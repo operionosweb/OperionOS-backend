@@ -10,7 +10,7 @@ app.get("/", (req, res) => {
   res.send("Operion AI Backend Running");
 });
 
-// CHAT ENDPOINT (Mistral AI)
+// Chat endpoint (Mistral AI)
 app.post("/chat", async (req, res) => {
   const message = req.body.message;
 
@@ -23,7 +23,7 @@ app.post("/chat", async (req, res) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer YOUR_MISTRAL_API_KEY"
+        "Authorization": `Bearer ${process.env.MISTRAL_API_KEY}`
       },
       body: JSON.stringify({
         model: "mistral-small",
@@ -51,7 +51,6 @@ app.post("/chat", async (req, res) => {
   }
 });
 
-// Start server
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
