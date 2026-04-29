@@ -1,35 +1,59 @@
 const express = require("express");
+const fetch = require("node-fetch");
 
 const app = express();
 
-// MUST be here or req.body will be empty
 app.use(express.json());
 
-// Health check route
+// Health check
 app.get("/", (req, res) => {
   res.send("Operion AI Backend Running");
 });
 
-// CHAT ROUTE (POST ONLY)
-app.post("/chat", (req, res) => {
+// CHAT ENDPOINT (Mistral AI)
+app.post("/chat", async (req, res) => {
   const message = req.body.message;
 
-  console.log("Received message:", message);
-
   if (!message) {
-    return res.json({
-      reply: "No message received"
-    });
+    return res.json({ reply: "No message received" });
   }
 
-  res.json({
-    reply: "You said: " + message
-  });
+  try {
+    const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer YOUR_MISTRAL_API_KEY"
+      },
+      body: JSON.stringify({
+        model: "mistral-small",
+        messages: [
+          {
+            role: "user",
+            content: message
+          }
+        ]
+      })
+    });
+
+    const data = await response.json();
+
+    const reply =
+      data?.choices?.[0]?.message?.content ||
+      "No response from AI";
+
+    res.json({ reply });
+
+  } catch (error) {
+    res.json({
+      reply: "AI error: " + error.message
+    });
+  }
 });
 
-// Start server (Render requires this)
+// Start server
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("Server running on port " + PORT);
+  console.log("Operion backend running on port " + PORT);
 });
