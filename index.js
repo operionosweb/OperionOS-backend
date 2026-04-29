@@ -10,7 +10,7 @@ app.get("/", (req, res) => {
   res.send("Operion AI Backend Running");
 });
 
-// Chat endpoint (Mistral AI)
+// REAL AI CHAT (Mistral)
 app.post("/chat", async (req, res) => {
   const message = req.body.message;
 
@@ -40,17 +40,18 @@ app.post("/chat", async (req, res) => {
 
     const reply =
       data?.choices?.[0]?.message?.content ||
-      "No response from AI";
+      "No AI response received";
 
     res.json({ reply });
 
   } catch (error) {
     res.json({
-      reply: "AI error: " + error.message
+      reply: "Error: " + error.message
     });
   }
 });
 
+// Start server
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
