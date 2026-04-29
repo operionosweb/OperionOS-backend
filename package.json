@@ -1,7 +1,7 @@
 {
   "name": "operion-backend",
   "version": "1.0.0",
-  "description": "Operion AI Backend with Mistral",
+  "description": "Operion AI Backend with Mistral integration",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
