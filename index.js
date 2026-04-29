@@ -2,17 +2,19 @@ const express = require("express");
 
 const app = express();
 
-// IMPORTANT: allows JSON body from your Android app
+// MUST be here or req.body will be empty
 app.use(express.json());
 
-// Health check (browser test)
+// Health check route
 app.get("/", (req, res) => {
   res.send("Operion AI Backend Running");
 });
 
-// Chat endpoint (your Android app will use this)
+// CHAT ROUTE (POST ONLY)
 app.post("/chat", (req, res) => {
   const message = req.body.message;
+
+  console.log("Received message:", message);
 
   if (!message) {
     return res.json({
@@ -25,9 +27,9 @@ app.post("/chat", (req, res) => {
   });
 });
 
-// Start server (required for Render)
+// Start server (Render requires this)
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("Operion backend running on port " + PORT);
+  console.log("Server running on port " + PORT);
 });
