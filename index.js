@@ -5,119 +5,40 @@ const { createClient } = require("@supabase/supabase-js");
 const app = express();
 app.use(express.json());
 
-// Supabase client
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
-);
+// DEBUG: check env vars
+console.log("SUPABASE_URL:", process.env.SUPABASE_URL);
+console.log("SUPABASE_KEY:", process.env.SUPABASE_KEY ? "OK" : "MISSING");
+console.log("MISTRAL_API_KEY:", process.env.MISTRAL_API_KEY ? "OK" : "MISSING");
 
-// Helper: summarize memory
-async function summarizeMemory(messages) {
-  const response = await fetch(
-    "https://api.mistral.ai/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "mistral-small",
-        messages: [
-          {
-            role: "system",
-            content:
-              "Summarize key facts about the user from this conversation."
-          },
-          {
-            role: "user",
-            content: JSON.stringify(messages)
-          }
-        ]
-      })
-    }
+// Create client safely
+let supabase;
+try {
+  supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_KEY
   );
-
-  const data = await response.json();
-  return data?.choices?.[0]?.message?.content || "";
+  console.log("Supabase client created");
+} catch (e) {
+  console.error("Supabase init error:", e.message);
 }
 
 // Health check
 app.get("/", (req, res) => {
-  res.send("Operion TRUE Memory Active");
+  res.send("Operion Debug Mode Running");
 });
 
-// CHAT ENDPOINT
+// Minimal test route
 app.post("/chat", async (req, res) => {
-  const userId = req.body.userId || "default";
-  const message = req.body.message;
-
-  if (!message) {
-    return res.json({ reply: "No message received" });
-  }
-
   try {
-    // 1. Save user message
-    await supabase.from("messages").insert([
-      { user_id: userId, role: "user", content: message }
-    ]);
+    res.json({ reply: "Backend is alive" });
+  } catch (error) {
+    console.error("Route error:", error);
+    res.json({ reply: "Error: " + error.message });
+  }
+});
 
-    // 2. Get recent messages
-    const { data: recent } = await supabase
-      .from("messages")
-      .select("role, content")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(6);
+const PORT = process.env.PORT || 3000;
 
-    const recentMessages = recent.reverse();
-
-    // 3. Get stored summary
-    const { data: memoryRow } = await supabase
-      .from("user_memory")
-      .select("*")
-      .eq("user_id", userId)
-      .single();
-
-    const summary = memoryRow?.summary || "";
-
-    // 4. Build AI input
-    const messagesForAI = [
-      {
-        role: "system",
-        content: "You are Operion AI."
-      }
-    ];
-
-    if (summary) {
-      messagesForAI.push({
-        role: "system",
-        content: "User memory: " + summary
-      });
-    }
-
-    messagesForAI.push(...recentMessages);
-
-    // 5. Call Mistral
-    const response = await fetch(
-      "https://api.mistral.ai/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`
-        },
-        body: JSON.stringify({
-          model: "mistral-small",
-          messages: messagesForAI
-        })
-      }
-    );
-
-    const data = await response.json();
-
-    const reply =
-      data?.choices?.[0]?.message?.content ||
-      "No AI response";
-
-    // 6
+app.listen(PORT, () => {
+  console.log("Server started on port " + PORT);
+});
