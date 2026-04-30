@@ -6,21 +6,27 @@ const app = express();
 // Middleware
 app.use(express.json());
 
-// Root route (browser test)
+/* --------------------------------
+   1. HEALTH CHECK (NO LOGIC)
+-------------------------------- */
 app.get("/", (req, res) => {
-  res.send("Operion AI Backend Running");
+  res.send("Operion Backend is Running 🚀");
 });
 
-// ✅ TEST ENDPOINT (connectivity check)
-app.post("/test3", (req, res) => {
+/* --------------------------------
+   2. TEST ENDPOINT (CONNECTIVITY)
+-------------------------------- */
+app.post("/test", (req, res) => {
   res.json({
     ok: true,
-    message: "test3 endpoint works ✅",
-    received: req.body
+    message: "API is working",
+    received: req.body || null
   });
 });
 
-// ✅ REAL MESSAGE ENDPOINT
+/* --------------------------------
+   3. MESSAGE ENDPOINT (CORE LOGIC)
+-------------------------------- */
 app.post("/message", (req, res) => {
   const { message } = req.body;
 
@@ -35,7 +41,19 @@ app.post("/message", (req, res) => {
   });
 });
 
-// Start server
+/* --------------------------------
+   4. AUTH PLACEHOLDER (FOR FUTURE)
+-------------------------------- */
+app.post("/auth", (req, res) => {
+  res.json({
+    ok: true,
+    message: "Auth system not enabled yet"
+  });
+});
+
+/* --------------------------------
+   START SERVER
+-------------------------------- */
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
