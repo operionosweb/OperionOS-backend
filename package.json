@@ -1,13 +1,14 @@
 {
   "name": "operion-backend",
   "version": "1.0.0",
-  "description": "Operion AI Backend with Mistral integration",
+  "description": "Operion AI Backend with Smart Memory",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "node-fetch": "^2.6.7"
+    "node-fetch": "^2.6.7",
+    "@supabase/supabase-js": "^2.39.0"
   }
 }
