@@ -1,34 +1,37 @@
 const express = require("express");
 const cors = require("cors");
 
-// Load environment variables (Render injects these automatically)
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_KEY;
-const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
-
 const app = express();
 
-// Middleware
+// ========================
+// SAFE MIDDLEWARE
+// ========================
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
-// ===============================
-// HEALTH CHECK (IMPORTANT)
-// ===============================
+// Force clean HTTP behavior (important for HTTP Shortcuts)
+app.use((req, res, next) => {
+  res.setHeader("Connection", "close");
+  next();
+});
+
+// ========================
+// HEALTH CHECK
+// ========================
 app.get("/", (req, res) => {
-  return res.json({
+  return res.status(200).json({
     status: "Operion AI Backend Running",
     memory: "active",
     auth: "ready"
   });
 });
 
-// ===============================
-// CHAT ENDPOINT (SAFE MODE)
-// ===============================
+// ========================
+// CHAT ENDPOINT (PROTOCOL SAFE)
+// ========================
 app.post("/chat", async (req, res) => {
   try {
-    const { message } = req.body;
+    const message = req.body?.message;
 
     if (!message) {
       return res.status(400).json({
@@ -36,14 +39,11 @@ app.post("/chat", async (req, res) => {
       });
     }
 
-    // TEMP AI RESPONSE (replace later with Mistral call)
+    // SAFE STATIC RESPONSE (no async streaming risk)
     const reply = `You said: ${message}`;
 
     return res.status(200).json({
-      reply,
-      memory: {
-        last_message: message
-      }
+      reply: reply
     });
 
   } catch (err) {
@@ -55,46 +55,25 @@ app.post("/chat", async (req, res) => {
   }
 });
 
-// ===============================
-// AUTH TEST ENDPOINT (JWT CHECK)
-// ===============================
-app.post("/auth-test", (req, res) => {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader) {
-    return res.status(401).json({
-      error: "missing_authorization_header"
-    });
-  }
-
-  return res.json({
-    status: "authorized",
-    received: authHeader
-  });
-});
-
-// ===============================
-// DEBUG ENDPOINT (OPTIONAL)
-// ===============================
+// ========================
+// DEBUG ENDPOINT
+// ========================
 app.post("/debug", (req, res) => {
-  console.log("DEBUG HIT");
-  console.log(req.body);
-
-  return res.json({
+  return res.status(200).json({
     ok: true,
-    body: req.body
+    received: req.body || null
   });
 });
 
-// ===============================
+// ========================
 // START SERVER
-// ===============================
+// ========================
 const PORT = process.env.PORT || 10000;
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log("Operion backend running on port", PORT);
-
-  console.log("SUPABASE_URL:", SUPABASE_URL ? "OK" : "MISSING");
-  console.log("SUPABASE_KEY:", SUPABASE_KEY ? "OK" : "MISSING");
-  console.log("MISTRAL_API_KEY:", MISTRAL_API_KEY ? "OK" : "MISSING");
 });
+
+// CRITICAL: force close idle sockets (fixes PROTOCOL_ERROR on Render)
+server.keepAliveTimeout = 0;
+server.headersTimeout = 0;
