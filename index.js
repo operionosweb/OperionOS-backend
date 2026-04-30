@@ -5,23 +5,48 @@ const { createClient } = require("@supabase/supabase-js");
 const app = express();
 app.use(express.json());
 
-// Debug logs (safe to keep)
-console.log("SUPABASE_URL:", process.env.SUPABASE_URL);
-console.log("SUPABASE_KEY:", process.env.SUPABASE_KEY ? "OK" : "MISSING");
-console.log("MISTRAL_API_KEY:", process.env.MISTRAL_API_KEY ? "OK" : "MISSING");
-
-// Create Supabase client
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
 );
 
-// Health check
+// HEALTH CHECK
 app.get("/", (req, res) => {
-  res.send("Operion Memory v1 Running");
+  res.send("Operion Smart Memory v2 Running");
 });
 
-// CHAT ENDPOINT (STABLE VERSION)
+// 🧠 EXTRACT PROFILE FROM CONVERSATION
+async function extractProfile(messages) {
+  const response = await fetch(
+    "https://api.mistral.ai/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "mistral-small",
+        messages: [
+          {
+            role: "system",
+            content:
+              "Extract and update a structured user profile from this conversation. Output ONLY key facts (name, interests, goals, preferences)."
+          },
+          {
+            role: "user",
+            content: JSON.stringify(messages)
+          }
+        ]
+      })
+    }
+  );
+
+  const data = await response.json();
+  return data?.choices?.[0]?.message?.content || "";
+}
+
+// 🧠 CHAT ENDPOINT (SMART MEMORY v2)
 app.post("/chat", async (req, res) => {
   const userId = req.body.userId || "default";
   const message = req.body.message;
@@ -33,29 +58,46 @@ app.post("/chat", async (req, res) => {
   try {
     // 1. Save user message
     await supabase.from("messages").insert([
-      {
-        user_id: userId,
-        role: "user",
-        content: message
-      }
+      { user_id: userId, role: "user", content: message }
     ]);
 
-    // 2. Get last 5 messages
-    const { data: history, error } = await supabase
+    // 2. Get last messages (short-term memory)
+    const { data: history } = await supabase
       .from("messages")
       .select("role, content")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
-      .limit(5);
+      .limit(6);
 
-    if (error) {
-      console.error("Supabase fetch error:", error);
-      return res.json({ reply: "Database error" });
+    const recent = history.reverse();
+
+    // 3. Get stored profile (LONG-TERM MEMORY)
+    const { data: profileRow } = await supabase
+      .from("user_profile")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+
+    const profile = profileRow?.profile || "";
+
+    // 4. Build AI context
+    const messagesForAI = [
+      {
+        role: "system",
+        content: "You are Operion AI, a personalized assistant."
+      }
+    ];
+
+    if (profile) {
+      messagesForAI.push({
+        role: "system",
+        content: "User profile:\n" + profile
+      });
     }
 
-    const messages = history.reverse();
+    messagesForAI.push(...recent);
 
-    // 3. Call Mistral
+    // 5. Call Mistral
     const response = await fetch(
       "https://api.mistral.ai/v1/chat/completions",
       {
@@ -66,7 +108,7 @@ app.post("/chat", async (req, res) => {
         },
         body: JSON.stringify({
           model: "mistral-small",
-          messages: messages
+          messages: messagesForAI
         })
       }
     );
@@ -77,29 +119,34 @@ app.post("/chat", async (req, res) => {
       data?.choices?.[0]?.message?.content ||
       "No AI response";
 
-    // 4. Save assistant reply
+    // 6. Save assistant reply
     await supabase.from("messages").insert([
-      {
-        user_id: userId,
-        role: "assistant",
-        content: reply
-      }
+      { user_id: userId, role: "assistant", content: reply }
     ]);
 
-    // 5. Return response
+    // 7. Occasionally update profile (IMPORTANT PART)
+    if (Math.random() < 0.3) {
+      const newProfile = await extractProfile(recent);
+
+      await supabase.from("user_profile").upsert([
+        {
+          user_id: userId,
+          profile: newProfile,
+          updated_at: new Date()
+        }
+      ]);
+    }
+
     res.json({ reply });
 
   } catch (error) {
-    console.error("CHAT ERROR:", error);
-    res.json({
-      reply: "Error: " + error.message
-    });
+    console.error("SMART MEMORY v2 ERROR:", error);
+    res.json({ reply: "Error: " + error.message });
   }
 });
 
-// Start server
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("Server running on port " + PORT);
+  console.log("Operion Smart Memory v2 running");
 });
