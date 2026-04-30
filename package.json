@@ -1,8 +1,9 @@
 {
   "name": "operion-backend",
   "version": "1.0.0",
-  "description": "Operion AI Backend with Smart Memory",
+  "description": "Operion AI Backend",
   "main": "index.js",
+  "type": "commonjs",
   "scripts": {
     "start": "node index.js"
   },
