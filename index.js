@@ -5,13 +5,35 @@ const { createClient } = require("@supabase/supabase-js");
 const app = express();
 app.use(express.json());
 
-// IMPORTANT: service role key for backend
+// ============================
+// ENV CHECK (DEBUG SAFE)
+// ============================
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
+  console.error("❌ Missing Supabase environment variables");
+}
+
+if (!process.env.MISTRAL_API_KEY) {
+  console.error("❌ Missing Mistral API key");
+}
+
+// ============================
+// SUPABASE CLIENT (FIXED)
+// ============================
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
 
-// 🔐 EXTRACT USER FROM JWT
+// ============================
+// HEALTH CHECK
+// ============================
+app.get("/", (req, res) => {
+  res.send("Operion JWT Backend Running");
+});
+
+// ============================
+// AUTH HELPER (JWT)
+// ============================
 async function getUser(req) {
   try {
     const token = req.headers.authorization?.replace("Bearer ", "");
@@ -27,23 +49,20 @@ async function getUser(req) {
 
     return data.user;
   } catch (err) {
-    console.error("JWT parsing error:", err.message);
+    console.error("JWT error:", err.message);
     return null;
   }
 }
 
-// HEALTH CHECK
-app.get("/", (req, res) => {
-  res.send("Operion JWT Auth System Running");
-});
-
-// CHAT (JWT SECURED)
+// ============================
+// CHAT ENDPOINT (FULL FIXED)
+// ============================
 app.post("/chat", async (req, res) => {
   const user = await getUser(req);
   const message = req.body.message;
 
   if (!user) {
-    return res.json({ reply: "Unauthorized (invalid token)" });
+    return res.json({ reply: "Unauthorized (invalid or missing token)" });
   }
 
   if (!message) {
@@ -60,7 +79,7 @@ app.post("/chat", async (req, res) => {
       }
     ]);
 
-    // Get history
+    // Get memory
     const { data: history, error } = await supabase
       .from("messages")
       .select("role, content")
@@ -69,12 +88,13 @@ app.post("/chat", async (req, res) => {
       .limit(6);
 
     if (error) {
-      return res.json({ reply: "DB error" });
+      console.error("DB error:", error.message);
+      return res.json({ reply: "Database error" });
     }
 
     const messages = history.reverse();
 
-    // Call Mistral
+    // Call Mistral AI
     const response = await fetch(
       "https://api.mistral.ai/v1/chat/completions",
       {
@@ -105,16 +125,20 @@ app.post("/chat", async (req, res) => {
       }
     ]);
 
+    // Return response
     res.json({ reply });
 
   } catch (error) {
     console.error("CHAT ERROR:", error);
-    res.json({ reply: error.message });
+    res.json({ reply: "Error: " + error.message });
   }
 });
 
+// ============================
+// START SERVER
+// ============================
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("Operion JWT Auth Ready");
+  console.log("Operion JWT Auth System Running on port " + PORT);
 });
