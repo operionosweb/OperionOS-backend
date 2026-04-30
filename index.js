@@ -11,12 +11,27 @@ app.get("/", (req, res) => {
   res.send("Operion AI Backend Running");
 });
 
-// ✅ CLEAN TEST ENDPOINT
+// ✅ TEST ENDPOINT (connectivity check)
 app.post("/test3", (req, res) => {
   res.json({
     ok: true,
     message: "test3 endpoint works ✅",
     received: req.body
+  });
+});
+
+// ✅ REAL MESSAGE ENDPOINT
+app.post("/message", (req, res) => {
+  const { message } = req.body;
+
+  if (!message) {
+    return res.status(400).json({
+      error: "Message is required"
+    });
+  }
+
+  res.json({
+    reply: `Operion received: ${message}`
   });
 });
 
