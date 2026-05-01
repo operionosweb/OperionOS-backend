@@ -1,20 +1,22 @@
 // index.js
 
 const express = require("express");
+const axios = require("axios");
+
 const app = express();
 
 // Middleware
 app.use(express.json());
 
 /* --------------------------------
-   1. HEALTH CHECK (NO LOGIC)
+   1. HEALTH CHECK
 -------------------------------- */
 app.get("/", (req, res) => {
-  res.send("Operion Backend is Running 🚀");
+  res.send("Operion Backend with Mistral AI 🚀");
 });
 
 /* --------------------------------
-   2. TEST ENDPOINT (CONNECTIVITY)
+   2. TEST ENDPOINT
 -------------------------------- */
 app.post("/test", (req, res) => {
   res.json({
@@ -25,9 +27,9 @@ app.post("/test", (req, res) => {
 });
 
 /* --------------------------------
-   3. MESSAGE ENDPOINT (CORE LOGIC)
+   3. AI MESSAGE ENDPOINT
 -------------------------------- */
-app.post("/message", (req, res) => {
+app.post("/message", async (req, res) => {
   const { message } = req.body;
 
   if (!message) {
@@ -36,13 +38,47 @@ app.post("/message", (req, res) => {
     });
   }
 
-  res.json({
-    reply: `Operion received: ${message}`
-  });
+  try {
+    const response = await axios.post(
+      "https://api.mistral.ai/v1/chat/completions",
+      {
+        model: "mistral-small",
+        messages: [
+          {
+            role: "system",
+            content: "You are Operion, a smart AI assistant."
+          },
+          {
+            role: "user",
+            content: message
+          }
+        ]
+      },
+      {
+        headers: {
+          "Authorization": `Bearer ${process.env.MISTRAL_API_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    const aiReply = response.data.choices[0].message.content;
+
+    res.json({
+      reply: aiReply
+    });
+
+  } catch (error) {
+    console.error("Mistral error:", error.response?.data || error.message);
+
+    res.status(500).json({
+      error: "AI request failed"
+    });
+  }
 });
 
 /* --------------------------------
-   4. AUTH PLACEHOLDER (FOR FUTURE)
+   4. AUTH PLACEHOLDER
 -------------------------------- */
 app.post("/auth", (req, res) => {
   res.json({
