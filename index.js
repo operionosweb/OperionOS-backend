@@ -1,23 +1,26 @@
-// index.js
-
 const express = require("express");
 const axios = require("axios");
+const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
-
-// Middleware
 app.use(express.json());
 
-/* --------------------------------
-   1. HEALTH CHECK
--------------------------------- */
+// Supabase client
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
+
+/* -----------------------------
+   HEALTH CHECK
+------------------------------ */
 app.get("/", (req, res) => {
-  res.send("Operion Backend with Mistral AI 🚀");
+  res.send("Operion AI with Memory 🚀");
 });
 
-/* --------------------------------
-   2. TEST ENDPOINT
--------------------------------- */
+/* -----------------------------
+   TEST ENDPOINT
+------------------------------ */
 app.post("/test", (req, res) => {
   res.json({
     ok: true,
@@ -26,9 +29,9 @@ app.post("/test", (req, res) => {
   });
 });
 
-/* --------------------------------
-   3. AI MESSAGE ENDPOINT
--------------------------------- */
+/* -----------------------------
+   MESSAGE WITH MEMORY (10 msgs)
+------------------------------ */
 app.post("/message", async (req, res) => {
   const { message } = req.body;
 
@@ -39,6 +42,27 @@ app.post("/message", async (req, res) => {
   }
 
   try {
+    // 1. Save user message
+    await supabase.from("messages").insert([
+      { role: "user", content: message }
+    ]);
+
+    // 2. Get last 10 messages (memory)
+    const { data: history } = await supabase
+      .from("messages")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    // 3. Format history for Mistral
+    const formattedHistory = (history || [])
+      .reverse()
+      .map((msg) => ({
+        role: msg.role,
+        content: msg.content
+      }));
+
+    // 4. Call Mistral AI
     const response = await axios.post(
       "https://api.mistral.ai/v1/chat/completions",
       {
@@ -46,17 +70,14 @@ app.post("/message", async (req, res) => {
         messages: [
           {
             role: "system",
-            content: "You are Operion, a smart AI assistant."
+            content: "You are Operion, a helpful AI assistant with memory of past conversations."
           },
-          {
-            role: "user",
-            content: message
-          }
+          ...formattedHistory
         ]
       },
       {
         headers: {
-          "Authorization": `Bearer ${process.env.MISTRAL_API_KEY}`,
+          Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
           "Content-Type": "application/json"
         }
       }
@@ -64,32 +85,38 @@ app.post("/message", async (req, res) => {
 
     const aiReply = response.data.choices[0].message.content;
 
+    // 5. Save AI response
+    await supabase.from("messages").insert([
+      { role: "assistant", content: aiReply }
+    ]);
+
+    // 6. Return response
     res.json({
       reply: aiReply
     });
 
   } catch (error) {
-    console.error("Mistral error:", error.response?.data || error.message);
+    console.error("Error:", error.response?.data || error.message);
 
     res.status(500).json({
-      error: "AI request failed"
+      error: "AI processing failed"
     });
   }
 });
 
-/* --------------------------------
-   4. AUTH PLACEHOLDER
--------------------------------- */
+/* -----------------------------
+   AUTH PLACEHOLDER
+------------------------------ */
 app.post("/auth", (req, res) => {
   res.json({
     ok: true,
-    message: "Auth system not enabled yet"
+    message: "Auth not enabled yet"
   });
 });
 
-/* --------------------------------
+/* -----------------------------
    START SERVER
--------------------------------- */
+------------------------------ */
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
