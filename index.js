@@ -5,21 +5,39 @@ const { createClient } = require("@supabase/supabase-js");
 const app = express();
 app.use(express.json());
 
+// Supabase
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY
 );
 
-/* -----------------------------
-   HEALTH
------------------------------- */
+/* --------------------------------
+   OPERION CORE IDENTITY LAYER
+-------------------------------- */
+const OPERION_SYSTEM_PROMPT = `
+You are Operion.
+
+Operion is not a generic chatbot. It is an operational intelligence system designed for engineering, aviation, maritime, and industrial domains.
+
+Behavior rules:
+- Be concise and structured
+- Focus on technical accuracy
+- Prefer systems thinking over generic advice
+- If user mentions aviation, maritime, offshore, or engineering topics, go deeper into technical detail
+- Avoid unnecessary conversational fluff
+- Provide actionable insights when possible
+`;
+
+/* --------------------------------
+   HEALTH CHECK
+-------------------------------- */
 app.get("/", (req, res) => {
-  res.send("Operion AI with Smart Memory 🚀");
+  res.send("Operion Intelligence Layer Active 🚀");
 });
 
-/* -----------------------------
-   MESSAGE (SMART MEMORY)
------------------------------- */
+/* --------------------------------
+   MESSAGE WITH PERSONA + MEMORY
+-------------------------------- */
 app.post("/message", async (req, res) => {
   const { message } = req.body;
 
@@ -42,23 +60,12 @@ app.post("/message", async (req, res) => {
         content: m.content
       }));
 
-    // 2. Build system context WITH summary if exists
-    const summary = history?.[0]?.memory_summary || "";
-
+    // 2. Build AI context
     const messagesForAI = [
       {
         role: "system",
-        content:
-          "You are Operion, an intelligent assistant with long-term memory."
+        content: OPERION_SYSTEM_PROMPT
       },
-      ...(summary
-        ? [
-            {
-              role: "system",
-              content: `Memory summary: ${summary}`
-            }
-          ]
-        : []),
       ...formattedHistory,
       {
         role: "user",
@@ -71,7 +78,8 @@ app.post("/message", async (req, res) => {
       "https://api.mistral.ai/v1/chat/completions",
       {
         model: "mistral-small",
-        messages: messagesForAI
+        messages: messagesForAI,
+        temperature: 0.4
       },
       {
         headers: {
@@ -83,7 +91,7 @@ app.post("/message", async (req, res) => {
 
     const aiReply = response.data.choices[0].message.content;
 
-    // 4. Save messages
+    // 4. Save memory
     await supabase.from("messages").insert([
       { role: "user", content: message }
     ]);
@@ -92,63 +100,25 @@ app.post("/message", async (req, res) => {
       { role: "assistant", content: aiReply }
     ]);
 
-    // 5. OPTIONAL: create/update memory summary
-    if (history && history.length >= 10) {
-      const oldText = formattedHistory.map(m => `${m.role}: ${m.content}`).join("\n");
-
-      const summaryResponse = await axios.post(
-        "https://api.mistral.ai/v1/chat/completions",
-        {
-          model: "mistral-small",
-          messages: [
-            {
-              role: "system",
-              content:
-                "Summarize the following conversation into a short memory (max 5 lines)."
-            },
-            {
-              role: "user",
-              content: oldText
-            }
-          ]
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
-            "Content-Type": "application/json"
-          }
-        }
-      );
-
-      const newSummary =
-        summaryResponse.data.choices[0].message.content;
-
-      // store summary in latest row
-      await supabase
-        .from("messages")
-        .update({ memory_summary: newSummary })
-        .eq("role", "assistant")
-        .order("created_at", { ascending: false })
-        .limit(1);
-    }
-
+    // 5. Return response
     res.json({
       reply: aiReply
     });
+
   } catch (err) {
     console.error(err.response?.data || err.message);
 
     res.status(500).json({
-      error: "Smart memory failed"
+      error: "Operion processing failed"
     });
   }
 });
 
-/* -----------------------------
-   START
------------------------------- */
+/* --------------------------------
+   START SERVER
+-------------------------------- */
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log("Operion running with personality layer 🚀");
 });
