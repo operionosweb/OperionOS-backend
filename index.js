@@ -12,31 +12,92 @@ const supabase = createClient(
 );
 
 /* --------------------------------
-   OPERION CORE IDENTITY LAYER
+   DOMAIN ROUTER (VERY SIMPLE v1)
 -------------------------------- */
-const OPERION_SYSTEM_PROMPT = `
-You are Operion.
+function detectDomain(text) {
+  const t = text.toLowerCase();
 
-Operion is not a generic chatbot. It is an operational intelligence system designed for engineering, aviation, maritime, and industrial domains.
+  if (
+    t.includes("aircraft") ||
+    t.includes("aviation") ||
+    t.includes("hydraulic") ||
+    t.includes("flight") ||
+    t.includes("avionics") ||
+    t.includes("airplane")
+  ) {
+    return "aviation";
+  }
 
-Behavior rules:
-- Be concise and structured
-- Focus on technical accuracy
-- Prefer systems thinking over generic advice
-- If user mentions aviation, maritime, offshore, or engineering topics, go deeper into technical detail
-- Avoid unnecessary conversational fluff
-- Provide actionable insights when possible
+  if (
+    t.includes("ship") ||
+    t.includes("maritime") ||
+    t.includes("vessel") ||
+    t.includes("port") ||
+    t.includes("cargo")
+  ) {
+    return "maritime";
+  }
+
+  if (
+    t.includes("offshore") ||
+    t.includes("drilling") ||
+    t.includes("rig") ||
+    t.includes("oil") ||
+    t.includes("gas")
+  ) {
+    return "offshore";
+  }
+
+  return "general";
+}
+
+/* --------------------------------
+   SYSTEM PROMPTS PER DOMAIN
+-------------------------------- */
+function getSystemPrompt(domain) {
+  const base = `
+You are Operion, an industrial intelligence system.
+Be structured, precise, and engineering-focused.
 `;
 
-/* --------------------------------
-   HEALTH CHECK
--------------------------------- */
-app.get("/", (req, res) => {
-  res.send("Operion Intelligence Layer Active 🚀");
-});
+  const aviation = `
+${base}
+Domain: Aviation Systems
+Focus: aircraft systems, avionics, hydraulics, flight control, safety, propulsion.
+`;
+
+  const maritime = `
+${base}
+Domain: Maritime Systems
+Focus: vessels, propulsion, navigation, port logistics, shipping operations.
+`;
+
+  const offshore = `
+${base}
+Domain: Offshore Systems
+Focus: drilling systems, oil & gas infrastructure, offshore logistics, energy systems.
+`;
+
+  const general = `
+${base}
+Domain: General Engineering & Operations
+Provide structured, practical explanations.
+`;
+
+  switch (domain) {
+    case "aviation":
+      return aviation;
+    case "maritime":
+      return maritime;
+    case "offshore":
+      return offshore;
+    default:
+      return general;
+  }
+}
 
 /* --------------------------------
-   MESSAGE WITH PERSONA + MEMORY
+   MESSAGE ENDPOINT
 -------------------------------- */
 app.post("/message", async (req, res) => {
   const { message } = req.body;
@@ -46,7 +107,10 @@ app.post("/message", async (req, res) => {
   }
 
   try {
-    // 1. Get last 10 messages
+    // 1. Detect domain
+    const domain = detectDomain(message);
+
+    // 2. Get last messages
     const { data: history } = await supabase
       .from("messages")
       .select("*")
@@ -60,11 +124,15 @@ app.post("/message", async (req, res) => {
         content: m.content
       }));
 
-    // 2. Build AI context
+    // 3. Build messages
     const messagesForAI = [
       {
         role: "system",
-        content: OPERION_SYSTEM_PROMPT
+        content: getSystemPrompt(domain)
+      },
+      {
+        role: "system",
+        content: `Detected domain: ${domain}`
       },
       ...formattedHistory,
       {
@@ -73,7 +141,7 @@ app.post("/message", async (req, res) => {
       }
     ];
 
-    // 3. Call Mistral
+    // 4. Call Mistral
     const response = await axios.post(
       "https://api.mistral.ai/v1/chat/completions",
       {
@@ -91,7 +159,7 @@ app.post("/message", async (req, res) => {
 
     const aiReply = response.data.choices[0].message.content;
 
-    // 4. Save memory
+    // 5. Save memory
     await supabase.from("messages").insert([
       { role: "user", content: message }
     ]);
@@ -100,16 +168,17 @@ app.post("/message", async (req, res) => {
       { role: "assistant", content: aiReply }
     ]);
 
-    // 5. Return response
+    // 6. Response
     res.json({
-      reply: aiReply
+      reply: aiReply,
+      domain: domain
     });
 
   } catch (err) {
     console.error(err.response?.data || err.message);
 
     res.status(500).json({
-      error: "Operion processing failed"
+      error: "Operion routing failed"
     });
   }
 });
@@ -120,5 +189,5 @@ app.post("/message", async (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("Operion running with personality layer 🚀");
+  console.log("Operion with domain routing active 🚀");
 });
