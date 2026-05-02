@@ -29,7 +29,6 @@ async function getEmbedding(text) {
     {
       headers: {
         Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
-        "Content-Type": "application/json",
       },
     }
   );
@@ -37,23 +36,28 @@ async function getEmbedding(text) {
   return res.data.data[0].embedding;
 }
 
-// ---------------- FINGERPRINT ----------------
-function createFingerprint(text) {
-  return crypto
-    .createHash("sha256")
-    .update(text.toLowerCase().trim())
-    .digest("hex");
-}
-
-// ---------------- CLUSTER ----------------
-function getCluster(text) {
+// ---------------- INTENT CLASSIFIER (simple brain v1) ----------------
+function detectIntent(text) {
   const t = text.toLowerCase();
 
-  if (t.includes("airbus") || t.includes("boeing")) return "aviation";
-  if (t.includes("ship") || t.includes("marine")) return "maritime";
-  if (t.includes("drilling") || t.includes("offshore")) return "offshore";
+  if (t.includes("airbus") || t.includes("boeing") || t.includes("aircraft"))
+    return "aviation_research";
+
+  if (t.includes("ship") || t.includes("maritime"))
+    return "maritime_systems";
+
+  if (t.includes("drilling") || t.includes("offshore"))
+    return "offshore_engineering";
+
+  if (t.includes("what is") || t.includes("explain"))
+    return "learning_query";
 
   return "general";
+}
+
+// ---------------- FINGERPRINT ----------------
+function fingerprint(text) {
+  return crypto.createHash("sha256").update(text).digest("hex");
 }
 
 // ---------------- MESSAGE ----------------
@@ -63,44 +67,46 @@ app.post("/message", async (req, res) => {
 
     const embedding = await getEmbedding(message);
 
-    const fingerprint = createFingerprint(message);
-    const cluster_id = getCluster(message);
+    const intent = detectIntent(message);
+    const fp = fingerprint(message);
 
-    // 🔍 CHECK FOR DUPLICATE MEMORY
+    // 🔍 CHECK DUPLICATES
     const { data: existing } = await supabase
       .from("user_memory")
       .select("*")
-      .eq("fingerprint", fingerprint)
+      .eq("fingerprint", fp)
       .eq("user_id", user_id)
       .maybeSingle();
 
     let insertError = null;
 
     if (existing) {
-      // 🔥 If duplicate exists → boost importance instead of inserting
       await supabase
         .from("user_memory")
         .update({
           importance: (existing.importance || 0.5) + 0.2,
+          access_count: (existing.access_count || 0) + 1,
+          last_accessed: new Date().toISOString(),
         })
         .eq("id", existing.id);
     } else {
-      // 🧠 Insert new memory
       const result = await supabase.from("user_memory").insert([
         {
           user_id,
           summary: message,
           embedding,
           importance: 0.5,
-          cluster_id,
-          fingerprint,
+          access_count: 1,
+          fingerprint: fp,
+          intent,
+          last_accessed: new Date().toISOString(),
         },
       ]);
 
       insertError = result.error;
     }
 
-    // 🧠 SEARCH MEMORY
+    // 🧠 MEMORY RETRIEVAL (intent-aware future expansion)
     const { data: memories } = await supabase.rpc("match_memory", {
       query_embedding: embedding,
       match_user_id: user_id,
@@ -108,10 +114,9 @@ app.post("/message", async (req, res) => {
     });
 
     return res.json({
-      reply: "Consolidation engine v2 active",
+      reply: "Cognitive agent layer active",
       inserted_ok: !insertError,
-      duplicate_detected: !!existing,
-      cluster: cluster_id,
+      intent_detected: intent,
       memory_found: memories?.length || 0,
       memories: memories || [],
     });
@@ -123,5 +128,5 @@ app.post("/message", async (req, res) => {
 
 // ---------------- START ----------------
 app.listen(PORT, () => {
-  console.log("🚀 Operion Intelligence Core v5 running");
+  console.log("🧠 Operion Cognitive Agent v1 running");
 });
