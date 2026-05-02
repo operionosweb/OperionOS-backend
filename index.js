@@ -30,103 +30,84 @@ app.post("/test3", (req, res) => {
   });
 });
 
-// 🧠 DOMAIN DETECTION FUNCTION
+// DOMAIN DETECTION
 function detectDomain(message) {
   const text = message.toLowerCase();
 
-  if (
-    text.includes("aircraft") ||
-    text.includes("flight") ||
-    text.includes("avionics") ||
-    text.includes("fly-by-wire") ||
-    text.includes("aviation")
-  ) {
+  if (/(aircraft|flight|avionics|fly-by-wire|aviation)/.test(text)) {
     return "aviation";
   }
 
-  if (
-    text.includes("ship") ||
-    text.includes("vessel") ||
-    text.includes("propulsion") ||
-    text.includes("marine") ||
-    text.includes("maritime")
-  ) {
+  if (/(ship|vessel|marine|propulsion|maritime)/.test(text)) {
     return "maritime";
   }
 
-  if (
-    text.includes("drilling") ||
-    text.includes("rig") ||
-    text.includes("offshore") ||
-    text.includes("mud") ||
-    text.includes("well")
-  ) {
+  if (/(drilling|rig|offshore|mud|well)/.test(text)) {
     return "offshore";
   }
 
   return "general";
 }
 
-// 🧠 PROMPTS PER DOMAIN
+// PROMPTS
 function getSystemPrompt(domain) {
-  const baseRules = `
+  const base = `
+You are Operion — an elite industrial AI system.
+
 RULES:
-- STRICT LIMIT: 120–200 words
-- Always finish sentences
-- Use headers + bullet points
-- Be concise, technical, high-value
+- 120–220 words MAX
+- ALWAYS finish cleanly (no cut sentences)
+- Structured: headers + bullets
+- Give practical engineering insight, not just definitions
+- Think like a senior engineer, not a textbook
 `;
 
   if (domain === "aviation") {
     return `
-You are Operion — Aviation Systems Engineer.
+You are an Aviation Systems Engineer.
 
 Focus:
 - Flight control systems
-- Avionics
-- Aircraft architecture
-- Safety & redundancy
+- Redundancy & safety
+- Real aircraft implementations (Airbus/Boeing mindset)
+- Operational implications
 
-${baseRules}
+${base}
 `;
   }
 
   if (domain === "maritime") {
     return `
-You are Operion — Maritime Systems Engineer.
+You are a Maritime Systems Engineer.
 
 Focus:
-- Ship propulsion
-- Marine engineering
-- Vessel systems
-- Hydrodynamics
+- Propulsion efficiency
+- Vessel operations
+- Trade-offs (fuel, maneuverability, maintenance)
+- Real-world ship configurations
 
-${baseRules}
+${base}
 `;
   }
 
   if (domain === "offshore") {
     return `
-You are Operion — Offshore Drilling Engineer.
+You are an Offshore Drilling Engineer.
 
 Focus:
-- Drilling systems
-- Mud engineering
-- Well control
-- Offshore operations
+- Well control & pressure management
+- Operational risks
+- Field applications (deepwater, HPHT)
+- Practical engineering decisions
 
-${baseRules}
+${base}
 `;
   }
 
   return `
-You are Operion — Technical AI assistant.
+You are a technical systems engineer.
 
-Focus:
-- Engineering systems
-- Industrial domains
-
-${baseRules}
+${base}
 `;
 }
 
@@ -139,10 +120,7 @@ app.post("/message", async (req, res) => {
       return res.status(400).json({ error: "Message is required" });
     }
 
-    // 🔥 Detect domain
     const domain = detectDomain(userMessage);
-
-    // 🔥 Get specialized prompt
     const systemPrompt = getSystemPrompt(domain);
 
     const aiResponse = await axios.post(
@@ -153,8 +131,8 @@ app.post("/message", async (req, res) => {
           { role: "system", content: systemPrompt },
           { role: "user", content: userMessage }
         ],
-        max_tokens: 250,
-        temperature: 0.7
+        max_tokens: 280,
+        temperature: 0.6
       },
       {
         headers: {
@@ -167,12 +145,13 @@ app.post("/message", async (req, res) => {
     let reply =
       aiResponse.data.choices[0].message.content || "No response";
 
-    // Trim incomplete ending
-    if (reply.length > 0 && !reply.trim().endsWith(".")) {
-      reply = reply.substring(0, reply.lastIndexOf(".")) + ".";
+    // HARD CLEAN ENDING
+    const lastPeriod = reply.lastIndexOf(".");
+    if (lastPeriod > 0) {
+      reply = reply.substring(0, lastPeriod + 1);
     }
 
-    // Save with domain
+    // Save
     await supabase.from("messages").insert([
       {
         user_message: userMessage,
