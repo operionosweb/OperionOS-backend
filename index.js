@@ -6,19 +6,16 @@ import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
 
-// ---------------- APP INIT ----------------
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// ---------------- ENV ----------------
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY;
 
-// ---------------- SUPABASE ----------------
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ---------------- EMBEDDING ----------------
@@ -40,29 +37,28 @@ async function getEmbedding(text) {
   return res.data.data[0].embedding;
 }
 
-// ---------------- HEALTH CHECK ----------------
+// ---------------- HEALTH ----------------
 app.get("/", (req, res) => {
   res.send("Operion Intelligence Core Running 🚀");
 });
 
-// ---------------- MESSAGE ROUTE (FULL FIX) ----------------
+// ---------------- MESSAGE ----------------
 app.post("/message", async (req, res) => {
   try {
-    const { message, user_id = "anon", domain = "general" } = req.body;
+    const { message, user_id = "anon" } = req.body;
 
     if (!message) {
       return res.status(400).json({ error: "message required" });
     }
 
-    // 1. CREATE EMBEDDING
+    // 1. EMBEDDING
     const embedding = await getEmbedding(message);
 
-    // 2. INSERT MEMORY (FIXED)
+    // 2. INSERT MEMORY (FIXED - NO DOMAIN)
     const { error: insertError } = await supabase.from("user_memory").insert([
       {
         user_id,
         summary: message,
-        domain,
         embedding,
       },
     ]);
@@ -103,7 +99,7 @@ app.post("/message", async (req, res) => {
   }
 });
 
-// ---------------- START SERVER ----------------
+// ---------------- START ----------------
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
