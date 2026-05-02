@@ -1,6 +1,5 @@
 import express from "express";
 import cors from "cors";
-import fetch from "node-fetch";
 import { createClient } from "@supabase/supabase-js";
 
 const app = express();
@@ -24,7 +23,7 @@ const withTimeout = (promise, ms = 20000) => {
   ]);
 };
 
-// 🧠 DOMAIN DETECTION (FAST + LIGHT)
+// 🧠 DOMAIN DETECTION
 function detectDomain(message) {
   const msg = message.toLowerCase();
 
@@ -40,19 +39,14 @@ function detectDomain(message) {
   return "general";
 }
 
-// 🧠 SYSTEM PROMPTS (SHORT = NO TIMEOUTS)
+// 🧠 SYSTEM PROMPTS
 function getSystemPrompt(domain) {
   const base = "You are Operion AI. Give concise, structured, technical answers.";
 
-  if (domain === "aviation") {
-    return base + " Focus on aircraft systems and engineering.";
-  }
-  if (domain === "maritime") {
-    return base + " Focus on ship systems and propulsion.";
-  }
-  if (domain === "offshore") {
-    return base + " Focus on offshore drilling systems.";
-  }
+  if (domain === "aviation") return base + " Focus on aircraft systems.";
+  if (domain === "maritime") return base + " Focus on ship propulsion.";
+  if (domain === "offshore") return base + " Focus on offshore drilling.";
+
   return base;
 }
 
@@ -68,7 +62,7 @@ app.post("/message", async (req, res) => {
   const systemPrompt = getSystemPrompt(domain);
 
   try {
-    // ⚡ AI CALL WITH TIMEOUT
+    // ⚡ USE BUILT-IN fetch (NO node-fetch)
     const aiResponse = await withTimeout(
       fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
@@ -82,18 +76,19 @@ app.post("/message", async (req, res) => {
             { role: "system", content: systemPrompt },
             { role: "user", content: userMessage }
           ],
-          max_tokens: 300 // 🔥 LIMIT SIZE (CRITICAL)
+          max_tokens: 300
         }),
       }),
       20000
     );
 
     const data = await aiResponse.json();
+
     const reply =
       data.choices?.[0]?.message?.content ||
       "No response generated.";
 
-    // ⚡ NON-BLOCKING MEMORY WRITE (DO NOT AWAIT)
+    // ⚡ NON-BLOCKING DB WRITE
     supabase.from("messages").insert([
       {
         user_message: userMessage,
@@ -103,7 +98,6 @@ app.post("/message", async (req, res) => {
       },
     ]).then(() => {}).catch(() => {});
 
-    // ✅ ALWAYS RETURN RESPONSE FAST
     return res.json({
       reply,
       domain,
@@ -112,10 +106,9 @@ app.post("/message", async (req, res) => {
   } catch (error) {
     console.error("ERROR:", error.message);
 
-    // 🛟 FALLBACK RESPONSE (NO MORE TIMEOUT FAILURES)
     return res.json({
-      reply: "Operion is responding in fallback mode. Please retry.",
-      domain: domain,
+      reply: "Operion fallback response. Try again.",
+      domain,
     });
   }
 });
