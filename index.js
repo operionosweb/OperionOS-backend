@@ -28,12 +28,12 @@ const app = express();
 app.use(express.json());
 
 // -------------------------
-// HEALTH CHECK
+// HEALTH
 // -------------------------
 app.get("/", (req, res) => {
   res.json({
-    status: "Operion Intelligence Core Active",
-    memory: "vector-enabled"
+    status: "Operion Intelligence Core",
+    memory: "user-based vector enabled"
   });
 });
 
@@ -51,7 +51,7 @@ async function callMistral(prompt) {
       body: JSON.stringify({
         model: "mistral-small-latest",
         messages: [
-          { role: "system", content: "You are Operion Intelligence Core with long-term memory." },
+          { role: "system", content: "You are Operion Intelligence Core with personal memory." },
           { role: "user", content: prompt }
         ],
         temperature: 0.7
@@ -92,58 +92,59 @@ async function getEmbedding(text) {
 }
 
 // -------------------------
-// VECTOR SEARCH
+// USER MEMORY SEARCH
 // -------------------------
-async function searchMemory(queryEmbedding) {
+async function searchMemory(userId, embedding) {
   try {
     const { data, error } = await supabase.rpc("match_user_memory", {
-      query_embedding: queryEmbedding,
+      query_embedding: embedding,
       match_threshold: 0.75,
       match_count: 5
     });
 
     if (error) {
-      console.error("Vector search error:", error);
+      console.error("Memory search error:", error);
       return [];
     }
 
-    return data || [];
+    // filter by user_id (important)
+    return (data || []).filter(m => m.user_id === userId);
   } catch (err) {
-    console.error("Memory search error:", err);
+    console.error("Search error:", err);
     return [];
   }
 }
 
 // -------------------------
-// MAIN CHAT ROUTE (VECTOR MEMORY CORE)
+// MAIN ROUTE (USER MEMORY CORE)
 // -------------------------
 app.post("/message", async (req, res) => {
   try {
     const userMessage = req.body?.message;
+    const userId = req.body?.user_id || "anonymous";
 
     if (!userMessage) {
       return res.status(400).json({ error: "No message provided" });
     }
 
-    // 1. Embedding
+    // 1. embedding
     const embedding = await getEmbedding(userMessage);
 
-    // 2. Memory recall
+    // 2. memory search (user-specific)
     let memories = [];
     if (embedding) {
-      memories = await searchMemory(embedding);
+      memories = await searchMemory(userId, embedding);
     }
 
-    const memoryContext = memories
-      .map(m => m.content)
-      .join("\n");
+    const memoryContext = memories.map(m => m.content).join("\n");
 
-    // 3. Build prompt with memory
+    // 3. prompt
     const prompt = `
 You are Operion Intelligence Core.
 
-Use memory when relevant:
+User ID: ${userId}
 
+Memory:
 ${memoryContext}
 
 User:
@@ -153,22 +154,24 @@ ${userMessage}
     // 4. AI response
     const aiReply = await callMistral(prompt);
 
-    // 5. Store memory
+    // 5. store memory (with user_id)
     try {
       await supabase.from("user_memory").insert([
         {
+          user_id: userId,
           content: userMessage,
           embedding: embedding,
           domain: "chat"
         }
       ]);
     } catch (e) {
-      console.error("Memory insert error:", e.message);
+      console.error("Insert error:", e.message);
     }
 
-    // 6. Response
+    // 6. response
     res.json({
       reply: aiReply,
+      user_id: userId,
       memory_hits: memories.length
     });
 
@@ -179,10 +182,10 @@ ${userMessage}
 });
 
 // -------------------------
-// START SERVER
+// START
 // -------------------------
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`🚀 Operion Intelligence Core running on port ${PORT}`);
+  console.log(`🚀 Operion Personal Intelligence running on port ${PORT}`);
 });
