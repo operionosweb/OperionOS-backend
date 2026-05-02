@@ -2,28 +2,14 @@ import express from "express";
 import { createClient } from "@supabase/supabase-js";
 
 // -------------------------
-// ENV SAFETY
+// ENV
 // -------------------------
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY;
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
 
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error("❌ Missing Supabase environment variables");
-}
-
-if (!MISTRAL_API_KEY) {
-  console.error("❌ Missing Mistral API key");
-}
-
-// -------------------------
-// CLIENTS
-// -------------------------
 const supabase = createClient(SUPABASE_URL || "", SUPABASE_KEY || "");
 
-// -------------------------
-// APP
-// -------------------------
 const app = express();
 app.use(express.json());
 
@@ -33,90 +19,108 @@ app.use(express.json());
 app.get("/", (req, res) => {
   res.json({
     status: "Operion Intelligence Core",
-    memory: "user-based vector enabled"
+    memory: "quality-scored + ranked"
   });
 });
 
 // -------------------------
-// MISTRAL CHAT
+// MISTRAL CALL
 // -------------------------
-async function callMistral(prompt) {
-  try {
-    const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${MISTRAL_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "mistral-small-latest",
-        messages: [
-          { role: "system", content: "You are Operion Intelligence Core with personal memory." },
-          { role: "user", content: prompt }
-        ],
-        temperature: 0.7
-      })
-    });
+async function callMistral(messages) {
+  const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${MISTRAL_API_KEY}`
+    },
+    body: JSON.stringify({
+      model: "mistral-small-latest",
+      messages,
+      temperature: 0.7
+    })
+  });
 
-    const data = await response.json();
-    return data?.choices?.[0]?.message?.content || "No response";
-  } catch (err) {
-    console.error("Mistral error:", err);
-    return "AI error";
-  }
+  const data = await res.json();
+  return data?.choices?.[0]?.message?.content || "";
 }
 
 // -------------------------
-// EMBEDDINGS
+// EMBEDDING
 // -------------------------
 async function getEmbedding(text) {
-  try {
-    const res = await fetch("https://api.mistral.ai/v1/embeddings", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${MISTRAL_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: "mistral-embed",
-        input: text
-      })
-    });
+  const res = await fetch("https://api.mistral.ai/v1/embeddings", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${MISTRAL_API_KEY}`
+    },
+    body: JSON.stringify({
+      model: "mistral-embed",
+      input: text
+    })
+  });
 
-    const data = await res.json();
-    return data?.data?.[0]?.embedding || null;
-  } catch (err) {
-    console.error("Embedding error:", err);
-    return null;
-  }
+  const data = await res.json();
+  return data?.data?.[0]?.embedding || null;
 }
 
 // -------------------------
-// USER MEMORY SEARCH
+// MEMORY SEARCH (RANKED)
 // -------------------------
 async function searchMemory(userId, embedding) {
+  const { data } = await supabase.rpc("match_user_memory", {
+    query_embedding: embedding,
+    match_threshold: 0.7,
+    match_count: 5,
+    p_user_id: userId
+  });
+
+  return data || [];
+}
+
+// -------------------------
+// 🧠 MEMORY QUALITY EVALUATION
+// -------------------------
+async function evaluateMemory(message) {
+  const prompt = `
+Analyze this user message.
+
+Return ONLY JSON:
+
+{
+  "summary": "short compressed memory",
+  "importance": number between 0 and 1,
+  "store": true or false
+}
+
+Rules:
+- Ignore small talk
+- Ignore greetings
+- Store only useful knowledge, intent, or preferences
+- Importance:
+  0.9 = critical info
+  0.7 = useful info
+  0.5 = neutral
+  0.2 = low value
+  0 = ignore
+
+Message:
+${message}
+`;
+
+  const result = await callMistral([
+    { role: "user", content: prompt }
+  ]);
+
   try {
-    const { data, error } = await supabase.rpc("match_user_memory", {
-      query_embedding: embedding,
-      match_threshold: 0.75,
-      match_count: 5
-    });
-
-    if (error) {
-      console.error("Memory search error:", error);
-      return [];
-    }
-
-    // filter by user_id (important)
-    return (data || []).filter(m => m.user_id === userId);
-  } catch (err) {
-    console.error("Search error:", err);
-    return [];
+    return JSON.parse(result);
+  } catch {
+    return { store: false };
   }
 }
 
 // -------------------------
-// MAIN ROUTE (USER MEMORY CORE)
+// MAIN ROUTE
 // -------------------------
 app.post("/message", async (req, res) => {
   try {
@@ -130,54 +134,57 @@ app.post("/message", async (req, res) => {
     // 1. embedding
     const embedding = await getEmbedding(userMessage);
 
-    // 2. memory search (user-specific)
+    // 2. memory recall
     let memories = [];
     if (embedding) {
       memories = await searchMemory(userId, embedding);
     }
 
-    const memoryContext = memories.map(m => m.content).join("\n");
+    const memoryContext = memories
+      .map(m => m.summary)
+      .join("\n");
 
-    // 3. prompt
-    const prompt = `
-You are Operion Intelligence Core.
-
-User ID: ${userId}
-
+    // 3. AI response
+    const reply = await callMistral([
+      {
+        role: "system",
+        content: "You are Operion Intelligence Core with selective memory."
+      },
+      {
+        role: "user",
+        content: `
 Memory:
 ${memoryContext}
 
 User:
 ${userMessage}
-`;
+`
+      }
+    ]);
 
-    // 4. AI response
-    const aiReply = await callMistral(prompt);
+    // 4. 🧠 evaluate memory BEFORE saving
+    const evaluation = await evaluateMemory(userMessage);
 
-    // 5. store memory (with user_id)
-    try {
+    if (evaluation.store && embedding) {
       await supabase.from("user_memory").insert([
         {
           user_id: userId,
-          content: userMessage,
-          embedding: embedding,
+          summary: evaluation.summary,
+          embedding,
+          importance: evaluation.importance,
           domain: "chat"
         }
       ]);
-    } catch (e) {
-      console.error("Insert error:", e.message);
     }
 
-    // 6. response
     res.json({
-      reply: aiReply,
-      user_id: userId,
-      memory_hits: memories.length
+      reply,
+      stored: evaluation.store || false
     });
 
-  } catch (error) {
-    console.error("Server error:", error);
-    res.status(500).json({ error: "Internal server error" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Internal error" });
   }
 });
 
@@ -187,5 +194,5 @@ ${userMessage}
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`🚀 Operion Personal Intelligence running on port ${PORT}`);
+  console.log("🚀 Operion Quality Memory System running");
 });
