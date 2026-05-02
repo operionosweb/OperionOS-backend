@@ -19,10 +19,10 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // TEST
 app.get("/", (req, res) => {
-  res.send("Operion Backend Running ✅");
+  res.send("Operion Brain Running 🧠");
 });
 
-// 🔥 KEY FUNCTION: FILTER MEMORY (BIG IMPACT)
+// 🔥 MEMORY FILTER
 function getRelevantMemory(memory, message) {
   if (!memory) return [];
 
@@ -34,30 +34,58 @@ function getRelevantMemory(memory, message) {
         item.message?.toLowerCase().includes(word)
       )
     )
-    .slice(0, 3); // LIMIT = HUGE SPEED BOOST
+    .slice(0, 3);
+}
+
+// 🔥 PROFILE EXTRACTOR (AUTO-LEARNING)
+function extractProfileData(message) {
+  const text = message.toLowerCase();
+
+  let domain = null;
+
+  if (text.includes("aircraft") || text.includes("aviation")) domain = "aviation";
+  if (text.includes("ship") || text.includes("marine")) domain = "maritime";
+  if (text.includes("drilling") || text.includes("offshore")) domain = "offshore";
+
+  return {
+    last_topic: message.slice(0, 100),
+    detected_domain: domain
+  };
 }
 
 // MAIN
 app.post("/message", async (req, res) => {
   try {
-    const { message, user_id = "anon", domain = "general" } = req.body;
+    const { message, user_id = "anon" } = req.body;
 
-    // 🔹 GET MEMORY
+    // 🔹 LOAD PROFILE
+    const { data: profileData } = await supabase
+      .from("user_profile")
+      .select("*")
+      .eq("user_id", user_id)
+      .single();
+
+    const profile = profileData || {};
+
+    // 🔹 LOAD MEMORY
     const { data: memory } = await supabase
       .from("user_memory")
       .select("message, reply")
       .eq("user_id", user_id)
       .limit(10);
 
-    // 🔥 FILTER ONLY RELEVANT MEMORY
     const relevantMemory = getRelevantMemory(memory, message);
 
-    // 🔥 COMPRESS MEMORY (TOKEN REDUCTION)
     const memoryText = relevantMemory
       .map(m => `User: ${m.message} | AI: ${m.reply}`)
       .join("\n");
 
-    // 🔹 CALL AI
+    // 🔥 PROFILE LEARNING
+    const extracted = extractProfileData(message);
+
+    const domain = extracted.detected_domain || profile.preferred_domain || "general";
+
+    // 🔹 AI CALL
     const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -69,35 +97,52 @@ app.post("/message", async (req, res) => {
         messages: [
           {
             role: "system",
-            content: `You are an expert in ${domain}.
-Use memory ONLY if relevant.
+            content: `
+You are Operion AI.
+
+User profile:
+- Preferred domain: ${profile.preferred_domain || "unknown"}
+- Last topic: ${profile.last_topic || "none"}
+
+Act like an expert in ${domain}.
+Be concise, high-value, structured.
 
 Memory:
-${memoryText}`
+${memoryText}
+`
           },
           {
             role: "user",
             content: message
           }
         ],
-        max_tokens: 300 // 🔥 LIMIT RESPONSE SIZE = SPEED
+        max_tokens: 250
       })
     });
 
     const data = await response.json();
     const reply = data?.choices?.[0]?.message?.content || "No response";
 
-    // 🔹 SAVE (messages)
+    // 🔹 SAVE MESSAGE
     await supabase.from("messages").insert([
       { user_id, message, reply, domain }
     ]);
 
-    // 🔥 SAVE ONLY IMPORTANT MEMORY
+    // 🔹 SAVE MEMORY
     if (message.length < 200) {
       await supabase.from("user_memory").insert([
         { user_id, message, reply }
       ]);
     }
+
+    // 🔥 UPDATE PROFILE (UPSERT)
+    await supabase.from("user_profile").upsert([
+      {
+        user_id,
+        preferred_domain: domain,
+        last_topic: extracted.last_topic
+      }
+    ]);
 
     res.json({ reply });
 
@@ -111,5 +156,5 @@ ${memoryText}`
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("Server running on port", PORT);
+  console.log("Operion Brain running on port", PORT);
 });
