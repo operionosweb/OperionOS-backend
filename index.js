@@ -36,23 +36,28 @@ async function getEmbedding(text) {
   return res.data.data[0].embedding;
 }
 
-// ---------------- INTENT CLASSIFIER (simple brain v1) ----------------
+// ---------------- INTENT ----------------
 function detectIntent(text) {
   const t = text.toLowerCase();
 
-  if (t.includes("airbus") || t.includes("boeing") || t.includes("aircraft"))
-    return "aviation_research";
-
-  if (t.includes("ship") || t.includes("maritime"))
-    return "maritime_systems";
-
-  if (t.includes("drilling") || t.includes("offshore"))
-    return "offshore_engineering";
-
-  if (t.includes("what is") || t.includes("explain"))
-    return "learning_query";
+  if (t.includes("airbus") || t.includes("boeing")) return "aviation";
+  if (t.includes("ship") || t.includes("maritime")) return "maritime";
+  if (t.includes("drilling") || t.includes("offshore")) return "offshore";
+  if (t.includes("what is") || t.includes("explain")) return "learning";
 
   return "general";
+}
+
+// ---------------- THREAD GENERATION ----------------
+// simple but powerful: thread = intent + topic hash
+function generateThreadId(intent, text) {
+  const hash = crypto
+    .createHash("md5")
+    .update(text.toLowerCase().slice(0, 40))
+    .digest("hex")
+    .slice(0, 8);
+
+  return `${intent}_${hash}`;
 }
 
 // ---------------- FINGERPRINT ----------------
@@ -68,9 +73,10 @@ app.post("/message", async (req, res) => {
     const embedding = await getEmbedding(message);
 
     const intent = detectIntent(message);
+    const thread_id = generateThreadId(intent, message);
     const fp = fingerprint(message);
 
-    // 🔍 CHECK DUPLICATES
+    // 🔍 DUPLICATE CHECK
     const { data: existing } = await supabase
       .from("user_memory")
       .select("*")
@@ -99,6 +105,7 @@ app.post("/message", async (req, res) => {
           access_count: 1,
           fingerprint: fp,
           intent,
+          thread_id,
           last_accessed: new Date().toISOString(),
         },
       ]);
@@ -106,19 +113,20 @@ app.post("/message", async (req, res) => {
       insertError = result.error;
     }
 
-    // 🧠 MEMORY RETRIEVAL (intent-aware future expansion)
-    const { data: memories } = await supabase.rpc("match_memory", {
-      query_embedding: embedding,
-      match_user_id: user_id,
-      match_count: 5,
-    });
+    // 🧠 THREAD RETRIEVAL (key upgrade)
+    const { data: memories } = await supabase
+      .from("user_memory")
+      .select("*")
+      .eq("thread_id", thread_id)
+      .order("created_at", { ascending: true });
 
     return res.json({
-      reply: "Cognitive agent layer active",
-      inserted_ok: !insertError,
+      reply: "Cognitive thread system active",
       intent_detected: intent,
-      memory_found: memories?.length || 0,
-      memories: memories || [],
+      thread_id,
+      inserted_ok: !insertError,
+      thread_length: memories?.length || 0,
+      thread: memories || [],
     });
 
   } catch (err) {
@@ -128,5 +136,5 @@ app.post("/message", async (req, res) => {
 
 // ---------------- START ----------------
 app.listen(PORT, () => {
-  console.log("🧠 Operion Cognitive Agent v1 running");
+  console.log("🧠 Operion Cognitive Threads v1 running");
 });
