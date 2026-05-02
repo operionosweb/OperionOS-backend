@@ -10,18 +10,18 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ✅ Supabase setup
+// Supabase
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY
 );
 
-// ✅ Health check
+// Health
 app.get("/", (req, res) => {
   res.send("Operion Backend is Running 🚀");
 });
 
-// ✅ Test endpoint
+// Test
 app.post("/test3", (req, res) => {
   res.json({
     ok: true,
@@ -30,7 +30,7 @@ app.post("/test3", (req, res) => {
   });
 });
 
-// ✅ MAIN MESSAGE ENDPOINT
+// MESSAGE
 app.post("/message", async (req, res) => {
   try {
     const userMessage = req.body.message;
@@ -39,30 +39,29 @@ app.post("/message", async (req, res) => {
       return res.status(400).json({ error: "Message is required" });
     }
 
-    // 🧠 Operion system prompt (optimized for speed)
     const systemPrompt = `
 You are Operion — an elite industrial AI assistant.
 
 RULES:
 - Be concise and high-value.
-- Default response length: 150–300 words MAX.
-- Use structured format (headers, bullet points).
-- Only go deep IF user explicitly asks for "deep dive".
-- Prioritize clarity over completeness.
+- STRICT LIMIT: 120–200 words MAX.
+- ALWAYS finish your response completely.
+- Never cut off mid-sentence.
+- Use structured format (headers + bullet points).
+- Only go deep if user explicitly asks for "deep dive".
 
-DOMAIN FOCUS:
+DOMAIN:
 - Aviation
 - Maritime
 - Offshore
 - Engineering systems
 
 STYLE:
-- Professional
 - Technical
-- Straight to the point
+- Clear
+- No fluff
 `;
 
-    // 🔥 Call Mistral API
     const aiResponse = await axios.post(
       "https://api.mistral.ai/v1/chat/completions",
       {
@@ -71,7 +70,8 @@ STYLE:
           { role: "system", content: systemPrompt },
           { role: "user", content: userMessage }
         ],
-        max_tokens: 300
+        max_tokens: 250,   // slightly increased
+        temperature: 0.7
       },
       {
         headers: {
@@ -81,10 +81,15 @@ STYLE:
       }
     );
 
-    const reply =
+    let reply =
       aiResponse.data.choices[0].message.content || "No response";
 
-    // 💾 Save to Supabase
+    // 🧠 Safety trim (prevents cut sentence at end)
+    if (reply.length > 0 && !reply.trim().endsWith(".")) {
+      reply = reply.substring(0, reply.lastIndexOf(".")) + ".";
+    }
+
+    // Save memory
     await supabase.from("messages").insert([
       {
         user_message: userMessage,
@@ -104,7 +109,7 @@ STYLE:
   }
 });
 
-// ✅ Start server
+// Start
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
