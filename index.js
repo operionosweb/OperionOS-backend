@@ -12,11 +12,10 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY;
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
 
 // ---------------- EMBEDDING ----------------
 async function getEmbedding(text) {
@@ -28,7 +27,7 @@ async function getEmbedding(text) {
     },
     {
       headers: {
-        Authorization: `Bearer ${MISTRAL_API_KEY}`,
+        Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
         "Content-Type": "application/json",
       },
     }
@@ -37,69 +36,59 @@ async function getEmbedding(text) {
   return res.data.data[0].embedding;
 }
 
-// ---------------- HEALTH ----------------
-app.get("/", (req, res) => {
-  res.send("Operion Intelligence Core Running 🚀");
-});
+// ---------------- SIMPLE CLUSTERING ----------------
+// (temporary lightweight grouping logic)
+function generateClusterId(text) {
+  const lower = text.toLowerCase();
+
+  if (lower.includes("airbus") || lower.includes("boeing")) return "aviation";
+  if (lower.includes("ship") || lower.includes("maritime")) return "maritime";
+  if (lower.includes("offshore") || lower.includes("drilling")) return "offshore";
+
+  return "general";
+}
 
 // ---------------- MESSAGE ----------------
 app.post("/message", async (req, res) => {
   try {
     const { message, user_id = "anon" } = req.body;
 
-    if (!message) {
-      return res.status(400).json({ error: "message required" });
-    }
-
-    // 1. EMBEDDING
     const embedding = await getEmbedding(message);
 
-    // 2. INSERT MEMORY (FIXED - NO DOMAIN)
+    const cluster_id = generateClusterId(message);
+
+    // SAVE MEMORY WITH CLUSTERING
     const { error: insertError } = await supabase.from("user_memory").insert([
       {
         user_id,
         summary: message,
         embedding,
+        importance: 0.5,
+        cluster_id,
       },
     ]);
 
-    if (insertError) {
-      console.log("INSERT ERROR:", insertError);
-    }
+    // SEARCH MEMORY (ranked)
+    const { data: memories } = await supabase.rpc("match_memory", {
+      query_embedding: embedding,
+      match_user_id: user_id,
+      match_count: 5,
+    });
 
-    // 3. VECTOR SEARCH
-    const { data: memories, error: searchError } = await supabase.rpc(
-      "match_memory",
-      {
-        query_embedding: embedding,
-        match_user_id: user_id,
-        match_count: 5,
-      }
-    );
-
-    console.log("MEMORIES:", memories);
-    console.log("SEARCH ERROR:", searchError);
-
-    // 4. RESPONSE
     return res.json({
-      message_received: message,
+      reply: "Memory consolidation active",
       inserted_ok: !insertError,
+      cluster_assigned: cluster_id,
       memory_found: memories?.length || 0,
       memories: memories || [],
-      insert_error: insertError || null,
-      search_error: searchError || null,
     });
 
   } catch (err) {
-    console.error("FATAL ERROR:", err);
-
-    return res.status(500).json({
-      error: err.message,
-    });
+    return res.status(500).json({ error: err.message });
   }
 });
 
 // ---------------- START ----------------
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log("🚀 Operion Intelligence Core v4 running");
 });
