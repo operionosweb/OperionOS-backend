@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import axios from "axios";
 import { createClient } from "@supabase/supabase-js";
+import crypto from "crypto";
 
 dotenv.config();
 
@@ -36,14 +37,21 @@ async function getEmbedding(text) {
   return res.data.data[0].embedding;
 }
 
-// ---------------- SIMPLE CLUSTERING ----------------
-// (temporary lightweight grouping logic)
-function generateClusterId(text) {
-  const lower = text.toLowerCase();
+// ---------------- FINGERPRINT ----------------
+function createFingerprint(text) {
+  return crypto
+    .createHash("sha256")
+    .update(text.toLowerCase().trim())
+    .digest("hex");
+}
 
-  if (lower.includes("airbus") || lower.includes("boeing")) return "aviation";
-  if (lower.includes("ship") || lower.includes("maritime")) return "maritime";
-  if (lower.includes("offshore") || lower.includes("drilling")) return "offshore";
+// ---------------- CLUSTER ----------------
+function getCluster(text) {
+  const t = text.toLowerCase();
+
+  if (t.includes("airbus") || t.includes("boeing")) return "aviation";
+  if (t.includes("ship") || t.includes("marine")) return "maritime";
+  if (t.includes("drilling") || t.includes("offshore")) return "offshore";
 
   return "general";
 }
@@ -55,20 +63,44 @@ app.post("/message", async (req, res) => {
 
     const embedding = await getEmbedding(message);
 
-    const cluster_id = generateClusterId(message);
+    const fingerprint = createFingerprint(message);
+    const cluster_id = getCluster(message);
 
-    // SAVE MEMORY WITH CLUSTERING
-    const { error: insertError } = await supabase.from("user_memory").insert([
-      {
-        user_id,
-        summary: message,
-        embedding,
-        importance: 0.5,
-        cluster_id,
-      },
-    ]);
+    // 🔍 CHECK FOR DUPLICATE MEMORY
+    const { data: existing } = await supabase
+      .from("user_memory")
+      .select("*")
+      .eq("fingerprint", fingerprint)
+      .eq("user_id", user_id)
+      .maybeSingle();
 
-    // SEARCH MEMORY (ranked)
+    let insertError = null;
+
+    if (existing) {
+      // 🔥 If duplicate exists → boost importance instead of inserting
+      await supabase
+        .from("user_memory")
+        .update({
+          importance: (existing.importance || 0.5) + 0.2,
+        })
+        .eq("id", existing.id);
+    } else {
+      // 🧠 Insert new memory
+      const result = await supabase.from("user_memory").insert([
+        {
+          user_id,
+          summary: message,
+          embedding,
+          importance: 0.5,
+          cluster_id,
+          fingerprint,
+        },
+      ]);
+
+      insertError = result.error;
+    }
+
+    // 🧠 SEARCH MEMORY
     const { data: memories } = await supabase.rpc("match_memory", {
       query_embedding: embedding,
       match_user_id: user_id,
@@ -76,9 +108,10 @@ app.post("/message", async (req, res) => {
     });
 
     return res.json({
-      reply: "Memory consolidation active",
+      reply: "Consolidation engine v2 active",
       inserted_ok: !insertError,
-      cluster_assigned: cluster_id,
+      duplicate_detected: !!existing,
+      cluster: cluster_id,
       memory_found: memories?.length || 0,
       memories: memories || [],
     });
@@ -90,5 +123,5 @@ app.post("/message", async (req, res) => {
 
 // ---------------- START ----------------
 app.listen(PORT, () => {
-  console.log("🚀 Operion Intelligence Core v4 running");
+  console.log("🚀 Operion Intelligence Core v5 running");
 });
