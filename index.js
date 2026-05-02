@@ -1,179 +1,127 @@
 import express from "express";
 import cors from "cors";
-import axios from "axios";
-import dotenv from "dotenv";
+import fetch from "node-fetch";
 import { createClient } from "@supabase/supabase-js";
-
-dotenv.config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Supabase
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
-);
+// 🔐 ENV
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
-// Health
-app.get("/", (req, res) => {
-  res.send("Operion Backend is Running 🚀");
-});
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Test
-app.post("/test3", (req, res) => {
-  res.json({
-    ok: true,
-    message: "test3 endpoint works ✅",
-    received: req.body
-  });
-});
+// ⏱ Timeout helper
+const withTimeout = (promise, ms = 20000) => {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Timeout")), ms)
+    ),
+  ]);
+};
 
-// DOMAIN DETECTION
+// 🧠 DOMAIN DETECTION (FAST + LIGHT)
 function detectDomain(message) {
-  const text = message.toLowerCase();
+  const msg = message.toLowerCase();
 
-  if (/(aircraft|flight|avionics|fly-by-wire|aviation)/.test(text)) {
+  if (msg.includes("aircraft") || msg.includes("flight") || msg.includes("aviation")) {
     return "aviation";
   }
-
-  if (/(ship|vessel|marine|propulsion|maritime)/.test(text)) {
+  if (msg.includes("ship") || msg.includes("marine") || msg.includes("vessel")) {
     return "maritime";
   }
-
-  if (/(drilling|rig|offshore|mud|well)/.test(text)) {
+  if (msg.includes("drilling") || msg.includes("rig") || msg.includes("offshore")) {
     return "offshore";
   }
-
   return "general";
 }
 
-// PROMPTS
+// 🧠 SYSTEM PROMPTS (SHORT = NO TIMEOUTS)
 function getSystemPrompt(domain) {
-  const base = `
-You are Operion — an elite industrial AI system.
-
-RULES:
-- 120–220 words MAX
-- ALWAYS finish cleanly (no cut sentences)
-- Structured: headers + bullets
-- Give practical engineering insight, not just definitions
-- Think like a senior engineer, not a textbook
-`;
+  const base = "You are Operion AI. Give concise, structured, technical answers.";
 
   if (domain === "aviation") {
-    return `
-You are an Aviation Systems Engineer.
-
-Focus:
-- Flight control systems
-- Redundancy & safety
-- Real aircraft implementations (Airbus/Boeing mindset)
-- Operational implications
-
-${base}
-`;
+    return base + " Focus on aircraft systems and engineering.";
   }
-
   if (domain === "maritime") {
-    return `
-You are a Maritime Systems Engineer.
-
-Focus:
-- Propulsion efficiency
-- Vessel operations
-- Trade-offs (fuel, maneuverability, maintenance)
-- Real-world ship configurations
-
-${base}
-`;
+    return base + " Focus on ship systems and propulsion.";
   }
-
   if (domain === "offshore") {
-    return `
-You are an Offshore Drilling Engineer.
-
-Focus:
-- Well control & pressure management
-- Operational risks
-- Field applications (deepwater, HPHT)
-- Practical engineering decisions
-
-${base}
-`;
+    return base + " Focus on offshore drilling systems.";
   }
-
-  return `
-You are a technical systems engineer.
-
-${base}
-`;
+  return base;
 }
 
-// MESSAGE
+// 🚀 MAIN ENDPOINT
 app.post("/message", async (req, res) => {
+  const userMessage = req.body.message;
+
+  if (!userMessage) {
+    return res.status(400).json({ error: "No message provided" });
+  }
+
+  const domain = detectDomain(userMessage);
+  const systemPrompt = getSystemPrompt(domain);
+
   try {
-    const userMessage = req.body.message;
-
-    if (!userMessage) {
-      return res.status(400).json({ error: "Message is required" });
-    }
-
-    const domain = detectDomain(userMessage);
-    const systemPrompt = getSystemPrompt(domain);
-
-    const aiResponse = await axios.post(
-      "https://api.mistral.ai/v1/chat/completions",
-      {
-        model: "mistral-small",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userMessage }
-        ],
-        max_tokens: 280,
-        temperature: 0.6
-      },
-      {
+    // ⚡ AI CALL WITH TIMEOUT
+    const aiResponse = await withTimeout(
+      fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
         headers: {
-          Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
-          "Content-Type": "application/json"
-        }
-      }
+          "Authorization": `Bearer ${OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userMessage }
+          ],
+          max_tokens: 300 // 🔥 LIMIT SIZE (CRITICAL)
+        }),
+      }),
+      20000
     );
 
-    let reply =
-      aiResponse.data.choices[0].message.content || "No response";
+    const data = await aiResponse.json();
+    const reply =
+      data.choices?.[0]?.message?.content ||
+      "No response generated.";
 
-    // HARD CLEAN ENDING
-    const lastPeriod = reply.lastIndexOf(".");
-    if (lastPeriod > 0) {
-      reply = reply.substring(0, lastPeriod + 1);
-    }
-
-    // Save
-    await supabase.from("messages").insert([
+    // ⚡ NON-BLOCKING MEMORY WRITE (DO NOT AWAIT)
+    supabase.from("messages").insert([
       {
         user_message: userMessage,
         ai_reply: reply,
-        domain: domain
-      }
-    ]);
+        domain: domain,
+        created_at: new Date().toISOString(),
+      },
+    ]).then(() => {}).catch(() => {});
 
-    res.json({ reply, domain });
+    // ✅ ALWAYS RETURN RESPONSE FAST
+    return res.json({
+      reply,
+      domain,
+    });
 
   } catch (error) {
-    console.error(error.response?.data || error.message);
+    console.error("ERROR:", error.message);
 
-    res.status(500).json({
-      error: "Something went wrong",
-      details: error.response?.data || error.message
+    // 🛟 FALLBACK RESPONSE (NO MORE TIMEOUT FAILURES)
+    return res.json({
+      reply: "Operion is responding in fallback mode. Please retry.",
+      domain: domain,
     });
   }
 });
 
-// Start
+// 🚀 START SERVER
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Operion backend running on port ${PORT}`);
 });
