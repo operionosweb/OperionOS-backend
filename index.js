@@ -10,18 +10,18 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Supabase setup
+// ✅ Supabase setup
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY
 );
 
-// Health check
+// ✅ Health check
 app.get("/", (req, res) => {
   res.send("Operion Backend is Running 🚀");
 });
 
-// Test endpoint
+// ✅ Test endpoint
 app.post("/test3", (req, res) => {
   res.json({
     ok: true,
@@ -30,7 +30,7 @@ app.post("/test3", (req, res) => {
   });
 });
 
-// MAIN MESSAGE ENDPOINT
+// ✅ MAIN MESSAGE ENDPOINT
 app.post("/message", async (req, res) => {
   try {
     const userMessage = req.body.message;
@@ -39,7 +39,7 @@ app.post("/message", async (req, res) => {
       return res.status(400).json({ error: "Message is required" });
     }
 
-    // 🧠 OPERION SYSTEM PROMPT (OPTIMIZED)
+    // 🧠 Operion system prompt (optimized for speed)
     const systemPrompt = `
 You are Operion — an elite industrial AI assistant.
 
@@ -49,7 +49,6 @@ RULES:
 - Use structured format (headers, bullet points).
 - Only go deep IF user explicitly asks for "deep dive".
 - Prioritize clarity over completeness.
-- Avoid long explanations unless requested.
 
 DOMAIN FOCUS:
 - Aviation
@@ -63,7 +62,7 @@ STYLE:
 - Straight to the point
 `;
 
-    // 🔥 Call Mistral
+    // 🔥 Call Mistral API
     const aiResponse = await axios.post(
       "https://api.mistral.ai/v1/chat/completions",
       {
@@ -72,7 +71,7 @@ STYLE:
           { role: "system", content: systemPrompt },
           { role: "user", content: userMessage }
         ],
-        max_tokens: 300 // 🔥 KEY FIX (prevents timeout)
+        max_tokens: 300
       },
       {
         headers: {
@@ -85,7 +84,7 @@ STYLE:
     const reply =
       aiResponse.data.choices[0].message.content || "No response";
 
-    // 💾 Store in Supabase (optional memory)
+    // 💾 Save to Supabase
     await supabase.from("messages").insert([
       {
         user_message: userMessage,
@@ -94,5 +93,19 @@ STYLE:
     ]);
 
     res.json({ reply });
+
   } catch (error) {
-    console.error(error.response?.data || error
+    console.error(error.response?.data || error.message);
+
+    res.status(500).json({
+      error: "Something went wrong",
+      details: error.response?.data || error.message
+    });
+  }
+});
+
+// ✅ Start server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
