@@ -26,7 +26,7 @@ const supabase = createClient(
 app.get("/", (req, res) => {
   res.json({
     status: "ok",
-    system: "Operion AI hybrid agents (stable)"
+    system: "Operion operations-first architecture"
   });
 });
 
@@ -55,17 +55,21 @@ async function llm(system, user) {
 
   } catch (err) {
     console.error("LLM ERROR:", err.response?.data || err.message);
-    return "Agent failed";
+    return "LLM error";
   }
 }
 
 // =======================
-// AGENTS (REDUCED)
+// DOMAIN DETECTOR
 // =======================
-const AGENTS = {
-  aviation: "You are an aviation expert.",
-  finance: "You are a finance expert."
-};
+function detectDomains(message) {
+  const msg = message.toLowerCase();
+
+  return {
+    aviation: msg.includes("aircraft") || msg.includes("airline") || msg.includes("flight"),
+    finance: msg.includes("cost") || msg.includes("revenue") || msg.includes("profit")
+  };
+}
 
 // =======================
 // MEMORY
@@ -86,40 +90,50 @@ async function storeMemory(user_id, message) {
     .insert([{ user_id, summary: message }]);
 
   if (error) {
-    console.log("MEMORY INSERT ERROR:", error.message);
+    console.log("MEMORY ERROR:", error.message);
   }
 }
 
 // =======================
-// AGENT RUN
+// DOMAIN AGENTS (OPTIONAL)
 // =======================
-async function runAgent(agent, message, context) {
+async function aviationAgent(message, context) {
   return llm(
-    AGENTS[agent],
-    `
-Context:
-${context}
+    "You are an aviation expert. Provide insights only if relevant.",
+    `Context:\n${context}\n\nUser:\n${message}`
+  );
+}
 
-User:
-${message}
-`
+async function financeAgent(message, context) {
+  return llm(
+    "You are a finance expert. Provide insights only if relevant.",
+    `Context:\n${context}\n\nUser:\n${message}`
   );
 }
 
 // =======================
-// SIMPLE MERGE (NO LLM)
+// OPERATIONS CORE AGENT (PRIMARY BRAIN)
 // =======================
-function mergeResults(results) {
-  return `
-AVIATION INSIGHT:
-${results.aviation}
+async function operationsAgent(message, context, extras) {
+  return llm(
+    "You are OPERATIONS CORE AGENT. You make decisions, optimize systems, and produce actionable outputs. You integrate all inputs into a single operational recommendation.",
+    `
+Context:
+${context}
 
-FINANCIAL INSIGHT:
-${results.finance}
+Extra Domain Insights:
+${JSON.stringify(extras)}
 
-FINAL:
-Combine both perspectives to give a clear, practical answer.
-`;
+User:
+${message}
+
+Respond with:
+- Key insight
+- Operational analysis
+- Step-by-step actions
+- Final recommendation
+`
+  );
 }
 
 // =======================
@@ -137,23 +151,31 @@ app.post("/message", async (req, res) => {
     const memory = await getMemory(user_id);
     const context = memory.map(m => m.summary).join("\n");
 
-    // 2. RUN 2 AGENTS (PARALLEL)
-    const [aviation, finance] = await Promise.all([
-      runAgent("aviation", message, context),
-      runAgent("finance", message, context)
-    ]);
+    // 2. DETECT DOMAINS
+    const domains = detectDomains(message);
 
-    const results = { aviation, finance };
+    // 3. OPTIONAL DOMAIN ENRICHMENT (CONTROLLED)
+    const extras = {};
 
-    // 3. MERGE (NO EXTRA API CALL)
-    const reply = mergeResults(results);
+    if (domains.aviation) {
+      extras.aviation = await aviationAgent(message, context);
+    }
 
-    // 4. STORE MEMORY (SAFE)
+    if (domains.finance) {
+      extras.finance = await financeAgent(message, context);
+    }
+
+    // 4. OPERATIONS CORE (ALWAYS RUNS LAST)
+    const reply = await operationsAgent(message, context, extras);
+
+    // 5. STORE MEMORY (NON-BLOCKING)
     storeMemory(user_id, message);
 
+    // 6. RESPONSE
     return res.json({
       reply,
-      agents: results
+      domains,
+      extras
     });
 
   } catch (err) {
@@ -168,5 +190,5 @@ app.post("/message", async (req, res) => {
 // START
 // =======================
 app.listen(PORT, () => {
-  console.log(`🚀 Operion AI hybrid running on port ${PORT}`);
+  console.log(`🚀 Operion operations-first running on port ${PORT}`);
 });
