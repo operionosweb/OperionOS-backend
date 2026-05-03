@@ -3,7 +3,6 @@ import cors from "cors";
 import dotenv from "dotenv";
 import axios from "axios";
 import { createClient } from "@supabase/supabase-js";
-import crypto from "crypto";
 
 dotenv.config();
 
@@ -25,7 +24,7 @@ async function llm(prompt) {
     {
       model: "mistral-medium",
       messages: [
-        { role: "system", content: "You are a meta-learning AI agent." },
+        { role: "system", content: "You are a self-designing AI agent." },
         { role: "user", content: prompt }
       ],
     },
@@ -39,27 +38,7 @@ async function llm(prompt) {
   return res.data.choices[0].message.content;
 }
 
-// ---------------- TOOLS ----------------
-async function searchTool(query) {
-  return `Search: Airbus uses fly-by-wire systems.`;
-}
-
-async function fetchTool(url) {
-  try {
-    const res = await axios.get(url, { timeout: 5000 });
-    return res.data.toString().slice(0, 1000);
-  } catch {
-    return "Fetch failed";
-  }
-}
-
-async function executeTool(tool, input) {
-  if (tool === "search") return await searchTool(input);
-  if (tool === "fetch") return await fetchTool(input);
-  return null;
-}
-
-// ---------------- STRATEGY SELECT ----------------
+// ---------------- GET BEST STRATEGY ----------------
 async function getBestStrategy(user_id) {
   const { data } = await supabase
     .from("agent_strategies")
@@ -68,114 +47,99 @@ async function getBestStrategy(user_id) {
     .order("avg_score", { ascending: false })
     .limit(1);
 
-  return data?.[0]?.strategy || "direct_reasoning";
+  return data?.[0] || null;
 }
 
-// ---------------- STRATEGY UPDATE ----------------
-async function updateStrategy(user_id, strategy, score) {
-  const { data: existing } = await supabase
-    .from("agent_strategies")
-    .select("*")
-    .eq("user_id", user_id)
-    .eq("strategy", strategy)
-    .maybeSingle();
+// ---------------- GENERATE NEW STRATEGY ----------------
+async function generateStrategy(goal) {
+  const prompt = `
+Goal:
+${goal.goal}
 
-  if (existing) {
-    const newCount = existing.usage_count + 1;
-    const newAvg =
-      (existing.avg_score * existing.usage_count + score) / newCount;
+Invent a new strategy to solve this better.
 
-    await supabase
-      .from("agent_strategies")
-      .update({
-        avg_score: newAvg,
-        usage_count: newCount,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", existing.id);
-  } else {
-    await supabase.from("agent_strategies").insert([
-      {
-        user_id,
-        strategy,
-        avg_score: score,
-        usage_count: 1,
-      },
-    ]);
+Respond JSON:
+{
+  "strategy": "short_name",
+  "description": "what it does"
+}
+`;
+
+  const res = await llm(prompt);
+
+  try {
+    return JSON.parse(res);
+  } catch {
+    return null;
   }
 }
 
-// ---------------- AGENT LOOP ----------------
-async function runAgent(goal, message, user_id) {
-  const strategy = await getBestStrategy(user_id);
-
-  let tool = "none";
-
-  if (strategy === "search_first") tool = "search";
-  if (strategy === "fetch_first") tool = "fetch";
-
-  const decisionPrompt = `
+// ---------------- TEST STRATEGY ----------------
+async function testStrategy(strategy, goal, message) {
+  const prompt = `
 Goal:
 ${goal.goal}
 
 Strategy:
-${strategy}
+${strategy.description}
 
 User message:
 ${message}
 
-Decide next action.
-
-Respond JSON:
-{
-  "tool": "${tool} or none",
-  "input": "...",
-  "action": "..."
-}
+Execute this strategy and respond with result.
 `;
 
-  const decisionText = await llm(decisionPrompt);
+  const result = await llm(prompt);
 
-  let decision;
-  try {
-    decision = JSON.parse(decisionText);
-  } catch {
-    decision = { tool: "none", action: decisionText };
-  }
-
-  const result =
-    decision.tool && decision.tool !== "none"
-      ? await executeTool(decision.tool, decision.input)
-      : "No tool used";
-
-  // ---------------- EVALUATE ----------------
   const evalPrompt = `
-Goal:
-${goal.goal}
-
-Action:
-${decision.action}
+Evaluate usefulness from 0 to 1:
 
 Result:
 ${result}
-
-Score from 0 to 1:
 `;
 
-  const evalText = await llm(evalPrompt);
+  const scoreText = await llm(evalPrompt);
 
-  let score = parseFloat(evalText);
+  let score = parseFloat(scoreText);
   if (isNaN(score)) score = 0.5;
 
-  // ---------------- UPDATE STRATEGY ----------------
-  await updateStrategy(user_id, strategy, score);
+  return { result, score };
+}
 
-  return {
-    strategy,
-    decision,
-    result,
-    score,
-  };
+// ---------------- UPDATE CANDIDATE ----------------
+async function updateCandidate(candidate, score) {
+  const newCount = candidate.usage_count + 1;
+  const newAvg =
+    (candidate.avg_score * candidate.usage_count + score) / newCount;
+
+  let status = "testing";
+
+  if (newCount >= 3) {
+    status = newAvg > 0.6 ? "approved" : "rejected";
+  }
+
+  await supabase
+    .from("agent_strategy_candidates")
+    .update({
+      avg_score: newAvg,
+      usage_count: newCount,
+      status,
+    })
+    .eq("id", candidate.id);
+
+  return status;
+}
+
+// ---------------- PROMOTE STRATEGY ----------------
+async function promoteStrategy(user_id, candidate) {
+  await supabase.from("agent_strategies").insert([
+    {
+      user_id,
+      strategy: candidate.strategy,
+      avg_score: candidate.avg_score,
+      usage_count: candidate.usage_count,
+    },
+  ]);
 }
 
 // ---------------- MESSAGE ----------------
@@ -183,7 +147,7 @@ app.post("/message", async (req, res) => {
   try {
     const { message, user_id = "anon" } = req.body;
 
-    // ACTIVE GOAL
+    // GET GOAL
     const { data: goal } = await supabase
       .from("user_goals")
       .select("*")
@@ -192,16 +156,65 @@ app.post("/message", async (req, res) => {
       .limit(1)
       .maybeSingle();
 
-    let output = null;
+    if (!goal) {
+      return res.json({ reply: "No active goal" });
+    }
 
-    if (goal) {
-      output = await runAgent(goal, message, user_id);
+    let result;
+
+    // 30% chance to try new strategy
+    if (Math.random() < 0.3) {
+      const newStrategy = await generateStrategy(goal);
+
+      if (newStrategy) {
+        const { data: candidate } = await supabase
+          .from("agent_strategy_candidates")
+          .insert([
+            {
+              user_id,
+              strategy: newStrategy.strategy,
+              description: newStrategy.description,
+            },
+          ])
+          .select()
+          .single();
+
+        const test = await testStrategy(newStrategy, goal, message);
+
+        const status = await updateCandidate(candidate, test.score);
+
+        if (status === "approved") {
+          await promoteStrategy(user_id, candidate);
+        }
+
+        result = {
+          type: "new_strategy",
+          strategy: newStrategy,
+          test,
+          status,
+        };
+      }
+    } else {
+      const best = await getBestStrategy(user_id);
+
+      if (best) {
+        const test = await testStrategy(
+          { description: best.strategy },
+          goal,
+          message
+        );
+
+        result = {
+          type: "existing_strategy",
+          strategy: best.strategy,
+          test,
+        };
+      }
     }
 
     return res.json({
-      reply: "Meta-learning agent executed",
-      meta: output,
-      has_goal: !!goal,
+      reply: "Self-designing agent executed",
+      result,
     });
 
   } catch (err) {
@@ -211,5 +224,5 @@ app.post("/message", async (req, res) => {
 
 // ---------------- START ----------------
 app.listen(PORT, () => {
-  console.log("🧠 Operion Meta-Learning Agent running");
+  console.log("🧠 Operion Self-Designing Agent running");
 });
