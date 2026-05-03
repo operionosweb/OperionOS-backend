@@ -25,7 +25,7 @@ async function llm(prompt) {
     {
       model: "mistral-medium",
       messages: [
-        { role: "system", content: "You are an autonomous agent that thinks step-by-step." },
+        { role: "system", content: "You are a self-improving AI agent." },
         { role: "user", content: prompt }
       ],
     },
@@ -64,28 +64,51 @@ function fingerprint(text) {
   return crypto.createHash("sha256").update(text).digest("hex");
 }
 
+// ---------------- EVALUATION ----------------
+async function evaluateAction(goal, step) {
+  const prompt = `
+Goal:
+${goal.goal}
+
+Action:
+${step.action}
+
+Result:
+${step.result}
+
+Was this useful?
+
+Respond JSON:
+{
+  "score": 0 to 1,
+  "feedback": "short explanation"
+}
+`;
+
+  const res = await llm(prompt);
+
+  try {
+    return JSON.parse(res);
+  } catch {
+    return { score: 0.5, feedback: "uncertain" };
+  }
+}
+
 // ---------------- AGENT LOOP ----------------
 async function runAgentLoop(goal, message, user_id) {
   let steps = [];
   let context = "";
-  let lastAction = null;
 
   for (let i = 0; i < 3; i++) {
-    const prompt = `
+    const decisionPrompt = `
 Goal:
 ${goal.goal}
 
-Plan:
-${JSON.stringify(goal.plan)}
-
-Context so far:
+Context:
 ${context}
 
 User message:
 ${message}
-
-Previous action:
-${lastAction || "none"}
 
 Decide next step.
 
@@ -93,57 +116,65 @@ Respond JSON:
 {
   "tool": "search | fetch | none",
   "input": "...",
-  "thought": "...",
   "action": "..."
 }
 `;
 
-    const response = await llm(prompt);
+    const decisionText = await llm(decisionPrompt);
 
     let decision;
     try {
-      decision = JSON.parse(response);
+      decision = JSON.parse(decisionText);
     } catch {
       break;
     }
 
-    // stop if no tool
     if (!decision.tool || decision.tool === "none") break;
 
-    // stop if repeating same action
-    if (decision.action === lastAction) break;
+    const result = await executeTool(decision.tool, decision.input);
 
-    const toolResult = await executeTool(decision.tool, decision.input);
-
-    // store step
-    steps.push({
-      step: i + 1,
-      thought: decision.thought,
+    const step = {
       action: decision.action,
       tool: decision.tool,
-      result: toolResult,
-    });
+      result,
+    };
 
-    // update context
-    context += `
-Step ${i + 1}:
-Action: ${decision.action}
-Result: ${toolResult}
-`;
+    // 🔍 EVALUATE STEP
+    const evaluation = await evaluateAction(goal, step);
 
-    lastAction = decision.action;
-
-    // save to DB
+    // 💾 SAVE ACTION
     await supabase.from("agent_actions").insert([
       {
         user_id,
         goal_id: goal.id,
         tool: decision.tool,
         action: decision.action,
-        result: toolResult,
+        result,
+        score: evaluation.score,
+        feedback: evaluation.feedback,
         status: "completed",
       },
     ]);
+
+    // 🧠 UPDATE MEMORY SIGNAL (reinforcement)
+    await supabase
+      .from("user_memory")
+      .update({
+        success_score: evaluation.score,
+      })
+      .eq("user_id", user_id)
+      .limit(1); // simple v1 signal
+
+    context += `
+Action: ${decision.action}
+Result: ${result}
+Score: ${evaluation.score}
+`;
+
+    steps.push({
+      ...step,
+      evaluation,
+    });
   }
 
   return steps;
@@ -156,7 +187,7 @@ app.post("/message", async (req, res) => {
 
     const fp = fingerprint(message);
 
-    // ---------------- MEMORY ----------------
+    // MEMORY STORE
     const { data: existing } = await supabase
       .from("user_memory")
       .select("*")
@@ -177,25 +208,24 @@ app.post("/message", async (req, res) => {
       ]);
     }
 
-    // ---------------- ACTIVE GOAL ----------------
+    // ACTIVE GOAL
     const { data: goal } = await supabase
       .from("user_goals")
       .select("*")
       .eq("user_id", user_id)
       .eq("status", "active")
-      .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    let loopSteps = null;
+    let steps = null;
 
     if (goal) {
-      loopSteps = await runAgentLoop(goal, message, user_id);
+      steps = await runAgentLoop(goal, message, user_id);
     }
 
     return res.json({
-      reply: "Agent loop executed",
-      steps: loopSteps,
+      reply: "Self-improving agent executed",
+      steps,
       has_goal: !!goal,
     });
 
@@ -206,5 +236,5 @@ app.post("/message", async (req, res) => {
 
 // ---------------- START ----------------
 app.listen(PORT, () => {
-  console.log("🧠 Operion Agent Loop v1 running");
+  console.log("🧠 Operion Self-Improving Agent v1 running");
 });
