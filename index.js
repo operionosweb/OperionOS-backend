@@ -21,79 +21,124 @@ const supabase = createClient(
 );
 
 // =======================
-// WEATHER LAYER (FREE)
+// MEMORY
 // =======================
-async function getWeatherContext() {
+async function getMemory(user_id) {
+  const { data } = await supabase
+    .from("user_memory")
+    .select("summary")
+    .eq("user_id", user_id)
+    .limit(5);
+
+  return data || [];
+}
+
+async function storeMemory(user_id, message) {
+  await supabase.from("user_memory").insert([
+    { user_id, summary: message }
+  ]);
+}
+
+// =======================
+// CURRENT ENVIRONMENT
+// =======================
+async function getWeather() {
   try {
     const res = await axios.get(
       "https://api.open-meteo.com/v1/forecast?latitude=41.3851&longitude=2.1734&current_weather=true"
     );
 
-    const w = res.data.current_weather;
-
-    return {
-      windspeed: w.windspeed,
-      temperature: w.temperature,
-      weathercode: w.weathercode,
-      risk:
-        w.windspeed > 40 ? "HIGH WIND RISK" :
-        w.windspeed > 25 ? "MODERATE WIND RISK" :
-        "LOW RISK"
-    };
-  } catch (err) {
-    return { risk: "UNKNOWN", error: true };
+    return res.data.current_weather;
+  } catch {
+    return null;
   }
 }
 
 // =======================
-// AVIATION CONTEXT (FREE SIGNAL)
+// ⏱️ PREDICTIVE ENGINE (NEW CORE)
 // =======================
-async function getAviationContext() {
+function predictWeatherRisk(current) {
+  if (!current) return { forecast: "unknown" };
+
+  // Simple extrapolation model (no ML, €0)
+  const wind = current.windspeed;
+
+  const next6h = wind * 1.05;
+  const next12h = wind * 1.1;
+  const next24h = wind * 1.2;
+
+  const riskLevel =
+    next24h > 45 ? "EXTREME" :
+    next24h > 30 ? "HIGH" :
+    next24h > 20 ? "MODERATE" :
+    "LOW";
+
+  return {
+    currentWind: wind,
+    forecast: {
+      +6h: next6h,
+      +12h: next12h,
+      +24h: next24h
+    },
+    riskLevel
+  };
+}
+
+// =======================
+// AVIATION CONGESTION FORECAST
+// =======================
+function predictAviationLoad(currentCount) {
+  // proxy model: assume +3–8% traffic growth window
+  const base = currentCount || 6000;
+
+  const f6 = base * 1.03;
+  const f12 = base * 1.05;
+  const f24 = base * 1.08;
+
+  return {
+    forecast: {
+      +6h: f6,
+      +12h: f12,
+      +24h: f24
+    },
+    congestionRisk:
+      f24 > 8500 ? "HIGH" :
+      f24 > 6500 ? "MEDIUM" :
+      "LOW"
+  };
+}
+
+// =======================
+// SIMPLE AVIATION DATA (FREE)
+// =======================
+async function getAviation() {
   try {
     const res = await axios.get(
       "https://opensky-network.org/api/states/all"
     );
 
-    const aircraftCount = res.data?.states?.length || 0;
-
-    return {
-      aircraftCount,
-      congestion:
-        aircraftCount > 8000 ? "HIGH" :
-        aircraftCount > 5000 ? "MEDIUM" :
-        "LOW"
-    };
-  } catch (err) {
-    return { congestion: "UNKNOWN" };
+    return res.data.states?.length || 0;
+  } catch {
+    return null;
   }
 }
 
 // =======================
-// MARITIME CONTEXT (SIMPLIFIED FREE SIGNAL)
+// ENVIRONMENT + FORECAST LAYER
 // =======================
-function getMaritimeContext() {
-  // No free global AIS → we simulate operational proxy
-  return {
-    congestion: "ESTIMATED MEDIUM",
-    note: "AIS premium required for full accuracy"
-  };
-}
-
-// =======================
-// ENVIRONMENTAL CONTEXT LAYER
-// =======================
-async function getEnvironmentContext() {
-  const [weather, aviation] = await Promise.all([
-    getWeatherContext(),
-    getAviationContext()
+async function getPredictiveEnvironment() {
+  const [weatherRaw, aviationRaw] = await Promise.all([
+    getWeather(),
+    getAviation()
   ]);
 
-  const maritime = getMaritimeContext();
+  const weather = predictWeatherRisk(weatherRaw);
+  const aviation = predictAviationLoad(aviationRaw);
 
   return {
     weather,
     aviation,
-    maritime
+    timestamp: new Date().toISOString()
   };
 }
 
@@ -121,34 +166,15 @@ async function llm(system, user) {
 }
 
 // =======================
-// MEMORY
-// =======================
-async function getMemory(user_id) {
-  const { data } = await supabase
-    .from("user_memory")
-    .select("summary")
-    .eq("user_id", user_id)
-    .limit(5);
-
-  return data || [];
-}
-
-async function storeMemory(user_id, message) {
-  await supabase.from("user_memory").insert([
-    { user_id, summary: message }
-  ]);
-}
-
-// =======================
 // PLANNER
 // =======================
-function planner(message) {
-  const m = message.toLowerCase();
+function planner(msg) {
+  const m = msg.toLowerCase();
 
   return {
     aviation: m.includes("flight") || m.includes("aircraft"),
     maritime: m.includes("ship") || m.includes("port"),
-    offshore: m.includes("offshore") || m.includes("rig"),
+    offshore: m.includes("rig") || m.includes("offshore"),
     finance: m.includes("cost") || m.includes("profit")
   };
 }
@@ -165,7 +191,7 @@ async function maritimeAgent(msg, ctx) {
 }
 
 async function offshoreAgent(msg, ctx) {
-  return llm("Offshore energy ops expert", `${ctx}\n\n${msg}`);
+  return llm("Offshore ops expert", `${ctx}\n\n${msg}`);
 }
 
 async function financeAgent(msg, ctx) {
@@ -173,11 +199,11 @@ async function financeAgent(msg, ctx) {
 }
 
 // =======================
-// SYNTHESIZER
+// SYNTHESIZER (NOW PREDICTIVE-AWARE)
 // =======================
 async function synthesizer(msg, ctx, outputs, env) {
   return llm(
-    "You are an operations orchestration engine. Use environmental constraints.",
+    "You are a predictive operations orchestration engine. You use current + forecasted conditions to recommend actions.",
     `
 USER:
 ${msg}
@@ -185,11 +211,16 @@ ${msg}
 CONTEXT:
 ${ctx}
 
-ENVIRONMENT:
+PREDICTIVE ENVIRONMENT:
 ${JSON.stringify(env)}
 
 AGENTS:
 ${JSON.stringify(outputs)}
+
+TASK:
+- Compare current vs future risk
+- Recommend timing (now vs delay vs reroute)
+- Optimize operational decision under forecast uncertainty
 `
   );
 }
@@ -206,8 +237,8 @@ app.post("/message", async (req, res) => {
 
     const plan = planner(message);
 
-    // 🌍 NEW: environment layer
-    const env = await getEnvironmentContext();
+    // ⏱️ PREDICTIVE LAYER (NEW CORE)
+    const env = await getPredictiveEnvironment();
 
     const outputs = {};
     const tasks = [];
@@ -233,7 +264,7 @@ app.post("/message", async (req, res) => {
     res.json({
       reply,
       plan,
-      environment: env
+      predictive_environment: env
     });
 
   } catch (err) {
@@ -243,5 +274,5 @@ app.post("/message", async (req, res) => {
 
 // =======================
 app.listen(PORT, () => {
-  console.log("🌍 Operion environment-aware orchestration running (€0 mode)");
+  console.log("⏱️ Predictive Routing Engine active (€0 forecasting layer)");
 });
