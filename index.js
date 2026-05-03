@@ -17,7 +17,7 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 
-// ---------------- GENERIC LLM ----------------
+// ---------------- LLM ----------------
 async function llm(system, user) {
   const res = await axios.post(
     "https://api.mistral.ai/v1/chat/completions",
@@ -40,59 +40,53 @@ async function llm(system, user) {
 
 // ---------------- AGENTS ----------------
 
-// 🎯 Planner
-async function plannerAgent(goal, message) {
-  const prompt = `
-Goal:
-${goal.goal}
-
-User message:
-${message}
-
-Create a clear plan of what to do next.
-`;
-
+// 🅰️ Agent A
+async function agentA(goal, message) {
   return await llm(
-    "You are a strategic planning agent.",
-    prompt
+    "You are Agent A: analytical and structured.",
+    `Goal:\n${goal.goal}\n\nUser:\n${message}\n\nProvide a solution.`
   );
 }
 
-// 🔧 Executor
-async function executorAgent(plan) {
-  const prompt = `
-Plan:
-${plan}
-
-Execute this plan and produce a result.
-`;
-
+// 🅱️ Agent B
+async function agentB(goal, message) {
   return await llm(
-    "You are an execution agent that follows instructions precisely.",
-    prompt
+    "You are Agent B: creative and alternative thinker.",
+    `Goal:\n${goal.goal}\n\nUser:\n${message}\n\nProvide a different approach.`
   );
 }
 
-// 🔍 Critic
-async function criticAgent(goal, result) {
-  const prompt = `
+// 🧨 Critique
+async function critique(agentName, own, other) {
+  return await llm(
+    `You are ${agentName} critiquing another agent.`,
+    `Your answer:\n${own}\n\nOther answer:\n${other}\n\nCritique weaknesses of the other.`
+  );
+}
+
+// ⚖️ Judge
+async function judge(goal, a, b, critiqueA, critiqueB) {
+  return await llm(
+    "You are a judge selecting the best solution.",
+    `
 Goal:
 ${goal.goal}
 
-Result:
-${result}
+Agent A:
+${a}
 
-Evaluate:
-- correctness
-- usefulness
-- improvements
+Agent B:
+${b}
 
-Respond clearly.
-`;
+Critique A:
+${critiqueA}
 
-  return await llm(
-    "You are a critical evaluator agent.",
-    prompt
+Critique B:
+${critiqueB}
+
+Choose the best answer or combine them into a superior one.
+Explain briefly.
+`
   );
 }
 
@@ -101,7 +95,6 @@ app.post("/message", async (req, res) => {
   try {
     const { message, user_id = "anon" } = req.body;
 
-    // GET GOAL
     const { data: goal } = await supabase
       .from("user_goals")
       .select("*")
@@ -114,35 +107,33 @@ app.post("/message", async (req, res) => {
       return res.json({ reply: "No active goal" });
     }
 
-    // ---------------- MULTI-AGENT FLOW ----------------
+    // 1️⃣ PROPOSALS
+    const A = await agentA(goal, message);
+    const B = await agentB(goal, message);
 
-    // 1️⃣ PLAN
-    const plan = await plannerAgent(goal, message);
+    // 2️⃣ CRITIQUES
+    const critiqueA = await critique("Agent A", A, B);
+    const critiqueB = await critique("Agent B", B, A);
 
-    await supabase.from("agent_interactions").insert([
-      { user_id, role: "planner", message: plan },
-    ]);
+    // 3️⃣ JUDGMENT
+    const final = await judge(goal, A, B, critiqueA, critiqueB);
 
-    // 2️⃣ EXECUTE
-    const result = await executorAgent(plan);
-
-    await supabase.from("agent_interactions").insert([
-      { user_id, role: "executor", message: result },
-    ]);
-
-    // 3️⃣ CRITIC
-    const critique = await criticAgent(goal, result);
-
-    await supabase.from("agent_interactions").insert([
-      { user_id, role: "critic", message: critique },
+    // OPTIONAL LOGGING
+    await supabase.from("agent_debates").insert([
+      { user_id, role: "A", message: A },
+      { user_id, role: "B", message: B },
+      { user_id, role: "critiqueA", message: critiqueA },
+      { user_id, role: "critiqueB", message: critiqueB },
+      { user_id, role: "judge", message: final },
     ]);
 
     return res.json({
-      reply: "Multi-agent cycle complete",
-      agents: {
-        planner: plan,
-        executor: result,
-        critic: critique,
+      reply: final,
+      debate: {
+        agentA: A,
+        agentB: B,
+        critiqueA,
+        critiqueB,
       },
     });
 
@@ -153,5 +144,5 @@ app.post("/message", async (req, res) => {
 
 // ---------------- START ----------------
 app.listen(PORT, () => {
-  console.log("🧠 Operion Multi-Agent System v1 running");
+  console.log("🧠 Operion Debate System v1 running");
 });
