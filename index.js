@@ -40,7 +40,7 @@ async function storeMemory(user_id, message) {
 }
 
 // =======================
-// CURRENT ENVIRONMENT
+// WEATHER
 // =======================
 async function getWeather() {
   try {
@@ -55,12 +55,11 @@ async function getWeather() {
 }
 
 // =======================
-// ⏱️ PREDICTIVE ENGINE (NEW CORE)
+// ⏱️ PREDICTIVE ENGINE (FIXED)
 // =======================
 function predictWeatherRisk(current) {
   if (!current) return { forecast: "unknown" };
 
-  // Simple extrapolation model (no ML, €0)
   const wind = current.windspeed;
 
   const next6h = wind * 1.05;
@@ -76,40 +75,16 @@ function predictWeatherRisk(current) {
   return {
     currentWind: wind,
     forecast: {
-      +6h: next6h,
-      +12h: next12h,
-      +24h: next24h
+      h6: next6h,
+      h12: next12h,
+      h24: next24h
     },
     riskLevel
   };
 }
 
 // =======================
-// AVIATION CONGESTION FORECAST
-// =======================
-function predictAviationLoad(currentCount) {
-  // proxy model: assume +3–8% traffic growth window
-  const base = currentCount || 6000;
-
-  const f6 = base * 1.03;
-  const f12 = base * 1.05;
-  const f24 = base * 1.08;
-
-  return {
-    forecast: {
-      +6h: f6,
-      +12h: f12,
-      +24h: f24
-    },
-    congestionRisk:
-      f24 > 8500 ? "HIGH" :
-      f24 > 6500 ? "MEDIUM" :
-      "LOW"
-  };
-}
-
-// =======================
-// SIMPLE AVIATION DATA (FREE)
+// AVIATION
 // =======================
 async function getAviation() {
   try {
@@ -123,8 +98,28 @@ async function getAviation() {
   }
 }
 
+function predictAviationLoad(currentCount) {
+  const base = currentCount || 6000;
+
+  const f6 = base * 1.03;
+  const f12 = base * 1.05;
+  const f24 = base * 1.08;
+
+  return {
+    forecast: {
+      h6: f6,
+      h12: f12,
+      h24: f24
+    },
+    congestionRisk:
+      f24 > 8500 ? "HIGH" :
+      f24 > 6500 ? "MEDIUM" :
+      "LOW"
+  };
+}
+
 // =======================
-// ENVIRONMENT + FORECAST LAYER
+// ENVIRONMENT LAYER
 // =======================
 async function getPredictiveEnvironment() {
   const [weatherRaw, aviationRaw] = await Promise.all([
@@ -132,12 +127,9 @@ async function getPredictiveEnvironment() {
     getAviation()
   ]);
 
-  const weather = predictWeatherRisk(weatherRaw);
-  const aviation = predictAviationLoad(aviationRaw);
-
   return {
-    weather,
-    aviation,
+    weather: predictWeatherRisk(weatherRaw),
+    aviation: predictAviationLoad(aviationRaw),
     timestamp: new Date().toISOString()
   };
 }
@@ -199,11 +191,11 @@ async function financeAgent(msg, ctx) {
 }
 
 // =======================
-// SYNTHESIZER (NOW PREDICTIVE-AWARE)
+// SYNTHESIZER
 // =======================
 async function synthesizer(msg, ctx, outputs, env) {
   return llm(
-    "You are a predictive operations orchestration engine. You use current + forecasted conditions to recommend actions.",
+    "You are a predictive operations orchestration engine.",
     `
 USER:
 ${msg}
@@ -211,16 +203,11 @@ ${msg}
 CONTEXT:
 ${ctx}
 
-PREDICTIVE ENVIRONMENT:
+ENVIRONMENT:
 ${JSON.stringify(env)}
 
 AGENTS:
 ${JSON.stringify(outputs)}
-
-TASK:
-- Compare current vs future risk
-- Recommend timing (now vs delay vs reroute)
-- Optimize operational decision under forecast uncertainty
 `
   );
 }
@@ -237,7 +224,6 @@ app.post("/message", async (req, res) => {
 
     const plan = planner(message);
 
-    // ⏱️ PREDICTIVE LAYER (NEW CORE)
     const env = await getPredictiveEnvironment();
 
     const outputs = {};
@@ -274,5 +260,5 @@ app.post("/message", async (req, res) => {
 
 // =======================
 app.listen(PORT, () => {
-  console.log("⏱️ Predictive Routing Engine active (€0 forecasting layer)");
+  console.log("🚀 Operion predictive orchestration running");
 });
