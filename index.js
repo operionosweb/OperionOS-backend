@@ -19,24 +19,20 @@ const supabase = createClient(
 );
 
 // =======================
-// BASE AGENTS (seed population)
+// AGENTS (simple stable layer)
 // =======================
-const BASE_AGENTS = [
+const AGENTS = [
   {
     agent_id: "aviation_basic",
     domain: "aviation",
-    logic: (env) =>
+    run: (env) =>
       env.weatherRisk === "EXTREME" ? "HOLD" : "PROCEED"
   },
   {
     agent_id: "aviation_routing",
     domain: "aviation",
-    logic: (env) =>
-      env.weatherRisk === "HIGH"
-        ? "REROUTE"
-        : env.congestionRisk === "HIGH"
-        ? "DELAY"
-        : "PROCEED"
+    run: (env) =>
+      env.congestionRisk === "HIGH" ? "DELAY" : "PROCEED"
   }
 ];
 
@@ -64,161 +60,60 @@ function buildEnv(weather, traffic) {
 }
 
 // =======================
-// LOAD ACTIVE AGENTS
+// EXECUTE SYSTEM
 // =======================
-async function getActiveAgents(tenantId) {
-  const { data } = await supabase
-    .from("agent_registry")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .eq("status", "active");
-
-  if (data && data.length > 0) return data;
-
-  // bootstrap system if empty
-  const seeded = BASE_AGENTS.map(a => ({
-    tenant_id: tenantId,
+function executeAgents(env) {
+  return AGENTS.map(a => ({
     agent_id: a.agent_id,
-    domain: a.domain,
-    logic: { type: "function_seed" },
-    performance: 1,
-    version: 1
+    decision: a.run(env)
   }));
-
-  await supabase.from("agent_registry").insert(seeded);
-
-  return seeded;
 }
 
 // =======================
-// EXECUTE AGENTS
+// SYSTEM ANALYSIS (META-AGENT)
 // =======================
-function runAgent(agent, env) {
-  if (agent.agent_id === "aviation_basic") {
-    return env.weatherRisk === "EXTREME" ? "HOLD" : "PROCEED";
-  }
-
-  if (agent.agent_id === "aviation_routing") {
-    return env.weatherRisk === "HIGH"
-      ? "REROUTE"
-      : env.congestionRisk === "HIGH"
-      ? "DELAY"
-      : "PROCEED";
-  }
-
-  return "PROCEED";
-}
-
-// =======================
-// AGGREGATION
-// =======================
-function aggregate(outputs) {
-  const scores = {
-    PROCEED: 0,
-    DELAY: 0,
-    REROUTE: 0,
-    HOLD: 0
-  };
+function analyzeSystem(outputs) {
+  const counts = {};
+  let total = 0;
 
   for (const o of outputs) {
-    scores[o.decision] += o.performance;
+    counts[o.decision] = (counts[o.decision] || 0) + 1;
+    total++;
   }
 
-  return Object.entries(scores)
-    .sort((a, b) => b[1] - a[1])[0][0];
-}
+  const diversity = Object.keys(counts).length;
 
-// =======================
-// EVOLUTION RULES
-// =======================
-function mutateLogic(oldLogic) {
-  const mutations = [
-    (env) => env.weatherRisk === "EXTREME" ? "HOLD" : "PROCEED",
-    (env) => env.congestionRisk === "HIGH" ? "DELAY" : "PROCEED",
-    (env) => "PROCEED"
-  ];
+  const dominant = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])[0];
 
-  return mutations[Math.floor(Math.random() * mutations.length)];
-}
+  const instabilityScore = diversity / total;
 
-// =======================
-// EVOLUTION ENGINE
-// =======================
-async function evolveAgents(tenantId) {
-  const { data } = await supabase
-    .from("agent_registry")
-    .select("*")
-    .eq("tenant_id", tenantId);
-
-  if (!data) return;
-
-  const best = data.sort((a, b) => b.performance - a.performance)[0];
-
-  if (!best) return;
-
-  // clone best agent
-  const newAgent = {
-    tenant_id: tenantId,
-    agent_id: best.agent_id + "_v" + (best.version + 1),
-    domain: best.domain,
-    logic: {
-      type: "mutated",
-      fn: "adaptive"
-    },
-    performance: 0.5,
-    version: best.version + 1
+  return {
+    dominantDecision: dominant[0],
+    systemScore: 1 - instabilityScore,
+    issues:
+      instabilityScore > 0.6
+        ? ["high disagreement between agents"]
+        : [],
+    recommendation:
+      instabilityScore > 0.6
+        ? "increase agent specialization"
+        : "system stable"
   };
-
-  await supabase.from("agent_registry").insert(newAgent);
 }
 
 // =======================
-// MAIN EXECUTION
+// STORE REFLECTION
 // =======================
-app.post("/execute/:tenantId", async (req, res) => {
-  try {
-    const { tenantId } = req.params;
-
-    const weather = await getWeather();
-    const traffic = await getTraffic();
-
-    const env = buildEnv(weather, traffic);
-
-    const agents = await getActiveAgents(tenantId);
-
-    const outputs = agents.map(agent => {
-      const decision = runAgent(agent, env);
-
-      return {
-        agent_id: agent.agent_id,
-        decision,
-        performance: agent.performance || 1
-      };
-    });
-
-    const finalDecision = aggregate(outputs);
-
-    await supabase.from("agent_runs").insert({
-      tenant_id: tenantId,
-      input: env,
-      output: outputs,
-      decision: finalDecision
-    });
-
-    // evolve system after run
-    await evolveAgents(tenantId);
-
-    res.json({
-      tenantId,
-      env,
-      outputs,
-      decision: finalDecision
-    });
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+async function storeReflection(tenantId, analysis) {
+  await supabase.from("system_reflections").insert({
+    tenant_id: tenantId,
+    summary: `System leaning toward ${analysis.dominantDecision}`,
+    system_score: analysis.systemScore,
+    issues: analysis.issues,
+    recommendation: analysis.recommendation
+  });
+}
 
 // =======================
 // EXTERNAL DATA
@@ -235,6 +130,43 @@ async function getTraffic() {
 }
 
 // =======================
+// MAIN ENDPOINT
+// =======================
+app.post("/execute/:tenantId", async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+
+    const weather = await getWeather();
+    const traffic = await getTraffic();
+
+    const env = buildEnv(weather, traffic);
+
+    const outputs = executeAgents(env);
+
+    const analysis = analyzeSystem(outputs);
+
+    await supabase.from("agent_runs").insert({
+      tenant_id: tenantId,
+      input: env,
+      output: outputs,
+      decision: analysis.dominantDecision
+    });
+
+    await storeReflection(tenantId, analysis);
+
+    res.json({
+      tenantId,
+      env,
+      outputs,
+      meta: analysis
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =======================
 app.listen(process.env.PORT || 3000, () => {
-  console.log("🧠 Operion Evolution Engine Running");
+  console.log("🧠 Operion Meta-Reflection Engine Running");
 });
