@@ -19,28 +19,26 @@ const supabase = createClient(
 );
 
 // =======================
-// AGENTS
+// BASE AGENTS (seed population)
 // =======================
-const AGENTS = {
-  aviation_basic: {
+const BASE_AGENTS = [
+  {
+    agent_id: "aviation_basic",
     domain: "aviation",
-    run: (env, weight = 1) => ({
-      decision: env.weatherRisk === "EXTREME" ? "HOLD" : "PROCEED",
-      confidence: 0.7 * weight
-    })
+    logic: (env) =>
+      env.weatherRisk === "EXTREME" ? "HOLD" : "PROCEED"
   },
-
-  aviation_routing: {
+  {
+    agent_id: "aviation_routing",
     domain: "aviation",
-    run: (env, weight = 1) => ({
-      decision:
-        env.weatherRisk === "HIGH" ? "REROUTE" :
-        env.congestionRisk === "HIGH" ? "DELAY" :
-        "PROCEED",
-      confidence: 0.9 * weight
-    })
+    logic: (env) =>
+      env.weatherRisk === "HIGH"
+        ? "REROUTE"
+        : env.congestionRisk === "HIGH"
+        ? "DELAY"
+        : "PROCEED"
   }
-};
+];
 
 // =======================
 // ENV
@@ -66,44 +64,53 @@ function buildEnv(weather, traffic) {
 }
 
 // =======================
-// GET AGENT RELIABILITY
+// LOAD ACTIVE AGENTS
 // =======================
-async function getReliabilityMap(tenantId) {
+async function getActiveAgents(tenantId) {
   const { data } = await supabase
-    .from("agent_reliability")
+    .from("agent_registry")
     .select("*")
-    .eq("tenant_id", tenantId);
+    .eq("tenant_id", tenantId)
+    .eq("status", "active");
 
-  const map = {};
+  if (data && data.length > 0) return data;
 
-  if (data) {
-    for (const row of data) {
-      map[row.agent_id] = row.reliability || 1;
-    }
+  // bootstrap system if empty
+  const seeded = BASE_AGENTS.map(a => ({
+    tenant_id: tenantId,
+    agent_id: a.agent_id,
+    domain: a.domain,
+    logic: { type: "function_seed" },
+    performance: 1,
+    version: 1
+  }));
+
+  await supabase.from("agent_registry").insert(seeded);
+
+  return seeded;
+}
+
+// =======================
+// EXECUTE AGENTS
+// =======================
+function runAgent(agent, env) {
+  if (agent.agent_id === "aviation_basic") {
+    return env.weatherRisk === "EXTREME" ? "HOLD" : "PROCEED";
   }
 
-  return map;
+  if (agent.agent_id === "aviation_routing") {
+    return env.weatherRisk === "HIGH"
+      ? "REROUTE"
+      : env.congestionRisk === "HIGH"
+      ? "DELAY"
+      : "PROCEED";
+  }
+
+  return "PROCEED";
 }
 
 // =======================
-// EXECUTE AGENTS (WEIGHTED)
-// =======================
-function executeAgents(agents, env, reliabilityMap) {
-  return agents.map((agent, i) => {
-    const weight = reliabilityMap[agent.domain] || 1;
-
-    const result = agent.run(env, weight);
-
-    return {
-      agent_id: agent.domain,
-      decision: result.decision,
-      confidence: result.confidence
-    };
-  });
-}
-
-// =======================
-// AGGREGATION (WEIGHTED VOTING)
+// AGGREGATION
 // =======================
 function aggregate(outputs) {
   const scores = {
@@ -114,7 +121,7 @@ function aggregate(outputs) {
   };
 
   for (const o of outputs) {
-    scores[o.decision] += o.confidence;
+    scores[o.decision] += o.performance;
   }
 
   return Object.entries(scores)
@@ -122,15 +129,96 @@ function aggregate(outputs) {
 }
 
 // =======================
-// SCORING
+// EVOLUTION RULES
 // =======================
-function calculateScore(agentDecision, finalDecision, confidence) {
-  const success = agentDecision === finalDecision;
-  return {
-    success,
-    score: success ? confidence : 0
-  };
+function mutateLogic(oldLogic) {
+  const mutations = [
+    (env) => env.weatherRisk === "EXTREME" ? "HOLD" : "PROCEED",
+    (env) => env.congestionRisk === "HIGH" ? "DELAY" : "PROCEED",
+    (env) => "PROCEED"
+  ];
+
+  return mutations[Math.floor(Math.random() * mutations.length)];
 }
+
+// =======================
+// EVOLUTION ENGINE
+// =======================
+async function evolveAgents(tenantId) {
+  const { data } = await supabase
+    .from("agent_registry")
+    .select("*")
+    .eq("tenant_id", tenantId);
+
+  if (!data) return;
+
+  const best = data.sort((a, b) => b.performance - a.performance)[0];
+
+  if (!best) return;
+
+  // clone best agent
+  const newAgent = {
+    tenant_id: tenantId,
+    agent_id: best.agent_id + "_v" + (best.version + 1),
+    domain: best.domain,
+    logic: {
+      type: "mutated",
+      fn: "adaptive"
+    },
+    performance: 0.5,
+    version: best.version + 1
+  };
+
+  await supabase.from("agent_registry").insert(newAgent);
+}
+
+// =======================
+// MAIN EXECUTION
+// =======================
+app.post("/execute/:tenantId", async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+
+    const weather = await getWeather();
+    const traffic = await getTraffic();
+
+    const env = buildEnv(weather, traffic);
+
+    const agents = await getActiveAgents(tenantId);
+
+    const outputs = agents.map(agent => {
+      const decision = runAgent(agent, env);
+
+      return {
+        agent_id: agent.agent_id,
+        decision,
+        performance: agent.performance || 1
+      };
+    });
+
+    const finalDecision = aggregate(outputs);
+
+    await supabase.from("agent_runs").insert({
+      tenant_id: tenantId,
+      input: env,
+      output: outputs,
+      decision: finalDecision
+    });
+
+    // evolve system after run
+    await evolveAgents(tenantId);
+
+    res.json({
+      tenantId,
+      env,
+      outputs,
+      decision: finalDecision
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // =======================
 // EXTERNAL DATA
@@ -147,100 +235,6 @@ async function getTraffic() {
 }
 
 // =======================
-// MAIN EXECUTION
-// =======================
-app.post("/execute/:tenantId", async (req, res) => {
-  try {
-    const { tenantId } = req.params;
-
-    const weather = await getWeather();
-    const traffic = await getTraffic();
-
-    const env = buildEnv(weather, traffic);
-
-    const reliabilityMap = await getReliabilityMap(tenantId);
-
-    const agents = Object.values(AGENTS);
-
-    const outputs = executeAgents(agents, env, reliabilityMap);
-
-    const decision = aggregate(outputs);
-
-    // =======================
-    // STORE RUN
-    // =======================
-    await supabase.from("agent_runs").insert({
-      tenant_id: tenantId,
-      input: env,
-      output: outputs,
-      decision
-    });
-
-    // =======================
-    // UPDATE LEARNING SYSTEM
-    // =======================
-    for (const o of outputs) {
-      const result = calculateScore(
-        o.decision,
-        decision,
-        o.confidence
-      );
-
-      // store score
-      await supabase.from("agent_scores").insert({
-        tenant_id: tenantId,
-        agent_id: o.agent_id,
-        success: result.success,
-        score: result.score,
-        context: env
-      });
-
-      // update reliability
-      const { data } = await supabase
-        .from("agent_reliability")
-        .select("*")
-        .eq("tenant_id", tenantId)
-        .eq("agent_id", o.agent_id)
-        .single();
-
-      if (data) {
-        const newTotalRuns = (data.total_runs || 0) + 1;
-        const newTotalScore = (data.total_score || 0) + result.score;
-        const newReliability = newTotalScore / newTotalRuns;
-
-        await supabase
-          .from("agent_reliability")
-          .update({
-            total_runs: newTotalRuns,
-            total_score: newTotalScore,
-            reliability: newReliability,
-            updated_at: new Date()
-          })
-          .eq("id", data.id);
-      } else {
-        await supabase.from("agent_reliability").insert({
-          tenant_id: tenantId,
-          agent_id: o.agent_id,
-          total_runs: 1,
-          total_score: result.score,
-          reliability: result.score
-        });
-      }
-    }
-
-    res.json({
-      tenantId,
-      env,
-      outputs,
-      decision
-    });
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// =======================
 app.listen(process.env.PORT || 3000, () => {
-  console.log("🚀 Operion OS - Adaptive Intelligence Engine Running");
+  console.log("🧠 Operion Evolution Engine Running");
 });
