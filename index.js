@@ -19,20 +19,29 @@ const supabase = createClient(
 );
 
 // =======================
-// AGENTS (simple stable layer)
+// AGENTS
 // =======================
 const AGENTS = [
   {
     agent_id: "aviation_basic",
     domain: "aviation",
-    run: (env) =>
-      env.weatherRisk === "EXTREME" ? "HOLD" : "PROCEED"
+    weight: 1,
+    run: (env, weight) => ({
+      decision: env.weatherRisk === "EXTREME" ? "HOLD" : "PROCEED",
+      confidence: 0.6 * weight
+    })
   },
   {
     agent_id: "aviation_routing",
     domain: "aviation",
-    run: (env) =>
-      env.congestionRisk === "HIGH" ? "DELAY" : "PROCEED"
+    weight: 1,
+    run: (env, weight) => ({
+      decision:
+        env.congestionRisk === "HIGH"
+          ? "DELAY"
+          : "PROCEED",
+      confidence: 0.9 * weight
+    })
   }
 ];
 
@@ -60,59 +69,86 @@ function buildEnv(weather, traffic) {
 }
 
 // =======================
-// EXECUTE SYSTEM
+// EXECUTION
 // =======================
 function executeAgents(env) {
-  return AGENTS.map(a => ({
-    agent_id: a.agent_id,
-    decision: a.run(env)
-  }));
+  return AGENTS.map(agent => {
+    const result = agent.run(env, agent.weight);
+
+    return {
+      agent_id: agent.agent_id,
+      decision: result.decision,
+      confidence: result.confidence
+    };
+  });
 }
 
 // =======================
-// SYSTEM ANALYSIS (META-AGENT)
+// META ANALYSIS
 // =======================
 function analyzeSystem(outputs) {
-  const counts = {};
+  const scores = {};
   let total = 0;
 
   for (const o of outputs) {
-    counts[o.decision] = (counts[o.decision] || 0) + 1;
-    total++;
+    scores[o.decision] = (scores[o.decision] || 0) + o.confidence;
+    total += o.confidence;
   }
 
-  const diversity = Object.keys(counts).length;
+  const dominant = Object.entries(scores)
+    .sort((a, b) => b[1] - a[1])[0][0];
 
-  const dominant = Object.entries(counts)
-    .sort((a, b) => b[1] - a[1])[0];
-
-  const instabilityScore = diversity / total;
+  const entropy = Object.keys(scores).length / 4;
 
   return {
-    dominantDecision: dominant[0],
-    systemScore: 1 - instabilityScore,
-    issues:
-      instabilityScore > 0.6
-        ? ["high disagreement between agents"]
-        : [],
-    recommendation:
-      instabilityScore > 0.6
-        ? "increase agent specialization"
-        : "system stable"
+    dominant,
+    instability: entropy,
+    systemHealth: 1 - entropy
   };
 }
 
 // =======================
-// STORE REFLECTION
+// META DECISION ENGINE (NEW)
 // =======================
-async function storeReflection(tenantId, analysis) {
-  await supabase.from("system_reflections").insert({
-    tenant_id: tenantId,
-    summary: `System leaning toward ${analysis.dominantDecision}`,
-    system_score: analysis.systemScore,
-    issues: analysis.issues,
-    recommendation: analysis.recommendation
-  });
+async function metaAdjustments(tenantId, analysis) {
+  const adjustments = [];
+
+  // If system unstable → increase diversity pressure
+  if (analysis.instability > 0.6) {
+    adjustments.push({
+      tenant_id: tenantId,
+      adjustment_type: "increase_diversity",
+      target: "system",
+      value: 0.2,
+      reason: "High instability detected"
+    });
+
+    // weaken overly dominant agent behavior
+    adjustments.push({
+      tenant_id: tenantId,
+      adjustment_type: "reduce_confidence_bias",
+      target: "agents",
+      value: -0.1,
+      reason: "Prevent convergence collapse"
+    });
+  }
+
+  // If stable → reinforce current strategy
+  if (analysis.systemHealth > 0.7) {
+    adjustments.push({
+      tenant_id: tenantId,
+      adjustment_type: "reinforce_current_policy",
+      target: "system",
+      value: 0.1,
+      reason: "Stable system behavior"
+    });
+  }
+
+  if (adjustments.length > 0) {
+    await supabase.from("meta_adjustments").insert(adjustments);
+  }
+
+  return adjustments;
 }
 
 // =======================
@@ -145,20 +181,21 @@ app.post("/execute/:tenantId", async (req, res) => {
 
     const analysis = analyzeSystem(outputs);
 
+    const adjustments = await metaAdjustments(tenantId, analysis);
+
     await supabase.from("agent_runs").insert({
       tenant_id: tenantId,
       input: env,
       output: outputs,
-      decision: analysis.dominantDecision
+      decision: analysis.dominant
     });
-
-    await storeReflection(tenantId, analysis);
 
     res.json({
       tenantId,
       env,
       outputs,
-      meta: analysis
+      meta: analysis,
+      adjustments
     });
 
   } catch (err) {
@@ -168,5 +205,5 @@ app.post("/execute/:tenantId", async (req, res) => {
 
 // =======================
 app.listen(process.env.PORT || 3000, () => {
-  console.log("🧠 Operion Meta-Reflection Engine Running");
+  console.log("🧠 Operion Recursive Meta-Agent Running");
 });
