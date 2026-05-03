@@ -2,7 +2,6 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import axios from "axios";
-import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
 
@@ -13,57 +12,105 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // =======================
-// SUPABASE (SHARED MEMORY LAYER)
+// GLOBAL STATE
 // =======================
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
-);
-
-// =======================
-// GLOBAL SHARED WEIGHTS (SYNCED ACROSS NODES)
-// =======================
-let SHARED_WEIGHTS = {
-  safety: 1.6,
-  cost: 1.0,
-  efficiency: 1.2,
-  operations: 1.5
+const GLOBAL_POLICY = {
+  safetyPriority: 1.8,
+  costPriority: 1.0,
+  efficiencyPriority: 1.2
 };
 
 // =======================
-// NODE IDENTIFICATION
+// DOMAIN GOVERNORS
 // =======================
-const NODE_ID = process.env.NODE_ID || "aviation-node";
+const GOVERNORS = {
+  aviation: (env) => ({
+    decision:
+      env.weatherRisk === "EXTREME" ? "HOLD" :
+      env.congestionRisk === "HIGH" ? "DELAY" :
+      "PROCEED",
+
+    risk: env.weatherRisk,
+    load: env.traffic
+  }),
+
+  maritime: (env) => ({
+    decision:
+      env.weatherRisk === "HIGH" ? "DELAY" :
+      "PROCEED",
+
+    risk: env.weatherRisk
+  }),
+
+  offshore: (env) => ({
+    decision:
+      env.weatherRisk === "EXTREME" ? "HOLD" :
+      "PROCEED",
+
+    risk: env.weatherRisk
+  }),
+
+  finance: (env) => ({
+    decision:
+      env.congestionRisk === "HIGH" ? "DELAY" :
+      "PROCEED",
+
+    risk: env.congestionRisk
+  })
+};
 
 // =======================
-// LOAD GLOBAL STATE FROM DB (SYNC)
+// CENTRAL COORDINATOR (NEW CORE)
 // =======================
-async function syncGlobalState() {
-  const { data } = await supabase
-    .from("global_agent_state")
-    .select("*")
-    .eq("id", "master")
-    .single();
+function centralCoordinator(governorOutputs, env) {
+  const scores = {
+    PROCEED: 0,
+    DELAY: 0,
+    REROUTE: 0,
+    HOLD: 0
+  };
 
-  if (data?.weights) {
-    SHARED_WEIGHTS = data.weights;
+  // Evaluate governor outputs
+  for (const [domain, output] of Object.entries(governorOutputs)) {
+    let weight = GLOBAL_POLICY.efficiencyPriority;
+
+    // safety override logic
+    if (output.decision === "HOLD") {
+      weight *= GLOBAL_POLICY.safetyPriority;
+    }
+
+    // risk amplification
+    if (output.risk === "EXTREME") {
+      weight *= 1.5;
+    }
+
+    scores[output.decision] += weight;
   }
+
+  // enforce safety override (hard constraint)
+  const anyExtreme = Object.values(governorOutputs)
+    .some(g => g.risk === "EXTREME");
+
+  if (anyExtreme) {
+    return {
+      finalDecision: "HOLD",
+      reason: "Global safety override triggered (EXTREME risk detected)",
+      scores
+    };
+  }
+
+  const finalDecision = Object.entries(scores)
+    .sort((a, b) => b[1] - a[1])[0][0];
+
+  return {
+    finalDecision,
+    reason: "Weighted governance aggregation",
+    scores
+  };
 }
 
 // =======================
-// PUSH STATE TO SHARED MEMORY
-// =======================
-async function pushGlobalState() {
-  await supabase.from("global_agent_state").upsert({
-    id: "master",
-    weights: SHARED_WEIGHTS,
-    updated_by: NODE_ID,
-    updated_at: new Date().toISOString()
-  });
-}
-
-// =======================
-// ENV MODEL (SIMPLIFIED)
+// ENV MODEL
 // =======================
 function envModel(weather, traffic) {
   const wind = weather?.windspeed || 10;
@@ -86,88 +133,7 @@ function envModel(weather, traffic) {
 }
 
 // =======================
-// AGENTS
-// =======================
-const AGENTS = {
-  safety: (env) =>
-    env.weatherRisk === "EXTREME" ? "HOLD" :
-    env.weatherRisk === "HIGH" ? "DELAY" :
-    "PROCEED",
-
-  cost: (env) =>
-    env.congestionRisk === "HIGH" ? "DELAY" : "PROCEED",
-
-  efficiency: (env) =>
-    env.traffic > 8000 ? "REROUTE" : "PROCEED",
-
-  operations: (env) =>
-    env.weatherRisk === "HIGH" && env.congestionRisk === "HIGH"
-      ? "HOLD"
-      : "PROCEED"
-};
-
-// =======================
-// DEBATE + WEIGHTED DECISION
-// =======================
-function decisionEngine(env) {
-  const votes = {};
-  const score = {
-    PROCEED: 0,
-    DELAY: 0,
-    REROUTE: 0,
-    HOLD: 0
-  };
-
-  for (const [name, fn] of Object.entries(AGENTS)) {
-    const decision = fn(env);
-    votes[name] = decision;
-
-    score[decision] += SHARED_WEIGHTS[name];
-  }
-
-  const finalDecision = Object.entries(score)
-    .sort((a, b) => b[1] - a[1])[0][0];
-
-  return { votes, score, finalDecision };
-}
-
-// =======================
-// 🧠 DISTRIBUTED LEARNING UPDATE (NEW CORE)
-// =======================
-async function distributedLearningUpdate(env, result) {
-  const { finalDecision, score } = result;
-
-  const success =
-    finalDecision === "PROCEED" && env.weatherRisk !== "EXTREME";
-
-  const learningRate = 0.03;
-
-  // local adjustment
-  if (success) {
-    for (const k in SHARED_WEIGHTS) {
-      SHARED_WEIGHTS[k] += learningRate;
-    }
-  } else {
-    SHARED_WEIGHTS.operations += 0.05;
-    SHARED_WEIGHTS.safety += 0.08;
-  }
-
-  // clamp weights
-  for (const k in SHARED_WEIGHTS) {
-    SHARED_WEIGHTS[k] = Math.max(
-      0.5,
-      Math.min(2.0, SHARED_WEIGHTS[k])
-    );
-  }
-
-  // persist globally
-  await pushGlobalState();
-
-  return SHARED_WEIGHTS;
-}
-
-// =======================
-// SIMPLE ENV FETCH
+// SIMULATION INPUTS
 // =======================
 async function getWeather() {
   try {
@@ -181,36 +147,35 @@ async function getWeather() {
 }
 
 async function getTraffic() {
-  return 7000 + Math.floor(Math.random() * 3000);
+  return 6000 + Math.floor(Math.random() * 4000);
 }
 
 // =======================
-// MAIN
+// MAIN EXECUTION
 // =======================
 app.post("/message", async (req, res) => {
   try {
     const { message } = req.body;
-
-    await syncGlobalState();
 
     const weather = await getWeather();
     const traffic = await getTraffic();
 
     const env = envModel(weather, traffic);
 
-    const decision = decisionEngine(env);
+    // STEP 1: Governors decide locally
+    const governorOutputs = {};
+    for (const [domain, governor] of Object.entries(GOVERNORS)) {
+      governorOutputs[domain] = governor(env);
+    }
 
-    const updatedWeights = await distributedLearningUpdate(
-      env,
-      decision
-    );
+    // STEP 2: Central coordination
+    const final = centralCoordinator(governorOutputs, env);
 
     res.json({
-      node: NODE_ID,
+      message,
       environment: env,
-      decision,
-      sharedWeights: updatedWeights,
-      message: "Distributed learning cycle complete"
+      governorOutputs,
+      centralDecision: final
     });
 
   } catch (err) {
@@ -220,6 +185,5 @@ app.post("/message", async (req, res) => {
 
 // =======================
 app.listen(PORT, () => {
-  console.log("🌐 Distributed Agent Memory Network Active");
-  console.log("Node:", NODE_ID);
+  console.log("🏛️ Hierarchical Command Layer Active");
 });
