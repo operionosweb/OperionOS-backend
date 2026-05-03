@@ -21,62 +21,15 @@ const supabase = createClient(
 );
 
 // =======================
-// MEMORY (BASE)
+// MEMORY GRAPH (CAUSAL DATA)
 // =======================
-async function storeMemory(user_id, message) {
-  await supabase.from("user_memory").insert([
-    {
-      user_id,
-      summary: message,
-      created_at: new Date().toISOString()
-    }
-  ]);
-}
-
-async function getMemory(user_id) {
-  const { data } = await supabase
-    .from("user_memory")
-    .select("*")
-    .eq("user_id", user_id)
-    .order("created_at", { ascending: false })
-    .limit(10);
-
-  return data || [];
-}
-
-// =======================
-// 🔗 TEMPORAL MEMORY GRAPH (NEW CORE)
-// =======================
-async function storeDecisionChain({
-  user_id,
-  message,
-  decision,
-  environment,
-  outcomeScore
-}) {
-  await supabase.from("memory_graph").insert([
-    {
-      user_id,
-      event: message,
-      decision: decision.decision,
-      cost: decision.cost,
-      risk: decision.risk,
-      delay: decision.delay,
-      score: outcomeScore,
-      weather_risk: environment.weather?.riskLevel,
-      congestion_risk: environment.aviation?.congestionRisk,
-      created_at: new Date().toISOString()
-    }
-  ]);
-}
-
 async function getDecisionHistory(user_id) {
   const { data } = await supabase
     .from("memory_graph")
     .select("*")
     .eq("user_id", user_id)
     .order("created_at", { ascending: false })
-    .limit(20);
+    .limit(50);
 
   return data || [];
 }
@@ -107,7 +60,7 @@ async function getAviation() {
 }
 
 // =======================
-// PREDICTION LAYER
+// PREDICTION MODELS
 // =======================
 function predictWeatherRisk(current) {
   if (!current) return { riskLevel: "UNKNOWN" };
@@ -124,27 +77,27 @@ function predictWeatherRisk(current) {
     h24 > 20 ? "MODERATE" :
     "LOW";
 
-  return { currentWind: w, forecast: { h6, h12, h24 }, riskLevel };
+  return { wind: w, forecast: { h6, h12, h24 }, riskLevel };
 }
 
 function predictAviationLoad(count) {
   const base = count || 6000;
 
-  const h6 = base * 1.03;
-  const h12 = base * 1.05;
-  const h24 = base * 1.08;
-
   return {
-    forecast: { h6, h12, h24 },
+    forecast: {
+      h6: base * 1.03,
+      h12: base * 1.05,
+      h24: base * 1.08
+    },
     congestionRisk:
-      h24 > 8500 ? "HIGH" :
-      h24 > 6500 ? "MEDIUM" :
+      base > 8500 ? "HIGH" :
+      base > 6500 ? "MEDIUM" :
       "LOW"
   };
 }
 
 // =======================
-// OPTIMIZATION SOLVER
+// BASE OPTIMIZATION SOLVER
 // =======================
 function optimizationSolver(env) {
   const wr = env.weather?.riskLevel;
@@ -171,18 +124,45 @@ function optimizationSolver(env) {
 }
 
 // =======================
-// REINFORCEMENT SCORE
+// 🧠 COUNTERFACTUAL ENGINE (NEW CORE)
 // =======================
-function computeOutcomeScore(decision) {
-  const t = decision.total;
+function simulateAlternative(action, baseDecision, env) {
+  const modifier = {
+    PROCEED: 1,
+    DELAY: 0.7,
+    REROUTE: 0.6,
+    HOLD: 0.4
+  };
 
-  if (decision.decision === "PROCEED" && t < 120) return 0.9;
-  if (decision.decision === "HOLD") return 0.95;
-  if (decision.decision === "DELAY" && t < 170) return 0.8;
+  const envRisk =
+    (env.weather?.riskLevel === "EXTREME" ? 50 : 10) +
+    (env.aviation?.congestionRisk === "HIGH" ? 30 : 10);
 
-  if (decision.decision === "PROCEED" && t > 160) return 0.2;
+  const baseScore = baseDecision.total;
 
-  return 0.5;
+  const simulatedScore =
+    baseScore * modifier[action] + envRisk * (action === "PROCEED" ? 1.2 : 0.8);
+
+  return {
+    action,
+    predictedCost: simulatedScore,
+    improvementVsCurrent: baseDecision.total - simulatedScore
+  };
+}
+
+function counterfactualEngine(baseDecision, env) {
+  const actions = ["PROCEED", "DELAY", "REROUTE", "HOLD"];
+
+  const simulations = actions.map(a =>
+    simulateAlternative(a, baseDecision, env)
+  );
+
+  simulations.sort((a, b) => a.predictedCost - b.predictedCost);
+
+  return {
+    bestAlternative: simulations[0],
+    allSimulations: simulations
+  };
 }
 
 // =======================
@@ -225,96 +205,48 @@ async function llm(system, user) {
 }
 
 // =======================
-// PLANNER + AGENTS
-// =======================
-function planner(msg) {
-  const m = msg.toLowerCase();
-
-  return {
-    aviation: m.includes("flight"),
-    maritime: m.includes("ship"),
-    offshore: m.includes("rig"),
-    finance: m.includes("cost")
-  };
-}
-
-// agents
-async function aviationAgent(m, c) { return llm("Aviation expert", `${c}\n${m}`); }
-async function maritimeAgent(m, c) { return llm("Maritime expert", `${c}\n${m}`); }
-async function offshoreAgent(m, c) { return llm("Offshore expert", `${c}\n${m}`); }
-async function financeAgent(m, c) { return llm("Finance expert", `${c}\n${m}`); }
-
-// =======================
-// MAIN SYSTEM
+// MAIN
 // =======================
 app.post("/message", async (req, res) => {
   try {
     const { message, user_id = "anon" } = req.body;
 
-    const history = await getMemory(user_id);
-    const context = history.map(m => m.summary).join("\n");
+    const history = await getDecisionHistory(user_id);
 
     const env = await buildEnvironment();
+
     const decision = optimizationSolver(env);
 
-    const outputs = {};
-    const tasks = [];
-
-    const plan = planner(message);
-
-    if (plan.aviation)
-      tasks.push(aviationAgent(message, context).then(r => outputs.aviation = r));
-
-    if (plan.maritime)
-      tasks.push(maritimeAgent(message, context).then(r => outputs.maritime = r));
-
-    if (plan.offshore)
-      tasks.push(offshoreAgent(message, context).then(r => outputs.offshore = r));
-
-    if (plan.finance)
-      tasks.push(financeAgent(message, context).then(r => outputs.finance = r));
-
-    await Promise.all(tasks);
+    // 🧠 COUNTERFACTUAL SIMULATION
+    const counterfactual = counterfactualEngine(decision, env);
 
     const reply = await llm(
-      "You are an operations intelligence engine with causal memory.",
+      "You are an advanced operations intelligence system.",
       `
 USER:
 ${message}
 
-ENV:
-${JSON.stringify(env)}
-
-DECISION:
+CURRENT DECISION:
 ${JSON.stringify(decision)}
 
-AGENTS:
-${JSON.stringify(outputs)}
+BEST ALTERNATIVE:
+${JSON.stringify(counterfactual.bestAlternative)}
+
+ALL SIMULATIONS:
+${JSON.stringify(counterfactual.allSimulations)}
 
 TASK:
-Explain and justify decision.
+Explain:
+- why current decision is chosen
+- what better alternative exists
+- tradeoffs between actions
 `
     );
-
-    const score = computeOutcomeScore(decision);
-
-    // =======================
-    // 🧠 TEMPORAL MEMORY GRAPH WRITE
-    // =======================
-    await storeMemory(user_id, message);
-
-    await storeDecisionChain({
-      user_id,
-      message,
-      decision,
-      environment: env,
-      outcomeScore: score
-    });
 
     res.json({
       reply,
       decision,
-      score,
+      counterfactual,
       environment: env
     });
 
@@ -325,5 +257,5 @@ Explain and justify decision.
 
 // =======================
 app.listen(PORT, () => {
-  console.log("🧠 Temporal Memory Graph Engine Active");
+  console.log("🧠 Counterfactual Reasoning Engine Active");
 });
