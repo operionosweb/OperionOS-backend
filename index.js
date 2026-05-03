@@ -21,17 +21,17 @@ const supabase = createClient(
 );
 
 // =======================
-// HEALTH CHECK
+// HEALTH
 // =======================
 app.get("/", (req, res) => {
   res.json({
     status: "ok",
-    system: "Operion AI stable (fast mode)"
+    system: "Operion AI async multi-agent"
   });
 });
 
 // =======================
-// LLM (MISTRAL)
+// LLM
 // =======================
 async function llm(system, user) {
   try {
@@ -55,12 +55,60 @@ async function llm(system, user) {
 
   } catch (err) {
     console.error("LLM ERROR:", err.response?.data || err.message);
-    return "LLM error";
+    return "Agent failed";
   }
 }
 
 // =======================
-// MAIN ENDPOINT (FAST + STABLE)
+// AGENTS
+// =======================
+const AGENTS = {
+  aviation: "You are an aviation expert (aircraft, airlines, operations).",
+  finance: "You are a finance expert (costs, ROI, profitability).",
+  operations: "You are an operations expert (efficiency, logistics)."
+};
+
+// =======================
+// MEMORY
+// =======================
+async function getMemory(user_id) {
+  const { data } = await supabase
+    .from("user_memory")
+    .select("summary")
+    .eq("user_id", user_id)
+    .limit(5);
+
+  return data || [];
+}
+
+// =======================
+// AGENT EXECUTION
+// =======================
+async function runAgent(agentName, message, context) {
+  return llm(
+    AGENTS[agentName],
+    `
+Context:
+${context}
+
+User:
+${message}
+`
+  );
+}
+
+// =======================
+// AGGREGATOR
+// =======================
+async function aggregate(results) {
+  return llm(
+    "You combine expert answers into one clear, concise, high-quality response.",
+    JSON.stringify(results, null, 2)
+  );
+}
+
+// =======================
+// MAIN ENDPOINT
 // =======================
 app.post("/message", async (req, res) => {
   try {
@@ -71,61 +119,45 @@ app.post("/message", async (req, res) => {
     }
 
     // =======================
-    // 1. GET MEMORY
+    // 1. MEMORY
     // =======================
-    const { data: memoryData, error: memoryError } = await supabase
-      .from("user_memory")
-      .select("summary")
-      .eq("user_id", user_id)
-      .limit(5);
-
-    if (memoryError) {
-      console.log("MEMORY FETCH ERROR:", memoryError.message);
-    }
-
-    const context = (memoryData || [])
-      .map(m => m.summary)
-      .join("\n");
+    const memory = await getMemory(user_id);
+    const context = memory.map(m => m.summary).join("\n");
 
     // =======================
-    // 2. SINGLE LLM CALL
+    // 2. PARALLEL AGENTS
     // =======================
-    const reply = await llm(
-      "You are an advanced multi-expert AI system (aviation, finance, operations).",
-      `
-Context:
-${context}
+    const agentNames = Object.keys(AGENTS);
 
-User:
-${message}
-
-Respond clearly with:
-1. Aviation perspective
-2. Finance perspective
-3. Operations perspective
-4. Final combined answer
-`
+    const agentPromises = agentNames.map(agent =>
+      runAgent(agent, message, context)
     );
 
-    // =======================
-    // 3. STORE MEMORY (NON-BLOCKING)
-    // =======================
-    supabase
-      .from("user_memory")
-      .insert([
-        {
-          user_id,
-          summary: message
-        }
-      ])
-      .then(() => {})
-      .catch(err => console.log("MEMORY INSERT ERROR:", err.message));
+    const agentResultsArray = await Promise.all(agentPromises);
+
+    const agentResults = {};
+    agentNames.forEach((name, i) => {
+      agentResults[name] = agentResultsArray[i];
+    });
 
     // =======================
-    // 4. RESPONSE
+    // 3. AGGREGATE
+    // =======================
+    const finalReply = await aggregate(agentResults);
+
+    // =======================
+    // 4. STORE MEMORY (NON-BLOCKING)
+    // =======================
+    supabase.from("user_memory").insert([
+      { user_id, summary: message }
+    ]).catch(() => {});
+
+    // =======================
+    // 5. RESPONSE
     // =======================
     return res.json({
-      reply
+      reply: finalReply,
+      agents: agentResults
     });
 
   } catch (err) {
@@ -137,8 +169,8 @@ Respond clearly with:
 });
 
 // =======================
-// START SERVER
+// START
 // =======================
 app.listen(PORT, () => {
-  console.log(`🚀 Operion backend running on port ${PORT}`);
+  console.log(`🚀 Operion AI async multi-agent running on port ${PORT}`);
 });
