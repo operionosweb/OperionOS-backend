@@ -21,17 +21,17 @@ const supabase = createClient(
 );
 
 // =======================
-// HEALTH
+// HEALTH CHECK
 // =======================
 app.get("/", (req, res) => {
   res.json({
     status: "ok",
-    system: "Operion operations-first + maritime module"
+    system: "Operion operations-first + maritime + offshore modules"
   });
 });
 
 // =======================
-// LLM
+// LLM WRAPPER
 // =======================
 async function llm(system, user) {
   try {
@@ -71,8 +71,15 @@ function detectDomains(message) {
       msg.includes("vessel") ||
       msg.includes("port") ||
       msg.includes("shipping") ||
-      msg.includes("maritime") ||
-      msg.includes("cargo sea"),
+      msg.includes("maritime"),
+
+    offshore:
+      msg.includes("rig") ||
+      msg.includes("drilling") ||
+      msg.includes("oil platform") ||
+      msg.includes("offshore") ||
+      msg.includes("subsea") ||
+      msg.includes("energy platform"),
 
     aviation:
       msg.includes("aircraft") ||
@@ -110,13 +117,11 @@ async function storeMemory(user_id, message) {
 }
 
 // =======================
-// AGENTS
+// CORE OPERATIONS BRAIN
 // =======================
-
-// CORE OPERATIONS BRAIN (unchanged)
 async function operationsAgent(message, context, extras) {
   return llm(
-    "You are OPERATIONS CORE AGENT. You optimize complex systems (aviation, maritime, logistics, energy, industrial operations). You produce actionable operational decisions.",
+    "You are OPERATIONS CORE AGENT. You optimize complex real-world systems: aviation, maritime, offshore energy, logistics, industrial operations, and finance. You think in efficiency, constraints, cost, and execution.",
     `
 Context:
 ${context}
@@ -129,18 +134,43 @@ ${message}
 
 Output:
 - Key insight
-- Operational analysis
+- Operational breakdown
 - Step-by-step actions
 - Risks / constraints
-- Final recommendation
+- Final optimized recommendation
 `
   );
 }
 
-// 🚢 MARITIME MODULE
+// =======================
+// MARITIME MODULE
+// =======================
 async function maritimeAgent(message, context) {
   return llm(
-    "You are a maritime operations expert (shipping, ports, vessels, offshore logistics, bunker fuel, fleet utilization).",
+    "You are a maritime operations expert focused on shipping, ports, vessel routing, bunker fuel, and logistics optimization.",
+    `
+Context:
+${context}
+
+User:
+${message}
+
+Analyze:
+- port efficiency
+- vessel routing
+- shipping costs
+- turnaround delays
+- fuel consumption (bunker fuel)
+`
+  );
+}
+
+// =======================
+// OFFSHORE MODULE (NEW)
+// =======================
+async function offshoreAgent(message, context) {
+  return llm(
+    "You are an offshore energy operations expert specializing in oil rigs, gas platforms, subsea operations, drilling efficiency, maintenance, and offshore logistics.",
     `
 Context:
 ${context}
@@ -149,11 +179,12 @@ User:
 ${message}
 
 Focus on:
-- shipping efficiency
-- port operations
-- vessel routing
-- fuel (bunker) costs
-- turnaround time
+- rig utilization & downtime
+- drilling efficiency
+- offshore logistics & supply vessels
+- maintenance scheduling
+- safety & operational risk
+- energy production optimization
 `
   );
 }
@@ -169,21 +200,26 @@ app.post("/message", async (req, res) => {
       return res.status(400).json({ error: "message required" });
     }
 
-    // 1. MEMORY
+    // MEMORY
     const memory = await getMemory(user_id);
     const context = memory.map(m => m.summary).join("\n");
 
-    // 2. DOMAIN DETECTION
+    // DOMAIN DETECTION
     const domains = detectDomains(message);
 
     const extras = {};
 
-    // 3. MARITIME MODULE (NEW)
+    // MARITIME
     if (domains.maritime) {
       extras.maritime = await maritimeAgent(message, context);
     }
 
-    // 4. OPTIONAL FINANCE (lightweight heuristic)
+    // OFFSHORE (NEW)
+    if (domains.offshore) {
+      extras.offshore = await offshoreAgent(message, context);
+    }
+
+    // FINANCE (light support)
     if (domains.finance) {
       extras.finance = await llm(
         "You are a finance operations analyst.",
@@ -191,13 +227,12 @@ app.post("/message", async (req, res) => {
       );
     }
 
-    // 5. CORE OPERATIONS BRAIN (FINAL DECIDER)
+    // CORE DECISION ENGINE
     const reply = await operationsAgent(message, context, extras);
 
-    // 6. STORE MEMORY (NON-BLOCKING)
+    // MEMORY WRITE
     storeMemory(user_id, message);
 
-    // 7. RESPONSE
     return res.json({
       reply,
       domains,
@@ -213,8 +248,8 @@ app.post("/message", async (req, res) => {
 });
 
 // =======================
-// START
+// START SERVER
 // =======================
 app.listen(PORT, () => {
-  console.log(`🚀 Operion OS running (maritime module active)`);
+  console.log(`🚀 Operion OS running (maritime + offshore modules active)`);
 });
