@@ -19,37 +19,26 @@ const supabase = createClient(
 );
 
 // =======================
-// AGENTS
+// AGENT LAYERS
 // =======================
-const AGENTS = [
-  {
-    agent_id: "aviation_basic",
-    domain: "aviation",
-    run: (env, memory) => {
-      const pastHolds = memory.filter(m => m.decision === "HOLD").length;
+const GOVERNORS = {
+  aviation: { weight: 1 },
+  maritime: { weight: 1 },
+  offshore: { weight: 1 }
+};
 
-      return pastHolds > 2
-        ? "HOLD"
-        : env.weatherRisk === "EXTREME"
-        ? "HOLD"
-        : "PROCEED";
-    }
-  },
-
-  {
-    agent_id: "aviation_routing",
-    domain: "aviation",
-    run: (env, memory) => {
-      const delayCases = memory.filter(m => m.decision === "DELAY").length;
-
-      return delayCases > 3
-        ? "REROUTE"
-        : env.congestionRisk === "HIGH"
-        ? "DELAY"
-        : "PROCEED";
-    }
-  }
-];
+const AGENTS = {
+  aviation: [
+    (env) => env.weatherRisk === "EXTREME" ? "HOLD" : "PROCEED",
+    (env) => env.congestionRisk === "HIGH" ? "DELAY" : "PROCEED"
+  ],
+  maritime: [
+    (env) => env.weatherRisk === "EXTREME" ? "ANCHOR" : "SAIL"
+  ],
+  offshore: [
+    (env) => env.wind > 40 ? "SHUTDOWN" : "OPERATE"
+  ]
+};
 
 // =======================
 // ENV
@@ -75,67 +64,50 @@ function buildEnv(weather, traffic) {
 }
 
 // =======================
-// LOAD MEMORY
+// DOMAIN EXECUTION
 // =======================
-async function loadMemory(tenantId, agentId) {
-  const { data } = await supabase
-    .from("agent_memory")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .eq("agent_id", agentId)
-    .limit(20);
+function runDomain(domain, env) {
+  const agents = AGENTS[domain];
 
-  return data || [];
+  const outputs = agents.map(fn => fn(env));
+
+  const counts = {};
+
+  for (const o of outputs) {
+    counts[o] = (counts[o] || 0) + 1;
+  }
+
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])[0][0];
 }
 
 // =======================
-// EXECUTION
+// GOVERNOR LEVEL
 // =======================
-async function executeAgents(env, tenantId) {
-  const results = [];
+function runGovernors(env) {
+  const results = {};
 
-  for (const agent of AGENTS) {
-    const memory = await loadMemory(tenantId, agent.agent_id);
-
-    const decision = agent.run(env, memory);
-
-    results.push({
-      agent_id: agent.agent_id,
-      decision
-    });
+  for (const domain of Object.keys(AGENTS)) {
+    results[domain] = runDomain(domain, env);
   }
 
   return results;
 }
 
 // =======================
-// AGGREGATION
+// COORDINATOR (FINAL DECISION)
 // =======================
-function aggregate(outputs) {
-  const scores = {};
+function coordinate(governorResults) {
+  const values = Object.values(governorResults);
 
-  for (const o of outputs) {
-    scores[o.decision] = (scores[o.decision] || 0) + 1;
+  const counts = {};
+
+  for (const v of values) {
+    counts[v] = (counts[v] || 0) + 1;
   }
 
-  return Object.entries(scores)
+  return Object.entries(counts)
     .sort((a, b) => b[1] - a[1])[0][0];
-}
-
-// =======================
-// STORE MEMORY
-// =======================
-async function storeMemory(tenantId, outputs, env, finalDecision) {
-  const records = outputs.map(o => ({
-    tenant_id: tenantId,
-    agent_id: o.agent_id,
-    memory_type: "decision",
-    state: env,
-    outcome: { decision: o.decision, final: finalDecision },
-    usefulness: o.decision === finalDecision ? 1 : 0
-  }));
-
-  await supabase.from("agent_memory").insert(records);
 }
 
 // =======================
@@ -153,7 +125,7 @@ async function getTraffic() {
 }
 
 // =======================
-// MAIN ENDPOINT
+// MAIN
 // =======================
 app.post("/execute/:tenantId", async (req, res) => {
   try {
@@ -164,24 +136,22 @@ app.post("/execute/:tenantId", async (req, res) => {
 
     const env = buildEnv(weather, traffic);
 
-    const outputs = await executeAgents(env, tenantId);
+    const governorResults = runGovernors(env);
 
-    const decision = aggregate(outputs);
+    const finalDecision = coordinate(governorResults);
 
     await supabase.from("agent_runs").insert({
       tenant_id: tenantId,
       input: env,
-      output: outputs,
-      decision
+      output: governorResults,
+      decision: finalDecision
     });
-
-    await storeMemory(tenantId, outputs, env, decision);
 
     res.json({
       tenantId,
       env,
-      outputs,
-      decision
+      governorResults,
+      finalDecision
     });
 
   } catch (err) {
@@ -191,5 +161,5 @@ app.post("/execute/:tenantId", async (req, res) => {
 
 // =======================
 app.listen(process.env.PORT || 3000, () => {
-  console.log("🧠 Operion Distributed Memory Network Running");
+  console.log("🏗️ Operion Hierarchical Intelligence OS Running");
 });
