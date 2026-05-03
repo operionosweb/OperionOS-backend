@@ -1,10 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import axios from "axios";
 import { createClient } from "@supabase/supabase-js";
-import jwt from "jsonwebtoken";
-import jwksClient from "jwks-rsa";
 
 dotenv.config();
 
@@ -12,180 +9,133 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// =====================
+// =========================
 // SUPABASE CLIENT
-// =====================
+// =========================
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY
 );
 
-// =====================
-// JWT VALIDATION
-// =====================
-const client = jwksClient({
-  jwksUri: `${process.env.SUPABASE_URL}/auth/v1/keys`
-});
-
-function getKey(header, callback) {
-  client.getSigningKey(header.kid, function (err, key) {
-    const signingKey = key.getPublicKey();
-    callback(null, signingKey);
-  });
-}
-
-function verifyToken(req, res, next) {
-  const token = req.headers.authorization?.replace("Bearer ", "");
-
-  if (!token) {
-    return res.status(401).json({ error: "No token provided" });
-  }
-
-  jwt.verify(token, getKey, {}, (err, decoded) => {
-    if (err) {
-      return res.status(403).json({ error: "Invalid token" });
-    }
-
-    req.user = decoded;
-    next();
-  });
-}
-
-// =====================
-// ROLE CHECK
-// =====================
+// =========================
+// ROLE FETCH FUNCTION
+// =========================
 async function getUserRole(userId) {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
     .single();
 
+  if (error) {
+    console.log("Role fetch error:", error.message);
+    return null;
+  }
+
   return data?.role || null;
 }
 
-// =====================
-// WEATHER (MOCK API)
-// =====================
-async function getWeather() {
+// =========================
+// SIMPLE TOKEN PARSER (SIMPLIFIED)
+// =========================
+function extractUserId(req) {
+  // In real system this comes from JWT
+  const auth = req.headers.authorization;
+
+  if (!auth) return null;
+
   try {
-    const res = await axios.get(
-      "https://api.open-meteo.com/v1/forecast?latitude=41.3851&longitude=2.1734&current_weather=true"
-    );
-    return res.data.current_weather;
-  } catch {
-    return { windspeed: 10 };
+    // For now we assume frontend sends userId in token (simplified layer)
+    const token = auth.replace("Bearer ", "");
+    return token;
+  } catch (err) {
+    return null;
   }
 }
 
-// =====================
-// ENV BUILDER
-// =====================
-function buildEnv(weather) {
-  return {
-    wind: weather?.windspeed || 10,
-    risk:
-      weather?.windspeed > 40
-        ? "HIGH"
-        : weather?.windspeed > 25
-        ? "MEDIUM"
-        : "LOW"
-  };
-}
-
-// =====================
-// AGENT ENGINE
-// =====================
-function runAgents(env) {
-  return [
-    {
-      agent: "aviation_core",
-      decision: env.wind > 35 ? "HOLD" : "PROCEED"
-    },
-    {
-      agent: "maritime_core",
-      decision: env.wind > 40 ? "ANCHOR" : "SAIL"
-    }
-  ];
-}
-
-// =====================
-// SECURE EXECUTE ENDPOINT
-// =====================
-app.post("/execute/:tenantId", verifyToken, async (req, res) => {
+// =========================
+// EXECUTE ENDPOINT
+// =========================
+app.post("/execute/:tenantId", async (req, res) => {
   try {
     const { tenantId } = req.params;
-    const userId = req.user.sub;
+
+    const userId = extractUserId(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
 
     const role = await getUserRole(userId);
 
-    if (role !== "super_admin") {
-      return res.status(403).json({
-        error: "Access denied"
-      });
+    if (!role) {
+      return res.status(403).json({ error: "Role not found" });
     }
 
-    const weather = await getWeather();
-    const env = buildEnv(weather);
+    if (role !== "super_admin") {
+      return res.status(403).json({ error: "Access denied" });
+    }
 
-    const results = runAgents(env);
-
-    const decision = results[0]?.decision;
-
-    await supabase.from("agent_runs").insert({
-      tenant_id: tenantId,
-      input: env,
-      output: results,
-      decision
-    });
-
-    res.json({
+    // Mock operational logic
+    const result = {
       tenantId,
-      env,
-      results,
-      decision,
-      status: "ok"
-    });
+      status: "executed",
+      decision: "PROCEED",
+      role
+    };
 
+    res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.log(err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-// =====================
-// HEALTH ENDPOINT
-// =====================
-app.get("/control/:tenantId/health", verifyToken, async (req, res) => {
-  const { tenantId } = req.params;
+// =========================
+// HEALTH / CONTROL ENDPOINT
+// =========================
+app.get("/control/:tenantId/health", async (req, res) => {
+  try {
+    const { tenantId } = req.params;
 
-  const { data } = await supabase
-    .from("agent_runs")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: false })
-    .limit(10);
+    const userId = extractUserId(req);
+    const role = await getUserRole(userId);
 
-  res.json({
-    tenantId,
-    metrics: data || []
-  });
+    if (!role) {
+      return res.status(403).json({ error: "No role" });
+    }
+
+    const { data } = await supabase
+      .from("agent_runs")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    res.json({
+      tenantId,
+      role,
+      metrics: data || []
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
 });
 
-// =====================
+// =========================
 // ROOT
-// =====================
+// =========================
 app.get("/", (req, res) => {
   res.json({
     status: "Operion backend running",
-    security: "enabled"
+    version: "1.0"
   });
 });
 
-// =====================
+// =========================
 // START SERVER
-// =====================
+// =========================
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`Operion running on port ${PORT}`);
+  console.log(`Operion backend running on port ${PORT}`);
 });
