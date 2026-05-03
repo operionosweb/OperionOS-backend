@@ -26,17 +26,48 @@ const supabase = createClient(
 async function getMemory(user_id) {
   const { data } = await supabase
     .from("user_memory")
-    .select("summary")
+    .select("summary, score")
     .eq("user_id", user_id)
-    .limit(5);
+    .order("created_at", { ascending: false })
+    .limit(10);
 
   return data || [];
 }
 
 async function storeMemory(user_id, message) {
   await supabase.from("user_memory").insert([
-    { user_id, summary: message }
+    {
+      user_id,
+      summary: message,
+      score: 0.5 // neutral starting value
+    }
   ]);
+}
+
+// =======================
+// FEEDBACK MEMORY UPDATE (NEW CORE)
+// =======================
+async function updateMemoryScore(user_id, outcomeScore) {
+  const { data } = await supabase
+    .from("user_memory")
+    .select("id, score")
+    .eq("user_id", user_id)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (!data?.length) return;
+
+  const mem = data[0];
+
+  const newScore = Math.max(
+    0,
+    Math.min(1, (mem.score || 0.5) * 0.7 + outcomeScore * 0.3)
+  );
+
+  await supabase
+    .from("user_memory")
+    .update({ score: newScore })
+    .eq("id", mem.id);
 }
 
 // =======================
@@ -82,11 +113,7 @@ function predictWeatherRisk(current) {
     h24 > 20 ? "MODERATE" :
     "LOW";
 
-  return {
-    currentWind: wind,
-    forecast: { h6, h12, h24 },
-    riskLevel
-  };
+  return { currentWind: wind, forecast: { h6, h12, h24 }, riskLevel };
 }
 
 function predictAviationLoad(count) {
@@ -106,62 +133,65 @@ function predictAviationLoad(count) {
 }
 
 // =======================
-// OPTIMIZATION SOLVER LAYER (NEW CORE)
+// OPTIMIZATION SOLVER
 // =======================
 function optimizationSolver(env) {
   const weatherRisk = env.weather?.riskLevel || "UNKNOWN";
   const congestionRisk = env.aviation?.congestionRisk || "UNKNOWN";
 
-  // COST (lower is better)
-  let costScore = 100;
-  if (congestionRisk === "HIGH") costScore += 30;
-  if (congestionRisk === "MEDIUM") costScore += 15;
+  let cost = 100;
+  let risk = 100;
+  let delay = 10;
 
-  // RISK (lower is better)
-  let riskScore = 100;
-  if (weatherRisk === "EXTREME") riskScore += 40;
-  if (weatherRisk === "HIGH") riskScore += 20;
-  if (weatherRisk === "MODERATE") riskScore += 10;
+  if (congestionRisk === "HIGH") cost += 30;
+  if (weatherRisk === "HIGH") risk += 20;
+  if (weatherRisk === "EXTREME") risk += 40;
 
-  // DELAY IMPACT (lower is better)
-  const delayScore =
-    (congestionRisk === "HIGH" ? 30 : 10) +
-    (weatherRisk === "HIGH" ? 25 : 5);
+  delay += (weatherRisk === "HIGH" ? 25 : 5);
 
-  const totalScore =
-    (costScore * 0.4) +
-    (riskScore * 0.4) +
-    (delayScore * 0.2);
+  const total = cost * 0.4 + risk * 0.4 + delay * 0.2;
 
   let decision = "PROCEED";
+  if (total > 140) decision = "DELAY";
+  if (total > 170) decision = "REROUTE";
+  if (weatherRisk === "EXTREME") decision = "HOLD";
 
-  if (totalScore > 140) decision = "DELAY";
-  if (totalScore > 170) decision = "REROUTE";
-  if (weatherRisk === "EXTREME") decision = "ABORT / HOLD";
-
-  return {
-    scores: {
-      costScore,
-      riskScore,
-      delayScore,
-      totalScore
-    },
-    decision
-  };
+  return { cost, risk, delay, total, decision };
 }
 
 // =======================
-// ENVIRONMENT BUILDER
+// 🔁 REINFORCEMENT SCORING LAYER (NEW CORE)
+// =======================
+function computeOutcomeScore(decisionResult) {
+  const { decision, total } = decisionResult;
+
+  let score = 0.5;
+
+  // better decisions under high pressure = higher score
+  if (decision === "PROCEED" && total < 120) score = 0.9;
+  if (decision === "DELAY" && total > 140 && total < 170) score = 0.8;
+  if (decision === "REROUTE" && total > 150) score = 0.85;
+  if (decision === "HOLD") score = 0.95;
+
+  // bad decisions penalized
+  if (decision === "PROCEED" && total > 160) score = 0.2;
+  if (decision === "DELAY" && total < 100) score = 0.3;
+
+  return score;
+}
+
+// =======================
+// ENV BUILDER
 // =======================
 async function buildEnvironment() {
-  const [weatherRaw, aviationRaw] = await Promise.all([
+  const [w, a] = await Promise.all([
     getWeather(),
     getAviation()
   ]);
 
   return {
-    weather: predictWeatherRisk(weatherRaw),
-    aviation: predictAviationLoad(aviationRaw),
+    weather: predictWeatherRisk(w),
+    aviation: predictAviationLoad(a),
     timestamp: new Date().toISOString()
   };
 }
@@ -190,70 +220,51 @@ async function llm(system, user) {
 }
 
 // =======================
-// PLANNER
+// PLANNER + AGENTS
 // =======================
 function planner(msg) {
   const m = msg.toLowerCase();
-
   return {
-    aviation: m.includes("flight") || m.includes("aircraft"),
-    maritime: m.includes("ship") || m.includes("port"),
+    aviation: m.includes("flight"),
+    maritime: m.includes("ship"),
     offshore: m.includes("rig"),
-    finance: m.includes("cost") || m.includes("profit")
+    finance: m.includes("cost")
   };
 }
 
-// =======================
-// AGENTS
-// =======================
-async function aviationAgent(msg, ctx) {
-  return llm("Aviation ops expert", `${ctx}\n${msg}`);
-}
-
-async function maritimeAgent(msg, ctx) {
-  return llm("Maritime ops expert", `${ctx}\n${msg}`);
-}
-
-async function offshoreAgent(msg, ctx) {
-  return llm("Offshore ops expert", `${ctx}\n${msg}`);
-}
-
-async function financeAgent(msg, ctx) {
-  return llm("Finance analyst", `${ctx}\n${msg}`);
-}
+// agents (unchanged logic)
+async function aviationAgent(m, c) { return llm("Aviation expert", `${c}\n${m}`); }
+async function maritimeAgent(m, c) { return llm("Maritime expert", `${c}\n${m}`); }
+async function offshoreAgent(m, c) { return llm("Offshore expert", `${c}\n${m}`); }
+async function financeAgent(m, c) { return llm("Finance expert", `${c}\n${m}`); }
 
 // =======================
-// SYNTHESIZER (NOW DECISION-AWARE)
+// SYNTHESIZER
 // =======================
 async function synthesizer(msg, ctx, outputs, env, decision) {
   return llm(
-    "You are an operations decision intelligence engine.",
+    "You are a self-learning operational intelligence system.",
     `
 USER:
 ${msg}
 
-CONTEXT:
-${ctx}
-
 AGENTS:
 ${JSON.stringify(outputs)}
 
-ENVIRONMENT:
+ENV:
 ${JSON.stringify(env)}
 
-OPTIMIZATION RESULT:
+DECISION:
 ${JSON.stringify(decision)}
 
 TASK:
-- Explain decision (PROCEED / DELAY / REROUTE / ABORT)
-- Justify using cost, risk, delay tradeoffs
-- Provide operational recommendation
+Explain decision and learn from it.
 `
   );
 }
 
 // =======================
-// MAIN
+// MAIN LOOP (WITH LEARNING FEEDBACK)
 // =======================
 app.post("/message", async (req, res) => {
   try {
@@ -262,14 +273,14 @@ app.post("/message", async (req, res) => {
     const memory = await getMemory(user_id);
     const context = memory.map(m => m.summary).join("\n");
 
-    const plan = planner(message);
-
     const env = await buildEnvironment();
 
     const decision = optimizationSolver(env);
 
     const outputs = {};
     const tasks = [];
+
+    const plan = planner(message);
 
     if (plan.aviation)
       tasks.push(aviationAgent(message, context).then(r => (outputs.aviation = r)));
@@ -287,13 +298,19 @@ app.post("/message", async (req, res) => {
 
     const reply = await synthesizer(message, context, outputs, env, decision);
 
-    storeMemory(user_id, message);
+    // =======================
+    // 🔁 REINFORCEMENT LOOP
+    // =======================
+    const outcomeScore = computeOutcomeScore(decision);
+
+    await storeMemory(user_id, message);
+    await updateMemoryScore(user_id, outcomeScore);
 
     res.json({
       reply,
-      plan,
-      environment: env,
-      optimization: decision
+      decision,
+      learning_score: outcomeScore,
+      environment: env
     });
 
   } catch (err) {
@@ -303,5 +320,5 @@ app.post("/message", async (req, res) => {
 
 // =======================
 app.listen(PORT, () => {
-  console.log("🧠 Operion Optimization Solver Active");
+  console.log("🧠 Operion Self-Learning System Active");
 });
