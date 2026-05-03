@@ -36,28 +36,37 @@ async function getEmbedding(text) {
   return res.data.data[0].embedding;
 }
 
+// ---------------- LLM RESPONSE ----------------
+async function getLLMResponse(prompt) {
+  const res = await axios.post(
+    "https://api.mistral.ai/v1/chat/completions",
+    {
+      model: "mistral-medium",
+      messages: [
+        { role: "system", content: "You are an intelligent AI with memory awareness." },
+        { role: "user", content: prompt }
+      ],
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
+      },
+    }
+  );
+
+  return res.data.choices[0].message.content;
+}
+
 // ---------------- INTENT ----------------
 function detectIntent(text) {
   const t = text.toLowerCase();
 
   if (t.includes("airbus") || t.includes("boeing")) return "aviation";
   if (t.includes("ship") || t.includes("maritime")) return "maritime";
-  if (t.includes("drilling") || t.includes("offshore")) return "offshore";
+  if (t.includes("offshore")) return "offshore";
   if (t.includes("what is") || t.includes("explain")) return "learning";
 
   return "general";
-}
-
-// ---------------- THREAD GENERATION ----------------
-// simple but powerful: thread = intent + topic hash
-function generateThreadId(intent, text) {
-  const hash = crypto
-    .createHash("md5")
-    .update(text.toLowerCase().slice(0, 40))
-    .digest("hex")
-    .slice(0, 8);
-
-  return `${intent}_${hash}`;
 }
 
 // ---------------- FINGERPRINT ----------------
@@ -71,9 +80,7 @@ app.post("/message", async (req, res) => {
     const { message, user_id = "anon" } = req.body;
 
     const embedding = await getEmbedding(message);
-
     const intent = detectIntent(message);
-    const thread_id = generateThreadId(intent, message);
     const fp = fingerprint(message);
 
     // 🔍 DUPLICATE CHECK
@@ -83,8 +90,6 @@ app.post("/message", async (req, res) => {
       .eq("fingerprint", fp)
       .eq("user_id", user_id)
       .maybeSingle();
-
-    let insertError = null;
 
     if (existing) {
       await supabase
@@ -96,7 +101,7 @@ app.post("/message", async (req, res) => {
         })
         .eq("id", existing.id);
     } else {
-      const result = await supabase.from("user_memory").insert([
+      await supabase.from("user_memory").insert([
         {
           user_id,
           summary: message,
@@ -105,28 +110,44 @@ app.post("/message", async (req, res) => {
           access_count: 1,
           fingerprint: fp,
           intent,
-          thread_id,
           last_accessed: new Date().toISOString(),
         },
       ]);
-
-      insertError = result.error;
     }
 
-    // 🧠 THREAD RETRIEVAL (key upgrade)
-    const { data: memories } = await supabase
-      .from("user_memory")
-      .select("*")
-      .eq("thread_id", thread_id)
-      .order("created_at", { ascending: true });
+    // 🧠 RETRIEVE BEST MEMORIES (brain ranking)
+    const { data: memories } = await supabase.rpc("match_memory", {
+      query_embedding: embedding,
+      match_user_id: user_id,
+      match_count: 5,
+    });
+
+    // 🧠 BUILD CONTEXT
+    const context = (memories || [])
+      .map((m, i) => `Memory ${i + 1}: ${m.summary}`)
+      .join("\n");
+
+    // 🧠 FINAL PROMPT (THIS IS THE BRAIN)
+    const finalPrompt = `
+User message:
+${message}
+
+Relevant past memories:
+${context}
+
+Instructions:
+- Use memory if relevant
+- Be precise
+- If no relevant memory, answer normally
+`;
+
+    // 🧠 LLM REASONING
+    const reply = await getLLMResponse(finalPrompt);
 
     return res.json({
-      reply: "Cognitive thread system active",
-      intent_detected: intent,
-      thread_id,
-      inserted_ok: !insertError,
-      thread_length: memories?.length || 0,
-      thread: memories || [],
+      reply,
+      memory_used: memories?.length || 0,
+      memories: memories || [],
     });
 
   } catch (err) {
@@ -136,5 +157,5 @@ app.post("/message", async (req, res) => {
 
 // ---------------- START ----------------
 app.listen(PORT, () => {
-  console.log("🧠 Operion Cognitive Threads v1 running");
+  console.log("🧠 Operion Reasoning Engine v1 running");
 });
