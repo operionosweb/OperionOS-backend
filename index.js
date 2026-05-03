@@ -12,52 +12,48 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // =======================
-// INITIAL HIERARCHY STATE
+// 🧠 PLUGIN REGISTRY (AGENT ECONOMY)
 // =======================
-let TOPOLOGY = {
-  aviation: { weight: 1.5, active: true },
-  maritime: { weight: 1.0, active: true },
-  offshore: { weight: 1.0, active: true },
-  finance: { weight: 1.2, active: true }
+let PLUGINS = {
+  aviation_basic: {
+    domain: "aviation",
+    weight: 1.0,
+    cost: 1,
+    reliability: 0.8,
+    fn: (env) => ({
+      decision: env.weatherRisk === "EXTREME" ? "HOLD" : "PROCEED",
+      confidence: 0.7
+    })
+  },
+
+  aviation_advanced: {
+    domain: "aviation",
+    weight: 1.3,
+    cost: 2,
+    reliability: 0.9,
+    fn: (env) => ({
+      decision:
+        env.weatherRisk === "HIGH" ? "DELAY" :
+        env.congestionRisk === "HIGH" ? "REROUTE" :
+        "PROCEED",
+      confidence: 0.85
+    })
+  },
+
+  maritime_basic: {
+    domain: "maritime",
+    weight: 1.0,
+    cost: 1,
+    reliability: 0.75,
+    fn: (env) => ({
+      decision: env.weatherRisk === "HIGH" ? "DELAY" : "PROCEED",
+      confidence: 0.7
+    })
+  }
 };
 
 // =======================
-// PERFORMANCE MEMORY
-// =======================
-let PERFORMANCE_HISTORY = {
-  aviation: [],
-  maritime: [],
-  offshore: [],
-  finance: []
-};
-
-// =======================
-// DOMAIN GOVERNORS
-// =======================
-const GOVERNORS = {
-  aviation: (env) => ({
-    decision: env.weatherRisk === "EXTREME" ? "HOLD" : "PROCEED",
-    score: env.weatherRisk === "LOW" ? 0.9 : 0.6
-  }),
-
-  maritime: (env) => ({
-    decision: env.weatherRisk === "HIGH" ? "DELAY" : "PROCEED",
-    score: env.weatherRisk === "LOW" ? 0.8 : 0.5
-  }),
-
-  offshore: (env) => ({
-    decision: env.weatherRisk === "EXTREME" ? "HOLD" : "PROCEED",
-    score: env.weatherRisk === "LOW" ? 0.85 : 0.55
-  }),
-
-  finance: (env) => ({
-    decision: env.congestionRisk === "HIGH" ? "DELAY" : "PROCEED",
-    score: env.congestionRisk === "LOW" ? 0.9 : 0.7
-  })
-};
-
-// =======================
-// ENV MODEL
+// 🧠 ENVIRONMENT MODEL
 // =======================
 function envModel(weather, traffic) {
   const wind = weather?.windspeed || 10;
@@ -80,75 +76,69 @@ function envModel(weather, traffic) {
 }
 
 // =======================
-// META OPTIMIZER (NEW CORE)
+// 🧠 OS KERNEL (PLUGIN EXECUTOR)
 // =======================
-function optimizeTopology() {
-  const avgScores = {};
+function executeKernel(env, budget = 10) {
+  const results = [];
+  let spent = 0;
 
-  // compute rolling performance
-  for (const domain in PERFORMANCE_HISTORY) {
-    const history = PERFORMANCE_HISTORY[domain];
-    const avg =
-      history.reduce((a, b) => a + b, 0) /
-      (history.length || 1);
+  for (const [name, plugin] of Object.entries(PLUGINS)) {
+    if (spent + plugin.cost > budget) continue;
 
-    avgScores[domain] = avg || 0.5;
+    const output = plugin.fn(env);
+
+    results.push({
+      plugin: name,
+      domain: plugin.domain,
+      ...output,
+      score: output.confidence * plugin.reliability * plugin.weight
+    });
+
+    spent += plugin.cost;
   }
 
-  // normalize influence
-  const max = Math.max(...Object.values(avgScores));
-
-  for (const domain in TOPOLOGY) {
-    const normalized = avgScores[domain] / max;
-
-    // adaptive weight adjustment
-    TOPOLOGY[domain].weight =
-      0.5 + normalized * 1.5;
-
-    // activation threshold
-    TOPOLOGY[domain].active =
-      normalized > 0.4;
-  }
-
-  return { TOPOLOGY, avgScores };
+  return results;
 }
 
 // =======================
-// COORDINATION ENGINE
+// 🧠 ECONOMY ENGINE (LEARNING LOOP)
 // =======================
-function coordinate(governorOutputs) {
-  let scoreTable = {
+function updateEconomy(results) {
+  for (const r of results) {
+    if (r.decision === "PROCEED") {
+      PLUGINS[r.plugin].weight *= 1.02;
+      PLUGINS[r.plugin].reliability *= 1.01;
+    } else if (r.decision === "HOLD") {
+      PLUGINS[r.plugin].weight *= 0.98;
+    }
+
+    // clamp values
+    PLUGINS[r.plugin].weight = Math.min(2, Math.max(0.5, PLUGINS[r.plugin].weight));
+    PLUGINS[r.plugin].reliability = Math.min(1, Math.max(0.5, PLUGINS[r.plugin].reliability));
+  }
+}
+
+// =======================
+// 🧠 OS DECISION LAYER
+// =======================
+function aggregate(results) {
+  const scores = {
     PROCEED: 0,
     DELAY: 0,
+    REROUTE: 0,
     HOLD: 0
   };
 
-  for (const domain in governorOutputs) {
-    if (!TOPOLOGY[domain].active) continue;
-
-    const output = governorOutputs[domain];
-
-    const weight = TOPOLOGY[domain].weight;
-
-    scoreTable[output.decision] +=
-      output.score * weight;
-
-    PERFORMANCE_HISTORY[domain].push(output.score);
-
-    // keep memory bounded
-    if (PERFORMANCE_HISTORY[domain].length > 20) {
-      PERFORMANCE_HISTORY[domain].shift();
-    }
+  for (const r of results) {
+    scores[r.decision] += r.score;
   }
 
-  const final = Object.entries(scoreTable)
+  return Object.entries(scores)
     .sort((a, b) => b[1] - a[1])[0][0];
-
-  return { final, scoreTable };
 }
 
 // =======================
-// SIMULATION INPUTS
+// 🌍 SIMULATION INPUTS
 // =======================
 async function getWeather() {
   const res = await axios.get(
@@ -162,30 +152,26 @@ async function getTraffic() {
 }
 
 // =======================
-// MAIN LOOP
+// 🚀 MAIN OS EXECUTION
 // =======================
-app.post("/message", async (req, res) => {
+app.post("/execute", async (req, res) => {
   try {
     const weather = await getWeather();
     const traffic = await getTraffic();
 
     const env = envModel(weather, traffic);
 
-    const governorOutputs = {};
+    const results = executeKernel(env, 10);
 
-    for (const [domain, fn] of Object.entries(GOVERNORS)) {
-      governorOutputs[domain] = fn(env);
-    }
+    const decision = aggregate(results);
 
-    const decision = coordinate(governorOutputs);
-
-    const topologyUpdate = optimizeTopology();
+    updateEconomy(results);
 
     res.json({
       env,
-      governorOutputs,
-      decision,
-      topology: topologyUpdate
+      pluginResults: results,
+      finalDecision: decision,
+      pluginEconomy: PLUGINS
     });
 
   } catch (err) {
@@ -195,5 +181,5 @@ app.post("/message", async (req, res) => {
 
 // =======================
 app.listen(PORT, () => {
-  console.log("🧠 Self-Optimizing Organizational Topology Active");
+  console.log("🧠 Operional Intelligence OS Active");
 });
