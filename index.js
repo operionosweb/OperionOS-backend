@@ -25,7 +25,7 @@ async function llm(prompt) {
     {
       model: "mistral-medium",
       messages: [
-        { role: "system", content: "You are an autonomous AI agent with tools." },
+        { role: "system", content: "You are an autonomous agent that thinks step-by-step." },
         { role: "user", content: prompt }
       ],
     },
@@ -39,28 +39,9 @@ async function llm(prompt) {
   return res.data.choices[0].message.content;
 }
 
-// ---------------- EMBEDDING ----------------
-async function getEmbedding(text) {
-  const res = await axios.post(
-    "https://api.mistral.ai/v1/embeddings",
-    {
-      model: "mistral-embed",
-      input: text,
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
-      },
-    }
-  );
-
-  return res.data.data[0].embedding;
-}
-
 // ---------------- TOOLS ----------------
 async function searchTool(query) {
-  // simple mock (replace later with real API)
-  return `Search results for "${query}": Airbus uses fly-by-wire control systems.`;
+  return `Search result: Airbus uses fly-by-wire systems.`;
 }
 
 async function fetchTool(url) {
@@ -68,16 +49,14 @@ async function fetchTool(url) {
     const res = await axios.get(url, { timeout: 5000 });
     return res.data.toString().slice(0, 1000);
   } catch {
-    return "Failed to fetch URL";
+    return "Fetch failed";
   }
 }
 
-// ---------------- TOOL EXECUTOR ----------------
 async function executeTool(name, input) {
   if (name === "search") return await searchTool(input);
   if (name === "fetch") return await fetchTool(input);
-
-  return "Unknown tool";
+  return null;
 }
 
 // ---------------- HELPERS ----------------
@@ -85,12 +64,96 @@ function fingerprint(text) {
   return crypto.createHash("sha256").update(text).digest("hex");
 }
 
+// ---------------- AGENT LOOP ----------------
+async function runAgentLoop(goal, message, user_id) {
+  let steps = [];
+  let context = "";
+  let lastAction = null;
+
+  for (let i = 0; i < 3; i++) {
+    const prompt = `
+Goal:
+${goal.goal}
+
+Plan:
+${JSON.stringify(goal.plan)}
+
+Context so far:
+${context}
+
+User message:
+${message}
+
+Previous action:
+${lastAction || "none"}
+
+Decide next step.
+
+Respond JSON:
+{
+  "tool": "search | fetch | none",
+  "input": "...",
+  "thought": "...",
+  "action": "..."
+}
+`;
+
+    const response = await llm(prompt);
+
+    let decision;
+    try {
+      decision = JSON.parse(response);
+    } catch {
+      break;
+    }
+
+    // stop if no tool
+    if (!decision.tool || decision.tool === "none") break;
+
+    // stop if repeating same action
+    if (decision.action === lastAction) break;
+
+    const toolResult = await executeTool(decision.tool, decision.input);
+
+    // store step
+    steps.push({
+      step: i + 1,
+      thought: decision.thought,
+      action: decision.action,
+      tool: decision.tool,
+      result: toolResult,
+    });
+
+    // update context
+    context += `
+Step ${i + 1}:
+Action: ${decision.action}
+Result: ${toolResult}
+`;
+
+    lastAction = decision.action;
+
+    // save to DB
+    await supabase.from("agent_actions").insert([
+      {
+        user_id,
+        goal_id: goal.id,
+        tool: decision.tool,
+        action: decision.action,
+        result: toolResult,
+        status: "completed",
+      },
+    ]);
+  }
+
+  return steps;
+}
+
 // ---------------- MESSAGE ----------------
 app.post("/message", async (req, res) => {
   try {
     const { message, user_id = "anon" } = req.body;
 
-    const embedding = await getEmbedding(message);
     const fp = fingerprint(message);
 
     // ---------------- MEMORY ----------------
@@ -106,7 +169,6 @@ app.post("/message", async (req, res) => {
         {
           user_id,
           summary: message,
-          embedding,
           importance: 0.5,
           access_count: 1,
           fingerprint: fp,
@@ -125,69 +187,15 @@ app.post("/message", async (req, res) => {
       .limit(1)
       .maybeSingle();
 
-    let agent_output = null;
+    let loopSteps = null;
 
     if (goal) {
-      // ---------------- AGENT DECISION ----------------
-      const decisionPrompt = `
-Goal:
-${goal.goal}
-
-User message:
-${message}
-
-Decide next step.
-
-Respond JSON:
-{
-  "tool": "search | fetch | none",
-  "input": "...",
-  "action": "..."
-}
-`;
-
-      const decisionText = await llm(decisionPrompt);
-
-      let decision;
-      try {
-        decision = JSON.parse(decisionText);
-      } catch {
-        decision = { tool: "none", action: decisionText };
-      }
-
-      // ---------------- EXECUTE TOOL ----------------
-      let toolResult = null;
-
-      if (decision.tool && decision.tool !== "none") {
-        toolResult = await executeTool(decision.tool, decision.input);
-      }
-
-      // ---------------- SAVE ACTION ----------------
-      const { data: saved } = await supabase
-        .from("agent_actions")
-        .insert([
-          {
-            user_id,
-            goal_id: goal.id,
-            tool: decision.tool,
-            action: decision.action,
-            result: toolResult,
-            status: "completed",
-          },
-        ])
-        .select()
-        .single();
-
-      agent_output = {
-        decision,
-        tool_result: toolResult,
-        saved,
-      };
+      loopSteps = await runAgentLoop(goal, message, user_id);
     }
 
     return res.json({
-      reply: "Tool execution complete",
-      agent: agent_output,
+      reply: "Agent loop executed",
+      steps: loopSteps,
       has_goal: !!goal,
     });
 
@@ -198,5 +206,5 @@ Respond JSON:
 
 // ---------------- START ----------------
 app.listen(PORT, () => {
-  console.log("🧠 Operion Autonomous Agent v2 running");
+  console.log("🧠 Operion Agent Loop v1 running");
 });
