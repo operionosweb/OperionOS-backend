@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import { createClient } from "@supabase/supabase-js";
 import axios from "axios";
 
 dotenv.config();
@@ -9,62 +10,40 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PORT = process.env.PORT || 3000;
+// =======================
+// SUPABASE
+// =======================
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
 
 // =======================
-// 🧠 TENANTS (MULTI-CLIENT ISOLATION)
+// AGENTS (v1 SYSTEM)
 // =======================
-let TENANTS = {
-  default: {
-    budget: 20,
-    memory: [],
-    installedAgents: []
-  }
-};
-
-// =======================
-// 🧠 AGENT MARKETPLACE (GLOBAL REGISTRY)
-// =======================
-let MARKETPLACE = {
-  aviation_core: {
+const AGENTS = {
+  aviation_basic: {
     domain: "aviation",
-    cost: 1,
-    reliability: 0.8,
-    permissions: ["weather", "traffic"],
-    execute: (env) => ({
+    run: (env) => ({
       decision: env.weatherRisk === "EXTREME" ? "HOLD" : "PROCEED",
       confidence: 0.7
     })
   },
 
-  aviation_routing_pro: {
+  aviation_routing: {
     domain: "aviation",
-    cost: 3,
-    reliability: 0.95,
-    permissions: ["weather", "traffic", "routing"],
-    execute: (env) => ({
+    run: (env) => ({
       decision:
         env.weatherRisk === "HIGH" ? "REROUTE" :
         env.congestionRisk === "HIGH" ? "DELAY" :
         "PROCEED",
       confidence: 0.9
     })
-  },
-
-  maritime_safety_ai: {
-    domain: "maritime",
-    cost: 2,
-    reliability: 0.88,
-    permissions: ["weather"],
-    execute: (env) => ({
-      decision: env.weatherRisk === "HIGH" ? "DELAY" : "PROCEED",
-      confidence: 0.85
-    })
   }
 };
 
 // =======================
-// 🧠 ENVIRONMENT MODEL
+// ENV BUILDER
 // =======================
 function buildEnv(weather, traffic) {
   const wind = weather?.windspeed || 10;
@@ -87,68 +66,41 @@ function buildEnv(weather, traffic) {
 }
 
 // =======================
-// 🧠 AGENT INSTALLER (MARKETPLACE LOGIC)
+// LOAD AGENTS FOR TENANT
 // =======================
-app.post("/install/:tenant/:agent", (req, res) => {
-  const { tenant, agent } = req.params;
-
-  if (!TENANTS[tenant]) {
-    TENANTS[tenant] = { budget: 20, memory: [], installedAgents: [] };
-  }
-
-  const plugin = MARKETPLACE[agent];
-
-  if (!plugin) {
-    return res.status(404).json({ error: "Agent not found" });
-  }
-
-  TENANTS[tenant].installedAgents.push(agent);
-
-  res.json({
-    message: `Agent ${agent} installed for ${tenant}`,
-    tenant: TENANTS[tenant]
-  });
-});
-
-// =======================
-// 🧠 SANDBOX EXECUTION LAYER
-// =======================
-function executeAgents(tenant, env) {
-  const t = TENANTS[tenant];
-
-  let spent = 0;
-  const outputs = [];
-
-  for (const agentName of t.installedAgents) {
-    const agent = MARKETPLACE[agentName];
-
-    if (!agent) continue;
-
-    if (spent + agent.cost > t.budget) continue;
-
-    const result = agent.execute(env);
-
-    outputs.push({
-      agent: agentName,
-      domain: agent.domain,
-      ...result,
-      score: result.confidence * agent.reliability
-    });
-
-    spent += agent.cost;
-  }
-
-  return outputs;
+async function getTenantAgents() {
+  return Object.values(AGENTS);
 }
 
 // =======================
-// 🧠 DECISION AGGREGATION
+// EXECUTE AGENTS
+// =======================
+function executeAgents(agents, env) {
+  return agents.map((agent) => {
+    const result = agent.run(env);
+
+    return {
+      domain: agent.domain,
+      decision: result.decision,
+      confidence: result.confidence
+    };
+  });
+}
+
+// =======================
+// AGGREGATION ENGINE
 // =======================
 function aggregate(outputs) {
-  const scores = { PROCEED: 0, DELAY: 0, REROUTE: 0, HOLD: 0 };
+  const scores = {
+    PROCEED: 0,
+    DELAY: 0,
+    REROUTE: 0,
+    HOLD: 0
+  };
 
   for (const o of outputs) {
-    scores[o.decision] += o.score;
+    const weight = o.confidence || 0.5;
+    scores[o.decision] += weight;
   }
 
   return Object.entries(scores)
@@ -156,7 +108,17 @@ function aggregate(outputs) {
 }
 
 // =======================
-// 🌍 SIMULATION INPUTS
+// SCORING ENGINE (LEARNING CORE)
+// =======================
+function calculateScore(agentDecision, finalDecision, confidence) {
+  const success = agentDecision === finalDecision;
+  const score = success ? confidence : 0;
+
+  return { success, score };
+}
+
+// =======================
+// EXTERNAL DATA
 // =======================
 async function getWeather() {
   const res = await axios.get(
@@ -170,37 +132,57 @@ async function getTraffic() {
 }
 
 // =======================
-// 🚀 MAIN EXECUTION
+// MAIN EXECUTION ENDPOINT
 // =======================
-app.post("/execute/:tenant", async (req, res) => {
+app.post("/execute/:tenantId", async (req, res) => {
   try {
-    const { tenant } = req.params;
-
-    if (!TENANTS[tenant]) {
-      TENANTS[tenant] = { budget: 20, memory: [], installedAgents: [] };
-    }
+    const { tenantId } = req.params;
 
     const weather = await getWeather();
     const traffic = await getTraffic();
 
     const env = buildEnv(weather, traffic);
 
-    const outputs = executeAgents(tenant, env);
+    const agents = await getTenantAgents(tenantId);
+
+    const outputs = executeAgents(agents, env);
 
     const decision = aggregate(outputs);
 
-    TENANTS[tenant].memory.push({ env, outputs, decision });
+    // =======================
+    // STORE MAIN RUN
+    // =======================
+    await supabase.from("agent_runs").insert({
+      tenant_id: tenantId,
+      input: env,
+      output: outputs,
+      decision
+    });
 
-    if (TENANTS[tenant].memory.length > 50) {
-      TENANTS[tenant].memory.shift();
+    // =======================
+    // FEEDBACK LOOP (LEARNING)
+    // =======================
+    for (const o of outputs) {
+      const result = calculateScore(
+        o.decision,
+        decision,
+        o.confidence
+      );
+
+      await supabase.from("agent_scores").insert({
+        tenant_id: tenantId,
+        agent_id: o.domain,
+        success: result.success,
+        score: result.score,
+        context: env
+      });
     }
 
     res.json({
-      tenant,
+      tenantId,
       env,
       outputs,
-      decision,
-      installedAgents: TENANTS[tenant].installedAgents
+      decision
     });
 
   } catch (err) {
@@ -209,6 +191,6 @@ app.post("/execute/:tenant", async (req, res) => {
 });
 
 // =======================
-app.listen(PORT, () => {
-  console.log("🧠 Multi-Tenant Intelligence Marketplace Active");
+app.listen(process.env.PORT || 3000, () => {
+  console.log("🚀 Operion OS Running (Learning Mode)");
 });
