@@ -12,42 +12,53 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // =======================
-// 🧠 PLUGIN REGISTRY (AGENT ECONOMY)
+// 🧠 TENANTS (MULTI-CLIENT ISOLATION)
 // =======================
-let PLUGINS = {
-  aviation_basic: {
+let TENANTS = {
+  default: {
+    budget: 20,
+    memory: [],
+    installedAgents: []
+  }
+};
+
+// =======================
+// 🧠 AGENT MARKETPLACE (GLOBAL REGISTRY)
+// =======================
+let MARKETPLACE = {
+  aviation_core: {
     domain: "aviation",
-    weight: 1.0,
     cost: 1,
     reliability: 0.8,
-    fn: (env) => ({
+    permissions: ["weather", "traffic"],
+    execute: (env) => ({
       decision: env.weatherRisk === "EXTREME" ? "HOLD" : "PROCEED",
       confidence: 0.7
     })
   },
 
-  aviation_advanced: {
+  aviation_routing_pro: {
     domain: "aviation",
-    weight: 1.3,
-    cost: 2,
-    reliability: 0.9,
-    fn: (env) => ({
+    cost: 3,
+    reliability: 0.95,
+    permissions: ["weather", "traffic", "routing"],
+    execute: (env) => ({
       decision:
-        env.weatherRisk === "HIGH" ? "DELAY" :
-        env.congestionRisk === "HIGH" ? "REROUTE" :
+        env.weatherRisk === "HIGH" ? "REROUTE" :
+        env.congestionRisk === "HIGH" ? "DELAY" :
         "PROCEED",
-      confidence: 0.85
+      confidence: 0.9
     })
   },
 
-  maritime_basic: {
+  maritime_safety_ai: {
     domain: "maritime",
-    weight: 1.0,
-    cost: 1,
-    reliability: 0.75,
-    fn: (env) => ({
+    cost: 2,
+    reliability: 0.88,
+    permissions: ["weather"],
+    execute: (env) => ({
       decision: env.weatherRisk === "HIGH" ? "DELAY" : "PROCEED",
-      confidence: 0.7
+      confidence: 0.85
     })
   }
 };
@@ -55,7 +66,7 @@ let PLUGINS = {
 // =======================
 // 🧠 ENVIRONMENT MODEL
 // =======================
-function envModel(weather, traffic) {
+function buildEnv(weather, traffic) {
   const wind = weather?.windspeed || 10;
 
   return {
@@ -76,61 +87,68 @@ function envModel(weather, traffic) {
 }
 
 // =======================
-// 🧠 OS KERNEL (PLUGIN EXECUTOR)
+// 🧠 AGENT INSTALLER (MARKETPLACE LOGIC)
 // =======================
-function executeKernel(env, budget = 10) {
-  const results = [];
+app.post("/install/:tenant/:agent", (req, res) => {
+  const { tenant, agent } = req.params;
+
+  if (!TENANTS[tenant]) {
+    TENANTS[tenant] = { budget: 20, memory: [], installedAgents: [] };
+  }
+
+  const plugin = MARKETPLACE[agent];
+
+  if (!plugin) {
+    return res.status(404).json({ error: "Agent not found" });
+  }
+
+  TENANTS[tenant].installedAgents.push(agent);
+
+  res.json({
+    message: `Agent ${agent} installed for ${tenant}`,
+    tenant: TENANTS[tenant]
+  });
+});
+
+// =======================
+// 🧠 SANDBOX EXECUTION LAYER
+// =======================
+function executeAgents(tenant, env) {
+  const t = TENANTS[tenant];
+
   let spent = 0;
+  const outputs = [];
 
-  for (const [name, plugin] of Object.entries(PLUGINS)) {
-    if (spent + plugin.cost > budget) continue;
+  for (const agentName of t.installedAgents) {
+    const agent = MARKETPLACE[agentName];
 
-    const output = plugin.fn(env);
+    if (!agent) continue;
 
-    results.push({
-      plugin: name,
-      domain: plugin.domain,
-      ...output,
-      score: output.confidence * plugin.reliability * plugin.weight
+    if (spent + agent.cost > t.budget) continue;
+
+    const result = agent.execute(env);
+
+    outputs.push({
+      agent: agentName,
+      domain: agent.domain,
+      ...result,
+      score: result.confidence * agent.reliability
     });
 
-    spent += plugin.cost;
+    spent += agent.cost;
   }
 
-  return results;
+  return outputs;
 }
 
 // =======================
-// 🧠 ECONOMY ENGINE (LEARNING LOOP)
+// 🧠 DECISION AGGREGATION
 // =======================
-function updateEconomy(results) {
-  for (const r of results) {
-    if (r.decision === "PROCEED") {
-      PLUGINS[r.plugin].weight *= 1.02;
-      PLUGINS[r.plugin].reliability *= 1.01;
-    } else if (r.decision === "HOLD") {
-      PLUGINS[r.plugin].weight *= 0.98;
-    }
+function aggregate(outputs) {
+  const scores = { PROCEED: 0, DELAY: 0, REROUTE: 0, HOLD: 0 };
 
-    // clamp values
-    PLUGINS[r.plugin].weight = Math.min(2, Math.max(0.5, PLUGINS[r.plugin].weight));
-    PLUGINS[r.plugin].reliability = Math.min(1, Math.max(0.5, PLUGINS[r.plugin].reliability));
-  }
-}
-
-// =======================
-// 🧠 OS DECISION LAYER
-// =======================
-function aggregate(results) {
-  const scores = {
-    PROCEED: 0,
-    DELAY: 0,
-    REROUTE: 0,
-    HOLD: 0
-  };
-
-  for (const r of results) {
-    scores[r.decision] += r.score;
+  for (const o of outputs) {
+    scores[o.decision] += o.score;
   }
 
   return Object.entries(scores)
@@ -152,26 +170,37 @@ async function getTraffic() {
 }
 
 // =======================
-// 🚀 MAIN OS EXECUTION
+// 🚀 MAIN EXECUTION
 // =======================
-app.post("/execute", async (req, res) => {
+app.post("/execute/:tenant", async (req, res) => {
   try {
+    const { tenant } = req.params;
+
+    if (!TENANTS[tenant]) {
+      TENANTS[tenant] = { budget: 20, memory: [], installedAgents: [] };
+    }
+
     const weather = await getWeather();
     const traffic = await getTraffic();
 
-    const env = envModel(weather, traffic);
+    const env = buildEnv(weather, traffic);
 
-    const results = executeKernel(env, 10);
+    const outputs = executeAgents(tenant, env);
 
-    const decision = aggregate(results);
+    const decision = aggregate(outputs);
 
-    updateEconomy(results);
+    TENANTS[tenant].memory.push({ env, outputs, decision });
+
+    if (TENANTS[tenant].memory.length > 50) {
+      TENANTS[tenant].memory.shift();
+    }
 
     res.json({
+      tenant,
       env,
-      pluginResults: results,
-      finalDecision: decision,
-      pluginEconomy: PLUGINS
+      outputs,
+      decision,
+      installedAgents: TENANTS[tenant].installedAgents
     });
 
   } catch (err) {
@@ -181,5 +210,5 @@ app.post("/execute", async (req, res) => {
 
 // =======================
 app.listen(PORT, () => {
-  console.log("🧠 Operional Intelligence OS Active");
+  console.log("🧠 Multi-Tenant Intelligence Marketplace Active");
 });
