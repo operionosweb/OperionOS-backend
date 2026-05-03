@@ -12,6 +12,16 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // =======================
+// INITIAL AGENT WEIGHTS (PERSISTENT STATE)
+// =======================
+let AGENT_WEIGHTS = {
+  safety: 1.6,
+  cost: 1.0,
+  efficiency: 1.2,
+  operations: 1.5
+};
+
+// =======================
 // ENV MODEL
 // =======================
 function envModel(weather, aviation) {
@@ -35,37 +45,25 @@ function envModel(weather, aviation) {
 }
 
 // =======================
-// AGENTS
+// AGENTS (NOW WEIGHTED)
 // =======================
 const AGENTS = {
-  safety: {
-    weight: 1.6,
-    propose: (env) =>
-      env.weatherRisk === "EXTREME" ? "HOLD" :
-      env.weatherRisk === "HIGH" ? "DELAY" :
-      "PROCEED"
-  },
+  safety: (env) =>
+    env.weatherRisk === "EXTREME" ? "HOLD" :
+    env.weatherRisk === "HIGH" ? "DELAY" :
+    "PROCEED",
 
-  cost: {
-    weight: 1.0,
-    propose: (env) =>
-      env.congestionRisk === "HIGH" ? "DELAY" :
-      "PROCEED"
-  },
+  cost: (env) =>
+    env.congestionRisk === "HIGH" ? "DELAY" :
+    "PROCEED",
 
-  efficiency: {
-    weight: 1.2,
-    propose: (env) =>
-      env.traffic > 8000 ? "REROUTE" : "PROCEED"
-  },
+  efficiency: (env) =>
+    env.traffic > 8000 ? "REROUTE" : "PROCEED",
 
-  operations: {
-    weight: 1.5,
-    propose: (env) =>
-      env.weatherRisk === "HIGH" && env.congestionRisk === "HIGH"
-        ? "HOLD"
-        : "PROCEED"
-  }
+  operations: (env) =>
+    env.weatherRisk === "HIGH" && env.congestionRisk === "HIGH"
+      ? "HOLD"
+      : "PROCEED"
 };
 
 // =======================
@@ -73,11 +71,6 @@ const AGENTS = {
 // =======================
 function debateEngine(env) {
   const proposals = {};
-
-  for (const [name, agent] of Object.entries(AGENTS)) {
-    proposals[name] = agent.propose(env);
-  }
-
   const score = {
     PROCEED: 0,
     DELAY: 0,
@@ -85,9 +78,11 @@ function debateEngine(env) {
     HOLD: 0
   };
 
-  for (const [name, agent] of Object.entries(AGENTS)) {
-    const vote = proposals[name];
-    score[vote] += agent.weight;
+  for (const [name, fn] of Object.entries(AGENTS)) {
+    const decision = fn(env);
+    proposals[name] = decision;
+
+    score[decision] += AGENT_WEIGHTS[name];
   }
 
   const finalDecision = Object.entries(score)
@@ -97,60 +92,68 @@ function debateEngine(env) {
 }
 
 // =======================
-// 🧠 META-REFLECTION AGENT (NEW CORE)
+// META-REFLECTION (QUALITY CHECK)
 // =======================
-function metaReflectionEngine(env, debate) {
+function metaReflection(env, debate) {
   const issues = [];
-  const strengths = [];
-
   const { proposals, finalDecision } = debate;
 
-  // Bias detection: safety ignored?
-  if (
-    proposals.safety === "HOLD" &&
-    finalDecision !== "HOLD"
-  ) {
-    issues.push("Safety signal was overridden by other agents.");
+  if (proposals.safety === "HOLD" && finalDecision !== "HOLD") {
+    issues.push("Safety overridden");
   }
 
-  // Cost over-prioritization detection
-  if (
-    proposals.cost === "PROCEED" &&
-    finalDecision === "PROCEED" &&
-    env.weatherRisk === "HIGH"
-  ) {
-    issues.push("Cost bias may have overridden weather risk.");
+  if (env.weatherRisk === "HIGH" && finalDecision === "PROCEED") {
+    issues.push("High weather risk ignored");
   }
 
-  // Efficiency vs safety conflict
-  if (
-    proposals.efficiency !== proposals.safety &&
-    finalDecision === proposals.efficiency
-  ) {
-    issues.push("Efficiency dominated safety disagreement.");
+  const confidence = Math.max(0, 1 - issues.length * 0.3);
+
+  return { issues, confidence };
+}
+
+// =======================
+// 🔁 RECURSIVE SELF-IMPROVEMENT LOOP (NEW CORE)
+// =======================
+function selfImprove(meta, debate) {
+  const { issues, confidence } = meta;
+
+  const learningRate = 0.05; // slow adaptation (critical)
+
+  // If system performed well → reinforce winning agents
+  if (confidence > 0.7) {
+    for (const agent of Object.keys(AGENT_WEIGHTS)) {
+      AGENT_WEIGHTS[agent] += learningRate;
+    }
   }
 
-  // Balanced decision check
-  if (
-    proposals.safety === finalDecision ||
-    proposals.operations === finalDecision
-  ) {
-    strengths.push("Decision aligned with safety/operations priorities.");
+  // If system performed poorly → penalize conflicting agents
+  if (issues.length > 0) {
+    for (const issue of issues) {
+      if (issue.includes("Safety")) {
+        AGENT_WEIGHTS.safety = Math.min(
+          2.0,
+          AGENT_WEIGHTS.safety + 0.1
+        );
+      }
+
+      if (issue.includes("weather")) {
+        AGENT_WEIGHTS.operations = Math.min(
+          2.0,
+          AGENT_WEIGHTS.operations + 0.1
+        );
+      }
+    }
   }
 
-  // stability check
-  if (issues.length === 0) {
-    strengths.push("No critical reasoning conflicts detected.");
+  // Clamp weights (CRITICAL SAFETY BOUNDARY)
+  for (const k in AGENT_WEIGHTS) {
+    AGENT_WEIGHTS[k] = Math.max(
+      0.5,
+      Math.min(2.0, AGENT_WEIGHTS[k])
+    );
   }
 
-  const confidence =
-    Math.max(0, 1 - issues.length * 0.25);
-
-  return {
-    issues,
-    strengths,
-    confidence: Number(confidence.toFixed(2))
-  };
+  return { updatedWeights: AGENT_WEIGHTS };
 }
 
 // =======================
@@ -179,7 +182,7 @@ async function getAviation() {
 }
 
 // =======================
-// MAIN
+// MAIN LOOP
 // =======================
 app.post("/message", async (req, res) => {
   try {
@@ -192,13 +195,16 @@ app.post("/message", async (req, res) => {
 
     const debate = debateEngine(env);
 
-    const meta = metaReflectionEngine(env, debate);
+    const meta = metaReflection(env, debate);
+
+    const learning = selfImprove(meta, debate);
 
     res.json({
-      reply: "Debate + meta-reflection complete.",
+      reply: "Recursive learning cycle complete.",
       environment: env,
       debate,
-      metaReflection: meta
+      meta,
+      learning
     });
 
   } catch (err) {
@@ -208,5 +214,6 @@ app.post("/message", async (req, res) => {
 
 // =======================
 app.listen(PORT, () => {
-  console.log("🧠 Meta-Reflection Engine Active");
+  console.log("🧠 Recursive Self-Improvement Engine Active");
+  console.log("Initial weights:", AGENT_WEIGHTS);
 });
