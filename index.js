@@ -25,23 +25,29 @@ const AGENTS = [
   {
     agent_id: "aviation_basic",
     domain: "aviation",
-    weight: 1,
-    run: (env, weight) => ({
-      decision: env.weatherRisk === "EXTREME" ? "HOLD" : "PROCEED",
-      confidence: 0.6 * weight
-    })
+    run: (env, memory) => {
+      const pastHolds = memory.filter(m => m.decision === "HOLD").length;
+
+      return pastHolds > 2
+        ? "HOLD"
+        : env.weatherRisk === "EXTREME"
+        ? "HOLD"
+        : "PROCEED";
+    }
   },
+
   {
     agent_id: "aviation_routing",
     domain: "aviation",
-    weight: 1,
-    run: (env, weight) => ({
-      decision:
-        env.congestionRisk === "HIGH"
-          ? "DELAY"
-          : "PROCEED",
-      confidence: 0.9 * weight
-    })
+    run: (env, memory) => {
+      const delayCases = memory.filter(m => m.decision === "DELAY").length;
+
+      return delayCases > 3
+        ? "REROUTE"
+        : env.congestionRisk === "HIGH"
+        ? "DELAY"
+        : "PROCEED";
+    }
   }
 ];
 
@@ -69,86 +75,67 @@ function buildEnv(weather, traffic) {
 }
 
 // =======================
+// LOAD MEMORY
+// =======================
+async function loadMemory(tenantId, agentId) {
+  const { data } = await supabase
+    .from("agent_memory")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .eq("agent_id", agentId)
+    .limit(20);
+
+  return data || [];
+}
+
+// =======================
 // EXECUTION
 // =======================
-function executeAgents(env) {
-  return AGENTS.map(agent => {
-    const result = agent.run(env, agent.weight);
+async function executeAgents(env, tenantId) {
+  const results = [];
 
-    return {
+  for (const agent of AGENTS) {
+    const memory = await loadMemory(tenantId, agent.agent_id);
+
+    const decision = agent.run(env, memory);
+
+    results.push({
       agent_id: agent.agent_id,
-      decision: result.decision,
-      confidence: result.confidence
-    };
-  });
+      decision
+    });
+  }
+
+  return results;
 }
 
 // =======================
-// META ANALYSIS
+// AGGREGATION
 // =======================
-function analyzeSystem(outputs) {
+function aggregate(outputs) {
   const scores = {};
-  let total = 0;
 
   for (const o of outputs) {
-    scores[o.decision] = (scores[o.decision] || 0) + o.confidence;
-    total += o.confidence;
+    scores[o.decision] = (scores[o.decision] || 0) + 1;
   }
 
-  const dominant = Object.entries(scores)
+  return Object.entries(scores)
     .sort((a, b) => b[1] - a[1])[0][0];
-
-  const entropy = Object.keys(scores).length / 4;
-
-  return {
-    dominant,
-    instability: entropy,
-    systemHealth: 1 - entropy
-  };
 }
 
 // =======================
-// META DECISION ENGINE (NEW)
+// STORE MEMORY
 // =======================
-async function metaAdjustments(tenantId, analysis) {
-  const adjustments = [];
+async function storeMemory(tenantId, outputs, env, finalDecision) {
+  const records = outputs.map(o => ({
+    tenant_id: tenantId,
+    agent_id: o.agent_id,
+    memory_type: "decision",
+    state: env,
+    outcome: { decision: o.decision, final: finalDecision },
+    usefulness: o.decision === finalDecision ? 1 : 0
+  }));
 
-  // If system unstable → increase diversity pressure
-  if (analysis.instability > 0.6) {
-    adjustments.push({
-      tenant_id: tenantId,
-      adjustment_type: "increase_diversity",
-      target: "system",
-      value: 0.2,
-      reason: "High instability detected"
-    });
-
-    // weaken overly dominant agent behavior
-    adjustments.push({
-      tenant_id: tenantId,
-      adjustment_type: "reduce_confidence_bias",
-      target: "agents",
-      value: -0.1,
-      reason: "Prevent convergence collapse"
-    });
-  }
-
-  // If stable → reinforce current strategy
-  if (analysis.systemHealth > 0.7) {
-    adjustments.push({
-      tenant_id: tenantId,
-      adjustment_type: "reinforce_current_policy",
-      target: "system",
-      value: 0.1,
-      reason: "Stable system behavior"
-    });
-  }
-
-  if (adjustments.length > 0) {
-    await supabase.from("meta_adjustments").insert(adjustments);
-  }
-
-  return adjustments;
+  await supabase.from("agent_memory").insert(records);
 }
 
 // =======================
@@ -177,25 +164,24 @@ app.post("/execute/:tenantId", async (req, res) => {
 
     const env = buildEnv(weather, traffic);
 
-    const outputs = executeAgents(env);
+    const outputs = await executeAgents(env, tenantId);
 
-    const analysis = analyzeSystem(outputs);
-
-    const adjustments = await metaAdjustments(tenantId, analysis);
+    const decision = aggregate(outputs);
 
     await supabase.from("agent_runs").insert({
       tenant_id: tenantId,
       input: env,
       output: outputs,
-      decision: analysis.dominant
+      decision
     });
+
+    await storeMemory(tenantId, outputs, env, decision);
 
     res.json({
       tenantId,
       env,
       outputs,
-      meta: analysis,
-      adjustments
+      decision
     });
 
   } catch (err) {
@@ -205,5 +191,5 @@ app.post("/execute/:tenantId", async (req, res) => {
 
 // =======================
 app.listen(process.env.PORT || 3000, () => {
-  console.log("🧠 Operion Recursive Meta-Agent Running");
+  console.log("🧠 Operion Distributed Memory Network Running");
 });
