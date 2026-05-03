@@ -26,7 +26,7 @@ const supabase = createClient(
 app.get("/", (req, res) => {
   res.json({
     status: "ok",
-    system: "Operion AI async multi-agent"
+    system: "Operion AI async multi-agent (fixed)"
   });
 });
 
@@ -72,13 +72,41 @@ const AGENTS = {
 // MEMORY
 // =======================
 async function getMemory(user_id) {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("user_memory")
     .select("summary")
     .eq("user_id", user_id)
     .limit(5);
 
+  if (error) {
+    console.log("MEMORY FETCH ERROR:", error.message);
+    return [];
+  }
+
   return data || [];
+}
+
+// =======================
+// STORE MEMORY (FIXED)
+// =======================
+async function storeMemory(user_id, message) {
+  try {
+    const { error } = await supabase
+      .from("user_memory")
+      .insert([
+        {
+          user_id,
+          summary: message
+        }
+      ]);
+
+    if (error) {
+      console.log("MEMORY INSERT ERROR:", error.message);
+    }
+
+  } catch (err) {
+    console.log("MEMORY INSERT FATAL:", err.message);
+  }
 }
 
 // =======================
@@ -146,11 +174,9 @@ app.post("/message", async (req, res) => {
     const finalReply = await aggregate(agentResults);
 
     // =======================
-    // 4. STORE MEMORY (NON-BLOCKING)
+    // 4. STORE MEMORY (NON-BLOCKING SAFE)
     // =======================
-    supabase.from("user_memory").insert([
-      { user_id, summary: message }
-    ]).catch(() => {});
+    storeMemory(user_id, message);
 
     // =======================
     // 5. RESPONSE
