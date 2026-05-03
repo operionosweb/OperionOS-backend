@@ -38,55 +38,94 @@ async function llm(system, user) {
   return res.data.choices[0].message.content;
 }
 
-// ---------------- AGENTS ----------------
+// ---------------- ROUTER ----------------
+async function routerAgent(message) {
+  const prompt = `
+Classify this request into domains:
+- aviation
+- finance
+- operations
+- general
 
-// 🅰️ Agent A
-async function agentA(goal, message) {
+Return JSON:
+{
+  "domains": ["..."]
+}
+`;
+
+  const res = await llm("You are a routing agent.", `${prompt}\n\n${message}`);
+
+  try {
+    return JSON.parse(res).domains;
+  } catch {
+    return ["general"];
+  }
+}
+
+// ---------------- SPECIALIST AGENTS ----------------
+
+async function aviationAgent(message) {
   return await llm(
-    "You are Agent A: analytical and structured.",
-    `Goal:\n${goal.goal}\n\nUser:\n${message}\n\nProvide a solution.`
+    "You are an aviation expert.",
+    message
   );
 }
 
-// 🅱️ Agent B
-async function agentB(goal, message) {
+async function financeAgent(message) {
   return await llm(
-    "You are Agent B: creative and alternative thinker.",
-    `Goal:\n${goal.goal}\n\nUser:\n${message}\n\nProvide a different approach.`
+    "You are a finance expert.",
+    message
   );
 }
 
-// 🧨 Critique
-async function critique(agentName, own, other) {
+async function operationsAgent(message) {
   return await llm(
-    `You are ${agentName} critiquing another agent.`,
-    `Your answer:\n${own}\n\nOther answer:\n${other}\n\nCritique weaknesses of the other.`
+    "You are an operations optimization expert.",
+    message
   );
 }
 
-// ⚖️ Judge
-async function judge(goal, a, b, critiqueA, critiqueB) {
+async function generalAgent(message) {
   return await llm(
-    "You are a judge selecting the best solution.",
-    `
-Goal:
-${goal.goal}
+    "You are a general reasoning AI.",
+    message
+  );
+}
 
-Agent A:
-${a}
+// ---------------- AGENT EXECUTION ----------------
+async function runAgents(domains, message) {
+  let results = {};
 
-Agent B:
-${b}
+  if (domains.includes("aviation")) {
+    results.aviation = await aviationAgent(message);
+  }
 
-Critique A:
-${critiqueA}
+  if (domains.includes("finance")) {
+    results.finance = await financeAgent(message);
+  }
 
-Critique B:
-${critiqueB}
+  if (domains.includes("operations")) {
+    results.operations = await operationsAgent(message);
+  }
 
-Choose the best answer or combine them into a superior one.
-Explain briefly.
-`
+  if (domains.includes("general") || domains.length === 0) {
+    results.general = await generalAgent(message);
+  }
+
+  return results;
+}
+
+// ---------------- AGGREGATOR ----------------
+async function aggregatorAgent(results) {
+  const prompt = `
+Combine these expert outputs into one clear answer:
+
+${JSON.stringify(results, null, 2)}
+`;
+
+  return await llm(
+    "You are an aggregator combining expert outputs.",
+    prompt
   );
 }
 
@@ -95,46 +134,26 @@ app.post("/message", async (req, res) => {
   try {
     const { message, user_id = "anon" } = req.body;
 
-    const { data: goal } = await supabase
-      .from("user_goals")
-      .select("*")
-      .eq("user_id", user_id)
-      .eq("status", "active")
-      .limit(1)
-      .maybeSingle();
+    // 1️⃣ ROUTE
+    const domains = await routerAgent(message);
 
-    if (!goal) {
-      return res.json({ reply: "No active goal" });
+    // 2️⃣ EXECUTE
+    const results = await runAgents(domains, message);
+
+    // 3️⃣ AGGREGATE
+    const final = await aggregatorAgent(results);
+
+    // LOG
+    for (const [agent, msg] of Object.entries(results)) {
+      await supabase.from("agent_network_logs").insert([
+        { user_id, agent, message: msg },
+      ]);
     }
-
-    // 1️⃣ PROPOSALS
-    const A = await agentA(goal, message);
-    const B = await agentB(goal, message);
-
-    // 2️⃣ CRITIQUES
-    const critiqueA = await critique("Agent A", A, B);
-    const critiqueB = await critique("Agent B", B, A);
-
-    // 3️⃣ JUDGMENT
-    const final = await judge(goal, A, B, critiqueA, critiqueB);
-
-    // OPTIONAL LOGGING
-    await supabase.from("agent_debates").insert([
-      { user_id, role: "A", message: A },
-      { user_id, role: "B", message: B },
-      { user_id, role: "critiqueA", message: critiqueA },
-      { user_id, role: "critiqueB", message: critiqueB },
-      { user_id, role: "judge", message: final },
-    ]);
 
     return res.json({
       reply: final,
-      debate: {
-        agentA: A,
-        agentB: B,
-        critiqueA,
-        critiqueB,
-      },
+      routing: domains,
+      raw: results,
     });
 
   } catch (err) {
@@ -144,5 +163,5 @@ app.post("/message", async (req, res) => {
 
 // ---------------- START ----------------
 app.listen(PORT, () => {
-  console.log("🧠 Operion Debate System v1 running");
+  console.log("🧠 Operion Distributed Agent Network running");
 });
