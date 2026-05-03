@@ -12,7 +12,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // =======================
-// ENVIRONMENT MODEL
+// ENV MODEL
 // =======================
 function envModel(weather, aviation) {
   const wind = weather?.windspeed || 10;
@@ -35,104 +35,50 @@ function envModel(weather, aviation) {
 }
 
 // =======================
-// AGENTS (WITH ARGUMENTATION)
+// AGENTS
 // =======================
 const AGENTS = {
   safety: {
-    weight: 1.5,
+    weight: 1.6,
     propose: (env) =>
       env.weatherRisk === "EXTREME" ? "HOLD" :
       env.weatherRisk === "HIGH" ? "DELAY" :
-      "PROCEED",
-
-    argue: (env, others) => {
-      if (env.weatherRisk === "EXTREME") {
-        return "Weather risk is too high for operational safety.";
-      }
-      if (others.cost === "PROCEED" && env.weatherRisk === "HIGH") {
-        return "Cost optimization ignores safety degradation.";
-      }
-      return "Safety risk acceptable under current conditions.";
-    }
+      "PROCEED"
   },
 
   cost: {
     weight: 1.0,
     propose: (env) =>
       env.congestionRisk === "HIGH" ? "DELAY" :
-      env.congestionRisk === "MEDIUM" ? "REROUTE" :
-      "PROCEED",
-
-    argue: (env, others) => {
-      if (others.safety === "HOLD") {
-        return "Safety is over-conservative; cost impact is excessive.";
-      }
-      if (env.congestionRisk === "HIGH") {
-        return "Delaying reduces operational inefficiency costs.";
-      }
-      return "Cost pressure is within acceptable thresholds.";
-    }
+      "PROCEED"
   },
 
   efficiency: {
     weight: 1.2,
     propose: (env) =>
-      env.traffic > 8000 ? "REROUTE" :
-      env.traffic > 7000 ? "DELAY" :
-      "PROCEED",
-
-    argue: (env, others) => {
-      if (others.safety === "HOLD") {
-        return "Efficiency must yield to extreme safety conditions.";
-      }
-      if (others.cost === "PROCEED" && env.traffic > 8000) {
-        return "Network congestion makes current routing suboptimal.";
-      }
-      return "Operational flow is stable.";
-    }
+      env.traffic > 8000 ? "REROUTE" : "PROCEED"
   },
 
   operations: {
-    weight: 1.6,
-    propose: (env) => {
-      if (env.weatherRisk === "HIGH" && env.congestionRisk === "HIGH")
-        return "HOLD";
-      if (env.weatherRisk === "MODERATE")
-        return "DELAY";
-      return "PROCEED";
-    },
-
-    argue: (env, others) => {
-      if (others.safety === "HOLD") {
-        return "Operations fully support safety-first override.";
-      }
-      if (others.cost === "PROCEED" && env.weatherRisk === "HIGH") {
-        return "Operational exposure too high for continued execution.";
-      }
-      return "System stable for execution.";
-    }
+    weight: 1.5,
+    propose: (env) =>
+      env.weatherRisk === "HIGH" && env.congestionRisk === "HIGH"
+        ? "HOLD"
+        : "PROCEED"
   }
 };
 
 // =======================
-// 🔥 DEBATE ENGINE (NEW CORE)
+// DEBATE ENGINE
 // =======================
 function debateEngine(env) {
-  const initialProposals = {};
-  const argumentsLog = {};
+  const proposals = {};
 
-  // STEP 1: Initial proposals
   for (const [name, agent] of Object.entries(AGENTS)) {
-    initialProposals[name] = agent.propose(env);
+    proposals[name] = agent.propose(env);
   }
 
-  // STEP 2: Debate phase (rebuttals)
-  for (const [name, agent] of Object.entries(AGENTS)) {
-    argumentsLog[name] = agent.argue(env, initialProposals);
-  }
-
-  // STEP 3: Influence adjustment (simple rule-based shift)
-  const influenceScore = {
+  const score = {
     PROCEED: 0,
     DELAY: 0,
     REROUTE: 0,
@@ -140,36 +86,75 @@ function debateEngine(env) {
   };
 
   for (const [name, agent] of Object.entries(AGENTS)) {
-    const vote = initialProposals[name];
-    let weight = agent.weight;
-
-    // safety arguments increase HOLD weight
-    if (name === "safety" && env.weatherRisk === "EXTREME") {
-      weight += 1;
-    }
-
-    // operations can override cost in high risk
-    if (name === "operations" && env.weatherRisk === "HIGH") {
-      weight += 0.5;
-    }
-
-    influenceScore[vote] += weight;
+    const vote = proposals[name];
+    score[vote] += agent.weight;
   }
 
-  // STEP 4: Final decision
-  const finalDecision = Object.entries(influenceScore)
+  const finalDecision = Object.entries(score)
     .sort((a, b) => b[1] - a[1])[0][0];
 
+  return { proposals, score, finalDecision };
+}
+
+// =======================
+// 🧠 META-REFLECTION AGENT (NEW CORE)
+// =======================
+function metaReflectionEngine(env, debate) {
+  const issues = [];
+  const strengths = [];
+
+  const { proposals, finalDecision } = debate;
+
+  // Bias detection: safety ignored?
+  if (
+    proposals.safety === "HOLD" &&
+    finalDecision !== "HOLD"
+  ) {
+    issues.push("Safety signal was overridden by other agents.");
+  }
+
+  // Cost over-prioritization detection
+  if (
+    proposals.cost === "PROCEED" &&
+    finalDecision === "PROCEED" &&
+    env.weatherRisk === "HIGH"
+  ) {
+    issues.push("Cost bias may have overridden weather risk.");
+  }
+
+  // Efficiency vs safety conflict
+  if (
+    proposals.efficiency !== proposals.safety &&
+    finalDecision === proposals.efficiency
+  ) {
+    issues.push("Efficiency dominated safety disagreement.");
+  }
+
+  // Balanced decision check
+  if (
+    proposals.safety === finalDecision ||
+    proposals.operations === finalDecision
+  ) {
+    strengths.push("Decision aligned with safety/operations priorities.");
+  }
+
+  // stability check
+  if (issues.length === 0) {
+    strengths.push("No critical reasoning conflicts detected.");
+  }
+
+  const confidence =
+    Math.max(0, 1 - issues.length * 0.25);
+
   return {
-    initialProposals,
-    argumentsLog,
-    influenceScore,
-    finalDecision
+    issues,
+    strengths,
+    confidence: Number(confidence.toFixed(2))
   };
 }
 
 // =======================
-// SIMPLE ENV FETCH (SIMPLIFIED)
+// ENV FETCH
 // =======================
 async function getWeather() {
   try {
@@ -207,10 +192,13 @@ app.post("/message", async (req, res) => {
 
     const debate = debateEngine(env);
 
+    const meta = metaReflectionEngine(env, debate);
+
     res.json({
-      reply: "Debate complete. See structured reasoning output.",
+      reply: "Debate + meta-reflection complete.",
       environment: env,
-      debate
+      debate,
+      metaReflection: meta
     });
 
   } catch (err) {
@@ -220,5 +208,5 @@ app.post("/message", async (req, res) => {
 
 // =======================
 app.listen(PORT, () => {
-  console.log("🧠 Agent Debate Layer Active");
+  console.log("🧠 Meta-Reflection Engine Active");
 });
