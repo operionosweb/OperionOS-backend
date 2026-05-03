@@ -21,14 +21,62 @@ const supabase = createClient(
 );
 
 // =======================
-// HEALTH
+// MEMORY (USER)
 // =======================
-app.get("/", (req, res) => {
-  res.json({
-    status: "ok",
-    system: "Operion unified multi-agent orchestration layer active"
-  });
-});
+async function getMemory(user_id) {
+  const { data } = await supabase
+    .from("user_memory")
+    .select("summary")
+    .eq("user_id", user_id)
+    .limit(5);
+
+  return data || [];
+}
+
+async function storeMemory(user_id, message) {
+  const { error } = await supabase
+    .from("user_memory")
+    .insert([{ user_id, summary: message }]);
+
+  if (error) console.log("MEMORY ERROR:", error.message);
+}
+
+// =======================
+// SIMPLE PERSISTENT LEARNING STORE
+// (NEW: agent performance tracking)
+// =======================
+async function logAgentPerformance(agent, usefulnessScore) {
+  await supabase.from("agent_feedback").insert([
+    {
+      agent,
+      score: usefulnessScore,
+      created_at: new Date().toISOString()
+    }
+  ]);
+}
+
+async function getAgentWeights() {
+  const { data } = await supabase
+    .from("agent_feedback")
+    .select("agent, score");
+
+  const weights = {
+    aviation: 1,
+    maritime: 1,
+    offshore: 1,
+    finance: 1
+  };
+
+  if (!data) return weights;
+
+  for (const row of data) {
+    if (weights[row.agent] !== undefined) {
+      weights[row.agent] += row.score * 0.01;
+    }
+  }
+
+  return weights;
+}
 
 // =======================
 // LLM
@@ -53,115 +101,84 @@ async function llm(system, user) {
 
     return res.data.choices[0].message.content;
   } catch (err) {
-    console.error("LLM ERROR:", err.response?.data || err.message);
+    console.error("LLM ERROR:", err.message);
     return "LLM error";
   }
 }
 
 // =======================
-// MEMORY
+// AGENTS
 // =======================
-async function getMemory(user_id) {
-  const { data } = await supabase
-    .from("user_memory")
-    .select("summary")
-    .eq("user_id", user_id)
-    .limit(5);
-
-  return data || [];
+async function aviationAgent(input, context) {
+  return llm(
+    "Aviation operations expert focused on airlines, fleets, fuel, efficiency.",
+    `Context:\n${context}\n\nInput:\n${input}`
+  );
 }
 
-async function storeMemory(user_id, message) {
-  const { error } = await supabase
-    .from("user_memory")
-    .insert([{ user_id, summary: message }]);
-
-  if (error) {
-    console.log("MEMORY ERROR:", error.message);
-  }
-}
-
-// =======================
-// DOMAIN AGENTS
-// =======================
 async function maritimeAgent(input, context) {
   return llm(
-    "Maritime operations expert (ports, shipping, vessels, bunker fuel). Return structured operational insight.",
+    "Maritime expert focused on shipping, ports, vessels, bunker fuel optimization.",
     `Context:\n${context}\n\nInput:\n${input}`
   );
 }
 
 async function offshoreAgent(input, context) {
   return llm(
-    "Offshore energy expert (oil rigs, drilling, subsea, platforms, logistics). Return structured operational insight.",
-    `Context:\n${context}\n\nInput:\n${input}`
-  );
-}
-
-async function aviationAgent(input, context) {
-  return llm(
-    "Aviation operations expert (airlines, fleets, fuel efficiency, routing). Return structured operational insight.",
+    "Offshore energy expert focused on rigs, drilling, subsea operations, logistics.",
     `Context:\n${context}\n\nInput:\n${input}`
   );
 }
 
 async function financeAgent(input, context) {
   return llm(
-    "Finance operations analyst (cost, ROI, profitability, optimization). Return structured insight.",
+    "Finance operations analyst focused on cost, ROI, profitability.",
     `Context:\n${context}\n\nInput:\n${input}`
   );
 }
 
 // =======================
-// 🧠 PLANNER (NEW ORCHESTRATION CORE)
+// 🧠 ADAPTIVE PLANNER (IMPROVED)
 // =======================
 async function planner(message) {
   const lower = message.toLowerCase();
 
+  const weights = await getAgentWeights();
+
   const plan = {
-    aviation: false,
-    maritime: false,
-    offshore: false,
-    finance: false
+    aviation: 0,
+    maritime: 0,
+    offshore: 0,
+    finance: 0
   };
 
-  if (
-    lower.includes("airline") ||
-    lower.includes("flight") ||
-    lower.includes("aircraft")
-  ) plan.aviation = true;
+  if (lower.match(/airline|flight|aircraft/)) {
+    plan.aviation = 1 * weights.aviation;
+  }
 
-  if (
-    lower.includes("ship") ||
-    lower.includes("port") ||
-    lower.includes("vessel") ||
-    lower.includes("shipping")
-  ) plan.maritime = true;
+  if (lower.match(/ship|port|vessel|shipping/)) {
+    plan.maritime = 1 * weights.maritime;
+  }
 
-  if (
-    lower.includes("rig") ||
-    lower.includes("offshore") ||
-    lower.includes("drilling") ||
-    lower.includes("platform")
-  ) plan.offshore = true;
+  if (lower.match(/offshore|rig|drilling|platform/)) {
+    plan.offshore = 1 * weights.offshore;
+  }
 
-  if (
-    lower.includes("cost") ||
-    lower.includes("profit") ||
-    lower.includes("revenue")
-  ) plan.finance = true;
+  if (lower.match(/cost|profit|revenue|roi/)) {
+    plan.finance = 1 * weights.finance;
+  }
 
   return plan;
 }
 
 // =======================
-// 🧠 SYNTHESIZER (NEW)
+// SYNTHESIZER
 // =======================
 async function synthesizer(message, context, outputs) {
   return llm(
-    "You are the OPERATIONS ORCHESTRATOR. You combine multiple expert outputs into a single optimized operational decision.",
+    "You are an operations orchestration engine combining expert outputs into one optimized decision.",
     `
-User Request:
+User:
 ${message}
 
 Context:
@@ -169,15 +186,24 @@ ${context}
 
 Agent Outputs:
 ${JSON.stringify(outputs)}
-
-Task:
-- Merge insights
-- Resolve contradictions
-- Prioritize actions
-- Produce final operational recommendation
 `
   );
 }
+
+// =======================
+// FEEDBACK ENDPOINT (NEW)
+// =======================
+app.post("/feedback", async (req, res) => {
+  const { agent, score } = req.body;
+
+  if (!agent || typeof score !== "number") {
+    return res.status(400).json({ error: "invalid feedback" });
+  }
+
+  await logAgentPerformance(agent, score);
+
+  res.json({ status: "logged" });
+});
 
 // =======================
 // MAIN ENDPOINT
@@ -190,16 +216,13 @@ app.post("/message", async (req, res) => {
       return res.status(400).json({ error: "message required" });
     }
 
-    // MEMORY
     const memory = await getMemory(user_id);
     const context = memory.map(m => m.summary).join("\n");
 
-    // 🧠 ORCHESTRATION PLAN
     const plan = await planner(message);
 
     const outputs = {};
 
-    // EXECUTE AGENTS IN PARALLEL
     const tasks = [];
 
     if (plan.aviation) {
@@ -228,23 +251,20 @@ app.post("/message", async (req, res) => {
 
     await Promise.all(tasks);
 
-    // 🧠 FINAL SYNTHESIS
     const reply = await synthesizer(message, context, outputs);
 
-    // MEMORY WRITE
     storeMemory(user_id, message);
 
     return res.json({
       reply,
       plan,
-      outputs
+      outputs,
+      note: "system is now learning from feedback endpoint"
     });
 
   } catch (err) {
-    console.error("FATAL ERROR:", err);
-    return res.status(500).json({
-      error: err.message
-    });
+    console.error("FATAL:", err);
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -252,5 +272,5 @@ app.post("/message", async (req, res) => {
 // START
 // =======================
 app.listen(PORT, () => {
-  console.log("🚀 Operion unified orchestration layer active");
+  console.log("🚀 Self-improving orchestration layer active");
 });
