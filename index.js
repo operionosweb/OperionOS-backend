@@ -18,6 +18,27 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 
+// ---------------- LLM ----------------
+async function llm(prompt) {
+  const res = await axios.post(
+    "https://api.mistral.ai/v1/chat/completions",
+    {
+      model: "mistral-medium",
+      messages: [
+        { role: "system", content: "You are an autonomous AI agent." },
+        { role: "user", content: prompt }
+      ],
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
+      },
+    }
+  );
+
+  return res.data.choices[0].message.content;
+}
+
 // ---------------- EMBEDDING ----------------
 async function getEmbedding(text) {
   const res = await axios.post(
@@ -32,43 +53,13 @@ async function getEmbedding(text) {
       },
     }
   );
+
   return res.data.data[0].embedding;
-}
-
-// ---------------- LLM ----------------
-async function llm(prompt) {
-  const res = await axios.post(
-    "https://api.mistral.ai/v1/chat/completions",
-    {
-      model: "mistral-medium",
-      messages: [
-        { role: "system", content: "You are an AI planning assistant." },
-        { role: "user", content: prompt }
-      ],
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
-      },
-    }
-  );
-
-  return res.data.choices[0].message.content;
 }
 
 // ---------------- HELPERS ----------------
 function fingerprint(text) {
   return crypto.createHash("sha256").update(text).digest("hex");
-}
-
-function isGoal(text) {
-  const t = text.toLowerCase();
-  return (
-    t.includes("i want to") ||
-    t.includes("help me build") ||
-    t.includes("plan") ||
-    t.includes("how do i create")
-  );
 }
 
 // ---------------- MESSAGE ----------------
@@ -79,7 +70,7 @@ app.post("/message", async (req, res) => {
     const embedding = await getEmbedding(message);
     const fp = fingerprint(message);
 
-    // ---------------- MEMORY STORE ----------------
+    // ---------------- MEMORY ----------------
     const { data: existing } = await supabase
       .from("user_memory")
       .select("*")
@@ -101,46 +92,8 @@ app.post("/message", async (req, res) => {
       ]);
     }
 
-    // ---------------- GOAL DETECTION ----------------
-    let goalData = null;
-
-    if (isGoal(message)) {
-      const planPrompt = `
-User goal:
-${message}
-
-Create a structured plan in JSON with steps.
-Format:
-{
-  "steps": ["step1", "step2", "step3"]
-}
-`;
-
-      const planText = await llm(planPrompt);
-
-      try {
-        const planJson = JSON.parse(planText);
-
-        const { data } = await supabase
-          .from("user_goals")
-          .insert([
-            {
-              user_id,
-              goal: message,
-              plan: planJson,
-            },
-          ])
-          .select()
-          .single();
-
-        goalData = data;
-      } catch (e) {
-        goalData = { error: "Failed to parse plan", raw: planText };
-      }
-    }
-
-    // ---------------- FETCH ACTIVE GOAL ----------------
-    const { data: activeGoal } = await supabase
+    // ---------------- ACTIVE GOAL ----------------
+    const { data: goal } = await supabase
       .from("user_goals")
       .select("*")
       .eq("user_id", user_id)
@@ -149,43 +102,81 @@ Format:
       .limit(1)
       .maybeSingle();
 
-    // ---------------- MEMORY RETRIEVAL ----------------
-    const { data: memories } = await supabase.rpc("match_memory", {
-      query_embedding: embedding,
-      match_user_id: user_id,
-      match_count: 5,
-    });
+    let agent_output = null;
 
-    // ---------------- CONTEXT ----------------
-    const memoryContext = (memories || [])
-      .map((m, i) => `Memory ${i + 1}: ${m.summary}`)
-      .join("\n");
+    if (goal) {
+      // ---------------- GET PAST ACTIONS ----------------
+      const { data: actions } = await supabase
+        .from("agent_actions")
+        .select("*")
+        .eq("goal_id", goal.id);
 
-    const goalContext = activeGoal
-      ? `Active goal: ${activeGoal.goal}\nPlan: ${JSON.stringify(activeGoal.plan)}`
-      : "No active goal";
+      const actionHistory = (actions || [])
+        .map(a => `- ${a.action} → ${a.result || "pending"}`)
+        .join("\n");
 
-    const finalPrompt = `
+      // ---------------- AGENT THINKING ----------------
+      const agentPrompt = `
+Goal:
+${goal.goal}
+
+Plan:
+${JSON.stringify(goal.plan)}
+
+Previous actions:
+${actionHistory}
+
 User message:
 ${message}
 
-${goalContext}
+Decide:
+1. Next best action
+2. Why
+3. Expected result
 
-Relevant memories:
-${memoryContext}
-
-Instructions:
-- If a goal exists, guide progress
-- If no goal, respond normally
+Respond in JSON:
+{
+  "action": "...",
+  "reason": "...",
+  "expected": "..."
+}
 `;
 
-    const reply = await llm(finalPrompt);
+      const decisionText = await llm(agentPrompt);
+
+      let decision;
+
+      try {
+        decision = JSON.parse(decisionText);
+      } catch {
+        decision = { action: decisionText };
+      }
+
+      // ---------------- SAVE ACTION ----------------
+      const { data: newAction } = await supabase
+        .from("agent_actions")
+        .insert([
+          {
+            user_id,
+            goal_id: goal.id,
+            action: decision.action,
+            result: decision.expected || null,
+            status: "completed",
+          },
+        ])
+        .select()
+        .single();
+
+      agent_output = {
+        decision,
+        action_saved: newAction,
+      };
+    }
 
     return res.json({
-      reply,
-      goal_created: goalData || null,
-      active_goal: activeGoal || null,
-      memory_used: memories?.length || 0,
+      reply: "Autonomous agent step executed",
+      agent: agent_output,
+      has_goal: !!goal,
     });
 
   } catch (err) {
@@ -195,5 +186,5 @@ Instructions:
 
 // ---------------- START ----------------
 app.listen(PORT, () => {
-  console.log("🧠 Operion Planning Engine v1 running");
+  console.log("🧠 Operion Autonomous Agent v1 running");
 });
