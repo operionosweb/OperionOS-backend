@@ -25,7 +25,7 @@ async function llm(prompt) {
     {
       model: "mistral-medium",
       messages: [
-        { role: "system", content: "You are an autonomous AI agent." },
+        { role: "system", content: "You are an autonomous AI agent with tools." },
         { role: "user", content: prompt }
       ],
     },
@@ -55,6 +55,29 @@ async function getEmbedding(text) {
   );
 
   return res.data.data[0].embedding;
+}
+
+// ---------------- TOOLS ----------------
+async function searchTool(query) {
+  // simple mock (replace later with real API)
+  return `Search results for "${query}": Airbus uses fly-by-wire control systems.`;
+}
+
+async function fetchTool(url) {
+  try {
+    const res = await axios.get(url, { timeout: 5000 });
+    return res.data.toString().slice(0, 1000);
+  } catch {
+    return "Failed to fetch URL";
+  }
+}
+
+// ---------------- TOOL EXECUTOR ----------------
+async function executeTool(name, input) {
+  if (name === "search") return await searchTool(input);
+  if (name === "fetch") return await fetchTool(input);
+
+  return "Unknown tool";
 }
 
 // ---------------- HELPERS ----------------
@@ -105,62 +128,50 @@ app.post("/message", async (req, res) => {
     let agent_output = null;
 
     if (goal) {
-      // ---------------- GET PAST ACTIONS ----------------
-      const { data: actions } = await supabase
-        .from("agent_actions")
-        .select("*")
-        .eq("goal_id", goal.id);
-
-      const actionHistory = (actions || [])
-        .map(a => `- ${a.action} → ${a.result || "pending"}`)
-        .join("\n");
-
-      // ---------------- AGENT THINKING ----------------
-      const agentPrompt = `
+      // ---------------- AGENT DECISION ----------------
+      const decisionPrompt = `
 Goal:
 ${goal.goal}
-
-Plan:
-${JSON.stringify(goal.plan)}
-
-Previous actions:
-${actionHistory}
 
 User message:
 ${message}
 
-Decide:
-1. Next best action
-2. Why
-3. Expected result
+Decide next step.
 
-Respond in JSON:
+Respond JSON:
 {
-  "action": "...",
-  "reason": "...",
-  "expected": "..."
+  "tool": "search | fetch | none",
+  "input": "...",
+  "action": "..."
 }
 `;
 
-      const decisionText = await llm(agentPrompt);
+      const decisionText = await llm(decisionPrompt);
 
       let decision;
-
       try {
         decision = JSON.parse(decisionText);
       } catch {
-        decision = { action: decisionText };
+        decision = { tool: "none", action: decisionText };
+      }
+
+      // ---------------- EXECUTE TOOL ----------------
+      let toolResult = null;
+
+      if (decision.tool && decision.tool !== "none") {
+        toolResult = await executeTool(decision.tool, decision.input);
       }
 
       // ---------------- SAVE ACTION ----------------
-      const { data: newAction } = await supabase
+      const { data: saved } = await supabase
         .from("agent_actions")
         .insert([
           {
             user_id,
             goal_id: goal.id,
+            tool: decision.tool,
             action: decision.action,
-            result: decision.expected || null,
+            result: toolResult,
             status: "completed",
           },
         ])
@@ -169,12 +180,13 @@ Respond in JSON:
 
       agent_output = {
         decision,
-        action_saved: newAction,
+        tool_result: toolResult,
+        saved,
       };
     }
 
     return res.json({
-      reply: "Autonomous agent step executed",
+      reply: "Tool execution complete",
       agent: agent_output,
       has_goal: !!goal,
     });
@@ -186,5 +198,5 @@ Respond in JSON:
 
 // ---------------- START ----------------
 app.listen(PORT, () => {
-  console.log("🧠 Operion Autonomous Agent v1 running");
+  console.log("🧠 Operion Autonomous Agent v2 running");
 });
