@@ -40,88 +40,120 @@ async function storeMemory(user_id, message) {
 }
 
 // =======================
-// WEATHER
+// ENVIRONMENT
 // =======================
 async function getWeather() {
   try {
     const res = await axios.get(
       "https://api.open-meteo.com/v1/forecast?latitude=41.3851&longitude=2.1734&current_weather=true"
     );
-
     return res.data.current_weather;
   } catch {
     return null;
   }
 }
 
-// =======================
-// ⏱️ PREDICTIVE ENGINE (FIXED)
-// =======================
-function predictWeatherRisk(current) {
-  if (!current) return { forecast: "unknown" };
-
-  const wind = current.windspeed;
-
-  const next6h = wind * 1.05;
-  const next12h = wind * 1.1;
-  const next24h = wind * 1.2;
-
-  const riskLevel =
-    next24h > 45 ? "EXTREME" :
-    next24h > 30 ? "HIGH" :
-    next24h > 20 ? "MODERATE" :
-    "LOW";
-
-  return {
-    currentWind: wind,
-    forecast: {
-      h6: next6h,
-      h12: next12h,
-      h24: next24h
-    },
-    riskLevel
-  };
-}
-
-// =======================
-// AVIATION
-// =======================
 async function getAviation() {
   try {
     const res = await axios.get(
       "https://opensky-network.org/api/states/all"
     );
-
     return res.data.states?.length || 0;
   } catch {
     return null;
   }
 }
 
-function predictAviationLoad(currentCount) {
-  const base = currentCount || 6000;
+// =======================
+// PREDICTIVE LAYER
+// =======================
+function predictWeatherRisk(current) {
+  if (!current) return { riskLevel: "UNKNOWN" };
 
-  const f6 = base * 1.03;
-  const f12 = base * 1.05;
-  const f24 = base * 1.08;
+  const wind = current.windspeed;
+
+  const h6 = wind * 1.05;
+  const h12 = wind * 1.1;
+  const h24 = wind * 1.2;
+
+  const riskLevel =
+    h24 > 45 ? "EXTREME" :
+    h24 > 30 ? "HIGH" :
+    h24 > 20 ? "MODERATE" :
+    "LOW";
 
   return {
-    forecast: {
-      h6: f6,
-      h12: f12,
-      h24: f24
-    },
+    currentWind: wind,
+    forecast: { h6, h12, h24 },
+    riskLevel
+  };
+}
+
+function predictAviationLoad(count) {
+  const base = count || 6000;
+
+  const h6 = base * 1.03;
+  const h12 = base * 1.05;
+  const h24 = base * 1.08;
+
+  return {
+    forecast: { h6, h12, h24 },
     congestionRisk:
-      f24 > 8500 ? "HIGH" :
-      f24 > 6500 ? "MEDIUM" :
+      h24 > 8500 ? "HIGH" :
+      h24 > 6500 ? "MEDIUM" :
       "LOW"
   };
 }
 
 // =======================
-// ENVIRONMENT LAYER
+// OPTIMIZATION SOLVER LAYER (NEW CORE)
 // =======================
-async function getPredictiveEnvironment() {
+function optimizationSolver(env) {
+  const weatherRisk = env.weather?.riskLevel || "UNKNOWN";
+  const congestionRisk = env.aviation?.congestionRisk || "UNKNOWN";
+
+  // COST (lower is better)
+  let costScore = 100;
+  if (congestionRisk === "HIGH") costScore += 30;
+  if (congestionRisk === "MEDIUM") costScore += 15;
+
+  // RISK (lower is better)
+  let riskScore = 100;
+  if (weatherRisk === "EXTREME") riskScore += 40;
+  if (weatherRisk === "HIGH") riskScore += 20;
+  if (weatherRisk === "MODERATE") riskScore += 10;
+
+  // DELAY IMPACT (lower is better)
+  const delayScore =
+    (congestionRisk === "HIGH" ? 30 : 10) +
+    (weatherRisk === "HIGH" ? 25 : 5);
+
+  const totalScore =
+    (costScore * 0.4) +
+    (riskScore * 0.4) +
+    (delayScore * 0.2);
+
+  let decision = "PROCEED";
+
+  if (totalScore > 140) decision = "DELAY";
+  if (totalScore > 170) decision = "REROUTE";
+  if (weatherRisk === "EXTREME") decision = "ABORT / HOLD";
+
+  return {
+    scores: {
+      costScore,
+      riskScore,
+      delayScore,
+      totalScore
+    },
+    decision
+  };
+}
+
+// =======================
+// ENVIRONMENT BUILDER
+// =======================
+async function buildEnvironment() {
   const [weatherRaw, aviationRaw] = await Promise.all([
     getWeather(),
     getAviation()
@@ -166,7 +198,7 @@ function planner(msg) {
   return {
     aviation: m.includes("flight") || m.includes("aircraft"),
     maritime: m.includes("ship") || m.includes("port"),
-    offshore: m.includes("rig") || m.includes("offshore"),
+    offshore: m.includes("rig"),
     finance: m.includes("cost") || m.includes("profit")
   };
 }
@@ -175,27 +207,27 @@ function planner(msg) {
 // AGENTS
 // =======================
 async function aviationAgent(msg, ctx) {
-  return llm("Aviation ops expert", `${ctx}\n\n${msg}`);
+  return llm("Aviation ops expert", `${ctx}\n${msg}`);
 }
 
 async function maritimeAgent(msg, ctx) {
-  return llm("Maritime ops expert", `${ctx}\n\n${msg}`);
+  return llm("Maritime ops expert", `${ctx}\n${msg}`);
 }
 
 async function offshoreAgent(msg, ctx) {
-  return llm("Offshore ops expert", `${ctx}\n\n${msg}`);
+  return llm("Offshore ops expert", `${ctx}\n${msg}`);
 }
 
 async function financeAgent(msg, ctx) {
-  return llm("Finance ops analyst", `${ctx}\n\n${msg}`);
+  return llm("Finance analyst", `${ctx}\n${msg}`);
 }
 
 // =======================
-// SYNTHESIZER
+// SYNTHESIZER (NOW DECISION-AWARE)
 // =======================
-async function synthesizer(msg, ctx, outputs, env) {
+async function synthesizer(msg, ctx, outputs, env, decision) {
   return llm(
-    "You are a predictive operations orchestration engine.",
+    "You are an operations decision intelligence engine.",
     `
 USER:
 ${msg}
@@ -203,11 +235,19 @@ ${msg}
 CONTEXT:
 ${ctx}
 
+AGENTS:
+${JSON.stringify(outputs)}
+
 ENVIRONMENT:
 ${JSON.stringify(env)}
 
-AGENTS:
-${JSON.stringify(outputs)}
+OPTIMIZATION RESULT:
+${JSON.stringify(decision)}
+
+TASK:
+- Explain decision (PROCEED / DELAY / REROUTE / ABORT)
+- Justify using cost, risk, delay tradeoffs
+- Provide operational recommendation
 `
   );
 }
@@ -224,7 +264,9 @@ app.post("/message", async (req, res) => {
 
     const plan = planner(message);
 
-    const env = await getPredictiveEnvironment();
+    const env = await buildEnvironment();
+
+    const decision = optimizationSolver(env);
 
     const outputs = {};
     const tasks = [];
@@ -243,14 +285,15 @@ app.post("/message", async (req, res) => {
 
     await Promise.all(tasks);
 
-    const reply = await synthesizer(message, context, outputs, env);
+    const reply = await synthesizer(message, context, outputs, env, decision);
 
     storeMemory(user_id, message);
 
     res.json({
       reply,
       plan,
-      predictive_environment: env
+      environment: env,
+      optimization: decision
     });
 
   } catch (err) {
@@ -260,5 +303,5 @@ app.post("/message", async (req, res) => {
 
 // =======================
 app.listen(PORT, () => {
-  console.log("🚀 Operion predictive orchestration running");
+  console.log("🧠 Operion Optimization Solver Active");
 });
