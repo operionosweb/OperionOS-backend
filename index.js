@@ -21,34 +21,34 @@ const supabase = createClient(
 );
 
 // =======================
-// HEALTH CHECK
+// AGENTS (SAFE REINTRO)
+// =======================
+const AGENTS = {
+  aviation: "You are an aviation expert (aircraft, airlines, operations).",
+  finance: "You are a finance expert (costs, ROI, profitability).",
+  operations: "You are an operations expert (efficiency, logistics).",
+  general: "You are a general intelligent assistant."
+};
+
+// =======================
+// HEALTH
 // =======================
 app.get("/", (req, res) => {
-  res.json({ status: "ok", service: "Operion backend stable" });
+  res.json({ status: "ok", system: "Operion AI v2 stable" });
 });
 
 // =======================
-// EMBEDDINGS (SAFE VERSION)
+// LLM
 // =======================
-async function getEmbedding(text) {
-  // Placeholder safe fallback (prevents crashes)
-  // Replace later with real embedding model if needed
-  return Array(384).fill(0).map((_, i) =>
-    Math.sin(text.length + i) / 10
-  );
-}
-
-// =======================
-// MISTRAL LLM
-// =======================
-async function llm(prompt) {
+async function llm(system, user) {
   try {
     const res = await axios.post(
       "https://api.mistral.ai/v1/chat/completions",
       {
         model: "mistral-medium",
         messages: [
-          { role: "user", content: prompt }
+          { role: "system", content: system },
+          { role: "user", content: user }
         ]
       },
       {
@@ -66,7 +66,82 @@ async function llm(prompt) {
 }
 
 // =======================
-// MEMORY ENDPOINT (STABLE)
+// SIMPLE ROUTER (ROBUST)
+// =======================
+function router(message) {
+  const msg = message.toLowerCase();
+
+  let domains = [];
+
+  if (msg.includes("aircraft") || msg.includes("airline") || msg.includes("flight")) {
+    domains.push("aviation");
+  }
+
+  if (msg.includes("cost") || msg.includes("revenue") || msg.includes("profit")) {
+    domains.push("finance");
+  }
+
+  if (msg.includes("optimize") || msg.includes("efficiency") || msg.includes("process")) {
+    domains.push("operations");
+  }
+
+  if (domains.length === 0) {
+    domains.push("general");
+  }
+
+  return domains;
+}
+
+// =======================
+// MEMORY (SAFE)
+// =======================
+async function getMemory(user_id) {
+  const { data } = await supabase
+    .from("user_memory")
+    .select("*")
+    .eq("user_id", user_id)
+    .limit(5);
+
+  return data || [];
+}
+
+async function storeMemory(user_id, summary) {
+  await supabase.from("user_memory").insert([
+    {
+      user_id,
+      summary
+    }
+  ]);
+}
+
+// =======================
+// RUN AGENT
+// =======================
+async function runAgent(agent, message, context) {
+  return await llm(
+    AGENTS[agent],
+    `
+Context:
+${context}
+
+User:
+${message}
+`
+  );
+}
+
+// =======================
+// AGGREGATOR (SAFE)
+// =======================
+async function aggregate(results) {
+  return await llm(
+    "Combine expert answers into one clear response.",
+    JSON.stringify(results, null, 2)
+  );
+}
+
+// =======================
+// MAIN ENDPOINT
 // =======================
 app.post("/message", async (req, res) => {
   try {
@@ -76,61 +151,41 @@ app.post("/message", async (req, res) => {
       return res.status(400).json({ error: "message required" });
     }
 
-    // 1. embedding (SAFE FIX: always 384 dims)
-    const embedding = await getEmbedding(message);
+    // 1. MEMORY
+    const memory = await getMemory(user_id);
+    const context = memory.map(m => m.summary).join("\n");
 
-    // 2. store memory (SAFE INSERT)
-    const { error: insertError } = await supabase
-      .from("user_memory")
-      .insert([
-        {
-          user_id,
-          summary: message,
-          embedding
-        }
-      ]);
+    // 2. ROUTE
+    const domains = router(message);
 
-    if (insertError) {
-      console.log("INSERT ERROR:", insertError.message);
+    // 3. RUN AGENTS
+    let results = {};
+
+    for (const d of domains) {
+      results[d] = await runAgent(d, message, context);
     }
 
-    // 3. retrieve memory (SAFE QUERY)
-    const { data: memories } = await supabase
-      .from("user_memory")
-      .select("*")
-      .eq("user_id", user_id)
-      .limit(5);
+    // 4. FINAL RESPONSE
+    const final = await aggregate(results);
 
-    // 4. response generation
-    const context = (memories || [])
-      .map(m => m.summary)
-      .join("\n");
-
-    const reply = await llm(`
-You are a helpful AI assistant.
-
-Context:
-${context}
-
-User:
-${message}
-`);
+    // 5. STORE MEMORY
+    await storeMemory(user_id, message);
 
     return res.json({
-      reply,
-      memory_found: memories?.length || 0,
-      memories: memories || []
+      reply: final,
+      routing: domains,
+      agents: results
     });
 
   } catch (err) {
-    console.error("FATAL ERROR:", err);
+    console.error("FATAL:", err);
     return res.status(500).json({ error: err.message });
   }
 });
 
 // =======================
-// START SERVER
+// START
 // =======================
 app.listen(PORT, () => {
-  console.log("🚀 Operion backend stable running on port", PORT);
+  console.log("🚀 Operion AI v2 running on port", PORT);
 });
