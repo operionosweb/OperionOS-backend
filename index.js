@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import axios from "axios";
+import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
 
@@ -12,9 +13,17 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 // =======================
-// INITIAL AGENT WEIGHTS (PERSISTENT STATE)
+// SUPABASE (SHARED MEMORY LAYER)
 // =======================
-let AGENT_WEIGHTS = {
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
+
+// =======================
+// GLOBAL SHARED WEIGHTS (SYNCED ACROSS NODES)
+// =======================
+let SHARED_WEIGHTS = {
   safety: 1.6,
   cost: 1.0,
   efficiency: 1.2,
@@ -22,9 +31,41 @@ let AGENT_WEIGHTS = {
 };
 
 // =======================
-// ENV MODEL
+// NODE IDENTIFICATION
 // =======================
-function envModel(weather, aviation) {
+const NODE_ID = process.env.NODE_ID || "aviation-node";
+
+// =======================
+// LOAD GLOBAL STATE FROM DB (SYNC)
+// =======================
+async function syncGlobalState() {
+  const { data } = await supabase
+    .from("global_agent_state")
+    .select("*")
+    .eq("id", "master")
+    .single();
+
+  if (data?.weights) {
+    SHARED_WEIGHTS = data.weights;
+  }
+}
+
+// =======================
+// PUSH STATE TO SHARED MEMORY
+// =======================
+async function pushGlobalState() {
+  await supabase.from("global_agent_state").upsert({
+    id: "master",
+    weights: SHARED_WEIGHTS,
+    updated_by: NODE_ID,
+    updated_at: new Date().toISOString()
+  });
+}
+
+// =======================
+// ENV MODEL (SIMPLIFIED)
+// =======================
+function envModel(weather, traffic) {
   const wind = weather?.windspeed || 10;
 
   return {
@@ -35,17 +76,17 @@ function envModel(weather, aviation) {
       "LOW",
 
     congestionRisk:
-      aviation > 8500 ? "HIGH" :
-      aviation > 6500 ? "MEDIUM" :
+      traffic > 8500 ? "HIGH" :
+      traffic > 6500 ? "MEDIUM" :
       "LOW",
 
     wind,
-    traffic: aviation
+    traffic
   };
 }
 
 // =======================
-// AGENTS (NOW WEIGHTED)
+// AGENTS
 // =======================
 const AGENTS = {
   safety: (env) =>
@@ -54,8 +95,7 @@ const AGENTS = {
     "PROCEED",
 
   cost: (env) =>
-    env.congestionRisk === "HIGH" ? "DELAY" :
-    "PROCEED",
+    env.congestionRisk === "HIGH" ? "DELAY" : "PROCEED",
 
   efficiency: (env) =>
     env.traffic > 8000 ? "REROUTE" : "PROCEED",
@@ -67,10 +107,10 @@ const AGENTS = {
 };
 
 // =======================
-// DEBATE ENGINE
+// DEBATE + WEIGHTED DECISION
 // =======================
-function debateEngine(env) {
-  const proposals = {};
+function decisionEngine(env) {
+  const votes = {};
   const score = {
     PROCEED: 0,
     DELAY: 0,
@@ -80,84 +120,54 @@ function debateEngine(env) {
 
   for (const [name, fn] of Object.entries(AGENTS)) {
     const decision = fn(env);
-    proposals[name] = decision;
+    votes[name] = decision;
 
-    score[decision] += AGENT_WEIGHTS[name];
+    score[decision] += SHARED_WEIGHTS[name];
   }
 
   const finalDecision = Object.entries(score)
     .sort((a, b) => b[1] - a[1])[0][0];
 
-  return { proposals, score, finalDecision };
+  return { votes, score, finalDecision };
 }
 
 // =======================
-// META-REFLECTION (QUALITY CHECK)
+// 🧠 DISTRIBUTED LEARNING UPDATE (NEW CORE)
 // =======================
-function metaReflection(env, debate) {
-  const issues = [];
-  const { proposals, finalDecision } = debate;
+async function distributedLearningUpdate(env, result) {
+  const { finalDecision, score } = result;
 
-  if (proposals.safety === "HOLD" && finalDecision !== "HOLD") {
-    issues.push("Safety overridden");
-  }
+  const success =
+    finalDecision === "PROCEED" && env.weatherRisk !== "EXTREME";
 
-  if (env.weatherRisk === "HIGH" && finalDecision === "PROCEED") {
-    issues.push("High weather risk ignored");
-  }
+  const learningRate = 0.03;
 
-  const confidence = Math.max(0, 1 - issues.length * 0.3);
-
-  return { issues, confidence };
-}
-
-// =======================
-// 🔁 RECURSIVE SELF-IMPROVEMENT LOOP (NEW CORE)
-// =======================
-function selfImprove(meta, debate) {
-  const { issues, confidence } = meta;
-
-  const learningRate = 0.05; // slow adaptation (critical)
-
-  // If system performed well → reinforce winning agents
-  if (confidence > 0.7) {
-    for (const agent of Object.keys(AGENT_WEIGHTS)) {
-      AGENT_WEIGHTS[agent] += learningRate;
+  // local adjustment
+  if (success) {
+    for (const k in SHARED_WEIGHTS) {
+      SHARED_WEIGHTS[k] += learningRate;
     }
+  } else {
+    SHARED_WEIGHTS.operations += 0.05;
+    SHARED_WEIGHTS.safety += 0.08;
   }
 
-  // If system performed poorly → penalize conflicting agents
-  if (issues.length > 0) {
-    for (const issue of issues) {
-      if (issue.includes("Safety")) {
-        AGENT_WEIGHTS.safety = Math.min(
-          2.0,
-          AGENT_WEIGHTS.safety + 0.1
-        );
-      }
-
-      if (issue.includes("weather")) {
-        AGENT_WEIGHTS.operations = Math.min(
-          2.0,
-          AGENT_WEIGHTS.operations + 0.1
-        );
-      }
-    }
-  }
-
-  // Clamp weights (CRITICAL SAFETY BOUNDARY)
-  for (const k in AGENT_WEIGHTS) {
-    AGENT_WEIGHTS[k] = Math.max(
+  // clamp weights
+  for (const k in SHARED_WEIGHTS) {
+    SHARED_WEIGHTS[k] = Math.max(
       0.5,
-      Math.min(2.0, AGENT_WEIGHTS[k])
+      Math.min(2.0, SHARED_WEIGHTS[k])
     );
   }
 
-  return { updatedWeights: AGENT_WEIGHTS };
+  // persist globally
+  await pushGlobalState();
+
+  return SHARED_WEIGHTS;
 }
 
 // =======================
-// ENV FETCH
+// SIMPLE ENV FETCH
 // =======================
 async function getWeather() {
   try {
@@ -170,41 +180,37 @@ async function getWeather() {
   }
 }
 
-async function getAviation() {
-  try {
-    const res = await axios.get(
-      "https://opensky-network.org/api/states/all"
-    );
-    return res.data.states?.length || 6000;
-  } catch {
-    return 6000;
-  }
+async function getTraffic() {
+  return 7000 + Math.floor(Math.random() * 3000);
 }
 
 // =======================
-// MAIN LOOP
+// MAIN
 // =======================
 app.post("/message", async (req, res) => {
   try {
     const { message } = req.body;
 
+    await syncGlobalState();
+
     const weather = await getWeather();
-    const aviation = await getAviation();
+    const traffic = await getTraffic();
 
-    const env = envModel(weather, aviation);
+    const env = envModel(weather, traffic);
 
-    const debate = debateEngine(env);
+    const decision = decisionEngine(env);
 
-    const meta = metaReflection(env, debate);
-
-    const learning = selfImprove(meta, debate);
+    const updatedWeights = await distributedLearningUpdate(
+      env,
+      decision
+    );
 
     res.json({
-      reply: "Recursive learning cycle complete.",
+      node: NODE_ID,
       environment: env,
-      debate,
-      meta,
-      learning
+      decision,
+      sharedWeights: updatedWeights,
+      message: "Distributed learning cycle complete"
     });
 
   } catch (err) {
@@ -214,6 +220,6 @@ app.post("/message", async (req, res) => {
 
 // =======================
 app.listen(PORT, () => {
-  console.log("🧠 Recursive Self-Improvement Engine Active");
-  console.log("Initial weights:", AGENT_WEIGHTS);
+  console.log("🌐 Distributed Agent Memory Network Active");
+  console.log("Node:", NODE_ID);
 });
