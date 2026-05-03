@@ -7,7 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 dotenv.config();
 
 // =======================
-// GLOBAL CONFIG (IMPORTANT)
+// AGENTS
 // =======================
 const AGENTS = {
   aviation: "Aviation expert focused on aircraft, airlines, operations",
@@ -22,16 +22,13 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// =======================
-// SUPABASE
-// =======================
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY
 );
 
 // =======================
-// LLM CALL
+// LLM
 // =======================
 async function llm(system, user) {
   try {
@@ -59,102 +56,103 @@ async function llm(system, user) {
 }
 
 // =======================
-// ROUTER
+// ROUTER (STRONG)
 // =======================
 async function router(message) {
   const prompt = `
-Classify this request into domains:
+Classify into:
 aviation, finance, operations, general
 
-Return JSON:
-["domain1", "domain2"]
+Rules:
+- MUST choose best domain(s)
+- NOT default to general unless necessary
+
+Return JSON array only.
+
+Message:
+${message}
 `;
 
-  const res = await llm("You are a routing agent.", prompt + "\n\n" + message);
+  const res = await llm("Routing system", prompt);
 
   try {
-    const parsed = JSON.parse(res);
-    return Array.isArray(parsed) ? parsed : ["general"];
+    return JSON.parse(res);
   } catch {
     return ["general"];
   }
 }
 
 // =======================
-// MEMORY FETCH
+// FETCH DOMAIN MEMORY
 // =======================
-async function getAgentMemory(agent, user_id) {
-  const { data, error } = await supabase
+async function getDomainMemory(agent, user_id) {
+  const { data } = await supabase
     .from("agent_memory")
     .select("*")
     .eq("agent", agent)
     .eq("user_id", user_id)
-    .order("importance", { ascending: false })
+    .order("quality_score", { ascending: false })
     .limit(5);
-
-  if (error) {
-    console.log("MEMORY FETCH ERROR:", error);
-    return [];
-  }
 
   return data || [];
 }
 
 // =======================
-// MEMORY STORE
+// STORE LEARNING
 // =======================
-async function storeMemory(agent, user_id, summary, score) {
+async function storeLearning(agent, user_id, summary, quality) {
   const { error } = await supabase.from("agent_memory").insert([
     {
       agent,
       user_id,
+      domain: agent,
       summary,
-      success_score: score,
-      importance: 0.5 + score * 0.5,
+      pattern_type: "response",
+      quality_score: quality,
+      importance: 0.5 + quality * 0.5,
     },
   ]);
 
   if (error) {
-    console.log("MEMORY INSERT ERROR:", error);
+    console.log("STORE ERROR:", error);
   }
 }
 
 // =======================
-// RUN SINGLE AGENT
+// RUN AGENT WITH LEARNING
 // =======================
 async function runAgent(agent, message, user_id) {
-  const memory = await getAgentMemory(agent, user_id);
+  const memory = await getDomainMemory(agent, user_id);
 
-  const context = memory.map(m => m.summary).join("\n");
+  const learnedContext = memory.map(m => m.summary).join("\n");
 
   const result = await llm(
     AGENTS[agent],
     `
-Past knowledge:
-${context}
+You are improving over time.
 
-User message:
+Best past knowledge:
+${learnedContext}
+
+User:
 ${message}
 
-Respond clearly and helpfully.
+Respond with the best possible domain expertise.
 `
   );
 
-  // Evaluate answer
+  // Evaluate quality
   const scoreText = await llm(
-    "Score this answer from 0 to 1 (only number).",
+    "Score this response quality from 0 to 1 (number only)",
     result
   );
 
   let score = parseFloat(scoreText);
   if (isNaN(score)) score = 0.5;
 
-  await storeMemory(agent, user_id, result, score);
+  await storeLearning(agent, user_id, result, score);
 
-  return {
-    result,
-    score
-  };
+  return { result, score };
 }
 
 // =======================
@@ -162,20 +160,13 @@ Respond clearly and helpfully.
 // =======================
 async function aggregate(results) {
   return await llm(
-    "You combine multiple expert answers into one final answer.",
+    "Combine expert outputs into one final high-quality answer.",
     JSON.stringify(results, null, 2)
   );
 }
 
 // =======================
-// HEALTH CHECK
-// =======================
-app.get("/", (req, res) => {
-  res.send("🧠 Operion Persistent Agent Organization running");
-});
-
-// =======================
-// MAIN ENDPOINT
+// ENDPOINT
 // =======================
 app.post("/message", async (req, res) => {
   try {
@@ -185,10 +176,8 @@ app.post("/message", async (req, res) => {
       return res.status(400).json({ error: "message required" });
     }
 
-    // 1. ROUTE
     const domains = await router(message);
 
-    // 2. RUN AGENTS
     let results = {};
 
     for (const domain of domains) {
@@ -197,12 +186,10 @@ app.post("/message", async (req, res) => {
       }
     }
 
-    // fallback safety
     if (Object.keys(results).length === 0) {
       results.general = await runAgent("general", message, user_id);
     }
 
-    // 3. AGGREGATE
     const final = await aggregate(results);
 
     return res.json({
@@ -212,14 +199,14 @@ app.post("/message", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("FATAL ERROR:", err);
+    console.error("FATAL:", err);
     return res.status(500).json({ error: err.message });
   }
 });
 
 // =======================
-// START SERVER
+// START
 // =======================
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log("🧠 Domain Specialization Learning running");
 });
