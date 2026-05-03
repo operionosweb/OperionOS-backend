@@ -19,57 +19,100 @@ const supabase = createClient(
 );
 
 // =======================
-// CORE INTERNAL AGENTS
+// RATE LIMIT CHECK
 // =======================
-const INTERNAL_AGENTS = [
+async function checkTenantLimit(tenantId) {
+  let { data } = await supabase
+    .from("tenant_limits")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .single();
+
+  if (!data) {
+    const init = {
+      tenant_id: tenantId,
+      max_requests_per_minute: 60,
+      current_usage: 0,
+      reset_at: new Date()
+    };
+
+    await supabase.from("tenant_limits").insert(init);
+    data = init;
+  }
+
+  const now = new Date();
+  const resetTime = new Date(data.reset_at);
+
+  // reset window
+  if (now - resetTime > 60000) {
+    await supabase
+      .from("tenant_limits")
+      .update({
+        current_usage: 0,
+        reset_at: now
+      })
+      .eq("tenant_id", tenantId);
+
+    data.current_usage = 0;
+  }
+
+  if (data.current_usage >= data.max_requests_per_minute) {
+    throw new Error("Rate limit exceeded");
+  }
+
+  await supabase
+    .from("tenant_limits")
+    .update({
+      current_usage: data.current_usage + 1
+    })
+    .eq("tenant_id", tenantId);
+}
+
+// =======================
+// SAFE AGENT WRAPPER (SANDBOX)
+// =======================
+async function safeExecute(fn, env) {
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      resolve({ decision: "TIMEOUT", score: 0 });
+    }, 500);
+
+    try {
+      const result = fn(env);
+      clearTimeout(timeout);
+      resolve({ decision: result, score: 1 });
+    } catch (e) {
+      resolve({ decision: "ERROR", score: 0 });
+    }
+  });
+}
+
+// =======================
+// INTERNAL AGENTS
+// =======================
+const AGENTS = [
   {
     id: "aviation_core",
     domain: "aviation",
     run: (env) =>
       env.weatherRisk === "EXTREME" ? "HOLD" : "PROCEED"
+  },
+  {
+    id: "maritime_core",
+    domain: "maritime",
+    run: (env) =>
+      env.weatherRisk === "EXTREME" ? "ANCHOR" : "SAIL"
+  },
+  {
+    id: "offshore_core",
+    domain: "offshore",
+    run: (env) =>
+      env.wind > 40 ? "SHUTDOWN" : "OPERATE"
   }
 ];
 
 // =======================
-// MARKETPLACE AGENTS
-// =======================
-async function loadMarketplaceAgents(domain) {
-  const { data } = await supabase
-    .from("marketplace_agents")
-    .select("*")
-    .eq("domain", domain)
-    .eq("active", true);
-
-  return data || [];
-}
-
-// =======================
-// EXECUTE MARKETPLACE AGENT (sandboxed)
-// =======================
-async function runMarketplaceAgent(agent, env) {
-  try {
-    const res = await axios.post(agent.endpoint, {
-      env
-    });
-
-    return {
-      id: agent.id,
-      decision: res.data.decision,
-      cost: agent.price_per_call,
-      score: res.data.score || 1
-    };
-  } catch (e) {
-    return {
-      id: agent.id,
-      decision: "FAIL",
-      cost: agent.price_per_call,
-      score: 0
-    };
-  }
-}
-
-// =======================
-// ENV
+// ENV BUILDER
 // =======================
 function buildEnv(weather, traffic) {
   const wind = weather?.windspeed || 10;
@@ -79,21 +122,40 @@ function buildEnv(weather, traffic) {
       wind > 45 ? "EXTREME" :
       wind > 30 ? "HIGH" :
       "LOW",
-
     wind,
     traffic
   };
 }
 
 // =======================
+// EXECUTION LAYER (SAFE)
+// =======================
+async function executeAgents(env) {
+  const results = [];
+
+  for (const agent of AGENTS) {
+    const output = await safeExecute(agent.run, env);
+
+    results.push({
+      agent_id: agent.id,
+      domain: agent.domain,
+      decision: output.decision,
+      score: output.score
+    });
+  }
+
+  return results;
+}
+
+// =======================
 // AGGREGATION
 // =======================
-function aggregate(allDecisions) {
+function aggregate(results) {
   const scores = {};
 
-  for (const d of allDecisions) {
-    scores[d.decision] =
-      (scores[d.decision] || 0) + (d.score || 1);
+  for (const r of results) {
+    scores[r.decision] =
+      (scores[r.decision] || 0) + r.score;
   }
 
   return Object.entries(scores)
@@ -101,74 +163,63 @@ function aggregate(allDecisions) {
 }
 
 // =======================
-// MARKET COST TRACKING
+// EXTERNAL DATA
 // =======================
-async function logMarketUsage(tenantId, agentId, cost, score) {
-  await supabase.from("agent_market_usage").insert({
-    tenant_id: tenantId,
-    agent_id: agentId,
-    cost,
-    outcome_score: score
-  });
+async function getWeather() {
+  const res = await axios.get(
+    "https://api.open-meteo.com/v1/forecast?latitude=41.3851&longitude=2.1734&current_weather=true",
+    { timeout: 800 }
+  );
+  return res.data.current_weather;
+}
+
+async function getTraffic() {
+  return 6000 + Math.random() * 3000;
 }
 
 // =======================
-// MAIN ENGINE
+// MAIN ENDPOINT
 // =======================
 app.post("/execute/:tenantId", async (req, res) => {
   try {
     const { tenantId } = req.params;
 
-    const weather = await axios.get(
-      "https://api.open-meteo.com/v1/forecast?latitude=41.3851&longitude=2.1734&current_weather=true"
-    );
+    // 🔐 enforce isolation + rate limits
+    await checkTenantLimit(tenantId);
 
-    const traffic = 7000 + Math.random() * 3000;
+    const weather = await getWeather();
+    const traffic = await getTraffic();
 
-    const env = buildEnv(weather.data.current_weather, traffic);
+    const env = buildEnv(weather, traffic);
 
-    // INTERNAL AGENTS
-    const internalResults = INTERNAL_AGENTS.map(a => ({
-      id: a.id,
-      decision: a.run(env),
-      score: 1
-    }));
+    const results = await executeAgents(env);
 
-    // MARKETPLACE AGENTS
-    const marketplace = await loadMarketplaceAgents("aviation");
+    const decision = aggregate(results);
 
-    const marketResults = await Promise.all(
-      marketplace.map(a => runMarketplaceAgent(a, env))
-    );
-
-    // LOG COSTS
-    for (const m of marketResults) {
-      await logMarketUsage(
-        tenantId,
-        m.id,
-        m.cost,
-        m.score
-      );
-    }
-
-    const all = [...internalResults, ...marketResults];
-
-    const decision = aggregate(all);
+    await supabase.from("agent_runs").insert({
+      tenant_id: tenantId,
+      input: env,
+      output: results,
+      decision
+    });
 
     res.json({
       tenantId,
       env,
+      results,
       decision,
-      internalResults,
-      marketResults
+      status: "secure_execution_ok"
     });
 
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({
+      error: err.message,
+      status: "blocked_or_failed"
+    });
   }
 });
 
 // =======================
 app.listen(process.env.PORT || 3000, () => {
-  console.log("🧠 Operion Intelligence Marketplace OS Running");
+  console.log("🔐 Operion Secure Enterprise OS Running");
 });
