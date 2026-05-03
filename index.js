@@ -21,20 +21,6 @@ const supabase = createClient(
 );
 
 // =======================
-// MEMORY GRAPH (CAUSAL DATA)
-// =======================
-async function getDecisionHistory(user_id) {
-  const { data } = await supabase
-    .from("memory_graph")
-    .select("*")
-    .eq("user_id", user_id)
-    .order("created_at", { ascending: false })
-    .limit(50);
-
-  return data || [];
-}
-
-// =======================
 // ENVIRONMENT
 // =======================
 async function getWeather() {
@@ -53,136 +39,118 @@ async function getAviation() {
     const res = await axios.get(
       "https://opensky-network.org/api/states/all"
     );
-    return res.data.states?.length || 0;
+    return res.data.states?.length || 6000;
   } catch {
-    return null;
+    return 6000;
   }
 }
 
 // =======================
-// PREDICTION MODELS
+// ENV MODEL
 // =======================
-function predictWeatherRisk(current) {
-  if (!current) return { riskLevel: "UNKNOWN" };
-
-  const w = current.windspeed;
-
-  const h6 = w * 1.05;
-  const h12 = w * 1.1;
-  const h24 = w * 1.2;
-
-  const riskLevel =
-    h24 > 45 ? "EXTREME" :
-    h24 > 30 ? "HIGH" :
-    h24 > 20 ? "MODERATE" :
-    "LOW";
-
-  return { wind: w, forecast: { h6, h12, h24 }, riskLevel };
-}
-
-function predictAviationLoad(count) {
-  const base = count || 6000;
+function envModel(weather, aviationCount) {
+  const wind = weather?.windspeed || 10;
 
   return {
-    forecast: {
-      h6: base * 1.03,
-      h12: base * 1.05,
-      h24: base * 1.08
-    },
+    weatherRisk:
+      wind > 45 ? "EXTREME" :
+      wind > 30 ? "HIGH" :
+      wind > 20 ? "MODERATE" :
+      "LOW",
+
     congestionRisk:
-      base > 8500 ? "HIGH" :
-      base > 6500 ? "MEDIUM" :
-      "LOW"
+      aviationCount > 8500 ? "HIGH" :
+      aviationCount > 6500 ? "MEDIUM" :
+      "LOW",
+
+    wind,
+    traffic: aviationCount
   };
 }
 
 // =======================
-// BASE OPTIMIZATION SOLVER
+// AGENTS (NEW CORE)
 // =======================
-function optimizationSolver(env) {
-  const wr = env.weather?.riskLevel;
-  const cr = env.aviation?.congestionRisk;
+const AGENTS = {
+  safety: {
+    weight: 1.4,
+    vote: (env) => {
+      if (env.weatherRisk === "EXTREME") return "HOLD";
+      if (env.weatherRisk === "HIGH") return "DELAY";
+      return "PROCEED";
+    }
+  },
 
-  let cost = 100;
-  let risk = 100;
-  let delay = 10;
+  cost: {
+    weight: 1.0,
+    vote: (env) => {
+      if (env.congestionRisk === "HIGH") return "DELAY";
+      if (env.congestionRisk === "MEDIUM") return "REROUTE";
+      return "PROCEED";
+    }
+  },
 
-  if (cr === "HIGH") cost += 30;
-  if (wr === "HIGH") risk += 20;
-  if (wr === "EXTREME") risk += 40;
+  efficiency: {
+    weight: 1.2,
+    vote: (env) => {
+      if (env.traffic > 8000) return "REROUTE";
+      if (env.traffic > 7000) return "DELAY";
+      return "PROCEED";
+    }
+  },
 
-  delay += wr === "HIGH" ? 25 : 5;
+  operations: {
+    weight: 1.5,
+    vote: (env) => {
+      if (env.weatherRisk === "HIGH" && env.congestionRisk === "HIGH")
+        return "HOLD";
 
-  const total = cost * 0.4 + risk * 0.4 + delay * 0.2;
+      if (env.weatherRisk === "MODERATE")
+        return "DELAY";
 
-  let decision = "PROCEED";
-  if (total > 140) decision = "DELAY";
-  if (total > 170) decision = "REROUTE";
-  if (wr === "EXTREME") decision = "HOLD";
-
-  return { cost, risk, delay, total, decision };
-}
+      return "PROCEED";
+    }
+  }
+};
 
 // =======================
-// 🧠 COUNTERFACTUAL ENGINE (NEW CORE)
+// VOTING ENGINE (NEW CORE)
 // =======================
-function simulateAlternative(action, baseDecision, env) {
-  const modifier = {
-    PROCEED: 1,
-    DELAY: 0.7,
-    REROUTE: 0.6,
-    HOLD: 0.4
+function negotiationEngine(env) {
+  const votes = {};
+
+  for (const [name, agent] of Object.entries(AGENTS)) {
+    const decision = agent.vote(env);
+
+    votes[name] = {
+      decision,
+      weight: agent.weight
+    };
+  }
+
+  const score = {
+    PROCEED: 0,
+    DELAY: 0,
+    REROUTE: 0,
+    HOLD: 0
   };
 
-  const envRisk =
-    (env.weather?.riskLevel === "EXTREME" ? 50 : 10) +
-    (env.aviation?.congestionRisk === "HIGH" ? 30 : 10);
+  for (const v of Object.values(votes)) {
+    score[v.decision] += v.weight;
+  }
 
-  const baseScore = baseDecision.total;
-
-  const simulatedScore =
-    baseScore * modifier[action] + envRisk * (action === "PROCEED" ? 1.2 : 0.8);
+  const finalDecision = Object.entries(score)
+    .sort((a, b) => b[1] - a[1])[0][0];
 
   return {
-    action,
-    predictedCost: simulatedScore,
-    improvementVsCurrent: baseDecision.total - simulatedScore
-  };
-}
-
-function counterfactualEngine(baseDecision, env) {
-  const actions = ["PROCEED", "DELAY", "REROUTE", "HOLD"];
-
-  const simulations = actions.map(a =>
-    simulateAlternative(a, baseDecision, env)
-  );
-
-  simulations.sort((a, b) => a.predictedCost - b.predictedCost);
-
-  return {
-    bestAlternative: simulations[0],
-    allSimulations: simulations
+    votes,
+    score,
+    finalDecision
   };
 }
 
 // =======================
-// ENV BUILDER
-// =======================
-async function buildEnvironment() {
-  const [w, a] = await Promise.all([
-    getWeather(),
-    getAviation()
-  ]);
-
-  return {
-    weather: predictWeatherRisk(w),
-    aviation: predictAviationLoad(a),
-    timestamp: new Date().toISOString()
-  };
-}
-
-// =======================
-// LLM
+// SIMPLE LLM (OPTIONAL EXPLANATION)
 // =======================
 async function llm(system, user) {
   const res = await axios.post(
@@ -209,45 +177,42 @@ async function llm(system, user) {
 // =======================
 app.post("/message", async (req, res) => {
   try {
-    const { message, user_id = "anon" } = req.body;
+    const { message } = req.body;
 
-    const history = await getDecisionHistory(user_id);
+    const weather = await getWeather();
+    const aviation = await getAviation();
 
-    const env = await buildEnvironment();
+    const env = envModel(weather, aviation);
 
-    const decision = optimizationSolver(env);
+    const negotiation = negotiationEngine(env);
 
-    // 🧠 COUNTERFACTUAL SIMULATION
-    const counterfactual = counterfactualEngine(decision, env);
-
-    const reply = await llm(
-      "You are an advanced operations intelligence system.",
+    const explanation = await llm(
+      "You are an operations council interpreter.",
       `
-USER:
-${message}
+ENVIRONMENT:
+${JSON.stringify(env)}
 
-CURRENT DECISION:
-${JSON.stringify(decision)}
+AGENT VOTES:
+${JSON.stringify(negotiation.votes)}
 
-BEST ALTERNATIVE:
-${JSON.stringify(counterfactual.bestAlternative)}
+SCORES:
+${JSON.stringify(negotiation.score)}
 
-ALL SIMULATIONS:
-${JSON.stringify(counterfactual.allSimulations)}
+FINAL DECISION:
+${negotiation.finalDecision}
 
 TASK:
 Explain:
-- why current decision is chosen
-- what better alternative exists
-- tradeoffs between actions
+- why each agent voted as it did
+- why final decision won
+- operational reasoning
 `
     );
 
     res.json({
-      reply,
-      decision,
-      counterfactual,
-      environment: env
+      reply: explanation,
+      environment: env,
+      negotiation
     });
 
   } catch (err) {
@@ -257,5 +222,5 @@ Explain:
 
 // =======================
 app.listen(PORT, () => {
-  console.log("🧠 Counterfactual Reasoning Engine Active");
+  console.log("🧠 Multi-Agent Negotiation Engine Active");
 });
