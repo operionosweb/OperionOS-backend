@@ -32,18 +32,17 @@ async function getEmbedding(text) {
       },
     }
   );
-
   return res.data.data[0].embedding;
 }
 
-// ---------------- LLM RESPONSE ----------------
-async function getLLMResponse(prompt) {
+// ---------------- LLM ----------------
+async function llm(prompt) {
   const res = await axios.post(
     "https://api.mistral.ai/v1/chat/completions",
     {
       model: "mistral-medium",
       messages: [
-        { role: "system", content: "You are an intelligent AI with memory awareness." },
+        { role: "system", content: "You are an AI planning assistant." },
         { role: "user", content: prompt }
       ],
     },
@@ -57,21 +56,19 @@ async function getLLMResponse(prompt) {
   return res.data.choices[0].message.content;
 }
 
-// ---------------- INTENT ----------------
-function detectIntent(text) {
-  const t = text.toLowerCase();
-
-  if (t.includes("airbus") || t.includes("boeing")) return "aviation";
-  if (t.includes("ship") || t.includes("maritime")) return "maritime";
-  if (t.includes("offshore")) return "offshore";
-  if (t.includes("what is") || t.includes("explain")) return "learning";
-
-  return "general";
-}
-
-// ---------------- FINGERPRINT ----------------
+// ---------------- HELPERS ----------------
 function fingerprint(text) {
   return crypto.createHash("sha256").update(text).digest("hex");
+}
+
+function isGoal(text) {
+  const t = text.toLowerCase();
+  return (
+    t.includes("i want to") ||
+    t.includes("help me build") ||
+    t.includes("plan") ||
+    t.includes("how do i create")
+  );
 }
 
 // ---------------- MESSAGE ----------------
@@ -80,10 +77,9 @@ app.post("/message", async (req, res) => {
     const { message, user_id = "anon" } = req.body;
 
     const embedding = await getEmbedding(message);
-    const intent = detectIntent(message);
     const fp = fingerprint(message);
 
-    // 🔍 DUPLICATE CHECK
+    // ---------------- MEMORY STORE ----------------
     const { data: existing } = await supabase
       .from("user_memory")
       .select("*")
@@ -91,16 +87,7 @@ app.post("/message", async (req, res) => {
       .eq("user_id", user_id)
       .maybeSingle();
 
-    if (existing) {
-      await supabase
-        .from("user_memory")
-        .update({
-          importance: (existing.importance || 0.5) + 0.2,
-          access_count: (existing.access_count || 0) + 1,
-          last_accessed: new Date().toISOString(),
-        })
-        .eq("id", existing.id);
-    } else {
+    if (!existing) {
       await supabase.from("user_memory").insert([
         {
           user_id,
@@ -109,45 +96,96 @@ app.post("/message", async (req, res) => {
           importance: 0.5,
           access_count: 1,
           fingerprint: fp,
-          intent,
           last_accessed: new Date().toISOString(),
         },
       ]);
     }
 
-    // 🧠 RETRIEVE BEST MEMORIES (brain ranking)
+    // ---------------- GOAL DETECTION ----------------
+    let goalData = null;
+
+    if (isGoal(message)) {
+      const planPrompt = `
+User goal:
+${message}
+
+Create a structured plan in JSON with steps.
+Format:
+{
+  "steps": ["step1", "step2", "step3"]
+}
+`;
+
+      const planText = await llm(planPrompt);
+
+      try {
+        const planJson = JSON.parse(planText);
+
+        const { data } = await supabase
+          .from("user_goals")
+          .insert([
+            {
+              user_id,
+              goal: message,
+              plan: planJson,
+            },
+          ])
+          .select()
+          .single();
+
+        goalData = data;
+      } catch (e) {
+        goalData = { error: "Failed to parse plan", raw: planText };
+      }
+    }
+
+    // ---------------- FETCH ACTIVE GOAL ----------------
+    const { data: activeGoal } = await supabase
+      .from("user_goals")
+      .select("*")
+      .eq("user_id", user_id)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // ---------------- MEMORY RETRIEVAL ----------------
     const { data: memories } = await supabase.rpc("match_memory", {
       query_embedding: embedding,
       match_user_id: user_id,
       match_count: 5,
     });
 
-    // 🧠 BUILD CONTEXT
-    const context = (memories || [])
+    // ---------------- CONTEXT ----------------
+    const memoryContext = (memories || [])
       .map((m, i) => `Memory ${i + 1}: ${m.summary}`)
       .join("\n");
 
-    // 🧠 FINAL PROMPT (THIS IS THE BRAIN)
+    const goalContext = activeGoal
+      ? `Active goal: ${activeGoal.goal}\nPlan: ${JSON.stringify(activeGoal.plan)}`
+      : "No active goal";
+
     const finalPrompt = `
 User message:
 ${message}
 
-Relevant past memories:
-${context}
+${goalContext}
+
+Relevant memories:
+${memoryContext}
 
 Instructions:
-- Use memory if relevant
-- Be precise
-- If no relevant memory, answer normally
+- If a goal exists, guide progress
+- If no goal, respond normally
 `;
 
-    // 🧠 LLM REASONING
-    const reply = await getLLMResponse(finalPrompt);
+    const reply = await llm(finalPrompt);
 
     return res.json({
       reply,
+      goal_created: goalData || null,
+      active_goal: activeGoal || null,
       memory_used: memories?.length || 0,
-      memories: memories || [],
     });
 
   } catch (err) {
@@ -157,5 +195,5 @@ Instructions:
 
 // ---------------- START ----------------
 app.listen(PORT, () => {
-  console.log("🧠 Operion Reasoning Engine v1 running");
+  console.log("🧠 Operion Planning Engine v1 running");
 });
