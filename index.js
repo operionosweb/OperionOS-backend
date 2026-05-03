@@ -19,23 +19,54 @@ const supabase = createClient(
 );
 
 // =======================
-// INITIAL ORGANIZATION STATE
+// CORE INTERNAL AGENTS
 // =======================
-const DEFAULT_DOMAINS = ["aviation", "maritime", "offshore"];
+const INTERNAL_AGENTS = [
+  {
+    id: "aviation_core",
+    domain: "aviation",
+    run: (env) =>
+      env.weatherRisk === "EXTREME" ? "HOLD" : "PROCEED"
+  }
+];
 
 // =======================
-// AGENTS (simplified domain logic)
+// MARKETPLACE AGENTS
 // =======================
-const AGENTS = {
-  aviation: (env) =>
-    env.weatherRisk === "EXTREME" ? "HOLD" : "PROCEED",
+async function loadMarketplaceAgents(domain) {
+  const { data } = await supabase
+    .from("marketplace_agents")
+    .select("*")
+    .eq("domain", domain)
+    .eq("active", true);
 
-  maritime: (env) =>
-    env.weatherRisk === "EXTREME" ? "ANCHOR" : "SAIL",
+  return data || [];
+}
 
-  offshore: (env) =>
-    env.wind > 40 ? "SHUTDOWN" : "OPERATE"
-};
+// =======================
+// EXECUTE MARKETPLACE AGENT (sandboxed)
+// =======================
+async function runMarketplaceAgent(agent, env) {
+  try {
+    const res = await axios.post(agent.endpoint, {
+      env
+    });
+
+    return {
+      id: agent.id,
+      decision: res.data.decision,
+      cost: agent.price_per_call,
+      score: res.data.score || 1
+    };
+  } catch (e) {
+    return {
+      id: agent.id,
+      decision: "FAIL",
+      cost: agent.price_per_call,
+      score: 0
+    };
+  }
+}
 
 // =======================
 // ENV
@@ -47,7 +78,6 @@ function buildEnv(weather, traffic) {
     weatherRisk:
       wind > 45 ? "EXTREME" :
       wind > 30 ? "HIGH" :
-      wind > 20 ? "MODERATE" :
       "LOW",
 
     wind,
@@ -56,53 +86,14 @@ function buildEnv(weather, traffic) {
 }
 
 // =======================
-// LOAD ORG STATE
+// AGGREGATION
 // =======================
-async function getOrgState(tenantId) {
-  const { data } = await supabase
-    .from("org_topology_state")
-    .select("*")
-    .eq("tenant_id", tenantId);
-
-  if (data && data.length > 0) {
-    return data;
-  }
-
-  // bootstrap
-  const init = DEFAULT_DOMAINS.map(d => ({
-    tenant_id: tenantId,
-    domain: d,
-    weight: 1,
-    performance: 1
-  }));
-
-  await supabase.from("org_topology_state").insert(init);
-
-  return init;
-}
-
-// =======================
-// RUN DOMAIN WITH WEIGHT
-// =======================
-function runDomain(domain, env, weight) {
-  const decision = AGENTS[domain](env);
-
-  return {
-    domain,
-    decision,
-    weightedInfluence: weight
-  };
-}
-
-// =======================
-// COORDINATOR (WEIGHTED VOTING)
-// =======================
-function coordinate(results) {
+function aggregate(allDecisions) {
   const scores = {};
 
-  for (const r of results) {
-    scores[r.decision] =
-      (scores[r.decision] || 0) + r.weightedInfluence;
+  for (const d of allDecisions) {
+    scores[d.decision] =
+      (scores[d.decision] || 0) + (d.score || 1);
   }
 
   return Object.entries(scores)
@@ -110,101 +101,66 @@ function coordinate(results) {
 }
 
 // =======================
-// ORGANIZATION SELF-OPTIMIZATION
+// MARKET COST TRACKING
 // =======================
-async function updateTopology(tenantId, results, finalDecision, orgState) {
-  const updates = [];
-
-  for (const domainState of orgState) {
-    const domainResult = results.find(r => r.domain === domainState.domain);
-
-    const success = domainResult.decision === finalDecision;
-
-    const newPerf =
-      (domainState.performance + (success ? 1 : 0)) / 2;
-
-    let newWeight = domainState.weight;
-
-    // increase influence if performing well
-    if (newPerf > 0.7) newWeight += 0.1;
-
-    // decrease if underperforming
-    if (newPerf < 0.4) newWeight -= 0.1;
-
-    newWeight = Math.max(0.2, Math.min(2, newWeight));
-
-    updates.push({
-      id: domainState.id,
-      performance: newPerf,
-      weight: newWeight,
-      last_updated: new Date()
-    });
-  }
-
-  for (const u of updates) {
-    await supabase
-      .from("org_topology_state")
-      .update(u)
-      .eq("id", u.id);
-  }
-
-  return updates;
+async function logMarketUsage(tenantId, agentId, cost, score) {
+  await supabase.from("agent_market_usage").insert({
+    tenant_id: tenantId,
+    agent_id: agentId,
+    cost,
+    outcome_score: score
+  });
 }
 
 // =======================
-// EXTERNAL DATA
-// =======================
-async function getWeather() {
-  const res = await axios.get(
-    "https://api.open-meteo.com/v1/forecast?latitude=41.3851&longitude=2.1734&current_weather=true"
-  );
-  return res.data.current_weather;
-}
-
-async function getTraffic() {
-  return 6000 + Math.random() * 4000;
-}
-
-// =======================
-// MAIN
+// MAIN ENGINE
 // =======================
 app.post("/execute/:tenantId", async (req, res) => {
   try {
     const { tenantId } = req.params;
 
-    const weather = await getWeather();
-    const traffic = await getTraffic();
-
-    const env = buildEnv(weather, traffic);
-
-    const orgState = await getOrgState(tenantId);
-
-    const results = orgState.map(d =>
-      runDomain(d.domain, env, d.weight)
+    const weather = await axios.get(
+      "https://api.open-meteo.com/v1/forecast?latitude=41.3851&longitude=2.1734&current_weather=true"
     );
 
-    const finalDecision = coordinate(results);
+    const traffic = 7000 + Math.random() * 3000;
 
-    const topologyUpdates = await updateTopology(
-      tenantId,
-      results,
-      finalDecision,
-      orgState
+    const env = buildEnv(weather.data.current_weather, traffic);
+
+    // INTERNAL AGENTS
+    const internalResults = INTERNAL_AGENTS.map(a => ({
+      id: a.id,
+      decision: a.run(env),
+      score: 1
+    }));
+
+    // MARKETPLACE AGENTS
+    const marketplace = await loadMarketplaceAgents("aviation");
+
+    const marketResults = await Promise.all(
+      marketplace.map(a => runMarketplaceAgent(a, env))
     );
 
-    await supabase.from("agent_runs").insert({
-      tenant_id: tenantId,
-      input: env,
-      output: results,
-      decision: finalDecision
-    });
+    // LOG COSTS
+    for (const m of marketResults) {
+      await logMarketUsage(
+        tenantId,
+        m.id,
+        m.cost,
+        m.score
+      );
+    }
+
+    const all = [...internalResults, ...marketResults];
+
+    const decision = aggregate(all);
 
     res.json({
       tenantId,
       env,
-      results,
-      finalDecision,
-      topologyUpdates
+      decision,
+      internalResults,
+      marketResults
     });
 
   } catch (err) {
@@ -214,5 +170,5 @@ app.post("/execute/:tenantId", async (req, res) => {
 
 // =======================
 app.listen(process.env.PORT || 3000, () => {
-  console.log("🧠 Self-Optimizing Operational OS Running");
+  console.log("🧠 Operion Intelligence Marketplace OS Running");
 });
