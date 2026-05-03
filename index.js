@@ -6,162 +6,220 @@ import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
 
+// =======================
+// GLOBAL CONFIG (IMPORTANT)
+// =======================
+const AGENTS = {
+  aviation: "Aviation expert focused on aircraft, airlines, operations",
+  finance: "Finance expert focused on ROI, cost, profitability",
+  operations: "Operations expert focused on efficiency and workflows",
+  general: "General reasoning agent"
+};
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
+// =======================
+// SUPABASE
+// =======================
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY
 );
 
-// ---------------- LLM ----------------
+// =======================
+// LLM CALL
+// =======================
 async function llm(system, user) {
-  const res = await axios.post(
-    "https://api.mistral.ai/v1/chat/completions",
-    {
-      model: "mistral-medium",
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user }
-      ],
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
+  try {
+    const res = await axios.post(
+      "https://api.mistral.ai/v1/chat/completions",
+      {
+        model: "mistral-medium",
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user }
+        ],
       },
-    }
-  );
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
+        },
+      }
+    );
 
-  return res.data.choices[0].message.content;
+    return res.data.choices[0].message.content;
+  } catch (err) {
+    console.error("LLM ERROR:", err.response?.data || err.message);
+    return "LLM error";
+  }
 }
 
-// ---------------- ROUTER ----------------
-async function routerAgent(message) {
+// =======================
+// ROUTER
+// =======================
+async function router(message) {
   const prompt = `
 Classify this request into domains:
-- aviation
-- finance
-- operations
-- general
+aviation, finance, operations, general
 
 Return JSON:
-{
-  "domains": ["..."]
-}
+["domain1", "domain2"]
 `;
 
-  const res = await llm("You are a routing agent.", `${prompt}\n\n${message}`);
+  const res = await llm("You are a routing agent.", prompt + "\n\n" + message);
 
   try {
-    return JSON.parse(res).domains;
+    const parsed = JSON.parse(res);
+    return Array.isArray(parsed) ? parsed : ["general"];
   } catch {
     return ["general"];
   }
 }
 
-// ---------------- SPECIALIST AGENTS ----------------
+// =======================
+// MEMORY FETCH
+// =======================
+async function getAgentMemory(agent, user_id) {
+  const { data, error } = await supabase
+    .from("agent_memory")
+    .select("*")
+    .eq("agent", agent)
+    .eq("user_id", user_id)
+    .order("importance", { ascending: false })
+    .limit(5);
 
-async function aviationAgent(message) {
-  return await llm(
-    "You are an aviation expert.",
-    message
-  );
-}
-
-async function financeAgent(message) {
-  return await llm(
-    "You are a finance expert.",
-    message
-  );
-}
-
-async function operationsAgent(message) {
-  return await llm(
-    "You are an operations optimization expert.",
-    message
-  );
-}
-
-async function generalAgent(message) {
-  return await llm(
-    "You are a general reasoning AI.",
-    message
-  );
-}
-
-// ---------------- AGENT EXECUTION ----------------
-async function runAgents(domains, message) {
-  let results = {};
-
-  if (domains.includes("aviation")) {
-    results.aviation = await aviationAgent(message);
+  if (error) {
+    console.log("MEMORY FETCH ERROR:", error);
+    return [];
   }
 
-  if (domains.includes("finance")) {
-    results.finance = await financeAgent(message);
-  }
-
-  if (domains.includes("operations")) {
-    results.operations = await operationsAgent(message);
-  }
-
-  if (domains.includes("general") || domains.length === 0) {
-    results.general = await generalAgent(message);
-  }
-
-  return results;
+  return data || [];
 }
 
-// ---------------- AGGREGATOR ----------------
-async function aggregatorAgent(results) {
-  const prompt = `
-Combine these expert outputs into one clear answer:
+// =======================
+// MEMORY STORE
+// =======================
+async function storeMemory(agent, user_id, summary, score) {
+  const { error } = await supabase.from("agent_memory").insert([
+    {
+      agent,
+      user_id,
+      summary,
+      success_score: score,
+      importance: 0.5 + score * 0.5,
+    },
+  ]);
 
-${JSON.stringify(results, null, 2)}
-`;
+  if (error) {
+    console.log("MEMORY INSERT ERROR:", error);
+  }
+}
 
+// =======================
+// RUN SINGLE AGENT
+// =======================
+async function runAgent(agent, message, user_id) {
+  const memory = await getAgentMemory(agent, user_id);
+
+  const context = memory.map(m => m.summary).join("\n");
+
+  const result = await llm(
+    AGENTS[agent],
+    `
+Past knowledge:
+${context}
+
+User message:
+${message}
+
+Respond clearly and helpfully.
+`
+  );
+
+  // Evaluate answer
+  const scoreText = await llm(
+    "Score this answer from 0 to 1 (only number).",
+    result
+  );
+
+  let score = parseFloat(scoreText);
+  if (isNaN(score)) score = 0.5;
+
+  await storeMemory(agent, user_id, result, score);
+
+  return {
+    result,
+    score
+  };
+}
+
+// =======================
+// AGGREGATOR
+// =======================
+async function aggregate(results) {
   return await llm(
-    "You are an aggregator combining expert outputs.",
-    prompt
+    "You combine multiple expert answers into one final answer.",
+    JSON.stringify(results, null, 2)
   );
 }
 
-// ---------------- MESSAGE ----------------
+// =======================
+// HEALTH CHECK
+// =======================
+app.get("/", (req, res) => {
+  res.send("🧠 Operion Persistent Agent Organization running");
+});
+
+// =======================
+// MAIN ENDPOINT
+// =======================
 app.post("/message", async (req, res) => {
   try {
     const { message, user_id = "anon" } = req.body;
 
-    // 1️⃣ ROUTE
-    const domains = await routerAgent(message);
-
-    // 2️⃣ EXECUTE
-    const results = await runAgents(domains, message);
-
-    // 3️⃣ AGGREGATE
-    const final = await aggregatorAgent(results);
-
-    // LOG
-    for (const [agent, msg] of Object.entries(results)) {
-      await supabase.from("agent_network_logs").insert([
-        { user_id, agent, message: msg },
-      ]);
+    if (!message) {
+      return res.status(400).json({ error: "message required" });
     }
+
+    // 1. ROUTE
+    const domains = await router(message);
+
+    // 2. RUN AGENTS
+    let results = {};
+
+    for (const domain of domains) {
+      if (AGENTS[domain]) {
+        results[domain] = await runAgent(domain, message, user_id);
+      }
+    }
+
+    // fallback safety
+    if (Object.keys(results).length === 0) {
+      results.general = await runAgent("general", message, user_id);
+    }
+
+    // 3. AGGREGATE
+    const final = await aggregate(results);
 
     return res.json({
       reply: final,
       routing: domains,
-      raw: results,
+      agents: results
     });
 
   } catch (err) {
+    console.error("FATAL ERROR:", err);
     return res.status(500).json({ error: err.message });
   }
 });
 
-// ---------------- START ----------------
+// =======================
+// START SERVER
+// =======================
 app.listen(PORT, () => {
-  console.log("🧠 Operion Distributed Agent Network running");
+  console.log(`🚀 Server running on port ${PORT}`);
 });
