@@ -21,12 +21,22 @@ const supabase = createClient(
 );
 
 // =======================
-// MEMORY
+// MEMORY (BASE)
 // =======================
+async function storeMemory(user_id, message) {
+  await supabase.from("user_memory").insert([
+    {
+      user_id,
+      summary: message,
+      created_at: new Date().toISOString()
+    }
+  ]);
+}
+
 async function getMemory(user_id) {
   const { data } = await supabase
     .from("user_memory")
-    .select("summary, score")
+    .select("*")
     .eq("user_id", user_id)
     .order("created_at", { ascending: false })
     .limit(10);
@@ -34,40 +44,41 @@ async function getMemory(user_id) {
   return data || [];
 }
 
-async function storeMemory(user_id, message) {
-  await supabase.from("user_memory").insert([
+// =======================
+// 🔗 TEMPORAL MEMORY GRAPH (NEW CORE)
+// =======================
+async function storeDecisionChain({
+  user_id,
+  message,
+  decision,
+  environment,
+  outcomeScore
+}) {
+  await supabase.from("memory_graph").insert([
     {
       user_id,
-      summary: message,
-      score: 0.5 // neutral starting value
+      event: message,
+      decision: decision.decision,
+      cost: decision.cost,
+      risk: decision.risk,
+      delay: decision.delay,
+      score: outcomeScore,
+      weather_risk: environment.weather?.riskLevel,
+      congestion_risk: environment.aviation?.congestionRisk,
+      created_at: new Date().toISOString()
     }
   ]);
 }
 
-// =======================
-// FEEDBACK MEMORY UPDATE (NEW CORE)
-// =======================
-async function updateMemoryScore(user_id, outcomeScore) {
+async function getDecisionHistory(user_id) {
   const { data } = await supabase
-    .from("user_memory")
-    .select("id, score")
+    .from("memory_graph")
+    .select("*")
     .eq("user_id", user_id)
     .order("created_at", { ascending: false })
-    .limit(1);
+    .limit(20);
 
-  if (!data?.length) return;
-
-  const mem = data[0];
-
-  const newScore = Math.max(
-    0,
-    Math.min(1, (mem.score || 0.5) * 0.7 + outcomeScore * 0.3)
-  );
-
-  await supabase
-    .from("user_memory")
-    .update({ score: newScore })
-    .eq("id", mem.id);
+  return data || [];
 }
 
 // =======================
@@ -96,16 +107,16 @@ async function getAviation() {
 }
 
 // =======================
-// PREDICTIVE LAYER
+// PREDICTION LAYER
 // =======================
 function predictWeatherRisk(current) {
   if (!current) return { riskLevel: "UNKNOWN" };
 
-  const wind = current.windspeed;
+  const w = current.windspeed;
 
-  const h6 = wind * 1.05;
-  const h12 = wind * 1.1;
-  const h24 = wind * 1.2;
+  const h6 = w * 1.05;
+  const h12 = w * 1.1;
+  const h24 = w * 1.2;
 
   const riskLevel =
     h24 > 45 ? "EXTREME" :
@@ -113,7 +124,7 @@ function predictWeatherRisk(current) {
     h24 > 20 ? "MODERATE" :
     "LOW";
 
-  return { currentWind: wind, forecast: { h6, h12, h24 }, riskLevel };
+  return { currentWind: w, forecast: { h6, h12, h24 }, riskLevel };
 }
 
 function predictAviationLoad(count) {
@@ -136,48 +147,42 @@ function predictAviationLoad(count) {
 // OPTIMIZATION SOLVER
 // =======================
 function optimizationSolver(env) {
-  const weatherRisk = env.weather?.riskLevel || "UNKNOWN";
-  const congestionRisk = env.aviation?.congestionRisk || "UNKNOWN";
+  const wr = env.weather?.riskLevel;
+  const cr = env.aviation?.congestionRisk;
 
   let cost = 100;
   let risk = 100;
   let delay = 10;
 
-  if (congestionRisk === "HIGH") cost += 30;
-  if (weatherRisk === "HIGH") risk += 20;
-  if (weatherRisk === "EXTREME") risk += 40;
+  if (cr === "HIGH") cost += 30;
+  if (wr === "HIGH") risk += 20;
+  if (wr === "EXTREME") risk += 40;
 
-  delay += (weatherRisk === "HIGH" ? 25 : 5);
+  delay += wr === "HIGH" ? 25 : 5;
 
   const total = cost * 0.4 + risk * 0.4 + delay * 0.2;
 
   let decision = "PROCEED";
   if (total > 140) decision = "DELAY";
   if (total > 170) decision = "REROUTE";
-  if (weatherRisk === "EXTREME") decision = "HOLD";
+  if (wr === "EXTREME") decision = "HOLD";
 
   return { cost, risk, delay, total, decision };
 }
 
 // =======================
-// 🔁 REINFORCEMENT SCORING LAYER (NEW CORE)
+// REINFORCEMENT SCORE
 // =======================
-function computeOutcomeScore(decisionResult) {
-  const { decision, total } = decisionResult;
+function computeOutcomeScore(decision) {
+  const t = decision.total;
 
-  let score = 0.5;
+  if (decision.decision === "PROCEED" && t < 120) return 0.9;
+  if (decision.decision === "HOLD") return 0.95;
+  if (decision.decision === "DELAY" && t < 170) return 0.8;
 
-  // better decisions under high pressure = higher score
-  if (decision === "PROCEED" && total < 120) score = 0.9;
-  if (decision === "DELAY" && total > 140 && total < 170) score = 0.8;
-  if (decision === "REROUTE" && total > 150) score = 0.85;
-  if (decision === "HOLD") score = 0.95;
+  if (decision.decision === "PROCEED" && t > 160) return 0.2;
 
-  // bad decisions penalized
-  if (decision === "PROCEED" && total > 160) score = 0.2;
-  if (decision === "DELAY" && total < 100) score = 0.3;
-
-  return score;
+  return 0.5;
 }
 
 // =======================
@@ -224,6 +229,7 @@ async function llm(system, user) {
 // =======================
 function planner(msg) {
   const m = msg.toLowerCase();
+
   return {
     aviation: m.includes("flight"),
     maritime: m.includes("ship"),
@@ -232,49 +238,23 @@ function planner(msg) {
   };
 }
 
-// agents (unchanged logic)
+// agents
 async function aviationAgent(m, c) { return llm("Aviation expert", `${c}\n${m}`); }
 async function maritimeAgent(m, c) { return llm("Maritime expert", `${c}\n${m}`); }
 async function offshoreAgent(m, c) { return llm("Offshore expert", `${c}\n${m}`); }
 async function financeAgent(m, c) { return llm("Finance expert", `${c}\n${m}`); }
 
 // =======================
-// SYNTHESIZER
-// =======================
-async function synthesizer(msg, ctx, outputs, env, decision) {
-  return llm(
-    "You are a self-learning operational intelligence system.",
-    `
-USER:
-${msg}
-
-AGENTS:
-${JSON.stringify(outputs)}
-
-ENV:
-${JSON.stringify(env)}
-
-DECISION:
-${JSON.stringify(decision)}
-
-TASK:
-Explain decision and learn from it.
-`
-  );
-}
-
-// =======================
-// MAIN LOOP (WITH LEARNING FEEDBACK)
+// MAIN SYSTEM
 // =======================
 app.post("/message", async (req, res) => {
   try {
     const { message, user_id = "anon" } = req.body;
 
-    const memory = await getMemory(user_id);
-    const context = memory.map(m => m.summary).join("\n");
+    const history = await getMemory(user_id);
+    const context = history.map(m => m.summary).join("\n");
 
     const env = await buildEnvironment();
-
     const decision = optimizationSolver(env);
 
     const outputs = {};
@@ -283,33 +263,58 @@ app.post("/message", async (req, res) => {
     const plan = planner(message);
 
     if (plan.aviation)
-      tasks.push(aviationAgent(message, context).then(r => (outputs.aviation = r)));
+      tasks.push(aviationAgent(message, context).then(r => outputs.aviation = r));
 
     if (plan.maritime)
-      tasks.push(maritimeAgent(message, context).then(r => (outputs.maritime = r)));
+      tasks.push(maritimeAgent(message, context).then(r => outputs.maritime = r));
 
     if (plan.offshore)
-      tasks.push(offshoreAgent(message, context).then(r => (outputs.offshore = r)));
+      tasks.push(offshoreAgent(message, context).then(r => outputs.offshore = r));
 
     if (plan.finance)
-      tasks.push(financeAgent(message, context).then(r => (outputs.finance = r)));
+      tasks.push(financeAgent(message, context).then(r => outputs.finance = r));
 
     await Promise.all(tasks);
 
-    const reply = await synthesizer(message, context, outputs, env, decision);
+    const reply = await llm(
+      "You are an operations intelligence engine with causal memory.",
+      `
+USER:
+${message}
+
+ENV:
+${JSON.stringify(env)}
+
+DECISION:
+${JSON.stringify(decision)}
+
+AGENTS:
+${JSON.stringify(outputs)}
+
+TASK:
+Explain and justify decision.
+`
+    );
+
+    const score = computeOutcomeScore(decision);
 
     // =======================
-    // 🔁 REINFORCEMENT LOOP
+    // 🧠 TEMPORAL MEMORY GRAPH WRITE
     // =======================
-    const outcomeScore = computeOutcomeScore(decision);
-
     await storeMemory(user_id, message);
-    await updateMemoryScore(user_id, outcomeScore);
+
+    await storeDecisionChain({
+      user_id,
+      message,
+      decision,
+      environment: env,
+      outcomeScore: score
+    });
 
     res.json({
       reply,
       decision,
-      learning_score: outcomeScore,
+      score,
       environment: env
     });
 
@@ -320,5 +325,5 @@ app.post("/message", async (req, res) => {
 
 // =======================
 app.listen(PORT, () => {
-  console.log("🧠 Operion Self-Learning System Active");
+  console.log("🧠 Temporal Memory Graph Engine Active");
 });
