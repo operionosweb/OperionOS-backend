@@ -1,8 +1,10 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import { createClient } from "@supabase/supabase-js";
 import axios from "axios";
+import { createClient } from "@supabase/supabase-js";
+import jwt from "jsonwebtoken";
+import jwksClient from "jwks-rsa";
 
 dotenv.config();
 
@@ -11,7 +13,7 @@ app.use(cors());
 app.use(express.json());
 
 // =======================
-// SUPABASE
+// SUPABASE CLIENT
 // =======================
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -19,195 +21,155 @@ const supabase = createClient(
 );
 
 // =======================
-// AGENTS
+// JWT VERIFY (SUPABASE)
 // =======================
-const AGENTS = [
-  {
-    id: "aviation_core",
-    domain: "aviation",
-    run: (env) => env.wind > 40 ? "HOLD" : "PROCEED"
-  },
-  {
-    id: "maritime_core",
-    domain: "maritime",
-    run: (env) => env.weatherRisk === "EXTREME" ? "ANCHOR" : "SAIL"
-  },
-  {
-    id: "offshore_core",
-    domain: "offshore",
-    run: (env) => env.wind > 35 ? "SHUTDOWN" : "OPERATE"
+const client = jwksClient({
+  jwksUri: `${process.env.SUPABASE_URL}/auth/v1/keys`
+});
+
+function getKey(header, callback) {
+  client.getSigningKey(header.kid, function (err, key) {
+    const signingKey = key.getPublicKey();
+    callback(null, signingKey);
+  });
+}
+
+function verifyToken(req, res, next) {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+
+  if (!token) {
+    return res.status(401).json({ error: "No token provided" });
   }
-];
+
+  jwt.verify(token, getKey, {}, (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ error: "Invalid token" });
+    }
+
+    req.user = decoded;
+    next();
+  });
+}
+
+// =======================
+// ROLE CHECK
+// =======================
+async function getUserRole(userId) {
+  const { data, error } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .single();
+
+  if (error) return null;
+  return data?.role;
+}
+
+// =======================
+// MOCK WEATHER (placeholder)
+// =======================
+async function getWeather() {
+  try {
+    const res = await axios.get(
+      "https://api.open-meteo.com/v1/forecast?latitude=41.3851&longitude=2.1734&current_weather=true"
+    );
+    return res.data.current_weather;
+  } catch {
+    return { windspeed: 10 };
+  }
+}
 
 // =======================
 // ENV BUILDER
 // =======================
 function buildEnv(weather) {
-  const wind = weather?.windspeed || 10;
-
   return {
-    wind,
-    weatherRisk:
-      wind > 45 ? "EXTREME" :
-      wind > 30 ? "HIGH" :
-      "LOW"
+    wind: weather?.windspeed || 10,
+    risk:
+      weather?.windspeed > 40
+        ? "HIGH"
+        : weather?.windspeed > 25
+        ? "MEDIUM"
+        : "LOW"
   };
 }
 
 // =======================
-// METRICS LOGGER
+// AGENT ENGINE (SIMPLIFIED)
 // =======================
-async function logMetric(tenantId, type, value, meta = {}) {
-  await supabase.from("system_metrics").insert({
-    tenant_id: tenantId,
-    metric_type: type,
-    value,
-    meta
-  });
-}
-
-// =======================
-// AGENT EXECUTION
-// =======================
-async function runAgents(env, tenantId) {
-  const results = [];
-
-  const start = Date.now();
-
-  for (const agent of AGENTS) {
-    const t0 = Date.now();
-
-    let decision;
-    try {
-      decision = agent.run(env);
-    } catch {
-      decision = "ERROR";
+function runAgents(env) {
+  return [
+    {
+      agent: "aviation_core",
+      decision: env.wind > 35 ? "HOLD" : "PROCEED"
+    },
+    {
+      agent: "maritime_core",
+      decision: env.wind > 40 ? "ANCHOR" : "SAIL"
     }
-
-    const duration = Date.now() - t0;
-
-    await logMetric(tenantId, "agent_latency", duration, {
-      agent: agent.id
-    });
-
-    results.push({
-      agent: agent.id,
-      domain: agent.domain,
-      decision,
-      latency: duration
-    });
-  }
-
-  const totalTime = Date.now() - start;
-
-  await logMetric(tenantId, "system_latency", totalTime);
-
-  return results;
+  ];
 }
 
 // =======================
-// SYSTEM HEALTH SCORING
+// 🔐 SECURE EXECUTE ENDPOINT
 // =======================
-function computeHealth(results) {
-  const ok = results.filter(r => r.decision !== "ERROR").length;
-  return ok / results.length;
-}
-
-// =======================
-// LOAD INDICATOR (SCALING SIGNAL)
-// =======================
-async function reportLoad(tenantId, healthScore, latency) {
-  const loadLevel =
-    latency > 800 ? "HIGH" :
-    latency > 400 ? "MEDIUM" :
-    "LOW";
-
-  await logMetric(tenantId, "system_health", healthScore, {
-    loadLevel
-  });
-
-  return { loadLevel, healthScore };
-}
-
-// =======================
-// WEATHER
-// =======================
-async function getWeather() {
-  const res = await axios.get(
-    "https://api.open-meteo.com/v1/forecast?latitude=41.3851&longitude=2.1734&current_weather=true",
-    { timeout: 1000 }
-  );
-  return res.data.current_weather;
-}
-
-// =======================
-// MAIN EXECUTION
-// =======================
-app.post("/execute/:tenantId", async (req, res) => {
+app.post("/execute/:tenantId", verifyToken, async (req, res) => {
   try {
     const { tenantId } = req.params;
+    const userId = req.user.sub;
+
+    const role = await getUserRole(userId);
+
+    // 🔐 ONLY SUPER ADMIN CAN RUN SYSTEM
+    if (role !== "super_admin") {
+      return res.status(403).json({
+        error: "Access denied (requires super_admin role)"
+      });
+    }
 
     const weather = await getWeather();
     const env = buildEnv(weather);
 
-    const start = Date.now();
+    const results = runAgents(env);
 
-    const results = await runAgents(env, tenantId);
-
-    const latency = Date.now() - start;
-
-    const healthScore = computeHealth(results);
-
-    const load = await reportLoad(tenantId, healthScore, latency);
+    const decision =
+      results.find(r => r.agent === "aviation_core")?.decision;
 
     await supabase.from("agent_runs").insert({
       tenant_id: tenantId,
       input: env,
       output: results,
-      health: healthScore,
-      latency
+      decision
     });
 
     res.json({
       tenantId,
       env,
       results,
-      healthScore,
-      latency,
-      load,
-      status: "control_plane_active"
+      decision,
+      status: "secure_execution_success"
     });
 
   } catch (err) {
     res.status(500).json({
-      error: err.message,
-      status: "control_plane_error"
+      error: err.message
     });
   }
 });
 
 // =======================
-// CONTROL DASHBOARD API
+// CONTROL PANEL HEALTH
 // =======================
-
-// system health overview
-app.get("/control/:tenantId/health", async (req, res) => {
+app.get("/control/:tenantId/health", verifyToken, async (req, res) => {
   const { tenantId } = req.params;
+  const userId = req.user.sub;
+
+  const role = await getUserRole(userId);
+
+  if (!role) {
+    return res.status(403).json({ error: "Unauthorized" });
+  }
 
   const { data } = await supabase
-    .from("system_metrics")
+    .from("agent_runs")
     .select("*")
-    .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: false })
-    .limit(20);
-
-  res.json({
-    tenantId,
-    metrics: data
-  });
-});
-
-// =======================
-app.listen(process.env.PORT || 3000, () => {
-  console.log("🧭 Operion Control Center OS Running");
-});
