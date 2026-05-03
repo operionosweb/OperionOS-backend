@@ -19,25 +19,22 @@ const supabase = createClient(
 );
 
 // =======================
-// AGENT LAYERS
+// INITIAL ORGANIZATION STATE
 // =======================
-const GOVERNORS = {
-  aviation: { weight: 1 },
-  maritime: { weight: 1 },
-  offshore: { weight: 1 }
-};
+const DEFAULT_DOMAINS = ["aviation", "maritime", "offshore"];
 
+// =======================
+// AGENTS (simplified domain logic)
+// =======================
 const AGENTS = {
-  aviation: [
-    (env) => env.weatherRisk === "EXTREME" ? "HOLD" : "PROCEED",
-    (env) => env.congestionRisk === "HIGH" ? "DELAY" : "PROCEED"
-  ],
-  maritime: [
-    (env) => env.weatherRisk === "EXTREME" ? "ANCHOR" : "SAIL"
-  ],
-  offshore: [
-    (env) => env.wind > 40 ? "SHUTDOWN" : "OPERATE"
-  ]
+  aviation: (env) =>
+    env.weatherRisk === "EXTREME" ? "HOLD" : "PROCEED",
+
+  maritime: (env) =>
+    env.weatherRisk === "EXTREME" ? "ANCHOR" : "SAIL",
+
+  offshore: (env) =>
+    env.wind > 40 ? "SHUTDOWN" : "OPERATE"
 };
 
 // =======================
@@ -53,61 +50,105 @@ function buildEnv(weather, traffic) {
       wind > 20 ? "MODERATE" :
       "LOW",
 
-    congestionRisk:
-      traffic > 8500 ? "HIGH" :
-      traffic > 6500 ? "MEDIUM" :
-      "LOW",
-
     wind,
     traffic
   };
 }
 
 // =======================
-// DOMAIN EXECUTION
+// LOAD ORG STATE
 // =======================
-function runDomain(domain, env) {
-  const agents = AGENTS[domain];
+async function getOrgState(tenantId) {
+  const { data } = await supabase
+    .from("org_topology_state")
+    .select("*")
+    .eq("tenant_id", tenantId);
 
-  const outputs = agents.map(fn => fn(env));
-
-  const counts = {};
-
-  for (const o of outputs) {
-    counts[o] = (counts[o] || 0) + 1;
+  if (data && data.length > 0) {
+    return data;
   }
 
-  return Object.entries(counts)
+  // bootstrap
+  const init = DEFAULT_DOMAINS.map(d => ({
+    tenant_id: tenantId,
+    domain: d,
+    weight: 1,
+    performance: 1
+  }));
+
+  await supabase.from("org_topology_state").insert(init);
+
+  return init;
+}
+
+// =======================
+// RUN DOMAIN WITH WEIGHT
+// =======================
+function runDomain(domain, env, weight) {
+  const decision = AGENTS[domain](env);
+
+  return {
+    domain,
+    decision,
+    weightedInfluence: weight
+  };
+}
+
+// =======================
+// COORDINATOR (WEIGHTED VOTING)
+// =======================
+function coordinate(results) {
+  const scores = {};
+
+  for (const r of results) {
+    scores[r.decision] =
+      (scores[r.decision] || 0) + r.weightedInfluence;
+  }
+
+  return Object.entries(scores)
     .sort((a, b) => b[1] - a[1])[0][0];
 }
 
 // =======================
-// GOVERNOR LEVEL
+// ORGANIZATION SELF-OPTIMIZATION
 // =======================
-function runGovernors(env) {
-  const results = {};
+async function updateTopology(tenantId, results, finalDecision, orgState) {
+  const updates = [];
 
-  for (const domain of Object.keys(AGENTS)) {
-    results[domain] = runDomain(domain, env);
+  for (const domainState of orgState) {
+    const domainResult = results.find(r => r.domain === domainState.domain);
+
+    const success = domainResult.decision === finalDecision;
+
+    const newPerf =
+      (domainState.performance + (success ? 1 : 0)) / 2;
+
+    let newWeight = domainState.weight;
+
+    // increase influence if performing well
+    if (newPerf > 0.7) newWeight += 0.1;
+
+    // decrease if underperforming
+    if (newPerf < 0.4) newWeight -= 0.1;
+
+    newWeight = Math.max(0.2, Math.min(2, newWeight));
+
+    updates.push({
+      id: domainState.id,
+      performance: newPerf,
+      weight: newWeight,
+      last_updated: new Date()
+    });
   }
 
-  return results;
-}
-
-// =======================
-// COORDINATOR (FINAL DECISION)
-// =======================
-function coordinate(governorResults) {
-  const values = Object.values(governorResults);
-
-  const counts = {};
-
-  for (const v of values) {
-    counts[v] = (counts[v] || 0) + 1;
+  for (const u of updates) {
+    await supabase
+      .from("org_topology_state")
+      .update(u)
+      .eq("id", u.id);
   }
 
-  return Object.entries(counts)
-    .sort((a, b) => b[1] - a[1])[0][0];
+  return updates;
 }
 
 // =======================
@@ -136,22 +177,34 @@ app.post("/execute/:tenantId", async (req, res) => {
 
     const env = buildEnv(weather, traffic);
 
-    const governorResults = runGovernors(env);
+    const orgState = await getOrgState(tenantId);
 
-    const finalDecision = coordinate(governorResults);
+    const results = orgState.map(d =>
+      runDomain(d.domain, env, d.weight)
+    );
+
+    const finalDecision = coordinate(results);
+
+    const topologyUpdates = await updateTopology(
+      tenantId,
+      results,
+      finalDecision,
+      orgState
+    );
 
     await supabase.from("agent_runs").insert({
       tenant_id: tenantId,
       input: env,
-      output: governorResults,
+      output: results,
       decision: finalDecision
     });
 
     res.json({
       tenantId,
       env,
-      governorResults,
-      finalDecision
+      results,
+      finalDecision,
+      topologyUpdates
     });
 
   } catch (err) {
@@ -161,5 +214,5 @@ app.post("/execute/:tenantId", async (req, res) => {
 
 // =======================
 app.listen(process.env.PORT || 3000, () => {
-  console.log("🏗️ Operion Hierarchical Intelligence OS Running");
+  console.log("🧠 Self-Optimizing Operational OS Running");
 });
