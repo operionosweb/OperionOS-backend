@@ -34,73 +34,95 @@ function extractUserId(req) {
 }
 
 // =========================
-// AGENTS
+// AGENTS WITH ARGUMENTS
 // =========================
-
-// WEATHER AGENT
 function weatherAgent(context) {
   if (context.weather === "storm") {
     return {
       decision: "reroute to avoid storm",
       score: 0.9,
-      agent: "weather"
+      agent: "weather",
+      reason: "Storm conditions increase risk and delay"
     };
   }
-  return { decision: "maintain route", score: 0.5, agent: "weather" };
+  return {
+    decision: "maintain route",
+    score: 0.5,
+    agent: "weather",
+    reason: "No severe weather detected"
+  };
 }
 
-// COST AGENT
 function costAgent(context) {
   return {
     decision: "choose cheapest route",
     score: 0.6,
-    agent: "cost"
+    agent: "cost",
+    reason: "Fuel optimization reduces operational expenses"
   };
 }
 
-// DELAY AGENT
 function delayAgent(context) {
   return {
     decision: "minimize delay path",
     score: 0.7,
-    agent: "delay"
+    agent: "delay",
+    reason: "Schedule adherence is critical"
   };
 }
 
-// SAFETY AGENT
 function safetyAgent(context) {
   if (context.weather === "storm") {
     return {
       decision: "avoid high-risk zone",
       score: 0.95,
-      agent: "safety"
+      agent: "safety",
+      reason: "Passenger and asset safety is priority"
     };
   }
-  return { decision: "standard operation", score: 0.6, agent: "safety" };
+  return {
+    decision: "standard operation",
+    score: 0.6,
+    agent: "safety",
+    reason: "No major risks detected"
+  };
 }
 
 // =========================
-// AGENT VOTING SYSTEM
+// DEBATE ENGINE
 // =========================
-function runAgents(context) {
-  const results = [
+function runDebate(context) {
+  const agents = [
     weatherAgent(context),
     costAgent(context),
     delayAgent(context),
     safetyAgent(context)
   ];
 
-  // pick highest score
-  results.sort((a, b) => b.score - a.score);
+  // detect conflicts (different decisions)
+  const decisions = agents.map(a => a.decision);
+  const uniqueDecisions = [...new Set(decisions)];
+
+  let winner;
+
+  if (uniqueDecisions.length === 1) {
+    // all agree
+    winner = agents[0];
+  } else {
+    // conflict → strongest argument wins (score-based for now)
+    agents.sort((a, b) => b.score - a.score);
+    winner = agents[0];
+  }
 
   return {
-    winner: results[0],
-    all: results
+    winner,
+    debate: agents,
+    conflicts: uniqueDecisions.length > 1
   };
 }
 
 // =========================
-// EXECUTE WITH AGENTS
+// EXECUTE WITH DEBATE
 // =========================
 app.post("/execute/:tenantId", async (req, res) => {
   try {
@@ -118,24 +140,22 @@ app.post("/execute/:tenantId", async (req, res) => {
       region: "atlantic"
     };
 
-    const agentResult = runAgents(context);
+    const result = runDebate(context);
 
-    const decision = agentResult.winner.decision;
-
-    // STORE MEMORY
     await supabase.from("decision_memory").insert({
       tenant_id: tenantId,
-      decision,
+      decision: result.winner.decision,
       outcome: "pending",
-      score: agentResult.winner.score,
+      score: result.winner.score,
       context
     });
 
     res.json({
-      decision,
-      chosen_by: agentResult.winner.agent,
-      score: agentResult.winner.score,
-      all_agents: agentResult.all
+      final_decision: result.winner.decision,
+      chosen_by: result.winner.agent,
+      reason: result.winner.reason,
+      conflicts: result.conflicts,
+      full_debate: result.debate
     });
 
   } catch (err) {
@@ -178,7 +198,7 @@ app.get("/control/:tenantId/health", async (req, res) => {
 // ROOT
 // =========================
 app.get("/", (req, res) => {
-  res.json({ status: "Operion multi-agent system active" });
+  res.json({ status: "Operion debate engine active" });
 });
 
 app.listen(process.env.PORT || 3000);
