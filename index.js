@@ -15,7 +15,7 @@ const supabase = createClient(
 );
 
 // =========================
-// ROLE FETCH
+// ROLE
 // =========================
 async function getUserRole(userId) {
   const { data } = await supabase
@@ -27,9 +27,6 @@ async function getUserRole(userId) {
   return data?.role || null;
 }
 
-// =========================
-// TOKEN (TEMP DEV MODE)
-// =========================
 function extractUserId(req) {
   const auth = req.headers.authorization;
   if (!auth) return null;
@@ -37,17 +34,53 @@ function extractUserId(req) {
 }
 
 // =========================
-// MEMORY SCORING ENGINE
+// SIMILARITY ENGINE (V1)
 // =========================
-function scoreDecision(decision) {
-  // VERY SIMPLE V1 MODEL
-  if (decision.includes("reroute")) return 0.8;
-  if (decision.includes("delay")) return 0.3;
-  return 0.5;
+function isSimilar(contextA, contextB) {
+  if (!contextA || !contextB) return false;
+
+  let score = 0;
+  let total = 0;
+
+  for (let key in contextA) {
+    total++;
+    if (contextA[key] === contextB[key]) {
+      score++;
+    }
+  }
+
+  return score / total > 0.5; // threshold
 }
 
 // =========================
-// EXECUTE (WITH LEARNING)
+// PREDICT BEST DECISION
+// =========================
+async function predictDecision(tenantId, context) {
+  const { data } = await supabase
+    .from("decision_memory")
+    .select("*")
+    .eq("tenant_id", tenantId);
+
+  if (!data || data.length === 0) {
+    return null;
+  }
+
+  const similar = data.filter(entry =>
+    isSimilar(entry.context, context)
+  );
+
+  if (similar.length === 0) {
+    return null;
+  }
+
+  // sort by score
+  similar.sort((a, b) => b.score - a.score);
+
+  return similar[0];
+}
+
+// =========================
+// EXECUTE WITH PREDICTION
 // =========================
 app.post("/execute/:tenantId", async (req, res) => {
   try {
@@ -60,25 +93,39 @@ app.post("/execute/:tenantId", async (req, res) => {
       return res.status(403).json({ error: "Access denied" });
     }
 
-    // --- Decision Logic (placeholder) ---
-    const decision = "reroute to avoid storm";
+    // --- CURRENT CONTEXT ---
+    const context = {
+      weather: "storm",
+      region: "atlantic"
+    };
 
-    // --- Score ---
-    const score = scoreDecision(decision);
+    // --- PREDICT ---
+    const predicted = await predictDecision(tenantId, context);
 
-    // --- Store Memory ---
+    let decision;
+    let source;
+
+    if (predicted) {
+      decision = predicted.decision;
+      source = "memory";
+    } else {
+      decision = "reroute to avoid storm";
+      source = "default";
+    }
+
+    // --- STORE NEW MEMORY ---
     await supabase.from("decision_memory").insert({
       tenant_id: tenantId,
       decision,
       outcome: "pending",
-      score,
-      context: { source: "v1-engine" }
+      score: 0.5,
+      context
     });
 
     res.json({
       decision,
-      score,
-      message: "Decision stored and learning updated"
+      source,
+      message: "Decision generated with prediction engine"
     });
 
   } catch (err) {
@@ -87,7 +134,7 @@ app.post("/execute/:tenantId", async (req, res) => {
 });
 
 // =========================
-// UPDATE OUTCOME (LEARNING LOOP)
+// FEEDBACK
 // =========================
 app.post("/feedback/:id", async (req, res) => {
   const { id } = req.params;
@@ -102,7 +149,7 @@ app.post("/feedback/:id", async (req, res) => {
 });
 
 // =========================
-// HEALTH
+// HISTORY
 // =========================
 app.get("/control/:tenantId/health", async (req, res) => {
   const { tenantId } = req.params;
@@ -121,7 +168,7 @@ app.get("/control/:tenantId/health", async (req, res) => {
 // ROOT
 // =========================
 app.get("/", (req, res) => {
-  res.json({ status: "Operion AI learning active" });
+  res.json({ status: "Operion predictive engine active" });
 });
 
 app.listen(process.env.PORT || 3000);
