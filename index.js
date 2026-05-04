@@ -1,10 +1,34 @@
+import express from 'express';
+import cors from 'cors';
+import Stripe from 'stripe';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const app = express();
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Stripe init
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+/**
+ * HEALTH CHECK
+ */
+app.get('/', (req, res) => {
+  res.send('Operion Backend Running');
+});
+
+/**
+ * CREATE CHECKOUT SESSION
+ */
 app.post('/create-checkout-session', async (req, res) => {
   try {
     const { priceId, companyId } = req.body;
 
-    console.log("👉 REQUEST RECEIVED");
-    console.log("priceId:", priceId);
-    console.log("companyId:", companyId);
+    console.log("REQUEST:", { priceId, companyId });
 
     if (!priceId || !companyId) {
       return res.status(400).json({
@@ -12,13 +36,13 @@ app.post('/create-checkout-session', async (req, res) => {
       });
     }
 
-    if (!process.env.STRIPE_SECRET_KEY) {
-      return res.status(500).json({
-        error: 'Missing STRIPE_SECRET_KEY in environment'
-      });
-    }
+    const successUrl = process.env.FRONTEND_URL
+      ? `${process.env.FRONTEND_URL}/billing-success`
+      : 'https://example.com/billing-success';
 
-    console.log("👉 Creating Stripe session...");
+    const cancelUrl = process.env.FRONTEND_URL
+      ? `${process.env.FRONTEND_URL}/billing`
+      : 'https://example.com/billing';
 
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
@@ -29,24 +53,29 @@ app.post('/create-checkout-session', async (req, res) => {
           quantity: 1
         }
       ],
-      success_url: `${process.env.FRONTEND_URL}/billing-success`,
-      cancel_url: `${process.env.FRONTEND_URL}/billing`,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
       metadata: {
         companyId
       }
     });
 
-    console.log("👉 SESSION CREATED:", session.id);
-
     return res.json({ url: session.url });
 
   } catch (error) {
-    console.error("🔥 FULL STRIPE ERROR:");
-    console.error(error); // THIS IS THE IMPORTANT PART
+    console.error("STRIPE ERROR:", error);
 
     return res.status(500).json({
-      error: error.message,
-      raw: error
+      error: error.message
     });
   }
+});
+
+/**
+ * START SERVER
+ */
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
