@@ -34,7 +34,7 @@ function extractUserId(req) {
 }
 
 // =========================
-// AGENTS WITH ARGUMENTS
+// AGENTS
 // =========================
 function weatherAgent(context) {
   if (context.weather === "storm") {
@@ -58,7 +58,7 @@ function costAgent(context) {
     decision: "choose cheapest route",
     score: 0.6,
     agent: "cost",
-    reason: "Fuel optimization reduces operational expenses"
+    reason: "Fuel optimization reduces cost"
   };
 }
 
@@ -77,19 +77,19 @@ function safetyAgent(context) {
       decision: "avoid high-risk zone",
       score: 0.95,
       agent: "safety",
-      reason: "Passenger and asset safety is priority"
+      reason: "Safety priority"
     };
   }
   return {
     decision: "standard operation",
     score: 0.6,
     agent: "safety",
-    reason: "No major risks detected"
+    reason: "No major risks"
   };
 }
 
 // =========================
-// DEBATE ENGINE
+// DEBATE
 // =========================
 function runDebate(context) {
   const agents = [
@@ -99,30 +99,47 @@ function runDebate(context) {
     safetyAgent(context)
   ];
 
-  // detect conflicts (different decisions)
   const decisions = agents.map(a => a.decision);
   const uniqueDecisions = [...new Set(decisions)];
 
-  let winner;
-
-  if (uniqueDecisions.length === 1) {
-    // all agree
-    winner = agents[0];
-  } else {
-    // conflict → strongest argument wins (score-based for now)
-    agents.sort((a, b) => b.score - a.score);
-    winner = agents[0];
-  }
+  agents.sort((a, b) => b.score - a.score);
 
   return {
-    winner,
+    winner: agents[0],
     debate: agents,
     conflicts: uniqueDecisions.length > 1
   };
 }
 
 // =========================
-// EXECUTE WITH DEBATE
+// META-AGENT (NEW)
+// =========================
+function metaAgent(debateResult) {
+  const { winner, debate, conflicts } = debateResult;
+
+  const avgScore =
+    debate.reduce((sum, a) => sum + a.score, 0) / debate.length;
+
+  let quality = "medium";
+
+  if (!conflicts && winner.score > 0.8) {
+    quality = "high";
+  } else if (conflicts && winner.score < 0.7) {
+    quality = "low";
+  }
+
+  return {
+    decision_quality: quality,
+    confidence: winner.score,
+    average_score: avgScore,
+    notes: conflicts
+      ? "Agents disagreed, resolution applied"
+      : "Strong agreement among agents"
+  };
+}
+
+// =========================
+// EXECUTE WITH META
 // =========================
 app.post("/execute/:tenantId", async (req, res) => {
   try {
@@ -140,22 +157,23 @@ app.post("/execute/:tenantId", async (req, res) => {
       region: "atlantic"
     };
 
-    const result = runDebate(context);
+    const debateResult = runDebate(context);
+    const meta = metaAgent(debateResult);
 
     await supabase.from("decision_memory").insert({
       tenant_id: tenantId,
-      decision: result.winner.decision,
+      decision: debateResult.winner.decision,
       outcome: "pending",
-      score: result.winner.score,
+      score: debateResult.winner.score,
       context
     });
 
     res.json({
-      final_decision: result.winner.decision,
-      chosen_by: result.winner.agent,
-      reason: result.winner.reason,
-      conflicts: result.conflicts,
-      full_debate: result.debate
+      final_decision: debateResult.winner.decision,
+      chosen_by: debateResult.winner.agent,
+      reasoning: debateResult.winner.reason,
+      meta_analysis: meta,
+      full_debate: debateResult.debate
     });
 
   } catch (err) {
@@ -198,7 +216,7 @@ app.get("/control/:tenantId/health", async (req, res) => {
 // ROOT
 // =========================
 app.get("/", (req, res) => {
-  res.json({ status: "Operion debate engine active" });
+  res.json({ status: "Operion meta-agent active" });
 });
 
 app.listen(process.env.PORT || 3000);
