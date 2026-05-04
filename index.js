@@ -1,25 +1,24 @@
-import express from 'express';
-import Stripe from 'stripe';
-import cors from 'cors';
-
-const app = express();
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-
-app.use(cors());
-app.use(express.json());
-
-/**
- * CREATE STRIPE CHECKOUT SESSION
- */
 app.post('/create-checkout-session', async (req, res) => {
   try {
     const { priceId, companyId } = req.body;
+
+    console.log("👉 REQUEST RECEIVED");
+    console.log("priceId:", priceId);
+    console.log("companyId:", companyId);
 
     if (!priceId || !companyId) {
       return res.status(400).json({
         error: 'Missing priceId or companyId'
       });
     }
+
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return res.status(500).json({
+        error: 'Missing STRIPE_SECRET_KEY in environment'
+      });
+    }
+
+    console.log("👉 Creating Stripe session...");
 
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
@@ -33,30 +32,21 @@ app.post('/create-checkout-session', async (req, res) => {
       success_url: `${process.env.FRONTEND_URL}/billing-success`,
       cancel_url: `${process.env.FRONTEND_URL}/billing`,
       metadata: {
-        companyId: companyId
+        companyId
       }
     });
 
-    return res.json({
-      url: session.url
-    });
+    console.log("👉 SESSION CREATED:", session.id);
+
+    return res.json({ url: session.url });
 
   } catch (error) {
-    console.error('Stripe Checkout Error:', error);
+    console.error("🔥 FULL STRIPE ERROR:");
+    console.error(error); // THIS IS THE IMPORTANT PART
+
     return res.status(500).json({
-      error: 'Internal server error'
+      error: error.message,
+      raw: error
     });
   }
-});
-
-/**
- * HEALTH CHECK
- */
-app.get('/', (req, res) => {
-  res.send('Operion Backend Running');
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
 });
