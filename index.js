@@ -15,7 +15,7 @@ const supabase = createClient(
 );
 
 // =========================
-// ROLE
+// AUTH
 // =========================
 async function getUserRole(userId) {
   const { data } = await supabase
@@ -34,53 +34,73 @@ function extractUserId(req) {
 }
 
 // =========================
-// SIMILARITY ENGINE (V1)
+// AGENTS
 // =========================
-function isSimilar(contextA, contextB) {
-  if (!contextA || !contextB) return false;
 
-  let score = 0;
-  let total = 0;
-
-  for (let key in contextA) {
-    total++;
-    if (contextA[key] === contextB[key]) {
-      score++;
-    }
+// WEATHER AGENT
+function weatherAgent(context) {
+  if (context.weather === "storm") {
+    return {
+      decision: "reroute to avoid storm",
+      score: 0.9,
+      agent: "weather"
+    };
   }
+  return { decision: "maintain route", score: 0.5, agent: "weather" };
+}
 
-  return score / total > 0.5; // threshold
+// COST AGENT
+function costAgent(context) {
+  return {
+    decision: "choose cheapest route",
+    score: 0.6,
+    agent: "cost"
+  };
+}
+
+// DELAY AGENT
+function delayAgent(context) {
+  return {
+    decision: "minimize delay path",
+    score: 0.7,
+    agent: "delay"
+  };
+}
+
+// SAFETY AGENT
+function safetyAgent(context) {
+  if (context.weather === "storm") {
+    return {
+      decision: "avoid high-risk zone",
+      score: 0.95,
+      agent: "safety"
+    };
+  }
+  return { decision: "standard operation", score: 0.6, agent: "safety" };
 }
 
 // =========================
-// PREDICT BEST DECISION
+// AGENT VOTING SYSTEM
 // =========================
-async function predictDecision(tenantId, context) {
-  const { data } = await supabase
-    .from("decision_memory")
-    .select("*")
-    .eq("tenant_id", tenantId);
+function runAgents(context) {
+  const results = [
+    weatherAgent(context),
+    costAgent(context),
+    delayAgent(context),
+    safetyAgent(context)
+  ];
 
-  if (!data || data.length === 0) {
-    return null;
-  }
+  // pick highest score
+  results.sort((a, b) => b.score - a.score);
 
-  const similar = data.filter(entry =>
-    isSimilar(entry.context, context)
-  );
-
-  if (similar.length === 0) {
-    return null;
-  }
-
-  // sort by score
-  similar.sort((a, b) => b.score - a.score);
-
-  return similar[0];
+  return {
+    winner: results[0],
+    all: results
+  };
 }
 
 // =========================
-// EXECUTE WITH PREDICTION
+// EXECUTE WITH AGENTS
 // =========================
 app.post("/execute/:tenantId", async (req, res) => {
   try {
@@ -93,39 +113,29 @@ app.post("/execute/:tenantId", async (req, res) => {
       return res.status(403).json({ error: "Access denied" });
     }
 
-    // --- CURRENT CONTEXT ---
     const context = {
       weather: "storm",
       region: "atlantic"
     };
 
-    // --- PREDICT ---
-    const predicted = await predictDecision(tenantId, context);
+    const agentResult = runAgents(context);
 
-    let decision;
-    let source;
+    const decision = agentResult.winner.decision;
 
-    if (predicted) {
-      decision = predicted.decision;
-      source = "memory";
-    } else {
-      decision = "reroute to avoid storm";
-      source = "default";
-    }
-
-    // --- STORE NEW MEMORY ---
+    // STORE MEMORY
     await supabase.from("decision_memory").insert({
       tenant_id: tenantId,
       decision,
       outcome: "pending",
-      score: 0.5,
+      score: agentResult.winner.score,
       context
     });
 
     res.json({
       decision,
-      source,
-      message: "Decision generated with prediction engine"
+      chosen_by: agentResult.winner.agent,
+      score: agentResult.winner.score,
+      all_agents: agentResult.all
     });
 
   } catch (err) {
@@ -168,7 +178,7 @@ app.get("/control/:tenantId/health", async (req, res) => {
 // ROOT
 // =========================
 app.get("/", (req, res) => {
-  res.json({ status: "Operion predictive engine active" });
+  res.json({ status: "Operion multi-agent system active" });
 });
 
 app.listen(process.env.PORT || 3000);
