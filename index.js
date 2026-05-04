@@ -9,133 +9,119 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// =========================
-// SUPABASE CLIENT
-// =========================
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY
 );
 
 // =========================
-// ROLE FETCH FUNCTION
+// ROLE FETCH
 // =========================
 async function getUserRole(userId) {
-  const { data, error } = await supabase
+  const { data } = await supabase
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
     .single();
 
-  if (error) {
-    console.log("Role fetch error:", error.message);
-    return null;
-  }
-
   return data?.role || null;
 }
 
 // =========================
-// SIMPLE TOKEN PARSER (SIMPLIFIED)
+// TOKEN (TEMP DEV MODE)
 // =========================
 function extractUserId(req) {
-  // In real system this comes from JWT
   const auth = req.headers.authorization;
-
   if (!auth) return null;
-
-  try {
-    // For now we assume frontend sends userId in token (simplified layer)
-    const token = auth.replace("Bearer ", "");
-    return token;
-  } catch (err) {
-    return null;
-  }
+  return auth.replace("Bearer ", "");
 }
 
 // =========================
-// EXECUTE ENDPOINT
+// MEMORY SCORING ENGINE
+// =========================
+function scoreDecision(decision) {
+  // VERY SIMPLE V1 MODEL
+  if (decision.includes("reroute")) return 0.8;
+  if (decision.includes("delay")) return 0.3;
+  return 0.5;
+}
+
+// =========================
+// EXECUTE (WITH LEARNING)
 // =========================
 app.post("/execute/:tenantId", async (req, res) => {
   try {
     const { tenantId } = req.params;
 
     const userId = extractUserId(req);
-    if (!userId) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-
     const role = await getUserRole(userId);
-
-    if (!role) {
-      return res.status(403).json({ error: "Role not found" });
-    }
 
     if (role !== "super_admin") {
       return res.status(403).json({ error: "Access denied" });
     }
 
-    // Mock operational logic
-    const result = {
-      tenantId,
-      status: "executed",
-      decision: "PROCEED",
-      role
-    };
+    // --- Decision Logic (placeholder) ---
+    const decision = "reroute to avoid storm";
 
-    res.json(result);
+    // --- Score ---
+    const score = scoreDecision(decision);
+
+    // --- Store Memory ---
+    await supabase.from("decision_memory").insert({
+      tenant_id: tenantId,
+      decision,
+      outcome: "pending",
+      score,
+      context: { source: "v1-engine" }
+    });
+
+    res.json({
+      decision,
+      score,
+      message: "Decision stored and learning updated"
+    });
+
   } catch (err) {
-    console.log(err);
     res.status(500).json({ error: "Server error" });
   }
 });
 
 // =========================
-// HEALTH / CONTROL ENDPOINT
+// UPDATE OUTCOME (LEARNING LOOP)
+// =========================
+app.post("/feedback/:id", async (req, res) => {
+  const { id } = req.params;
+  const { outcome, score } = req.body;
+
+  await supabase
+    .from("decision_memory")
+    .update({ outcome, score })
+    .eq("id", id);
+
+  res.json({ message: "Feedback recorded" });
+});
+
+// =========================
+// HEALTH
 // =========================
 app.get("/control/:tenantId/health", async (req, res) => {
-  try {
-    const { tenantId } = req.params;
+  const { tenantId } = req.params;
 
-    const userId = extractUserId(req);
-    const role = await getUserRole(userId);
+  const { data } = await supabase
+    .from("decision_memory")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false })
+    .limit(10);
 
-    if (!role) {
-      return res.status(403).json({ error: "No role" });
-    }
-
-    const { data } = await supabase
-      .from("agent_runs")
-      .select("*")
-      .eq("tenant_id", tenantId)
-      .order("created_at", { ascending: false })
-      .limit(10);
-
-    res.json({
-      tenantId,
-      role,
-      metrics: data || []
-    });
-  } catch (err) {
-    res.status(500).json({ error: "Server error" });
-  }
+  res.json({ history: data });
 });
 
 // =========================
 // ROOT
 // =========================
 app.get("/", (req, res) => {
-  res.json({
-    status: "Operion backend running",
-    version: "1.0"
-  });
+  res.json({ status: "Operion AI learning active" });
 });
 
-// =========================
-// START SERVER
-// =========================
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log(`Operion backend running on port ${PORT}`);
-});
+app.listen(process.env.PORT || 3000);
