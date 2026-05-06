@@ -19,9 +19,10 @@ app.use(express.json());
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 // =========================
-// IN-MEMORY WORKFLOW STORAGE
+// IN-MEMORY STORAGE (TEMP)
 // =========================
 let workflows = {};
+let actions = {}; // <-- NEW: stores approval-required actions
 
 // =========================
 // HEALTH CHECK
@@ -88,18 +89,18 @@ app.post('/workflow/:tenantId', (req, res) => {
 // =========================
 app.get('/workflow/:tenantId', (req, res) => {
   const { tenantId } = req.params;
-
   res.json(workflows[tenantId] || []);
 });
 
 // =========================
-// WORKFLOW ENGINE EXECUTION
+// WORKFLOW ENGINE → ACTION ENGINE
 // =========================
 app.post('/workflow/:tenantId/run', async (req, res) => {
   const { tenantId } = req.params;
   const systemData = req.body;
 
   const tenantWorkflows = workflows[tenantId] || [];
+  if (!actions[tenantId]) actions[tenantId] = [];
 
   let triggered = [];
 
@@ -110,28 +111,29 @@ app.post('/workflow/:tenantId/run', async (req, res) => {
     // CONDITION ENGINE
     // =========================
     if (wf.trigger_type === "FLEET_RISK") {
-      if (systemData.healthScore < 70) {
-        match = true;
-      }
+      if (systemData.healthScore < 70) match = true;
     }
 
     if (wf.trigger_type === "LOAD_SPIKE") {
-      if (systemData.load?.loadLevel === "HIGH") {
-        match = true;
-      }
+      if (systemData.load?.loadLevel === "HIGH") match = true;
     }
 
     // =========================
-    // MATCH FOUND → TRIGGER ACTION
+    // ACTION ENGINE (PROPOSE)
     // =========================
     if (match) {
-      triggered.push({
+      const newAction = {
+        id: Date.now() + Math.random(),
         workflow: wf.name,
         trigger: wf.trigger_type,
+        status: "PENDING_APPROVAL",
+        suggestedAction: generateActionSuggestion(systemData),
         systemData,
-        action: "APPROVAL_REQUIRED",
-        timestamp: new Date().toISOString()
-      });
+        createdAt: new Date().toISOString()
+      };
+
+      actions[tenantId].push(newAction);
+      triggered.push(newAction);
     }
   }
 
@@ -142,13 +144,76 @@ app.post('/workflow/:tenantId/run', async (req, res) => {
 });
 
 // =========================
+// AI-LIKE ACTION SUGGESTION
+// =========================
+function generateActionSuggestion(systemData) {
+  if (systemData.healthScore < 50) {
+    return "Immediate intervention required: reassign resources and initiate contingency protocol.";
+  }
+
+  if (systemData.load?.loadLevel === "HIGH") {
+    return "Load balancing recommended: redistribute workload across available fleet.";
+  }
+
+  return "Monitor system closely. No immediate action required.";
+}
+
+// =========================
+// GET ACTIONS (APPROVAL QUEUE)
+// =========================
+app.get('/actions/:tenantId', (req, res) => {
+  const { tenantId } = req.params;
+  res.json(actions[tenantId] || []);
+});
+
+// =========================
+// APPROVE ACTION
+// =========================
+app.post('/actions/:tenantId/:actionId/approve', (req, res) => {
+  const { tenantId, actionId } = req.params;
+
+  const tenantActions = actions[tenantId] || [];
+
+  const action = tenantActions.find(a => a.id == actionId);
+
+  if (!action) {
+    return res.status(404).json({ error: "Action not found" });
+  }
+
+  action.status = "APPROVED";
+  action.executedAt = new Date().toISOString();
+
+  // Simulated execution
+  action.executionResult = "Action successfully executed.";
+
+  res.json(action);
+});
+
+// =========================
+// REJECT ACTION
+// =========================
+app.post('/actions/:tenantId/:actionId/reject', (req, res) => {
+  const { tenantId, actionId } = req.params;
+
+  const tenantActions = actions[tenantId] || [];
+
+  const action = tenantActions.find(a => a.id == actionId);
+
+  if (!action) {
+    return res.status(404).json({ error: "Action not found" });
+  }
+
+  action.status = "REJECTED";
+
+  res.json(action);
+});
+
+// =========================
 // STRIPE CHECKOUT SESSION
 // =========================
 app.post('/create-checkout-session', async (req, res) => {
   try {
     const { priceId, companyId } = req.body;
-
-    console.log("REQUEST:", { priceId, companyId });
 
     if (!priceId || !companyId) {
       return res.status(400).json({
@@ -167,27 +232,16 @@ app.post('/create-checkout-session', async (req, res) => {
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       payment_method_types: ['card'],
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1
-        }
-      ],
+      line_items: [{ price: priceId, quantity: 1 }],
       success_url: successUrl,
       cancel_url: cancelUrl,
-      metadata: {
-        companyId
-      }
+      metadata: { companyId }
     });
 
     return res.json({ url: session.url });
 
   } catch (error) {
-    console.error("STRIPE ERROR:", error);
-
-    return res.status(500).json({
-      error: error.message
-    });
+    return res.status(500).json({ error: error.message });
   }
 });
 
