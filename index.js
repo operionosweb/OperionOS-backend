@@ -13,12 +13,12 @@ app.use(cors());
 app.use(express.json());
 
 /* ===============================
-   HEALTH CHECK
+   HEALTH
 =============================== */
 app.get("/api/test", (req, res) => {
   res.json({
     status: "ok",
-    message: "API is working"
+    message: "API running"
   });
 });
 
@@ -36,7 +36,7 @@ app.post("/api/flight", async (req, res) => {
         flight_hours,
         flight_date
       )
-      VALUES ($1, $2, now())
+      VALUES ($1,$2,now())
       RETURNING *
       `,
       [aircraftId, flightHours]
@@ -55,99 +55,54 @@ app.post("/api/flight", async (req, res) => {
       accrual
     });
 
-  } catch (error) {
+  } catch (err) {
     res.status(500).json({
       status: "error",
-      message: error.message
+      message: err.message
     });
   }
 });
 
 /* ===============================
-   🌦 FETCH REAL WEATHER (NEW)
+   🌦 GET LATEST STATE
 =============================== */
-async function fetchWeather(lat, lon) {
-  // Open-Meteo free API (no key needed)
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`;
-
-  const res = await fetch(url);
-  const data = await res.json();
-
-  return {
-    wind_speed: data?.current_weather?.windspeed || 0,
-    temperature: data?.current_weather?.temperature || 0
-  };
-}
-
-/* ===============================
-   🌦 UPDATE AIRCRAFT STATE (NEW)
-=============================== */
-app.post("/api/aircraft/:id/update-state", async (req, res) => {
+app.get("/api/aircraft/:id/live-state", async (req, res) => {
   try {
     const { id } = req.params;
-    const { latitude, longitude, phase } = req.body;
 
-    if (!latitude || !longitude) {
-      return res.status(400).json({
-        status: "error",
-        message: "Missing coordinates"
-      });
-    }
-
-    // 1. Get weather
-    const weather = await fetchWeather(latitude, longitude);
-
-    // 2. Simple turbulence model (rule-based)
-    let turbulence_index = 5;
-
-    if (weather.wind_speed > 30) turbulence_index += 3;
-    if (weather.wind_speed > 20) turbulence_index += 1;
-
-    // 3. Store state
-    const result = await query(
+    const stateResult = await query(
       `
-      INSERT INTO aircraft_state (
-        aircraft_id,
-        latitude,
-        longitude,
-        altitude,
-        phase,
-        wind_speed,
-        temperature,
-        turbulence_index,
-        last_updated
-      )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now())
-      RETURNING *
+      SELECT *
+      FROM aircraft_state
+      WHERE aircraft_id = $1
+      ORDER BY last_updated DESC
+      LIMIT 1
       `,
-      [
-        id,
-        latitude,
-        longitude,
-        0,
-        phase || "cruise",
-        weather.wind_speed,
-        weather.temperature,
-        turbulence_index
-      ]
+      [id]
     );
 
+    const state = stateResult.rows[0];
+
+    let wearMultiplier = 1;
+
+    if (state?.wind_speed > 25) wearMultiplier += 0.10;
+    if (state?.turbulence_index > 7) wearMultiplier += 0.15;
+
     res.json({
-      status: "success",
-      message: "Aircraft state updated with live weather",
-      state: result.rows[0]
+      state,
+      wearMultiplier
     });
 
-  } catch (error) {
+  } catch (err) {
     res.status(500).json({
       status: "error",
-      message: error.message
+      message: err.message
     });
   }
 });
 
 /* ===============================
-   AIRCRAFT SUMMARY
+   📊 AIRCRAFT SUMMARY
 =============================== */
 app.get("/api/aircraft/:id/summary", async (req, res) => {
   try {
@@ -202,21 +157,34 @@ app.get("/api/aircraft/:id/summary", async (req, res) => {
       }
     });
 
-  } catch (error) {
+  } catch (err) {
     res.status(500).json({
       status: "error",
-      message: error.message
+      message: err.message
     });
   }
 });
 
 /* ===============================
-   LIVE STATE VIEW
+   🚨 PREDICTION ENGINE (NEW)
 =============================== */
-app.get("/api/aircraft/:id/live-state", async (req, res) => {
+app.get("/api/aircraft/:id/prediction", async (req, res) => {
   try {
     const { id } = req.params;
 
+    // 1. Get total flight hours
+    const flightResult = await query(
+      `
+      SELECT COALESCE(SUM(flight_hours),0) AS hours
+      FROM flight_usage
+      WHERE aircraft_id = $1
+      `,
+      [id]
+    );
+
+    const hours = Number(flightResult.rows[0].hours);
+
+    // 2. Get latest environmental stress
     const stateResult = await query(
       `
       SELECT *
@@ -230,31 +198,64 @@ app.get("/api/aircraft/:id/live-state", async (req, res) => {
 
     const state = stateResult.rows[0];
 
-    let wearMultiplier = 1;
+    // ===============================
+    // PREDICTION MODEL (RULE-BASED)
+    // ===============================
 
-    if (state?.wind_speed > 25) wearMultiplier += 0.10;
-    if (state?.turbulence_index > 7) wearMultiplier += 0.15;
+    let riskScore = 0;
 
+    // Utilization factor
+    riskScore += hours * 0.01;
+
+    // Weather stress
+    if (state?.wind_speed > 25) riskScore += 15;
+    if (state?.turbulence_index > 7) riskScore += 20;
+
+    // Flight phase risk
+    if (state?.phase === "landing") riskScore += 5;
+
+    // Normalize
+    const normalizedRisk = Math.min(riskScore, 100);
+
+    // Classification
+    let status = "LOW";
+
+    if (normalizedRisk > 70) status = "HIGH";
+    else if (normalizedRisk > 40) status = "MEDIUM";
+
+    // ===============================
+    // RESPONSE
+    // ===============================
     res.json({
-      liveState: state,
-      operationalImpact: {
-        wearMultiplier
-      }
+      aircraftId: id,
+      riskScore: normalizedRisk,
+      status,
+      factors: {
+        totalFlightHours: hours,
+        windSpeed: state?.wind_speed || 0,
+        turbulence: state?.turbulence_index || 0
+      },
+      recommendation:
+        status === "HIGH"
+          ? "Immediate inspection recommended"
+          : status === "MEDIUM"
+          ? "Monitor closely"
+          : "Normal operation"
     });
 
-  } catch (error) {
+  } catch (err) {
     res.status(500).json({
       status: "error",
-      message: error.message
+      message: err.message
     });
   }
 });
 
 /* ===============================
-   START SERVER
+   START
 =============================== */
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`🚀 Operion backend running on port ${PORT}`);
+  console.log("🚀 Operion predictive engine running");
 });
