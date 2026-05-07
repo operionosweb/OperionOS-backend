@@ -5,42 +5,88 @@ dotenv.config();
 
 const { Pool } = pkg;
 
-/**
- * Operion Database Connection Pool
- * ---------------------------------
- * Uses DATABASE_URL from Render environment variables.
- * Works with Supabase / Render Postgres / Neon.
- */
-
+// ===============================
+// Validate environment variables
+// ===============================
 if (!process.env.DATABASE_URL) {
-  console.error("❌ DATABASE_URL is missing in environment variables");
-  throw new Error("DATABASE_URL not configured");
+  console.error("❌ DATABASE_URL missing");
+  process.exit(1);
 }
 
+// ===============================
+// PostgreSQL Connection Pool
+// ===============================
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 
-  // Required for cloud databases (Render / Supabase / Neon)
   ssl: {
     rejectUnauthorized: false
   },
 
-  // Stability tuning for production
-  max: 10,              // max connections
+  // Pool tuning
+  max: 10,
+  min: 1,
+
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000
+  connectionTimeoutMillis: 10000,
+
+  allowExitOnIdle: false
 });
 
-// Optional: connection test on startup
-pool.connect()
-  .then((client) => {
+// ===============================
+// Initial connection test
+// ===============================
+async function testConnection() {
+  try {
+    const client = await pool.connect();
+
     console.log("===================================");
     console.log("🟢 Database connected successfully");
     console.log("===================================");
+
     client.release();
-  })
-  .catch((err) => {
-    console.error("❌ Database connection failed:", err.message);
-  });
+  } catch (err) {
+    console.error("===================================");
+    console.error("❌ Database connection failed");
+    console.error(err.message);
+    console.error("===================================");
+  }
+}
+
+testConnection();
+
+// ===============================
+// Pool error monitoring
+// ===============================
+pool.on("error", (err) => {
+  console.error("===================================");
+  console.error("❌ Unexpected PostgreSQL pool error");
+  console.error(err.message);
+  console.error("===================================");
+});
+
+// ===============================
+// Safe query wrapper
+// ===============================
+export async function query(text, params) {
+  const start = Date.now();
+
+  try {
+    const result = await pool.query(text, params);
+
+    const duration = Date.now() - start;
+
+    console.log("🧠 Query executed", {
+      duration: `${duration}ms`,
+      rows: result.rowCount
+    });
+
+    return result;
+  } catch (err) {
+    console.error("❌ Query failed");
+    console.error(err.message);
+    throw err;
+  }
+}
 
 export default pool;
