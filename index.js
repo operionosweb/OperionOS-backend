@@ -29,13 +29,6 @@ app.post("/api/flight", async (req, res) => {
   try {
     const { aircraftId, flightHours } = req.body;
 
-    if (!aircraftId || !flightHours) {
-      return res.status(400).json({
-        status: "error",
-        message: "Missing aircraftId or flightHours"
-      });
-    }
-
     const flightResult = await query(
       `
       INSERT INTO flight_usage (
@@ -58,7 +51,6 @@ app.post("/api/flight", async (req, res) => {
 
     res.json({
       status: "success",
-      message: "Flight recorded and maintenance accrual applied",
       flight,
       accrual
     });
@@ -72,7 +64,90 @@ app.post("/api/flight", async (req, res) => {
 });
 
 /* ===============================
-   AIRCRAFT SUMMARY (FINANCIAL)
+   🌦 FETCH REAL WEATHER (NEW)
+=============================== */
+async function fetchWeather(lat, lon) {
+  // Open-Meteo free API (no key needed)
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`;
+
+  const res = await fetch(url);
+  const data = await res.json();
+
+  return {
+    wind_speed: data?.current_weather?.windspeed || 0,
+    temperature: data?.current_weather?.temperature || 0
+  };
+}
+
+/* ===============================
+   🌦 UPDATE AIRCRAFT STATE (NEW)
+=============================== */
+app.post("/api/aircraft/:id/update-state", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { latitude, longitude, phase } = req.body;
+
+    if (!latitude || !longitude) {
+      return res.status(400).json({
+        status: "error",
+        message: "Missing coordinates"
+      });
+    }
+
+    // 1. Get weather
+    const weather = await fetchWeather(latitude, longitude);
+
+    // 2. Simple turbulence model (rule-based)
+    let turbulence_index = 5;
+
+    if (weather.wind_speed > 30) turbulence_index += 3;
+    if (weather.wind_speed > 20) turbulence_index += 1;
+
+    // 3. Store state
+    const result = await query(
+      `
+      INSERT INTO aircraft_state (
+        aircraft_id,
+        latitude,
+        longitude,
+        altitude,
+        phase,
+        wind_speed,
+        temperature,
+        turbulence_index,
+        last_updated
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now())
+      RETURNING *
+      `,
+      [
+        id,
+        latitude,
+        longitude,
+        0,
+        phase || "cruise",
+        weather.wind_speed,
+        weather.temperature,
+        turbulence_index
+      ]
+    );
+
+    res.json({
+      status: "success",
+      message: "Aircraft state updated with live weather",
+      state: result.rows[0]
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      status: "error",
+      message: error.message
+    });
+  }
+});
+
+/* ===============================
+   AIRCRAFT SUMMARY
 =============================== */
 app.get("/api/aircraft/:id/summary", async (req, res) => {
   try {
@@ -86,15 +161,6 @@ app.get("/api/aircraft/:id/summary", async (req, res) => {
       `,
       [id]
     );
-
-    if (aircraftResult.rows.length === 0) {
-      return res.status(404).json({
-        status: "error",
-        message: "Aircraft not found"
-      });
-    }
-
-    const aircraft = aircraftResult.rows[0];
 
     const reserveResult = await query(
       `
@@ -127,7 +193,7 @@ app.get("/api/aircraft/:id/summary", async (req, res) => {
     );
 
     res.json({
-      aircraft,
+      aircraft: aircraftResult.rows[0],
       reserves: reserveResult.rows,
       accrualHistory: auditResult.rows,
       metrics: {
@@ -145,29 +211,11 @@ app.get("/api/aircraft/:id/summary", async (req, res) => {
 });
 
 /* ===============================
-   🌦 LIVE AIRCRAFT STATE (NEW)
+   LIVE STATE VIEW
 =============================== */
 app.get("/api/aircraft/:id/live-state", async (req, res) => {
   try {
     const { id } = req.params;
-
-    const aircraftResult = await query(
-      `
-      SELECT id, tail_number, model
-      FROM aircraft
-      WHERE id = $1
-      `,
-      [id]
-    );
-
-    if (aircraftResult.rows.length === 0) {
-      return res.status(404).json({
-        status: "error",
-        message: "Aircraft not found"
-      });
-    }
-
-    const aircraft = aircraftResult.rows[0];
 
     const stateResult = await query(
       `
@@ -180,26 +228,17 @@ app.get("/api/aircraft/:id/live-state", async (req, res) => {
       [id]
     );
 
-    const state = stateResult.rows[0] || null;
+    const state = stateResult.rows[0];
 
-    // ===============================
-    // Wear model (rule-based)
-    // ===============================
     let wearMultiplier = 1;
 
     if (state?.wind_speed > 25) wearMultiplier += 0.10;
     if (state?.turbulence_index > 7) wearMultiplier += 0.15;
-    if (state?.phase === "landing" && state?.wind_speed > 20) wearMultiplier += 0.05;
 
     res.json({
-      aircraft,
       liveState: state,
       operationalImpact: {
-        wearMultiplier,
-        note:
-          wearMultiplier > 1
-            ? "Elevated maintenance stress detected"
-            : "Normal operating conditions"
+        wearMultiplier
       }
     });
 
