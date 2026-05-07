@@ -9,25 +9,22 @@ dotenv.config();
 
 const app = express();
 
-// ===============================
-// Middleware
-// ===============================
 app.use(cors());
 app.use(express.json());
 
-// ===============================
-// HEALTH CHECK
-// ===============================
-app.get("/api/test", async (req, res) => {
+/* ===============================
+   HEALTH CHECK
+=============================== */
+app.get("/api/test", (req, res) => {
   res.json({
     status: "ok",
     message: "API is working"
   });
 });
 
-// ===============================
-// FLIGHT ENDPOINT
-// ===============================
+/* ===============================
+   FLIGHT INGESTION
+=============================== */
 app.post("/api/flight", async (req, res) => {
   try {
     const { aircraftId, flightHours } = req.body;
@@ -39,7 +36,6 @@ app.post("/api/flight", async (req, res) => {
       });
     }
 
-    // 1. Insert flight
     const flightResult = await query(
       `
       INSERT INTO flight_usage (
@@ -55,7 +51,6 @@ app.post("/api/flight", async (req, res) => {
 
     const flight = flightResult.rows[0];
 
-    // 2. Apply accrual engine
     const accrual = await applyMaintenanceAccrual(
       aircraftId,
       flightHours
@@ -76,14 +71,13 @@ app.post("/api/flight", async (req, res) => {
   }
 });
 
-// ===============================
-// AIRCRAFT FINANCIAL SUMMARY
-// ===============================
+/* ===============================
+   AIRCRAFT FINANCIAL SUMMARY
+=============================== */
 app.get("/api/aircraft/:id/summary", async (req, res) => {
   try {
     const { id } = req.params;
 
-    // 1. Aircraft info
     const aircraftResult = await query(
       `
       SELECT id, tail_number, model
@@ -102,12 +96,9 @@ app.get("/api/aircraft/:id/summary", async (req, res) => {
 
     const aircraft = aircraftResult.rows[0];
 
-    // 2. Current reserves
     const reserveResult = await query(
       `
-      SELECT
-        category,
-        SUM(accumulated_amount) AS total
+      SELECT category, SUM(accumulated_amount) AS total
       FROM maintenance_reserves
       WHERE aircraft_id = $1
       GROUP BY category
@@ -115,12 +106,9 @@ app.get("/api/aircraft/:id/summary", async (req, res) => {
       [id]
     );
 
-    // 3. Accrual history
     const auditResult = await query(
       `
-      SELECT
-        category,
-        SUM(increment) AS total
+      SELECT category, SUM(increment) AS total
       FROM accrual_audit_log
       WHERE aircraft_id = $1
       GROUP BY category
@@ -128,7 +116,6 @@ app.get("/api/aircraft/:id/summary", async (req, res) => {
       [id]
     );
 
-    // 4. Cost per flight hour
     const costResult = await query(
       `
       SELECT
@@ -139,9 +126,6 @@ app.get("/api/aircraft/:id/summary", async (req, res) => {
       [id]
     );
 
-    // ===============================
-    // RESPONSE
-    // ===============================
     res.json({
       aircraft,
       reserves: reserveResult.rows,
@@ -160,9 +144,77 @@ app.get("/api/aircraft/:id/summary", async (req, res) => {
   }
 });
 
-// ===============================
-// START SERVER
-// ===============================
+/* ===============================
+   🚀 FLEET DASHBOARD (NEW)
+=============================== */
+app.get("/api/fleet/overview", async (req, res) => {
+  try {
+
+    // 1. All aircraft
+    const aircraftResult = await query(
+      `
+      SELECT id, tail_number, model
+      FROM aircraft
+      `
+    );
+
+    // 2. Total reserves per aircraft
+    const reservesResult = await query(
+      `
+      SELECT
+        aircraft_id,
+        SUM(accumulated_amount) AS total_reserve
+      FROM maintenance_reserves
+      GROUP BY aircraft_id
+      `
+    );
+
+    // 3. Flight activity per aircraft
+    const flightResult = await query(
+      `
+      SELECT
+        aircraft_id,
+        COUNT(*) AS total_flights,
+        SUM(flight_hours) AS total_hours
+      FROM flight_usage
+      GROUP BY aircraft_id
+      `
+    );
+
+    // 4. Merge into fleet view
+    const fleet = aircraftResult.rows.map(a => {
+
+      const reserve = reservesResult.rows.find(
+        r => r.aircraft_id === a.id
+      );
+
+      const flight = flightResult.rows.find(
+        f => f.aircraft_id === a.id
+      );
+
+      return {
+        aircraft: a,
+        totalReserve: reserve?.total_reserve || 0,
+        totalFlights: flight?.total_flights || 0,
+        totalFlightHours: flight?.total_hours || 0
+      };
+    });
+
+    res.json({
+      fleet
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      status: "error",
+      message: error.message
+    });
+  }
+});
+
+/* ===============================
+   START SERVER
+=============================== */
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
