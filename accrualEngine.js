@@ -1,10 +1,12 @@
 import { query } from "./db.js";
 
 /**
- * Operion Maintenance Accrual Engine (v2)
+ * Operion Maintenance Accrual Engine (v3)
  * ----------------------------------------
- * Now fully DATA-DRIVEN using reserve_rules table.
- * No hardcoded multipliers anymore.
+ * Now includes:
+ * - Dynamic rules (DB-driven)
+ * - Audit logging per calculation
+ * - Full traceability
  */
 
 export async function applyMaintenanceAccrual(
@@ -25,7 +27,7 @@ export async function applyMaintenanceAccrual(
     }
 
     // ===============================
-    // Get aircraft + model
+    // Get aircraft info
     // ===============================
     const aircraftResult = await query(
       `
@@ -43,7 +45,7 @@ export async function applyMaintenanceAccrual(
     const aircraft = aircraftResult.rows[0];
 
     // ===============================
-    // Get existing reserves
+    // Get maintenance reserves
     // ===============================
     const reservesResult = await query(
       `
@@ -63,11 +65,11 @@ export async function applyMaintenanceAccrual(
     }
 
     // ===============================
-    // Apply dynamic rules per reserve
+    // PROCESS EACH RESERVE
     // ===============================
     for (const reserve of reservesResult.rows) {
 
-      // Fetch rule from DB
+      // Fetch rule
       const ruleResult = await query(
         `
         SELECT rate_per_hour, multiplier
@@ -82,20 +84,20 @@ export async function applyMaintenanceAccrual(
       const rule = ruleResult.rows[0];
 
       if (!rule) {
-        console.log("⚠️ No rule found for category:", reserve.category);
+        console.log("⚠️ No rule found:", reserve.category);
         continue;
       }
 
-      // ===============================
-      // Calculate increment
-      // ===============================
+      const rate = Number(rule.rate_per_hour);
+      const multiplier = Number(rule.multiplier);
+
       const increment =
-        Number(rule.rate_per_hour) *
+        rate *
         Number(flightHours) *
-        Number(rule.multiplier);
+        multiplier;
 
       // ===============================
-      // Update reserve
+      // Update reserve balance
       // ===============================
       await query(
         `
@@ -109,19 +111,42 @@ export async function applyMaintenanceAccrual(
         [increment, reserve.id]
       );
 
-      console.log("💰 Dynamic reserve updated", {
-        aircraftId,
-        model: aircraft.model,
+      // ===============================
+      // AUDIT LOG (NEW)
+      // ===============================
+      await query(
+        `
+        INSERT INTO accrual_audit_log (
+          aircraft_id,
+          flight_hours,
+          category,
+          rate_per_hour,
+          multiplier,
+          increment
+        )
+        VALUES ($1,$2,$3,$4,$5,$6)
+        `,
+        [
+          aircraftId,
+          flightHours,
+          reserve.category,
+          rate,
+          multiplier,
+          increment
+        ]
+      );
+
+      console.log("📊 Audit logged:", {
         category: reserve.category,
         increment
       });
     }
 
     // ===============================
-    // Success response
+    // SUCCESS RESPONSE
     // ===============================
     console.log("===================================");
-    console.log("🧮 Maintenance accrual completed (v2)");
+    console.log("🧮 Maintenance accrual completed (v3)");
     console.log("Aircraft:", aircraftId);
     console.log("Flight Hours:", flightHours);
     console.log("===================================");
@@ -130,13 +155,13 @@ export async function applyMaintenanceAccrual(
       success: true,
       aircraftId,
       flightHours,
-      message: "Dynamic maintenance accrual applied"
+      message: "Dynamic accrual + audit logging completed"
     };
 
   } catch (error) {
 
     console.error("===================================");
-    console.error("❌ Accrual Engine v2 Error");
+    console.error("❌ Accrual Engine v3 Error");
     console.error(error.message);
     console.error("===================================");
 
