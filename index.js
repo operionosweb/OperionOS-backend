@@ -1,7 +1,9 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import Stripe from "stripe";
+
+import pool from "./db.js";
+import { applyMaintenanceAccrual } from "./accrualEngine.js";
 
 dotenv.config();
 
@@ -14,14 +16,14 @@ app.use(cors());
 app.use(express.json());
 
 // =====================
-// Health check route
+// Health check
 // =====================
 app.get("/", (req, res) => {
   res.send("Operion backend running");
 });
 
 // =====================
-// Test API route
+// API test
 // =====================
 app.get("/api/test", (req, res) => {
   res.json({
@@ -31,40 +33,54 @@ app.get("/api/test", (req, res) => {
 });
 
 // =====================
-// Stripe setup (safe init)
+// MAIN FLIGHT ENDPOINT
 // =====================
-let stripe = null;
-
-if (process.env.STRIPE_SECRET_KEY) {
-  stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-  console.log("Stripe initialized");
-} else {
-  console.log("Stripe key missing (skipping init)");
-}
-
-// =====================
-// Example endpoint (safe)
-// =====================
-app.post("/api/checkout", async (req, res) => {
+app.post("/api/flight", async (req, res) => {
   try {
-    if (!stripe) {
-      return res.status(500).json({
-        error: "Stripe not configured"
-      });
+    const { aircraftId, flightHours, flightDate } = req.body;
+
+    // Validation
+    if (!aircraftId) {
+      return res.status(400).json({ error: "aircraftId is required" });
     }
 
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      mode: "payment",
-      line_items: req.body.items || [],
-      success_url: "https://example.com/success",
-      cancel_url: "https://example.com/cancel"
+    if (!flightHours || flightHours <= 0) {
+      return res.status(400).json({ error: "flightHours must be > 0" });
+    }
+
+    // 1. Insert flight record
+    const flightResult = await pool.query(
+      `
+      INSERT INTO flight_usage (aircraft_id, flight_date, flight_hours)
+      VALUES ($1, COALESCE($2, now()), $3)
+      RETURNING *
+      `,
+      [aircraftId, flightDate || null, flightHours]
+    );
+
+    const flight = flightResult.rows[0];
+
+    // 2. Run accrual engine
+    const accrualResult = await applyMaintenanceAccrual(
+      aircraftId,
+      flightHours
+    );
+
+    // 3. Response
+    res.json({
+      status: "success",
+      message: "Flight recorded and maintenance accrual applied",
+      flight,
+      accrual: accrualResult
     });
 
-    res.json({ url: session.url });
   } catch (error) {
-    console.error("Checkout error:", error.message);
-    res.status(500).json({ error: error.message });
+    console.error("❌ /api/flight error:", error.message);
+
+    res.status(500).json({
+      status: "error",
+      message: error.message
+    });
   }
 });
 
