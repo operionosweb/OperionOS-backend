@@ -72,7 +72,7 @@ app.post("/api/flight", async (req, res) => {
 });
 
 /* ===============================
-   AIRCRAFT FINANCIAL SUMMARY
+   AIRCRAFT SUMMARY (FINANCIAL)
 =============================== */
 app.get("/api/aircraft/:id/summary", async (req, res) => {
   try {
@@ -145,63 +145,62 @@ app.get("/api/aircraft/:id/summary", async (req, res) => {
 });
 
 /* ===============================
-   🚀 FLEET DASHBOARD (NEW)
+   🌦 LIVE AIRCRAFT STATE (NEW)
 =============================== */
-app.get("/api/fleet/overview", async (req, res) => {
+app.get("/api/aircraft/:id/live-state", async (req, res) => {
   try {
+    const { id } = req.params;
 
-    // 1. All aircraft
     const aircraftResult = await query(
       `
       SELECT id, tail_number, model
       FROM aircraft
-      `
+      WHERE id = $1
+      `,
+      [id]
     );
 
-    // 2. Total reserves per aircraft
-    const reservesResult = await query(
+    if (aircraftResult.rows.length === 0) {
+      return res.status(404).json({
+        status: "error",
+        message: "Aircraft not found"
+      });
+    }
+
+    const aircraft = aircraftResult.rows[0];
+
+    const stateResult = await query(
       `
-      SELECT
-        aircraft_id,
-        SUM(accumulated_amount) AS total_reserve
-      FROM maintenance_reserves
-      GROUP BY aircraft_id
-      `
+      SELECT *
+      FROM aircraft_state
+      WHERE aircraft_id = $1
+      ORDER BY last_updated DESC
+      LIMIT 1
+      `,
+      [id]
     );
 
-    // 3. Flight activity per aircraft
-    const flightResult = await query(
-      `
-      SELECT
-        aircraft_id,
-        COUNT(*) AS total_flights,
-        SUM(flight_hours) AS total_hours
-      FROM flight_usage
-      GROUP BY aircraft_id
-      `
-    );
+    const state = stateResult.rows[0] || null;
 
-    // 4. Merge into fleet view
-    const fleet = aircraftResult.rows.map(a => {
+    // ===============================
+    // Wear model (rule-based)
+    // ===============================
+    let wearMultiplier = 1;
 
-      const reserve = reservesResult.rows.find(
-        r => r.aircraft_id === a.id
-      );
-
-      const flight = flightResult.rows.find(
-        f => f.aircraft_id === a.id
-      );
-
-      return {
-        aircraft: a,
-        totalReserve: reserve?.total_reserve || 0,
-        totalFlights: flight?.total_flights || 0,
-        totalFlightHours: flight?.total_hours || 0
-      };
-    });
+    if (state?.wind_speed > 25) wearMultiplier += 0.10;
+    if (state?.turbulence_index > 7) wearMultiplier += 0.15;
+    if (state?.phase === "landing" && state?.wind_speed > 20) wearMultiplier += 0.05;
 
     res.json({
-      fleet
+      aircraft,
+      liveState: state,
+      operationalImpact: {
+        wearMultiplier,
+        note:
+          wearMultiplier > 1
+            ? "Elevated maintenance stress detected"
+            : "Normal operating conditions"
+      }
     });
 
   } catch (error) {
