@@ -1,10 +1,10 @@
 import { query } from "./db.js";
 
 /**
- * Operion Maintenance Accrual Engine
- * -----------------------------------
- * Applies maintenance reserve accruals
- * based on aircraft flight activity.
+ * Operion Maintenance Accrual Engine (v2)
+ * ----------------------------------------
+ * Now fully DATA-DRIVEN using reserve_rules table.
+ * No hardcoded multipliers anymore.
  */
 
 export async function applyMaintenanceAccrual(
@@ -25,38 +25,32 @@ export async function applyMaintenanceAccrual(
     }
 
     // ===============================
-    // Get ownership profile
+    // Get aircraft + model
     // ===============================
     const aircraftResult = await query(
       `
-      SELECT
-        a.id AS aircraft_id,
-        op.ownership_type
-      FROM aircraft a
-      JOIN ownership_profiles op
-        ON op.aircraft_id = a.id
-      WHERE a.id = $1
+      SELECT id, model
+      FROM aircraft
+      WHERE id = $1
       `,
       [aircraftId]
     );
 
     if (aircraftResult.rows.length === 0) {
-      throw new Error(
-        "Aircraft not found or ownership profile missing"
-      );
+      throw new Error("Aircraft not found");
     }
 
     const aircraft = aircraftResult.rows[0];
 
     // ===============================
-    // Get maintenance reserves
+    // Get existing reserves
     // ===============================
     const reservesResult = await query(
       `
       SELECT
         id,
+        category,
         reserve_type,
-        rate_per_flight_hour,
         accumulated_amount
       FROM maintenance_reserves
       WHERE aircraft_id = $1
@@ -65,20 +59,44 @@ export async function applyMaintenanceAccrual(
     );
 
     if (reservesResult.rows.length === 0) {
-      throw new Error(
-        "No maintenance reserves configured"
-      );
+      throw new Error("No maintenance reserves configured");
     }
 
     // ===============================
-    // Apply accruals
+    // Apply dynamic rules per reserve
     // ===============================
     for (const reserve of reservesResult.rows) {
 
-      const increment =
-        Number(reserve.rate_per_flight_hour) *
-        Number(flightHours);
+      // Fetch rule from DB
+      const ruleResult = await query(
+        `
+        SELECT rate_per_hour, multiplier
+        FROM reserve_rules
+        WHERE aircraft_model = $1
+          AND category = $2
+        LIMIT 1
+        `,
+        [aircraft.model, reserve.category]
+      );
 
+      const rule = ruleResult.rows[0];
+
+      if (!rule) {
+        console.log("⚠️ No rule found for category:", reserve.category);
+        continue;
+      }
+
+      // ===============================
+      // Calculate increment
+      // ===============================
+      const increment =
+        Number(rule.rate_per_hour) *
+        Number(flightHours) *
+        Number(rule.multiplier);
+
+      // ===============================
+      // Update reserve
+      // ===============================
       await query(
         `
         UPDATE maintenance_reserves
@@ -91,39 +109,34 @@ export async function applyMaintenanceAccrual(
         [increment, reserve.id]
       );
 
-      console.log("💰 Reserve updated", {
-        reserveType: reserve.reserve_type,
+      console.log("💰 Dynamic reserve updated", {
+        aircraftId,
+        model: aircraft.model,
+        category: reserve.category,
         increment
       });
     }
 
     // ===============================
-    // Success log
+    // Success response
     // ===============================
     console.log("===================================");
-    console.log("🧮 Maintenance accrual completed");
+    console.log("🧮 Maintenance accrual completed (v2)");
     console.log("Aircraft:", aircraftId);
-    console.log("Ownership:", aircraft.ownership_type);
     console.log("Flight Hours:", flightHours);
-    console.log(
-      "Reserves Updated:",
-      reservesResult.rows.length
-    );
     console.log("===================================");
 
     return {
       success: true,
       aircraftId,
-      ownershipType: aircraft.ownership_type,
       flightHours,
-      reservesUpdated:
-        reservesResult.rows.length
+      message: "Dynamic maintenance accrual applied"
     };
 
   } catch (error) {
 
     console.error("===================================");
-    console.error("❌ Accrual Engine Error");
+    console.error("❌ Accrual Engine v2 Error");
     console.error(error.message);
     console.error("===================================");
 
