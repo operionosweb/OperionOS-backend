@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export default function ControlCenter() {
 
@@ -9,12 +9,56 @@ export default function ControlCenter() {
   const API =
     "https://operionos-backend-1.onrender.com/api/control-center";
 
+  // store animated positions
+  const positionsRef = useRef({});
+
   const fetchData = async () => {
+
     try {
+
       const res = await fetch(API);
       const json = await res.json();
 
-      setData(json);
+      // initialize or update aircraft state
+      const enriched = json?.aircraftRankings?.map((a, i) => {
+
+        const id = a.aircraft.id;
+
+        const baseLat = 41.3851;
+        const baseLng = 2.1734;
+
+        // initialize stable position once
+        if (!positionsRef.current[id]) {
+          positionsRef.current[id] = {
+            lat: baseLat + (i * 0.3),
+            lng: baseLng + (i * 0.4)
+          };
+        }
+
+        // simulate movement drift (future ADS-B replacement point)
+        const driftLat = (Math.random() - 0.5) * 0.01;
+        const driftLng = (Math.random() - 0.5) * 0.01;
+
+        positionsRef.current[id].lat += driftLat;
+        positionsRef.current[id].lng += driftLng;
+
+        return {
+          id,
+          tail: a.aircraft.tail_number,
+          model: a.aircraft.model,
+          risk: a.metrics.riskScore,
+          hours: a.metrics.totalHours,
+          lat: positionsRef.current[id].lat,
+          lng: positionsRef.current[id].lng,
+          route: {
+            from: "BCN",
+            to: "MAD"
+          }
+        };
+
+      }) || [];
+
+      setData(enriched);
       setLastUpdated(new Date());
       setLoading(false);
 
@@ -30,7 +74,7 @@ export default function ControlCenter() {
 
     const interval = setInterval(() => {
       fetchData();
-    }, 20000);
+    }, 15000); // faster for "live feel"
 
     return () => clearInterval(interval);
 
@@ -39,36 +83,10 @@ export default function ControlCenter() {
   if (loading) {
     return (
       <div style={styles.loading}>
-        Loading Operion Geo Intelligence...
+        Initializing Flight Tracking Layer...
       </div>
     );
   }
-
-  /* ===============================
-     GEO MODEL (READY FOR REAL ADS-B LATER)
-  =============================== */
-
-  const aircraftGeo = data?.aircraftRankings?.map((a, i) => {
-
-    // Base coordinate (Barcelona region default hub)
-    const baseLat = 41.3851;
-    const baseLng = 2.1734;
-
-    // Deterministic pseudo spread (stable layout)
-    const offsetLat = ((i + 1) * 0.37) % 2 - 1;
-    const offsetLng = ((i + 1) * 0.51) % 2 - 1;
-
-    return {
-      id: i,
-      name: a.aircraft.tail_number,
-      model: a.aircraft.model,
-      lat: baseLat + offsetLat,
-      lng: baseLng + offsetLng,
-      risk: a.metrics.riskScore,
-      hours: a.metrics.totalHours
-    };
-
-  }) || [];
 
   return (
     <div style={styles.page}>
@@ -82,37 +100,36 @@ export default function ControlCenter() {
           </h1>
 
           <p style={styles.subtitle}>
-            Geo-Aware Fleet Intelligence System
+            Live Flight Tracking Architecture Layer
           </p>
         </div>
 
         <div style={styles.liveBadge}>
-          ● LIVE GEO
+          ● TRACKING ACTIVE
         </div>
 
       </div>
 
-      {/* UPDATE */}
+      {/* LAST UPDATE */}
       <div style={styles.updated}>
-        Last update: {lastUpdated?.toLocaleTimeString()}
+        Last sync: {lastUpdated?.toLocaleTimeString()}
       </div>
 
       {/* ===============================
-          GEO MAP
+          FLIGHT MAP
       =============================== */}
 
       <div style={styles.mapContainer}>
 
         <h2 style={styles.section}>
-          Aircraft Geo Map (Operational Layer)
+          Live Aircraft Movement Layer
         </h2>
 
         <div style={styles.map}>
 
-          {/* GRID BACKGROUND */}
           <div style={styles.grid} />
 
-          {aircraftGeo.map((ac) => {
+          {data.map((ac) => {
 
             let color = "#22c55e";
 
@@ -124,11 +141,11 @@ export default function ControlCenter() {
                 key={ac.id}
                 style={{
                   ...styles.marker,
-                  top: `${50 + ac.lat * 2}%`,
-                  left: `${50 + ac.lng * 2}%`,
+                  top: `${50 + ac.lat * 1.8}%`,
+                  left: `${50 + ac.lng * 1.8}%`,
                   background: color
                 }}
-                title={`${ac.name} | Risk ${Math.round(ac.risk)}`}
+                title={`${ac.tail} → ${ac.route.to}`}
               >
                 ✈
               </div>
@@ -140,13 +157,13 @@ export default function ControlCenter() {
       </div>
 
       {/* ===============================
-          TABLE
+          FLIGHT TABLE
       =============================== */}
 
       <div style={styles.tableContainer}>
 
         <h2 style={styles.section}>
-          Fleet Intelligence
+          Flight Intelligence Feed
         </h2>
 
         <table style={styles.table}>
@@ -155,42 +172,47 @@ export default function ControlCenter() {
             <tr>
               <th>Aircraft</th>
               <th>Model</th>
+              <th>Route</th>
               <th>Risk</th>
               <th>Hours</th>
-              <th>Geo Status</th>
+              <th>Status</th>
             </tr>
           </thead>
 
           <tbody>
 
-            {aircraftGeo.map((a) => {
+            {data.map((ac) => {
 
               let status = "STABLE";
 
-              if (a.risk > 70) status = "CRITICAL ZONE";
-              else if (a.risk > 40) status = "ELEVATED";
+              if (ac.risk > 70) status = "CRITICAL FLIGHT";
+              else if (ac.risk > 40) status = "MONITOR";
 
               return (
-                <tr key={a.id}>
+                <tr key={ac.id}>
 
-                  <td>{a.name}</td>
-                  <td>{a.model}</td>
+                  <td>{ac.tail}</td>
+                  <td>{ac.model}</td>
+
+                  <td>
+                    {ac.route.from} → {ac.route.to}
+                  </td>
 
                   <td>
                     <span style={{
                       ...styles.badge,
                       background:
-                        a.risk > 70
+                        ac.risk > 70
                           ? "#ef4444"
-                          : a.risk > 40
+                          : ac.risk > 40
                           ? "#f59e0b"
                           : "#22c55e"
                     }}>
-                      {Math.round(a.risk)}
+                      {Math.round(ac.risk)}
                     </span>
                   </td>
 
-                  <td>{Math.round(a.hours)}</td>
+                  <td>{Math.round(ac.hours)}</td>
 
                   <td>{status}</td>
 
