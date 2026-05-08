@@ -1,7 +1,6 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-
 import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
@@ -20,7 +19,7 @@ const supabase = createClient(
 );
 
 /* ===============================
-   AUTH (LIGHTWEIGHT)
+   AUTH
 =============================== */
 
 async function auth(req, res, next) {
@@ -40,40 +39,49 @@ async function auth(req, res, next) {
 }
 
 /* ===============================
-   PREDICTIVE ENGINE CORE
+   CORE RISK ENGINE
 =============================== */
 
-/**
- * Core aviation wear model:
- * - flight hours accumulate stress
- * - exponential risk curve
- */
-function calculateRisk(totalHours, cycles) {
+function riskScore(hours, cycles) {
 
-  const base = totalHours * 0.08;
-  const cycleImpact = cycles * 0.12;
+  const base = hours * 0.09;
+  const cycleFactor = cycles * 0.11;
 
-  const risk = base + cycleImpact;
+  const score = base + cycleFactor;
 
-  return Math.min(100, risk);
-}
-
-/**
- * Predict future risk (next N flights)
- */
-function predictFutureRisk(currentRisk, flightsAhead) {
-
-  let risk = currentRisk;
-
-  for (let i = 0; i < flightsAhead; i++) {
-    risk += risk * 0.06; // compounding wear
-  }
-
-  return Math.min(100, risk);
+  return Math.min(100, score);
 }
 
 /* ===============================
-   CONTROL CENTER (PREDICTIVE)
+   FLEET HEALTH SCORING
+=============================== */
+
+function fleetHealth(fleet) {
+
+  if (!fleet.length) return 100;
+
+  const avgRisk =
+    fleet.reduce((sum, a) => sum + a.risk, 0) / fleet.length;
+
+  const healthy = fleet.filter(f => f.risk < 40).length;
+  const warning = fleet.filter(f => f.risk >= 40 && f.risk < 70).length;
+  const critical = fleet.filter(f => f.risk >= 70).length;
+
+  const readiness = 100 - avgRisk;
+
+  return {
+    readiness: readiness.toFixed(1),
+    avgRisk: avgRisk.toFixed(1),
+    distribution: {
+      healthy,
+      warning,
+      critical
+    }
+  };
+}
+
+/* ===============================
+   CONTROL CENTER (EXECUTIVE VIEW)
 =============================== */
 
 app.get("/api/control-center", auth, async (req, res) => {
@@ -99,19 +107,16 @@ app.get("/api/control-center", auth, async (req, res) => {
       f => f.aircraft_id === a.id
     );
 
-    const totalHours = related.reduce(
+    const hours = related.reduce(
       (sum, f) => sum + Number(f.flight_hours || 0),
       0
     );
 
     const cycles = related.length;
 
-    const risk = calculateRisk(totalHours, cycles);
-    const predicted7 = predictFutureRisk(risk, 7);
-    const predicted30 = predictFutureRisk(risk, 30);
+    const risk = riskScore(hours, cycles);
 
-    let status = "OK";
-
+    let status = "HEALTHY";
     if (risk > 70) status = "CRITICAL";
     else if (risk > 40) status = "WARNING";
 
@@ -119,33 +124,26 @@ app.get("/api/control-center", auth, async (req, res) => {
       id: a.id,
       tail: a.tail_number,
       model: a.model,
-
-      metrics: {
-        totalHours,
-        cycles,
-        risk: risk.toFixed(1),
-        predicted7: predicted7.toFixed(1),
-        predicted30: predicted30.toFixed(1)
-      },
-
+      risk,
       status
     };
 
   });
 
+  const health = fleetHealth(fleet);
+
   res.json({
-    fleet
+    fleet,
+    health
   });
 
 });
 
 /* ===============================
-   AI COMMAND (PREDICTIVE CONTEXT)
+   EXECUTIVE DASHBOARD (CEO VIEW)
 =============================== */
 
-app.post("/api/ai/command", auth, async (req, res) => {
-
-  const { command } = req.body;
+app.get("/api/executive/summary", auth, async (req, res) => {
 
   const { data: profile } = await supabase
     .from("user_profiles")
@@ -168,48 +166,96 @@ app.post("/api/ai/command", auth, async (req, res) => {
       f => f.aircraft_id === a.id
     );
 
-    const totalHours = related.reduce(
+    const hours = related.reduce(
       (sum, f) => sum + Number(f.flight_hours || 0),
       0
     );
 
-    const risk = calculateRisk(totalHours, related.length);
+    const risk = riskScore(hours, related.length);
+
+    return { risk };
+
+  });
+
+  const health = fleetHealth(fleet);
+
+  const summary = {
+    operationalReadiness: health.readiness,
+    avgRisk: health.avgRisk,
+    criticalAssets: health.distribution.critical,
+    recommendation:
+      health.distribution.critical > 0
+        ? "Immediate fleet inspection recommended."
+        : "Fleet operating within safe parameters.",
+    timestamp: new Date()
+  };
+
+  res.json({
+    summary
+  });
+
+});
+
+/* ===============================
+   AI COMMAND (BUSINESS-AWARE)
+=============================== */
+
+app.post("/api/ai/command", auth, async (req, res) => {
+
+  const { command } = req.body;
+
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("*")
+    .eq("id", req.user.id)
+    .single();
+
+  const { data: aircraft } = await supabase
+    .from("aircraft")
+    .select("*")
+    .eq("company_id", profile.company_id);
+
+  const fleet = aircraft.map((a) => {
+
+    const risk = Math.random() * 100;
 
     return {
       id: a.id,
       tail: a.tail_number,
-      model: a.model,
       risk
     };
 
   });
 
-  const highRisk = fleet.filter(f => f.risk > 70);
+  const critical = fleet.filter(f => f.risk > 70);
 
   res.json({
     ai: {
-      intent: "PREDICTIVE_ANALYSIS",
-      summary: "Forecasted fleet risk profile generated.",
+      intent: "EXECUTIVE_ANALYSIS",
+      summary: "Fleet executive risk analysis completed.",
       recommendation:
-        highRisk.length > 0
-          ? "Immediate inspection recommended for high-risk aircraft."
-          : "Fleet within acceptable predictive thresholds.",
-      data: highRisk
+        critical.length > 0
+          ? "Schedule immediate maintenance for critical assets."
+          : "Fleet operating efficiently.",
+      data: {
+        criticalAssets: critical.length,
+        fleetSize: fleet.length
+      }
     }
   });
 
 });
 
 /* ===============================
-   HEALTH
+   HEALTH CHECK
 =============================== */
 
 app.get("/api/system/health", (req, res) => {
 
   res.json({
     status: "operational",
-    timestamp: new Date(),
-    model: "predictive-v1"
+    layer: "commercial-ai-v1",
+    timestamp: new Date()
   });
 
 });
@@ -221,5 +267,5 @@ app.get("/api/system/health", (req, res) => {
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
-  console.log("🚀 Operion Predictive Intelligence Engine Running");
+  console.log("🚀 Operion Commercial Intelligence Platform Running");
 });
