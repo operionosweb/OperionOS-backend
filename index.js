@@ -13,12 +13,12 @@ app.use(cors());
 app.use(express.json());
 
 /* ===============================
-   HEALTH
+   HEALTH CHECK
 =============================== */
 app.get("/api/test", (req, res) => {
   res.json({
     status: "ok",
-    message: "Operion running"
+    message: "Operion Control Center running"
   });
 });
 
@@ -27,6 +27,7 @@ app.get("/api/test", (req, res) => {
 =============================== */
 app.post("/api/flight", async (req, res) => {
   try {
+
     const { aircraftId, flightHours } = req.body;
 
     const flightResult = await query(
@@ -68,6 +69,7 @@ app.post("/api/flight", async (req, res) => {
 =============================== */
 app.get("/api/aircraft/:id/live-state", async (req, res) => {
   try {
+
     const { id } = req.params;
 
     const stateResult = await query(
@@ -106,16 +108,23 @@ app.get("/api/aircraft/:id/live-state", async (req, res) => {
 =============================== */
 app.get("/api/aircraft/:id/summary", async (req, res) => {
   try {
+
     const { id } = req.params;
 
     const aircraft = await query(
-      `SELECT id, tail_number, model FROM aircraft WHERE id = $1`,
+      `
+      SELECT id, tail_number, model
+      FROM aircraft
+      WHERE id = $1
+      `,
       [id]
     );
 
     const reserves = await query(
       `
-      SELECT category, SUM(accumulated_amount) AS total
+      SELECT
+        category,
+        SUM(accumulated_amount) AS total
       FROM maintenance_reserves
       WHERE aircraft_id = $1
       GROUP BY category
@@ -126,7 +135,9 @@ app.get("/api/aircraft/:id/summary", async (req, res) => {
     const cost = await query(
       `
       SELECT
-        SUM(increment) / NULLIF(SUM(flight_hours),0) AS cost_per_flight_hour
+        SUM(increment) /
+        NULLIF(SUM(flight_hours),0)
+        AS cost_per_flight_hour
       FROM accrual_audit_log
       WHERE aircraft_id = $1
       `,
@@ -137,7 +148,8 @@ app.get("/api/aircraft/:id/summary", async (req, res) => {
       aircraft: aircraft.rows[0],
       reserves: reserves.rows,
       metrics: {
-        costPerFlightHour: cost.rows[0]?.cost_per_flight_hour || 0
+        costPerFlightHour:
+          cost.rows[0]?.cost_per_flight_hour || 0
       }
     });
 
@@ -150,15 +162,17 @@ app.get("/api/aircraft/:id/summary", async (req, res) => {
 });
 
 /* ===============================
-   🚨 RISK FORECAST (ENHANCED)
+   🚨 AIRCRAFT PREDICTION
 =============================== */
 app.get("/api/aircraft/:id/prediction", async (req, res) => {
   try {
+
     const { id } = req.params;
 
     const flightResult = await query(
       `
-      SELECT COALESCE(SUM(flight_hours),0) AS hours
+      SELECT
+        COALESCE(SUM(flight_hours),0) AS hours
       FROM flight_usage
       WHERE aircraft_id = $1
       `,
@@ -177,6 +191,7 @@ app.get("/api/aircraft/:id/prediction", async (req, res) => {
     );
 
     const hours = Number(flightResult.rows[0].hours);
+
     const state = stateResult.rows[0];
 
     let riskScore = hours * 0.01;
@@ -187,15 +202,15 @@ app.get("/api/aircraft/:id/prediction", async (req, res) => {
 
     riskScore = Math.min(riskScore, 100);
 
+    let status = "LOW";
+
+    if (riskScore > 70) status = "HIGH";
+    else if (riskScore > 40) status = "MEDIUM";
+
     res.json({
       aircraftId: id,
       riskScore,
-      status:
-        riskScore > 70
-          ? "HIGH"
-          : riskScore > 40
-          ? "MEDIUM"
-          : "LOW"
+      status
     });
 
   } catch (err) {
@@ -207,65 +222,158 @@ app.get("/api/aircraft/:id/prediction", async (req, res) => {
 });
 
 /* ===============================
-   📈 FLEET FORECAST (NEW CORE FEATURE)
+   🌍 OPERION CONTROL CENTER
 =============================== */
-app.get("/api/fleet/forecast", async (req, res) => {
+app.get("/api/control-center", async (req, res) => {
   try {
 
-    // 1. Get all aircraft
-    const aircraftResult = await query(`SELECT id, model, tail_number FROM aircraft`);
+    // ===============================
+    // 1. Load all aircraft
+    // ===============================
+    const aircraftResult = await query(
+      `
+      SELECT id, tail_number, model
+      FROM aircraft
+      `
+    );
 
-    const fleet = [];
+    const aircraftList = aircraftResult.rows;
 
-    for (const aircraft of aircraftResult.rows) {
+    const dashboard = [];
 
-      // 2. Flight hours
-      const flightResult = await query(
+    let fleetRiskTotal = 0;
+    let fleetCostTotal = 0;
+
+    // ===============================
+    // 2. Build intelligence per aircraft
+    // ===============================
+    for (const aircraft of aircraftList) {
+
+      // Flight hours
+      const hoursResult = await query(
         `
-        SELECT COALESCE(SUM(flight_hours),0) AS hours
+        SELECT COALESCE(SUM(flight_hours),0) AS total
         FROM flight_usage
         WHERE aircraft_id = $1
         `,
         [aircraft.id]
       );
 
-      const hours = Number(flightResult.rows[0].hours);
+      const totalHours =
+        Number(hoursResult.rows[0].total);
 
-      // 3. Cost rate
+      // Cost rate
       const costResult = await query(
         `
         SELECT
-          SUM(increment) / NULLIF(SUM(flight_hours),0) AS cost_rate
+          SUM(increment) /
+          NULLIF(SUM(flight_hours),0)
+          AS cost_rate
         FROM accrual_audit_log
         WHERE aircraft_id = $1
         `,
         [aircraft.id]
       );
 
-      const costRate = Number(costResult.rows[0]?.cost_rate || 0);
+      const costRate =
+        Number(costResult.rows[0]?.cost_rate || 0);
 
-      // 4. Forecast (30 days simple projection)
-      const projectedCost = hours * costRate * 0.1;
+      // Live state
+      const stateResult = await query(
+        `
+        SELECT *
+        FROM aircraft_state
+        WHERE aircraft_id = $1
+        ORDER BY last_updated DESC
+        LIMIT 1
+        `,
+        [aircraft.id]
+      );
 
-      // 5. Simple risk model
-      let risk = hours * 0.01;
+      const state = stateResult.rows[0];
 
-      if (projectedCost > 5000) risk += 20;
+      // ===============================
+      // Risk model
+      // ===============================
+      let riskScore = totalHours * 0.01;
 
-      fleet.push({
+      if (state?.wind_speed > 25)
+        riskScore += 15;
+
+      if (state?.turbulence_index > 7)
+        riskScore += 20;
+
+      if (state?.phase === "landing")
+        riskScore += 5;
+
+      riskScore = Math.min(riskScore, 100);
+
+      // ===============================
+      // Forecast
+      // ===============================
+      const projected30DayCost =
+        totalHours * costRate * 0.1;
+
+      // ===============================
+      // Recommendation engine
+      // ===============================
+      let recommendation =
+        "Continue normal operations";
+
+      if (riskScore > 70) {
+        recommendation =
+          "Prioritize inspection immediately";
+      } else if (riskScore > 40) {
+        recommendation =
+          "Monitor maintenance closely";
+      }
+
+      dashboard.push({
         aircraft,
-        totalHours: hours,
-        costRate,
-        projected30DayCost: projectedCost,
-        riskScore: Math.min(risk, 100)
+        metrics: {
+          totalHours,
+          costRate,
+          projected30DayCost,
+          riskScore
+        },
+        liveState: state || null,
+        recommendation
       });
+
+      fleetRiskTotal += riskScore;
+      fleetCostTotal += projected30DayCost;
     }
 
-    // 6. Sort by risk
-    fleet.sort((a, b) => b.riskScore - a.riskScore);
+    // ===============================
+    // Fleet ranking
+    // ===============================
+    dashboard.sort(
+      (a, b) =>
+        b.metrics.riskScore -
+        a.metrics.riskScore
+    );
 
+    // ===============================
+    // Fleet health score
+    // ===============================
+    const fleetHealthScore =
+      dashboard.length > 0
+        ? Math.max(
+            0,
+            100 -
+              fleetRiskTotal / dashboard.length
+          )
+        : 100;
+
+    // ===============================
+    // RESPONSE
+    // ===============================
     res.json({
-      fleet
+      generatedAt: new Date(),
+      fleetHealthScore,
+      projectedFleet30DayCost:
+        fleetCostTotal,
+      aircraftRankings: dashboard
     });
 
   } catch (err) {
@@ -277,10 +385,12 @@ app.get("/api/fleet/forecast", async (req, res) => {
 });
 
 /* ===============================
-   START
+   START SERVER
 =============================== */
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("🚀 Operion forecasting engine running");
+  console.log(
+    `🚀 Operion Control Center running on port ${PORT}`
+  );
 });
