@@ -27,7 +27,8 @@ const supabase = createClient(
 
 async function auth(req, res, next) {
 
-  const token = req.headers.authorization?.replace("Bearer ", "");
+  const token =
+    req.headers.authorization?.replace("Bearer ", "");
 
   if (!token) {
     return res.status(401).json({
@@ -50,31 +51,7 @@ async function auth(req, res, next) {
 }
 
 /* ===============================
-   WEATHER RISK MODEL
-=============================== */
-
-function weatherImpact(weather) {
-
-  if (!weather) return 0;
-
-  let risk = 0;
-
-  const main = weather.weather?.[0]?.main || "";
-
-  if (main.includes("Thunderstorm")) risk += 25;
-  if (main.includes("Rain")) risk += 12;
-  if (main.includes("Snow")) risk += 18;
-
-  const wind = weather.wind?.speed || 0;
-
-  if (wind > 15) risk += 10;
-  if (wind > 25) risk += 20;
-
-  return risk;
-}
-
-/* ===============================
-   AIRCRAFT BASE RISK
+   CORE RISK MODEL
 =============================== */
 
 function aircraftRisk(hours, cycles) {
@@ -87,7 +64,32 @@ function aircraftRisk(hours, cycles) {
 }
 
 /* ===============================
-   FETCH WEATHER
+   WEATHER IMPACT
+=============================== */
+
+function weatherImpact(weather) {
+
+  if (!weather) return 0;
+
+  let risk = 0;
+
+  const main =
+    weather.weather?.[0]?.main || "";
+
+  if (main.includes("Thunderstorm")) risk += 25;
+  if (main.includes("Rain")) risk += 10;
+  if (main.includes("Snow")) risk += 18;
+
+  const wind =
+    weather.wind?.speed || 0;
+
+  if (wind > 15) risk += 10;
+
+  return risk;
+}
+
+/* ===============================
+   WEATHER API
 =============================== */
 
 async function fetchWeather(city) {
@@ -100,7 +102,8 @@ async function fetchWeather(city) {
     const url =
       `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}`;
 
-    const response = await axios.get(url);
+    const response =
+      await axios.get(url);
 
     return response.data;
 
@@ -110,6 +113,49 @@ async function fetchWeather(city) {
 
     return null;
   }
+}
+
+/* ===============================
+   MAINTENANCE ENGINE
+=============================== */
+
+function estimateMaintenance(risk) {
+
+  if (risk > 80) {
+
+    return {
+      type: "HEAVY_CHECK",
+      cost: 180000,
+      daysUntilDue: 7
+    };
+
+  }
+
+  if (risk > 60) {
+
+    return {
+      type: "ENGINE_INSPECTION",
+      cost: 75000,
+      daysUntilDue: 14
+    };
+
+  }
+
+  if (risk > 40) {
+
+    return {
+      type: "PREVENTIVE_CHECK",
+      cost: 25000,
+      daysUntilDue: 30
+    };
+
+  }
+
+  return {
+    type: "ROUTINE_MONITORING",
+    cost: 5000,
+    daysUntilDue: 90
+  };
 }
 
 /* ===============================
@@ -152,7 +198,8 @@ app.get("/api/control-center", auth, async (req, res) => {
         0
       );
 
-    const cycles = related.length;
+    const cycles =
+      related.length;
 
     const baseRisk =
       aircraftRisk(hours, cycles);
@@ -163,22 +210,14 @@ app.get("/api/control-center", auth, async (req, res) => {
     const weather =
       await fetchWeather(city);
 
-    const weatherRisk =
-      weatherImpact(weather);
-
     const totalRisk =
       Math.min(
         100,
-        baseRisk + weatherRisk
+        baseRisk + weatherImpact(weather)
       );
 
-    let status = "HEALTHY";
-
-    if (totalRisk > 70) {
-      status = "CRITICAL";
-    } else if (totalRisk > 40) {
-      status = "WARNING";
-    }
+    const maintenance =
+      estimateMaintenance(totalRisk);
 
     fleet.push({
 
@@ -188,15 +227,14 @@ app.get("/api/control-center", auth, async (req, res) => {
 
       risk: totalRisk,
 
+      maintenance,
+
       weather: {
         city,
         condition:
-          weather?.weather?.[0]?.main || "Unknown",
-        wind:
-          weather?.wind?.speed || 0
-      },
+          weather?.weather?.[0]?.main || "Unknown"
+      }
 
-      status
     });
 
   }
@@ -208,29 +246,111 @@ app.get("/api/control-center", auth, async (req, res) => {
 });
 
 /* ===============================
-   AI ALERTS
+   GENERATE MAINTENANCE PLAN
 =============================== */
 
-app.get("/api/alerts", auth, async (req, res) => {
+app.post(
+  "/api/maintenance/generate",
+  auth,
+  async (req, res) => {
 
-  const alerts = [
-    {
-      severity: "HIGH",
-      message:
-        "Storm conditions increasing fleet operational risk."
-    },
-    {
-      severity: "MEDIUM",
-      message:
-        "Crosswind exposure detected on active routes."
+    const { data: profile } =
+      await supabase
+        .from("user_profiles")
+        .select("*")
+        .eq("id", req.user.id)
+        .single();
+
+    const { data: aircraft } =
+      await supabase
+        .from("aircraft")
+        .select("*")
+        .eq("company_id", profile.company_id);
+
+    const schedule = [];
+
+    for (const a of aircraft) {
+
+      const risk =
+        Math.random() * 100;
+
+      const plan =
+        estimateMaintenance(risk);
+
+      const dueDate =
+        new Date();
+
+      dueDate.setDate(
+        dueDate.getDate() +
+        plan.daysUntilDue
+      );
+
+      const item = {
+
+        aircraft_id: a.id,
+        company_id: profile.company_id,
+
+        maintenance_type:
+          plan.type,
+
+        predicted_due_hours:
+          Math.floor(Math.random() * 500),
+
+        predicted_due_date:
+          dueDate,
+
+        estimated_cost:
+          plan.cost
+      };
+
+      await supabase
+        .from("maintenance_schedule")
+        .insert([item]);
+
+      schedule.push(item);
+
     }
-  ];
 
-  res.json({
-    alerts
-  });
+    res.json({
+      status: "success",
+      generated: schedule.length,
+      schedule
+    });
 
-});
+  }
+);
+
+/* ===============================
+   VIEW MAINTENANCE SCHEDULE
+=============================== */
+
+app.get(
+  "/api/maintenance/schedule",
+  auth,
+  async (req, res) => {
+
+    const { data: profile } =
+      await supabase
+        .from("user_profiles")
+        .select("*")
+        .eq("id", req.user.id)
+        .single();
+
+    const { data } =
+      await supabase
+        .from("maintenance_schedule")
+        .select("*")
+        .eq(
+          "company_id",
+          profile.company_id
+        );
+
+    res.json({
+      schedule: data
+    });
+
+  }
+);
 
 /* ===============================
    HEALTH
@@ -240,7 +360,8 @@ app.get("/api/system/health", (req, res) => {
 
   res.json({
     status: "operational",
-    layer: "weather-intelligence-v1",
+    layer:
+      "predictive-maintenance-v1",
     timestamp: new Date()
   });
 
@@ -256,7 +377,7 @@ const PORT =
 app.listen(PORT, () => {
 
   console.log(
-    "🚀 Operion Weather Intelligence Running"
+    "🚀 Operion Predictive Maintenance Platform Running"
   );
 
 });
