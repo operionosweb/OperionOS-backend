@@ -1,11 +1,14 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import axios from "axios";
+
 import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
 
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 
@@ -26,235 +29,218 @@ async function auth(req, res, next) {
 
   const token = req.headers.authorization?.replace("Bearer ", "");
 
-  if (!token) return res.status(401).json({ error: "Missing token" });
+  if (!token) {
+    return res.status(401).json({
+      error: "Missing token"
+    });
+  }
 
-  const { data, error } = await supabase.auth.getUser(token);
+  const { data, error } =
+    await supabase.auth.getUser(token);
 
   if (error || !data?.user) {
-    return res.status(401).json({ error: "Invalid token" });
+    return res.status(401).json({
+      error: "Invalid token"
+    });
   }
 
   req.user = data.user;
+
   next();
 }
 
 /* ===============================
-   CORE RISK ENGINE
+   WEATHER RISK MODEL
 =============================== */
 
-function riskScore(hours, cycles) {
+function weatherImpact(weather) {
 
-  const base = hours * 0.09;
-  const cycleFactor = cycles * 0.11;
+  if (!weather) return 0;
 
-  const score = base + cycleFactor;
+  let risk = 0;
+
+  const main = weather.weather?.[0]?.main || "";
+
+  if (main.includes("Thunderstorm")) risk += 25;
+  if (main.includes("Rain")) risk += 12;
+  if (main.includes("Snow")) risk += 18;
+
+  const wind = weather.wind?.speed || 0;
+
+  if (wind > 15) risk += 10;
+  if (wind > 25) risk += 20;
+
+  return risk;
+}
+
+/* ===============================
+   AIRCRAFT BASE RISK
+=============================== */
+
+function aircraftRisk(hours, cycles) {
+
+  const score =
+    hours * 0.08 +
+    cycles * 0.12;
 
   return Math.min(100, score);
 }
 
 /* ===============================
-   FLEET HEALTH SCORING
+   FETCH WEATHER
 =============================== */
 
-function fleetHealth(fleet) {
+async function fetchWeather(city) {
 
-  if (!fleet.length) return 100;
+  try {
 
-  const avgRisk =
-    fleet.reduce((sum, a) => sum + a.risk, 0) / fleet.length;
+    const apiKey =
+      process.env.OPENWEATHER_API_KEY;
 
-  const healthy = fleet.filter(f => f.risk < 40).length;
-  const warning = fleet.filter(f => f.risk >= 40 && f.risk < 70).length;
-  const critical = fleet.filter(f => f.risk >= 70).length;
+    const url =
+      `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}`;
 
-  const readiness = 100 - avgRisk;
+    const response = await axios.get(url);
 
-  return {
-    readiness: readiness.toFixed(1),
-    avgRisk: avgRisk.toFixed(1),
-    distribution: {
-      healthy,
-      warning,
-      critical
-    }
-  };
+    return response.data;
+
+  } catch (err) {
+
+    console.error(err.message);
+
+    return null;
+  }
 }
 
 /* ===============================
-   CONTROL CENTER (EXECUTIVE VIEW)
+   CONTROL CENTER
 =============================== */
 
 app.get("/api/control-center", auth, async (req, res) => {
 
-  const { data: profile } = await supabase
-    .from("user_profiles")
-    .select("*")
-    .eq("id", req.user.id)
-    .single();
+  const { data: profile } =
+    await supabase
+      .from("user_profiles")
+      .select("*")
+      .eq("id", req.user.id)
+      .single();
 
-  const { data: aircraft } = await supabase
-    .from("aircraft")
-    .select("*")
-    .eq("company_id", profile.company_id);
+  const { data: aircraft } =
+    await supabase
+      .from("aircraft")
+      .select("*")
+      .eq("company_id", profile.company_id);
 
-  const { data: flights } = await supabase
-    .from("flights")
-    .select("*");
+  const { data: flights } =
+    await supabase
+      .from("flights")
+      .select("*");
 
-  const fleet = aircraft.map((a) => {
+  const fleet = [];
 
-    const related = flights.filter(
-      f => f.aircraft_id === a.id
-    );
+  for (const a of aircraft) {
 
-    const hours = related.reduce(
-      (sum, f) => sum + Number(f.flight_hours || 0),
-      0
-    );
+    const related =
+      flights.filter(
+        f => f.aircraft_id === a.id
+      );
+
+    const hours =
+      related.reduce(
+        (sum, f) =>
+          sum + Number(f.flight_hours || 0),
+        0
+      );
 
     const cycles = related.length;
 
-    const risk = riskScore(hours, cycles);
+    const baseRisk =
+      aircraftRisk(hours, cycles);
+
+    const city =
+      related[0]?.destination || "London";
+
+    const weather =
+      await fetchWeather(city);
+
+    const weatherRisk =
+      weatherImpact(weather);
+
+    const totalRisk =
+      Math.min(
+        100,
+        baseRisk + weatherRisk
+      );
 
     let status = "HEALTHY";
-    if (risk > 70) status = "CRITICAL";
-    else if (risk > 40) status = "WARNING";
 
-    return {
+    if (totalRisk > 70) {
+      status = "CRITICAL";
+    } else if (totalRisk > 40) {
+      status = "WARNING";
+    }
+
+    fleet.push({
+
       id: a.id,
       tail: a.tail_number,
       model: a.model,
-      risk,
+
+      risk: totalRisk,
+
+      weather: {
+        city,
+        condition:
+          weather?.weather?.[0]?.main || "Unknown",
+        wind:
+          weather?.wind?.speed || 0
+      },
+
       status
-    };
+    });
 
-  });
-
-  const health = fleetHealth(fleet);
+  }
 
   res.json({
-    fleet,
-    health
+    fleet
   });
 
 });
 
 /* ===============================
-   EXECUTIVE DASHBOARD (CEO VIEW)
+   AI ALERTS
 =============================== */
 
-app.get("/api/executive/summary", auth, async (req, res) => {
+app.get("/api/alerts", auth, async (req, res) => {
 
-  const { data: profile } = await supabase
-    .from("user_profiles")
-    .select("*")
-    .eq("id", req.user.id)
-    .single();
-
-  const { data: aircraft } = await supabase
-    .from("aircraft")
-    .select("*")
-    .eq("company_id", profile.company_id);
-
-  const { data: flights } = await supabase
-    .from("flights")
-    .select("*");
-
-  const fleet = aircraft.map((a) => {
-
-    const related = flights.filter(
-      f => f.aircraft_id === a.id
-    );
-
-    const hours = related.reduce(
-      (sum, f) => sum + Number(f.flight_hours || 0),
-      0
-    );
-
-    const risk = riskScore(hours, related.length);
-
-    return { risk };
-
-  });
-
-  const health = fleetHealth(fleet);
-
-  const summary = {
-    operationalReadiness: health.readiness,
-    avgRisk: health.avgRisk,
-    criticalAssets: health.distribution.critical,
-    recommendation:
-      health.distribution.critical > 0
-        ? "Immediate fleet inspection recommended."
-        : "Fleet operating within safe parameters.",
-    timestamp: new Date()
-  };
-
-  res.json({
-    summary
-  });
-
-});
-
-/* ===============================
-   AI COMMAND (BUSINESS-AWARE)
-=============================== */
-
-app.post("/api/ai/command", auth, async (req, res) => {
-
-  const { command } = req.body;
-
-  const { data: profile } = await supabase
-    .from("user_profiles")
-    .select("*")
-    .eq("id", req.user.id)
-    .single();
-
-  const { data: aircraft } = await supabase
-    .from("aircraft")
-    .select("*")
-    .eq("company_id", profile.company_id);
-
-  const fleet = aircraft.map((a) => {
-
-    const risk = Math.random() * 100;
-
-    return {
-      id: a.id,
-      tail: a.tail_number,
-      risk
-    };
-
-  });
-
-  const critical = fleet.filter(f => f.risk > 70);
-
-  res.json({
-    ai: {
-      intent: "EXECUTIVE_ANALYSIS",
-      summary: "Fleet executive risk analysis completed.",
-      recommendation:
-        critical.length > 0
-          ? "Schedule immediate maintenance for critical assets."
-          : "Fleet operating efficiently.",
-      data: {
-        criticalAssets: critical.length,
-        fleetSize: fleet.length
-      }
+  const alerts = [
+    {
+      severity: "HIGH",
+      message:
+        "Storm conditions increasing fleet operational risk."
+    },
+    {
+      severity: "MEDIUM",
+      message:
+        "Crosswind exposure detected on active routes."
     }
+  ];
+
+  res.json({
+    alerts
   });
 
 });
 
 /* ===============================
-   HEALTH CHECK
+   HEALTH
 =============================== */
 
 app.get("/api/system/health", (req, res) => {
 
   res.json({
     status: "operational",
-    layer: "commercial-ai-v1",
+    layer: "weather-intelligence-v1",
     timestamp: new Date()
   });
 
@@ -264,8 +250,13 @@ app.get("/api/system/health", (req, res) => {
    START SERVER
 =============================== */
 
-const PORT = process.env.PORT || 4000;
+const PORT =
+  process.env.PORT || 4000;
 
 app.listen(PORT, () => {
-  console.log("🚀 Operion Commercial Intelligence Platform Running");
+
+  console.log(
+    "🚀 Operion Weather Intelligence Running"
+  );
+
 });
