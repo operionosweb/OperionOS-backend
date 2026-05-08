@@ -26,6 +26,71 @@ const supabase = createClient(
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 /* ===============================
+   IN-MEMORY RATE LIMITER
+=============================== */
+
+const rateMap = new Map();
+
+function rateLimiter(req, res, next) {
+
+  const ip = req.ip;
+  const now = Date.now();
+
+  const windowMs = 60 * 1000; // 1 minute
+  const limit = 60; // requests per minute
+
+  if (!rateMap.has(ip)) {
+    rateMap.set(ip, []);
+  }
+
+  const timestamps = rateMap.get(ip);
+
+  const filtered = timestamps.filter(t => now - t < windowMs);
+
+  filtered.push(now);
+
+  rateMap.set(ip, filtered);
+
+  if (filtered.length > limit) {
+    return res.status(429).json({
+      status: "error",
+      message: "Rate limit exceeded"
+    });
+  }
+
+  next();
+}
+
+app.use(rateLimiter);
+
+/* ===============================
+   REQUEST LOGGER
+=============================== */
+
+app.use(async (req, res, next) => {
+
+  const start = Date.now();
+
+  res.on("finish", async () => {
+
+    const duration = Date.now() - start;
+
+    await supabase.from("request_logs").insert([{
+      method: req.method,
+      path: req.path,
+      status: res.statusCode,
+      duration,
+      ip: req.ip,
+      created_at: new Date()
+    }]);
+
+  });
+
+  next();
+
+});
+
+/* ===============================
    AUTH
 =============================== */
 
@@ -33,7 +98,9 @@ async function auth(req, res, next) {
 
   const token = req.headers.authorization?.replace("Bearer ", "");
 
-  if (!token) return res.status(401).json({ error: "Missing token" });
+  if (!token) {
+    return res.status(401).json({ error: "Missing token" });
+  }
 
   const { data, error } = await supabase.auth.getUser(token);
 
@@ -46,18 +113,38 @@ async function auth(req, res, next) {
 }
 
 /* ===============================
-   ADMIN MIDDLEWARE
+   AI RATE CONTROL (PER USER)
 =============================== */
 
-function adminOnly(req, res, next) {
+const aiMap = new Map();
 
-  const adminEmails = [
-    "admin@operionos.com"
-  ];
+function aiLimiter(req, res, next) {
 
-  if (!adminEmails.includes(req.user.email)) {
-    return res.status(403).json({
-      error: "Admin access only"
+  const userId = req.user?.id;
+
+  if (!userId) return next();
+
+  const now = Date.now();
+
+  const windowMs = 60 * 1000;
+  const limit = 20;
+
+  if (!aiMap.has(userId)) {
+    aiMap.set(userId, []);
+  }
+
+  const arr = aiMap.get(userId);
+
+  const filtered = arr.filter(t => now - t < windowMs);
+
+  filtered.push(now);
+
+  aiMap.set(userId, filtered);
+
+  if (filtered.length > limit) {
+    return res.status(429).json({
+      status: "error",
+      message: "AI rate limit exceeded"
     });
   }
 
@@ -65,71 +152,15 @@ function adminOnly(req, res, next) {
 }
 
 /* ===============================
-   SYSTEM HEALTH
+   HEALTH
 =============================== */
 
 app.get("/api/system/health", (req, res) => {
 
   res.json({
-    status: "operational",
-    timestamp: new Date(),
-    services: {
-      api: "ok",
-      supabase: "ok",
-      stripe: "ok"
-    }
-  });
-
-});
-
-/* ===============================
-   ADMIN DASHBOARD
-=============================== */
-
-app.get("/api/admin/dashboard", auth, adminOnly, async (req, res) => {
-
-  const { data: companies } = await supabase
-    .from("companies")
-    .select("*");
-
-  const { data: profiles } = await supabase
-    .from("user_profiles")
-    .select("*");
-
-  const { data: flights } = await supabase
-    .from("flights")
-    .select("*");
-
-  const stats = {
-    companies: companies.length,
-    users: profiles.length,
-    flights: flights.length
-  };
-
-  res.json({
-    status: "success",
-    stats
-  });
-
-});
-
-/* ===============================
-   AUDIT LOG TABLE (AI DECISIONS)
-=============================== */
-
-app.post("/api/audit/log", auth, async (req, res) => {
-
-  const { action, metadata } = req.body;
-
-  await supabase.from("audit_logs").insert([{
-    user_id: req.user.id,
-    action,
-    metadata,
-    created_at: new Date()
-  }]);
-
-  res.json({
-    status: "logged"
+    status: "ok",
+    uptime: process.uptime(),
+    timestamp: new Date()
   });
 
 });
@@ -165,10 +196,10 @@ app.get("/api/control-center", auth, async (req, res) => {
 });
 
 /* ===============================
-   AI COMMAND + AUDIT TRACKING
+   AI COMMAND (PROTECTED + LIMITED)
 =============================== */
 
-app.post("/api/ai/command", auth, async (req, res) => {
+app.post("/api/ai/command", auth, aiLimiter, async (req, res) => {
 
   const { command } = req.body;
 
@@ -194,14 +225,10 @@ app.post("/api/ai/command", auth, async (req, res) => {
 
   const result = interpretCommand(command, fleet, actions);
 
-  /* AUDIT LOG */
   await supabase.from("audit_logs").insert([{
     user_id: req.user.id,
     action: "AI_COMMAND",
-    metadata: {
-      command,
-      result
-    }
+    metadata: { command }
   }]);
 
   res.json({
@@ -251,5 +278,5 @@ app.get("/api/ops/daily-report", auth, async (req, res) => {
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
-  console.log("🚀 Operion Enterprise Control System Running");
+  console.log("🚀 Operion Production-Hardened System Running");
 });
