@@ -9,7 +9,7 @@ export default function ControlCenter() {
   const API =
     "https://operionos-backend-1.onrender.com/api/control-center";
 
-  const positionStore = useRef({});
+  const stateRef = useRef({});
 
   const fetchData = async () => {
 
@@ -22,26 +22,46 @@ export default function ControlCenter() {
 
         const id = a.aircraft.id;
 
-        // base hub
+        // base positions
         const baseLat = 41.3851;
         const baseLng = 2.1734;
 
-        if (!positionStore.current[id]) {
-          positionStore.current[id] = {
-            lat: baseLat + i * 0.4,
-            lng: baseLng + i * 0.3
+        if (!stateRef.current[id]) {
+          stateRef.current[id] = {
+            lat: baseLat + i * 0.3,
+            lng: baseLng + i * 0.2
           };
         }
 
         // movement simulation
-        positionStore.current[id].lat += (Math.random() - 0.5) * 0.01;
-        positionStore.current[id].lng += (Math.random() - 0.5) * 0.01;
+        stateRef.current[id].lat += (Math.random() - 0.5) * 0.01;
+        stateRef.current[id].lng += (Math.random() - 0.5) * 0.01;
 
-        const from = { lat: 41.3851, lng: 2.1734 }; // BCN
-        const to = { lat: 40.4168, lng: -3.7038 };  // MAD
+        /* ===============================
+           WEATHER MODEL (SIMULATED)
+        =============================== */
 
-        // fake ETA model (future hook)
-        const etaMinutes = 45 + Math.round(a.metrics.riskScore / 10);
+        const windStrength = Math.random() * 100;
+
+        const stormZone =
+          windStrength > 70 ? "STORM" :
+          windStrength > 40 ? "WINDY" :
+          "CLEAR";
+
+        const weatherImpactFactor =
+          windStrength > 70 ? 1.25 :
+          windStrength > 40 ? 1.10 :
+          1.0;
+
+        /* ===============================
+           ETA MODEL WITH WEATHER IMPACT
+        =============================== */
+
+        const baseETA = 45;
+        const eta = Math.round(
+          baseETA * weatherImpactFactor +
+          a.metrics.riskScore / 10
+        );
 
         return {
           id,
@@ -50,14 +70,15 @@ export default function ControlCenter() {
           risk: a.metrics.riskScore,
           hours: a.metrics.totalHours,
 
-          position: positionStore.current[id],
+          position: stateRef.current[id],
 
-          route: {
-            from,
-            to
+          weather: {
+            wind: windStrength,
+            zone: stormZone,
+            impact: weatherImpactFactor
           },
 
-          eta: etaMinutes
+          eta
         };
 
       }) || [];
@@ -85,10 +106,20 @@ export default function ControlCenter() {
   if (loading) {
     return (
       <div style={styles.loading}>
-        Initializing Flight Route System...
+        Initializing Weather Intelligence Layer...
       </div>
     );
   }
+
+  /* ===============================
+     WEATHER OVERLAY ZONES
+  =============================== */
+
+  const weatherZones = [
+    { x: 60, y: 40, type: "STORM" },
+    { x: 30, y: 70, type: "WIND" },
+    { x: 80, y: 60, type: "CLEAN" }
+  ];
 
   return (
     <div style={styles.page}>
@@ -102,12 +133,12 @@ export default function ControlCenter() {
           </h1>
 
           <p style={styles.subtitle}>
-            Live Flight Route Intelligence System
+            Weather-Aware Flight Intelligence System
           </p>
         </div>
 
         <div style={styles.liveBadge}>
-          ● ROUTES ACTIVE
+          ● WEATHER ACTIVE
         </div>
 
       </div>
@@ -117,48 +148,44 @@ export default function ControlCenter() {
       </div>
 
       {/* ===============================
-          MAP WITH ROUTES
+          MAP WITH WEATHER LAYERS
       =============================== */}
 
       <div style={styles.mapContainer}>
 
         <h2 style={styles.section}>
-          Flight Routes (Origin → Destination)
+          Airspace & Weather Intelligence Layer
         </h2>
 
         <div style={styles.map}>
 
           <div style={styles.grid} />
 
-          {/* ROUTE LINES */}
-          {data.map((ac) => {
+          {/* WEATHER ZONES */}
+          {weatherZones.map((z, i) => {
 
-            const x1 = 50 + ac.route.from.lng;
-            const y1 = 50 + ac.route.from.lat;
-            const x2 = 50 + ac.route.to.lng;
-            const y2 = 50 + ac.route.to.lat;
+            let color = "rgba(34,197,94,0.15)";
+
+            if (z.type === "STORM")
+              color = "rgba(239,68,68,0.25)";
+            else if (z.type === "WIND")
+              color = "rgba(245,158,11,0.20)";
 
             return (
-              <svg
-                key={ac.id}
-                style={styles.svg}
-              >
-
-                <line
-                  x1={`${x1}%`}
-                  y1={`${y1}%`}
-                  x2={`${x2}%`}
-                  y2={`${y2}%`}
-                  stroke="rgba(255,255,255,0.15)"
-                  strokeWidth="2"
-                />
-
-              </svg>
+              <div
+                key={i}
+                style={{
+                  ...styles.weatherZone,
+                  top: `${z.y}%`,
+                  left: `${z.x}%`,
+                  background: color
+                }}
+              />
             );
 
           })}
 
-          {/* AIRCRAFT MARKERS */}
+          {/* AIRCRAFT */}
           {data.map((ac) => {
 
             let color = "#22c55e";
@@ -166,18 +193,16 @@ export default function ControlCenter() {
             if (ac.risk > 70) color = "#ef4444";
             else if (ac.risk > 40) color = "#f59e0b";
 
-            const pos = ac.position;
-
             return (
               <div
                 key={ac.id}
                 style={{
                   ...styles.marker,
-                  top: `${50 + pos.lat * 1.5}%`,
-                  left: `${50 + pos.lng * 1.5}%`,
+                  top: `${50 + ac.position.lat * 1.5}%`,
+                  left: `${50 + ac.position.lng * 1.5}%`,
                   background: color
                 }}
-                title={`${ac.tail} ETA ${ac.eta} min`}
+                title={`${ac.tail} | ETA ${ac.eta} min`}
               >
                 ✈
               </div>
@@ -196,7 +221,7 @@ export default function ControlCenter() {
       <div style={styles.tableContainer}>
 
         <h2 style={styles.section}>
-          Flight Intelligence Feed
+          Weather Impact Flight Feed
         </h2>
 
         <table style={styles.table}>
@@ -204,7 +229,7 @@ export default function ControlCenter() {
           <thead>
             <tr>
               <th>Aircraft</th>
-              <th>Route</th>
+              <th>Weather</th>
               <th>Risk</th>
               <th>ETA</th>
               <th>Status</th>
@@ -217,15 +242,17 @@ export default function ControlCenter() {
 
               let status = "STABLE";
 
-              if (ac.risk > 70) status = "CRITICAL";
-              else if (ac.risk > 40) status = "MONITOR";
+              if (ac.weather.zone === "STORM")
+                status = "DIVERSION RISK";
+              else if (ac.risk > 70)
+                status = "CRITICAL";
 
               return (
                 <tr key={ac.id}>
 
                   <td>{ac.tail}</td>
 
-                  <td>BCN → MAD</td>
+                  <td>{ac.weather.zone}</td>
 
                   <td>
                     <span style={{
@@ -298,7 +325,7 @@ const styles = {
   },
 
   liveBadge: {
-    background: "#a855f7",
+    background: "#06b6d4",
     color: "#081018",
     padding: "8px 14px",
     borderRadius: "999px",
@@ -332,10 +359,13 @@ const styles = {
     backgroundSize: "40px 40px"
   },
 
-  svg: {
+  weatherZone: {
     position: "absolute",
-    width: "100%",
-    height: "100%"
+    width: "160px",
+    height: "160px",
+    borderRadius: "50%",
+    transform: "translate(-50%, -50%)",
+    filter: "blur(6px)"
   },
 
   marker: {
