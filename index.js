@@ -3,16 +3,24 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import Stripe from "stripe";
+import http from "http";
+import { Server } from "socket.io";
 
 import { generateActions } from "./actionEngine.js";
 import { interpretCommand } from "./ai/commandEngine.js";
-import { generateDailyOpsReport } from "./ops/autonomousEngine.js";
 
 dotenv.config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*"
+  }
+});
 
 /* ===============================
    CORE SERVICES
@@ -26,71 +34,6 @@ const supabase = createClient(
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 /* ===============================
-   IN-MEMORY RATE LIMITER
-=============================== */
-
-const rateMap = new Map();
-
-function rateLimiter(req, res, next) {
-
-  const ip = req.ip;
-  const now = Date.now();
-
-  const windowMs = 60 * 1000; // 1 minute
-  const limit = 60; // requests per minute
-
-  if (!rateMap.has(ip)) {
-    rateMap.set(ip, []);
-  }
-
-  const timestamps = rateMap.get(ip);
-
-  const filtered = timestamps.filter(t => now - t < windowMs);
-
-  filtered.push(now);
-
-  rateMap.set(ip, filtered);
-
-  if (filtered.length > limit) {
-    return res.status(429).json({
-      status: "error",
-      message: "Rate limit exceeded"
-    });
-  }
-
-  next();
-}
-
-app.use(rateLimiter);
-
-/* ===============================
-   REQUEST LOGGER
-=============================== */
-
-app.use(async (req, res, next) => {
-
-  const start = Date.now();
-
-  res.on("finish", async () => {
-
-    const duration = Date.now() - start;
-
-    await supabase.from("request_logs").insert([{
-      method: req.method,
-      path: req.path,
-      status: res.statusCode,
-      duration,
-      ip: req.ip,
-      created_at: new Date()
-    }]);
-
-  });
-
-  next();
-
-});
-
-/* ===============================
    AUTH
 =============================== */
 
@@ -98,9 +41,7 @@ async function auth(req, res, next) {
 
   const token = req.headers.authorization?.replace("Bearer ", "");
 
-  if (!token) {
-    return res.status(401).json({ error: "Missing token" });
-  }
+  if (!token) return res.status(401).json({ error: "Missing token" });
 
   const { data, error } = await supabase.auth.getUser(token);
 
@@ -113,123 +54,85 @@ async function auth(req, res, next) {
 }
 
 /* ===============================
-   AI RATE CONTROL (PER USER)
+   REAL-TIME FLEET ENGINE
 =============================== */
 
-const aiMap = new Map();
+let fleetCache = [];
 
-function aiLimiter(req, res, next) {
+/**
+ * Simulates live aircraft telemetry updates
+ * (later replaced with real IoT / flight data feed)
+ */
+function updateFleet() {
 
-  const userId = req.user?.id;
+  fleetCache = fleetCache.map((a) => {
 
-  if (!userId) return next();
+    const drift = (Math.random() - 0.5) * 5;
 
-  const now = Date.now();
+    let failure = (a.failure || 20) + drift;
 
-  const windowMs = 60 * 1000;
-  const limit = 20;
+    if (failure < 0) failure = 0;
+    if (failure > 100) failure = 100;
 
-  if (!aiMap.has(userId)) {
-    aiMap.set(userId, []);
-  }
+    return {
+      ...a,
+      failure
+    };
 
-  const arr = aiMap.get(userId);
+  });
 
-  const filtered = arr.filter(t => now - t < windowMs);
-
-  filtered.push(now);
-
-  aiMap.set(userId, filtered);
-
-  if (filtered.length > limit) {
-    return res.status(429).json({
-      status: "error",
-      message: "AI rate limit exceeded"
-    });
-  }
-
-  next();
+  io.emit("fleet:update", fleetCache);
 }
 
 /* ===============================
-   HEALTH
+   INIT DEMO FLEET
 =============================== */
 
-app.get("/api/system/health", (req, res) => {
+function initFleet() {
 
-  res.json({
-    status: "ok",
-    uptime: process.uptime(),
-    timestamp: new Date()
-  });
+  fleetCache = [
+    { id: "1", tail: "OE-LA1", model: "A320", failure: 20 },
+    { id: "2", tail: "OE-LA2", model: "A320", failure: 35 },
+    { id: "3", tail: "OE-LB1", model: "B737", failure: 55 }
+  ];
+
+}
+
+/* ===============================
+   SOCKET CONNECTION
+=============================== */
+
+io.on("connection", (socket) => {
+
+  console.log("🔵 client connected");
+
+  socket.emit("fleet:init", fleetCache);
 
 });
 
 /* ===============================
-   CONTROL CENTER
+   CONTROL CENTER API (STATIC SNAPSHOT)
 =============================== */
 
 app.get("/api/control-center", auth, async (req, res) => {
 
-  const { data: profile } = await supabase
-    .from("user_profiles")
-    .select("*")
-    .eq("id", req.user.id)
-    .single();
-
-  const { data: aircraft } = await supabase
-    .from("aircraft")
-    .select("*")
-    .eq("company_id", profile.company_id);
-
-  const fleet = aircraft.map((a) => ({
-    id: a.id,
-    tail: a.tail_number,
-    model: a.model,
-    failure: Math.random() * 100
-  }));
-
   res.json({
-    fleet
+    fleet: fleetCache
   });
 
 });
 
 /* ===============================
-   AI COMMAND (PROTECTED + LIMITED)
+   AI COMMAND ENGINE
 =============================== */
 
-app.post("/api/ai/command", auth, aiLimiter, async (req, res) => {
+app.post("/api/ai/command", auth, async (req, res) => {
 
   const { command } = req.body;
 
-  const { data: profile } = await supabase
-    .from("user_profiles")
-    .select("*")
-    .eq("id", req.user.id)
-    .single();
+  const actions = generateActions(fleetCache);
 
-  const { data: aircraft } = await supabase
-    .from("aircraft")
-    .select("*")
-    .eq("company_id", profile.company_id);
-
-  const fleet = aircraft.map((a) => ({
-    id: a.id,
-    tail: a.tail_number,
-    model: a.model,
-    failure: Math.random() * 100
-  }));
-
-  const actions = generateActions(fleet);
-
-  const result = interpretCommand(command, fleet, actions);
-
-  await supabase.from("audit_logs").insert([{
-    user_id: req.user.id,
-    action: "AI_COMMAND",
-    metadata: { command }
-  }]);
+  const result = interpretCommand(command, fleetCache, actions);
 
   res.json({
     ai: result
@@ -238,38 +141,14 @@ app.post("/api/ai/command", auth, aiLimiter, async (req, res) => {
 });
 
 /* ===============================
-   OPS REPORT
+   START REAL-TIME LOOP
 =============================== */
 
-app.get("/api/ops/daily-report", auth, async (req, res) => {
+initFleet();
 
-  const { data: profile } = await supabase
-    .from("user_profiles")
-    .select("*")
-    .eq("id", req.user.id)
-    .single();
-
-  const { data: aircraft } = await supabase
-    .from("aircraft")
-    .select("*")
-    .eq("company_id", profile.company_id);
-
-  const fleet = aircraft.map((a) => ({
-    id: a.id,
-    tail: a.tail_number,
-    model: a.model,
-    failure: Math.random() * 100
-  }));
-
-  const actions = generateActions(fleet);
-
-  const report = generateDailyOpsReport(fleet, actions);
-
-  res.json({
-    report
-  });
-
-});
+setInterval(() => {
+  updateFleet();
+}, 3000); // every 3 seconds
 
 /* ===============================
    START SERVER
@@ -277,6 +156,6 @@ app.get("/api/ops/daily-report", auth, async (req, res) => {
 
 const PORT = process.env.PORT || 4000;
 
-app.listen(PORT, () => {
-  console.log("🚀 Operion Production-Hardened System Running");
+server.listen(PORT, () => {
+  console.log("🚀 Operion Real-Time Engine Running");
 });
