@@ -13,6 +13,8 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
+    "moment": "^2.30.1",
+    "react-big-calendar": "^1.19.4",
     "socket.io": "^4.8.1",
     "stripe": "^18.4.0"
   }
