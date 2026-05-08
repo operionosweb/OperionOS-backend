@@ -1,13 +1,8 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import { createClient } from "@supabase/supabase-js";
-import Stripe from "stripe";
-import http from "http";
-import { Server } from "socket.io";
 
-import { generateActions } from "./actionEngine.js";
-import { interpretCommand } from "./ai/commandEngine.js";
+import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
 
@@ -15,15 +10,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: "*"
-  }
-});
-
 /* ===============================
-   CORE SERVICES
+   SUPABASE
 =============================== */
 
 const supabase = createClient(
@@ -31,10 +19,8 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-
 /* ===============================
-   AUTH
+   AUTH (LIGHTWEIGHT)
 =============================== */
 
 async function auth(req, res, next) {
@@ -54,101 +40,179 @@ async function auth(req, res, next) {
 }
 
 /* ===============================
-   REAL-TIME FLEET ENGINE
+   PREDICTIVE ENGINE CORE
 =============================== */
-
-let fleetCache = [];
 
 /**
- * Simulates live aircraft telemetry updates
- * (later replaced with real IoT / flight data feed)
+ * Core aviation wear model:
+ * - flight hours accumulate stress
+ * - exponential risk curve
  */
-function updateFleet() {
+function calculateRisk(totalHours, cycles) {
 
-  fleetCache = fleetCache.map((a) => {
+  const base = totalHours * 0.08;
+  const cycleImpact = cycles * 0.12;
 
-    const drift = (Math.random() - 0.5) * 5;
+  const risk = base + cycleImpact;
 
-    let failure = (a.failure || 20) + drift;
+  return Math.min(100, risk);
+}
 
-    if (failure < 0) failure = 0;
-    if (failure > 100) failure = 100;
+/**
+ * Predict future risk (next N flights)
+ */
+function predictFutureRisk(currentRisk, flightsAhead) {
 
-    return {
-      ...a,
-      failure
-    };
+  let risk = currentRisk;
 
-  });
+  for (let i = 0; i < flightsAhead; i++) {
+    risk += risk * 0.06; // compounding wear
+  }
 
-  io.emit("fleet:update", fleetCache);
+  return Math.min(100, risk);
 }
 
 /* ===============================
-   INIT DEMO FLEET
-=============================== */
-
-function initFleet() {
-
-  fleetCache = [
-    { id: "1", tail: "OE-LA1", model: "A320", failure: 20 },
-    { id: "2", tail: "OE-LA2", model: "A320", failure: 35 },
-    { id: "3", tail: "OE-LB1", model: "B737", failure: 55 }
-  ];
-
-}
-
-/* ===============================
-   SOCKET CONNECTION
-=============================== */
-
-io.on("connection", (socket) => {
-
-  console.log("🔵 client connected");
-
-  socket.emit("fleet:init", fleetCache);
-
-});
-
-/* ===============================
-   CONTROL CENTER API (STATIC SNAPSHOT)
+   CONTROL CENTER (PREDICTIVE)
 =============================== */
 
 app.get("/api/control-center", auth, async (req, res) => {
 
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("*")
+    .eq("id", req.user.id)
+    .single();
+
+  const { data: aircraft } = await supabase
+    .from("aircraft")
+    .select("*")
+    .eq("company_id", profile.company_id);
+
+  const { data: flights } = await supabase
+    .from("flights")
+    .select("*");
+
+  const fleet = aircraft.map((a) => {
+
+    const related = flights.filter(
+      f => f.aircraft_id === a.id
+    );
+
+    const totalHours = related.reduce(
+      (sum, f) => sum + Number(f.flight_hours || 0),
+      0
+    );
+
+    const cycles = related.length;
+
+    const risk = calculateRisk(totalHours, cycles);
+    const predicted7 = predictFutureRisk(risk, 7);
+    const predicted30 = predictFutureRisk(risk, 30);
+
+    let status = "OK";
+
+    if (risk > 70) status = "CRITICAL";
+    else if (risk > 40) status = "WARNING";
+
+    return {
+      id: a.id,
+      tail: a.tail_number,
+      model: a.model,
+
+      metrics: {
+        totalHours,
+        cycles,
+        risk: risk.toFixed(1),
+        predicted7: predicted7.toFixed(1),
+        predicted30: predicted30.toFixed(1)
+      },
+
+      status
+    };
+
+  });
+
   res.json({
-    fleet: fleetCache
+    fleet
   });
 
 });
 
 /* ===============================
-   AI COMMAND ENGINE
+   AI COMMAND (PREDICTIVE CONTEXT)
 =============================== */
 
 app.post("/api/ai/command", auth, async (req, res) => {
 
   const { command } = req.body;
 
-  const actions = generateActions(fleetCache);
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("*")
+    .eq("id", req.user.id)
+    .single();
 
-  const result = interpretCommand(command, fleetCache, actions);
+  const { data: aircraft } = await supabase
+    .from("aircraft")
+    .select("*")
+    .eq("company_id", profile.company_id);
+
+  const { data: flights } = await supabase
+    .from("flights")
+    .select("*");
+
+  const fleet = aircraft.map((a) => {
+
+    const related = flights.filter(
+      f => f.aircraft_id === a.id
+    );
+
+    const totalHours = related.reduce(
+      (sum, f) => sum + Number(f.flight_hours || 0),
+      0
+    );
+
+    const risk = calculateRisk(totalHours, related.length);
+
+    return {
+      id: a.id,
+      tail: a.tail_number,
+      model: a.model,
+      risk
+    };
+
+  });
+
+  const highRisk = fleet.filter(f => f.risk > 70);
 
   res.json({
-    ai: result
+    ai: {
+      intent: "PREDICTIVE_ANALYSIS",
+      summary: "Forecasted fleet risk profile generated.",
+      recommendation:
+        highRisk.length > 0
+          ? "Immediate inspection recommended for high-risk aircraft."
+          : "Fleet within acceptable predictive thresholds.",
+      data: highRisk
+    }
   });
 
 });
 
 /* ===============================
-   START REAL-TIME LOOP
+   HEALTH
 =============================== */
 
-initFleet();
+app.get("/api/system/health", (req, res) => {
 
-setInterval(() => {
-  updateFleet();
-}, 3000); // every 3 seconds
+  res.json({
+    status: "operational",
+    timestamp: new Date(),
+    model: "predictive-v1"
+  });
+
+});
 
 /* ===============================
    START SERVER
@@ -156,6 +220,6 @@ setInterval(() => {
 
 const PORT = process.env.PORT || 4000;
 
-server.listen(PORT, () => {
-  console.log("🚀 Operion Real-Time Engine Running");
+app.listen(PORT, () => {
+  console.log("🚀 Operion Predictive Intelligence Engine Running");
 });
