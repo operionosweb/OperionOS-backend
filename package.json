@@ -1,20 +1,16 @@
 {
   "name": "operion-backend",
   "version": "1.0.0",
-  "description": "Operion Aviation Intelligence Backend",
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "node index.js"
-  },
-  "engines": {
-    "node": ">=18"
+    "start": "node index.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
+    "express": "^4.19.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "@supabase/supabase-js": "^2.45.0"
+    "@supabase/supabase-js": "^2.45.4",
+    "socket.io": "^4.7.5"
   }
 }
