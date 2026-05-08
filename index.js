@@ -13,7 +13,7 @@ app.use(cors());
 app.use(express.json());
 
 /* ===============================
-   SUPABASE CLIENT
+   SUPABASE
 =============================== */
 
 const supabase = createClient(
@@ -22,18 +22,24 @@ const supabase = createClient(
 );
 
 /* ===============================
+   SIMPLE MEMORY STORE (TEMP)
+=============================== */
+
+const sessions = {};
+
+/* ===============================
    HEALTH CHECK
 =============================== */
 
 app.get("/", (req, res) => {
   res.json({
     status: "ok",
-    message: "Operion Backend Running"
+    message: "Operion Chat Ops Backend Running"
   });
 });
 
 /* ===============================
-   CONTROL CENTER
+   CONTROL CENTER (UNCHANGED CORE)
 =============================== */
 
 app.get("/api/control-center", async (req, res) => {
@@ -50,11 +56,11 @@ app.get("/api/control-center", async (req, res) => {
 
     const aircraftRankings = aircraft.map((a) => {
 
-      const relatedFlights = flights.filter(
+      const related = flights.filter(
         (f) => f.aircraft_id === a.id
       );
 
-      const totalHours = relatedFlights.reduce(
+      const totalHours = related.reduce(
         (sum, f) => sum + Number(f.flight_hours || 0),
         0
       );
@@ -78,8 +84,6 @@ app.get("/api/control-center", async (req, res) => {
     });
 
   } catch (err) {
-
-    console.error(err);
 
     res.status(500).json({
       status: "error",
@@ -108,21 +112,17 @@ app.get("/api/actions", async (req, res) => {
 
     const enriched = aircraft.map((a) => {
 
-      const relatedFlights = flights.filter(
+      const related = flights.filter(
         (f) => f.aircraft_id === a.id
       );
 
-      const totalHours = relatedFlights.reduce(
+      const totalHours = related.reduce(
         (sum, f) => sum + Number(f.flight_hours || 0),
         0
       );
 
       const failure =
-        Math.min(
-          100,
-          (totalHours * 0.05) +
-          Math.random() * 30
-        );
+        Math.min(100, totalHours * 0.05 + Math.random() * 20);
 
       return {
         id: a.id,
@@ -142,8 +142,6 @@ app.get("/api/actions", async (req, res) => {
 
   } catch (err) {
 
-    console.error(err);
-
     res.status(500).json({
       status: "error",
       message: err.message
@@ -154,14 +152,28 @@ app.get("/api/actions", async (req, res) => {
 });
 
 /* ===============================
-   AI COMMAND ENGINE
+   🧠 CHAT OPS AI ENDPOINT (NEW)
 =============================== */
 
-app.post("/api/ai/command", async (req, res) => {
+app.post("/api/ai/chat", async (req, res) => {
 
   try {
 
-    const { command } = req.body;
+    const { sessionId = "default", message } = req.body;
+
+    /* ===============================
+       INIT SESSION MEMORY
+    =============================== */
+
+    if (!sessions[sessionId]) {
+      sessions[sessionId] = [];
+    }
+
+    const history = sessions[sessionId];
+
+    /* ===============================
+       FETCH FLEET DATA
+    =============================== */
 
     const { data: aircraft } = await supabase
       .from("aircraft")
@@ -183,11 +195,7 @@ app.post("/api/ai/command", async (req, res) => {
       );
 
       const failure =
-        Math.min(
-          100,
-          (totalHours * 0.08) +
-          Math.random() * 25
-        );
+        Math.min(100, totalHours * 0.08 + Math.random() * 25);
 
       return {
         id: a.id,
@@ -200,21 +208,44 @@ app.post("/api/ai/command", async (req, res) => {
 
     const actions = generateActions(fleet);
 
-    const result = interpretCommand(
-      command,
+    /* ===============================
+       AI RESPONSE (CORE)
+    =============================== */
+
+    const aiResponse = interpretCommand(
+      message,
       fleet,
       actions
     );
 
+    /* ===============================
+       SAVE MEMORY
+    =============================== */
+
+    history.push({
+      role: "user",
+      message
+    });
+
+    history.push({
+      role: "assistant",
+      response: aiResponse.summary
+    });
+
+    sessions[sessionId] = history.slice(-10); // keep last 10
+
+    /* ===============================
+       RESPONSE
+    =============================== */
+
     res.json({
       status: "success",
-      command,
-      ...result
+      sessionId,
+      memory: sessions[sessionId],
+      ai: aiResponse
     });
 
   } catch (err) {
-
-    console.error(err);
 
     res.status(500).json({
       status: "error",
@@ -232,5 +263,5 @@ app.post("/api/ai/command", async (req, res) => {
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
-  console.log(`Operion backend running on port ${PORT}`);
+  console.log(`Operion Chat Ops running on port ${PORT}`);
 });
