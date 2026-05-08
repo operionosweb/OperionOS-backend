@@ -1,10 +1,5 @@
 import React, { useState } from "react";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  "https://YOUR_PROJECT.supabase.co",
-  "YOUR_SUPABASE_ANON_KEY"
-);
+import { supabase } from "../lib/supabaseClient";
 
 export default function Auth() {
 
@@ -36,7 +31,7 @@ export default function Auth() {
       return;
     }
 
-    setMessage("Success! Redirecting...");
+    setMessage("Success");
 
     window.location.href = "/";
   }
@@ -44,9 +39,7 @@ export default function Auth() {
   return (
     <div style={{ padding: 40, maxWidth: 400 }}>
 
-      <h2>🧠 Operion Access</h2>
-
-      <p>{mode === "login" ? "Login" : "Create account"}</p>
+      <h2>🧠 Operion Login</h2>
 
       <input
         placeholder="Email"
@@ -67,15 +60,12 @@ export default function Auth() {
         {mode === "login" ? "Login" : "Sign Up"}
       </button>
 
-      <p style={{ marginTop: 10 }}>{message}</p>
+      <p>{message}</p>
 
-      <button
-        onClick={() =>
-          setMode(mode === "login" ? "signup" : "login")
-        }
-        style={{ marginTop: 10 }}
-      >
-        Switch to {mode === "login" ? "Signup" : "Login"}
+      <button onClick={() =>
+        setMode(mode === "login" ? "signup" : "login")
+      }>
+        Switch
       </button>
 
     </div>
