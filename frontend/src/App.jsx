@@ -1,5 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+
+import { AuthProvider } from "./context/AuthContext";
 
 import Auth from "./pages/Auth";
 import Onboarding from "./pages/Onboarding";
@@ -8,69 +10,24 @@ import Copilot from "./pages/Copilot";
 
 export default function App() {
 
-  const [loading, setLoading] = useState(true);
-  const [needsOnboarding, setNeedsOnboarding] = useState(false);
-
-  async function checkOnboarding() {
-
-    try {
-
-      const token = localStorage.getItem("sb-token");
-
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-
-      const res = await fetch(
-        "https://operionos-backend-1.onrender.com/api/onboarding/status",
-        {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
-      );
-
-      const json = await res.json();
-
-      setNeedsOnboarding(json.needsOnboarding);
-      setLoading(false);
-
-    } catch (err) {
-      console.error(err);
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    checkOnboarding();
-  }, []);
-
-  if (loading) {
-    return <div style={{ padding: 20 }}>Loading Operion...</div>;
-  }
-
   return (
-    <Router>
+    <AuthProvider>
 
-      <Routes>
+      <Router>
 
-        {/* AUTH */}
-        <Route path="/auth" element={<Auth />} />
+        <Routes>
 
-        {/* ONBOARDING FLOW */}
-        {needsOnboarding ? (
-          <Route path="*" element={<Onboarding />} />
-        ) : (
-          <>
-            <Route path="/" element={<ControlCenter />} />
-            <Route path="/control-center" element={<ControlCenter />} />
-            <Route path="/copilot" element={<Copilot />} />
-          </>
-        )}
+          <Route path="/auth" element={<Auth />} />
+          <Route path="/onboarding" element={<Onboarding />} />
 
-      </Routes>
+          <Route path="/" element={<ControlCenter />} />
+          <Route path="/control-center" element={<ControlCenter />} />
+          <Route path="/copilot" element={<Copilot />} />
 
-    </Router>
+        </Routes>
+
+      </Router>
+
+    </AuthProvider>
   );
 }
