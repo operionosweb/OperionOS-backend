@@ -15,7 +15,7 @@ app.use(cors());
 app.use(express.json());
 
 /* ===============================
-   SUPABASE (AUTH ENABLED)
+   SUPABASE CLIENT
 =============================== */
 
 const supabase = createClient(
@@ -27,14 +27,14 @@ const supabase = createClient(
    AUTH MIDDLEWARE
 =============================== */
 
-async function authMiddleware(req, res, next) {
+async function auth(req, res, next) {
 
   const token = req.headers.authorization?.replace("Bearer ", "");
 
   if (!token) {
     return res.status(401).json({
       status: "error",
-      message: "Missing auth token"
+      message: "Missing token"
     });
   }
 
@@ -58,35 +58,121 @@ async function authMiddleware(req, res, next) {
 app.get("/", (req, res) => {
   res.json({
     status: "ok",
-    message: "Operion SaaS Core Running"
+    message: "Operion SaaS Onboarding Core Running"
   });
 });
 
 /* ===============================
-   GET USER PROFILE
+   CHECK ONBOARDING STATUS
 =============================== */
 
-app.get("/api/me", authMiddleware, async (req, res) => {
-
-  res.json({
-    status: "success",
-    user: req.user
-  });
-
-});
-
-/* ===============================
-   CONTROL CENTER (TENANT SAFE)
-=============================== */
-
-app.get("/api/control-center", authMiddleware, async (req, res) => {
+app.get("/api/onboarding/status", auth, async (req, res) => {
 
   try {
+
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("*")
+      .eq("id", req.user.id)
+      .single();
+
+    if (!profile || !profile.company_id) {
+      return res.json({
+        needsOnboarding: true,
+        step: "CREATE_COMPANY"
+      });
+    }
+
+    res.json({
+      needsOnboarding: false,
+      step: "READY"
+    });
+
+  } catch (err) {
+
+    res.status(500).json({
+      status: "error",
+      message: err.message
+    });
+
+  }
+
+});
+
+/* ===============================
+   CREATE COMPANY + ASSIGN CEO
+=============================== */
+
+app.post("/api/onboarding/create-company", auth, async (req, res) => {
+
+  const { companyName } = req.body;
+
+  try {
+
+    /* 1. Create company */
+
+    const { data: company, error: companyError } = await supabase
+      .from("companies")
+      .insert([
+        {
+          name: companyName
+        }
+      ])
+      .select()
+      .single();
+
+    if (companyError) throw companyError;
+
+    /* 2. Create user profile */
+
+    const { error: profileError } = await supabase
+      .from("user_profiles")
+      .insert([
+        {
+          id: req.user.id,
+          company_id: company.id,
+          role: "CEO"
+        }
+      ]);
+
+    if (profileError) throw profileError;
+
+    res.json({
+      status: "success",
+      message: "Company created",
+      company,
+      role: "CEO"
+    });
+
+  } catch (err) {
+
+    res.status(500).json({
+      status: "error",
+      message: err.message
+    });
+
+  }
+
+});
+
+/* ===============================
+   CONTROL CENTER (COMPANY SAFE)
+=============================== */
+
+app.get("/api/control-center", auth, async (req, res) => {
+
+  try {
+
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("*")
+      .eq("id", req.user.id)
+      .single();
 
     const { data: aircraft } = await supabase
       .from("aircraft")
       .select("*")
-      .eq("owner_id", req.user.id); // tenant isolation
+      .eq("company_id", profile.company_id);
 
     const { data: flights } = await supabase
       .from("flights")
@@ -132,19 +218,25 @@ app.get("/api/control-center", authMiddleware, async (req, res) => {
 });
 
 /* ===============================
-   AI COMMAND (SECURE)
+   AI COMMAND ENGINE
 =============================== */
 
-app.post("/api/ai/command", authMiddleware, async (req, res) => {
+app.post("/api/ai/command", auth, async (req, res) => {
+
+  const { command } = req.body;
 
   try {
 
-    const { command } = req.body;
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("*")
+      .eq("id", req.user.id)
+      .single();
 
     const { data: aircraft } = await supabase
       .from("aircraft")
       .select("*")
-      .eq("owner_id", req.user.id);
+      .eq("company_id", profile.company_id);
 
     const { data: flights } = await supabase
       .from("flights")
@@ -194,17 +286,23 @@ app.post("/api/ai/command", authMiddleware, async (req, res) => {
 });
 
 /* ===============================
-   OPS REPORT (SECURE)
+   OPS REPORT
 =============================== */
 
-app.get("/api/ops/daily-report", authMiddleware, async (req, res) => {
+app.get("/api/ops/daily-report", auth, async (req, res) => {
 
   try {
+
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("*")
+      .eq("id", req.user.id)
+      .single();
 
     const { data: aircraft } = await supabase
       .from("aircraft")
       .select("*")
-      .eq("owner_id", req.user.id);
+      .eq("company_id", profile.company_id);
 
     const { data: flights } = await supabase
       .from("flights")
@@ -260,5 +358,5 @@ app.get("/api/ops/daily-report", authMiddleware, async (req, res) => {
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
-  console.log(`🚀 Operion SaaS Core running on port ${PORT}`);
+  console.log("🚀 Operion Onboarding Core Running");
 });
