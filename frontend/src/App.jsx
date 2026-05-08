@@ -1,33 +1,70 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 
-import { AuthProvider } from "./context/AuthContext";
+import {
+  BrowserRouter,
+  Routes,
+  Route
+} from "react-router-dom";
 
-import Auth from "./pages/Auth";
-import Onboarding from "./pages/Onboarding";
+/* ===============================
+   PAGES
+=============================== */
+
+import Home from "./pages/Home";
+import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
 import ControlCenter from "./pages/ControlCenter";
-import Copilot from "./pages/Copilot";
+import OperationsCenter from "./pages/OperationsCenter";
+
+/* ===============================
+   APP
+=============================== */
 
 export default function App() {
 
   return (
-    <AuthProvider>
 
-      <Router>
+    <BrowserRouter>
 
-        <Routes>
+      <Routes>
 
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/onboarding" element={<Onboarding />} />
+        {/* ===============================
+            PUBLIC
+        =============================== */}
 
-          <Route path="/" element={<ControlCenter />} />
-          <Route path="/control-center" element={<ControlCenter />} />
-          <Route path="/copilot" element={<Copilot />} />
+        <Route
+          path="/"
+          element={<Home />}
+        />
 
-        </Routes>
+        <Route
+          path="/login"
+          element={<Login />}
+        />
 
-      </Router>
+        {/* ===============================
+            CORE PLATFORM
+        =============================== */}
 
-    </AuthProvider>
+        <Route
+          path="/dashboard"
+          element={<Dashboard />}
+        />
+
+        <Route
+          path="/control-center"
+          element={<ControlCenter />}
+        />
+
+        <Route
+          path="/operations-center"
+          element={<OperationsCenter />}
+        />
+
+      </Routes>
+
+    </BrowserRouter>
+
   );
+
 }
