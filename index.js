@@ -2,8 +2,6 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
-import http from "http";
-import { Server } from "socket.io";
 
 import { generateActions } from "./actionEngine.js";
 import { interpretCommand } from "./ai/commandEngine.js";
@@ -12,23 +10,12 @@ import { generateDailyOpsReport } from "./ops/autonomousEngine.js";
 dotenv.config();
 
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 
 /* ===============================
-   HTTP + WEBSOCKET SERVER
-=============================== */
-
-const server = http.createServer(app);
-
-const io = new Server(server, {
-  cors: {
-    origin: "*"
-  }
-});
-
-/* ===============================
-   SUPABASE
+   SUPABASE (AUTH ENABLED)
 =============================== */
 
 const supabase = createClient(
@@ -37,179 +24,234 @@ const supabase = createClient(
 );
 
 /* ===============================
-   WEBSOCKET CONNECTION
+   AUTH MIDDLEWARE
 =============================== */
 
-io.on("connection", (socket) => {
+async function authMiddleware(req, res, next) {
 
-  console.log("🔵 Client connected:", socket.id);
+  const token = req.headers.authorization?.replace("Bearer ", "");
 
-  socket.on("disconnect", () => {
-    console.log("🔴 Client disconnected:", socket.id);
-  });
-
-});
-
-/* ===============================
-   BROADCAST HELPER
-=============================== */
-
-function broadcast(event, data) {
-  io.emit(event, data);
-}
-
-/* ===============================
-   FLEET BUILDER
-=============================== */
-
-async function buildFleet() {
-
-  const { data: aircraft } = await supabase
-    .from("aircraft")
-    .select("*");
-
-  const { data: flights } = await supabase
-    .from("flights")
-    .select("*");
-
-  return aircraft.map((a) => {
-
-    const related = flights.filter(
-      f => f.aircraft_id === a.id
-    );
-
-    const totalHours = related.reduce(
-      (sum, f) => sum + Number(f.flight_hours || 0),
-      0
-    );
-
-    const failure =
-      Math.min(100, totalHours * 0.08 + Math.random() * 25);
-
-    return {
-      id: a.id,
-      tail: a.tail_number,
-      model: a.model,
-      failure
-    };
-
-  });
-}
-
-/* ===============================
-   CONTROL CENTER
-=============================== */
-
-app.get("/api/control-center", async (req, res) => {
-
-  const fleet = await buildFleet();
-
-  res.json({
-    status: "success",
-    fleet
-  });
-
-});
-
-/* ===============================
-   AI COMMAND
-=============================== */
-
-app.post("/api/ai/command", async (req, res) => {
-
-  const { command } = req.body;
-
-  const fleet = await buildFleet();
-
-  const actions = generateActions(fleet);
-
-  const result = interpretCommand(command, fleet, actions);
-
-  res.json({
-    status: "success",
-    ai: result
-  });
-
-});
-
-/* ===============================
-   OPS REPORT
-=============================== */
-
-app.get("/api/ops/daily-report", async (req, res) => {
-
-  const fleet = await buildFleet();
-
-  const actions = generateActions(fleet);
-
-  const report = generateDailyOpsReport(fleet, actions);
-
-  res.json({
-    status: "success",
-    report
-  });
-
-});
-
-/* ===============================
-   🧠 LIVE OPS ENGINE (NEW CORE)
-=============================== */
-
-async function liveOpsLoop() {
-
-  const fleet = await buildFleet();
-
-  const actions = generateActions(fleet);
-
-  const report = generateDailyOpsReport(fleet, actions);
-
-  /* ===============================
-     DETECT CRITICAL EVENTS
-  =============================== */
-
-  const critical = report.riskGroups.critical.length;
-  const high = report.riskGroups.high.length;
-
-  const event = {
-    timestamp: new Date().toISOString(),
-    mode:
-      critical > 0
-        ? "EMERGENCY"
-        : high > 3
-        ? "ELEVATED"
-        : "NORMAL",
-    metrics: report.metrics,
-    criticalCount: critical,
-    highCount: high
-  };
-
-  /* ===============================
-     BROADCAST REAL-TIME UPDATE
-  =============================== */
-
-  broadcast("ops_update", event);
-
-  if (critical > 0) {
-    broadcast("alert", {
-      level: "CRITICAL",
-      message: "Critical aircraft detected — immediate action required"
+  if (!token) {
+    return res.status(401).json({
+      status: "error",
+      message: "Missing auth token"
     });
   }
 
-  if (high > 3) {
-    broadcast("alert", {
-      level: "WARNING",
-      message: "Fleet risk elevated"
+  const { data, error } = await supabase.auth.getUser(token);
+
+  if (error || !data?.user) {
+    return res.status(401).json({
+      status: "error",
+      message: "Invalid token"
     });
   }
 
+  req.user = data.user;
+  next();
 }
 
 /* ===============================
-   START LIVE LOOP
+   HEALTH CHECK
 =============================== */
 
-setInterval(liveOpsLoop, 10000); // every 10 seconds
+app.get("/", (req, res) => {
+  res.json({
+    status: "ok",
+    message: "Operion SaaS Core Running"
+  });
+});
+
+/* ===============================
+   GET USER PROFILE
+=============================== */
+
+app.get("/api/me", authMiddleware, async (req, res) => {
+
+  res.json({
+    status: "success",
+    user: req.user
+  });
+
+});
+
+/* ===============================
+   CONTROL CENTER (TENANT SAFE)
+=============================== */
+
+app.get("/api/control-center", authMiddleware, async (req, res) => {
+
+  try {
+
+    const { data: aircraft } = await supabase
+      .from("aircraft")
+      .select("*")
+      .eq("owner_id", req.user.id); // tenant isolation
+
+    const { data: flights } = await supabase
+      .from("flights")
+      .select("*");
+
+    const fleet = aircraft.map((a) => {
+
+      const related = flights.filter(
+        f => f.aircraft_id === a.id
+      );
+
+      const totalHours = related.reduce(
+        (sum, f) => sum + Number(f.flight_hours || 0),
+        0
+      );
+
+      const failure =
+        Math.min(100, totalHours * 0.08 + Math.random() * 25);
+
+      return {
+        id: a.id,
+        tail: a.tail_number,
+        model: a.model,
+        failure
+      };
+
+    });
+
+    res.json({
+      status: "success",
+      fleet
+    });
+
+  } catch (err) {
+
+    res.status(500).json({
+      status: "error",
+      message: err.message
+    });
+
+  }
+
+});
+
+/* ===============================
+   AI COMMAND (SECURE)
+=============================== */
+
+app.post("/api/ai/command", authMiddleware, async (req, res) => {
+
+  try {
+
+    const { command } = req.body;
+
+    const { data: aircraft } = await supabase
+      .from("aircraft")
+      .select("*")
+      .eq("owner_id", req.user.id);
+
+    const { data: flights } = await supabase
+      .from("flights")
+      .select("*");
+
+    const fleet = aircraft.map((a) => {
+
+      const related = flights.filter(
+        f => f.aircraft_id === a.id
+      );
+
+      const totalHours = related.reduce(
+        (sum, f) => sum + Number(f.flight_hours || 0),
+        0
+      );
+
+      const failure =
+        Math.min(100, totalHours * 0.08 + Math.random() * 25);
+
+      return {
+        id: a.id,
+        tail: a.tail_number,
+        model: a.model,
+        failure
+      };
+
+    });
+
+    const actions = generateActions(fleet);
+
+    const result = interpretCommand(command, fleet, actions);
+
+    res.json({
+      status: "success",
+      ai: result
+    });
+
+  } catch (err) {
+
+    res.status(500).json({
+      status: "error",
+      message: err.message
+    });
+
+  }
+
+});
+
+/* ===============================
+   OPS REPORT (SECURE)
+=============================== */
+
+app.get("/api/ops/daily-report", authMiddleware, async (req, res) => {
+
+  try {
+
+    const { data: aircraft } = await supabase
+      .from("aircraft")
+      .select("*")
+      .eq("owner_id", req.user.id);
+
+    const { data: flights } = await supabase
+      .from("flights")
+      .select("*");
+
+    const fleet = aircraft.map((a) => {
+
+      const related = flights.filter(
+        f => f.aircraft_id === a.id
+      );
+
+      const totalHours = related.reduce(
+        (sum, f) => sum + Number(f.flight_hours || 0),
+        0
+      );
+
+      const failure =
+        Math.min(100, totalHours * 0.08 + Math.random() * 25);
+
+      return {
+        id: a.id,
+        tail: a.tail_number,
+        model: a.model,
+        failure
+      };
+
+    });
+
+    const actions = generateActions(fleet);
+
+    const report = generateDailyOpsReport(fleet, actions);
+
+    res.json({
+      status: "success",
+      report
+    });
+
+  } catch (err) {
+
+    res.status(500).json({
+      status: "error",
+      message: err.message
+    });
+
+  }
+
+});
 
 /* ===============================
    START SERVER
@@ -217,6 +259,6 @@ setInterval(liveOpsLoop, 10000); // every 10 seconds
 
 const PORT = process.env.PORT || 4000;
 
-server.listen(PORT, () => {
-  console.log(`🚀 Operion Live Ops running on port ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`🚀 Operion SaaS Core running on port ${PORT}`);
 });
