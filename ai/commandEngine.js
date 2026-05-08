@@ -1,85 +1,129 @@
 export function interpretCommand(input, fleetData, actions) {
 
-  const cmd = input.toLowerCase();
+  const text = (input || "").toLowerCase().trim();
 
-  let result = {
-    type: "UNKNOWN",
-    response: "",
+  /* ===============================
+     RESPONSE TEMPLATE
+  =============================== */
+
+  const response = {
+    intent: "UNKNOWN",
+    summary: "",
+    recommendation: "",
     data: []
   };
 
   /* ===============================
-     HIGH RISK REQUESTS
+     1. CRITICAL INTENT
   =============================== */
 
-  if (cmd.includes("critical")) {
+  const criticalKeywords = [
+    "critical",
+    "urgent",
+    "immediate",
+    "danger",
+    "stop"
+  ];
 
-    const filtered = fleetData.filter(f => f.failure > 75);
+  if (criticalKeywords.some(k => text.includes(k))) {
 
-    return {
-      type: "FILTER",
-      response: "Showing critical aircraft requiring immediate action.",
-      data: filtered
-    };
-  }
-
-  /* ===============================
-     MAINTENANCE REQUESTS
-  =============================== */
-
-  if (cmd.includes("maintenance")) {
-
-    const maintenanceActions = actions.filter(
-      a => a.type.includes("MAINTENANCE")
+    const critical = fleetData.filter(
+      f => f.failure > 75
     );
 
     return {
-      type: "ACTIONS",
-      response: "Showing all maintenance-related actions.",
-      data: maintenanceActions
+      intent: "CRITICAL_ANALYSIS",
+      summary: "Identified aircraft requiring immediate operational attention.",
+      recommendation: "Ground high-risk aircraft and trigger inspection workflow.",
+      data: critical
     };
   }
 
   /* ===============================
-     RISK ANALYSIS
+     2. MAINTENANCE INTENT
   =============================== */
 
-  if (cmd.includes("risk") || cmd.includes("high risk")) {
+  const maintenanceKeywords = [
+    "maintenance",
+    "repair",
+    "service",
+    "fix"
+  ];
 
-    const filtered = fleetData.filter(f => f.failure > 50);
+  if (maintenanceKeywords.some(k => text.includes(k))) {
+
+    const maintenance = actions.filter(
+      a => a.type?.includes("MAINTENANCE")
+    );
 
     return {
-      type: "FILTER",
-      response: "Showing high-risk fleet segments.",
-      data: filtered
+      intent: "MAINTENANCE_PLANNING",
+      summary: "Generated maintenance-related operational tasks.",
+      recommendation: "Schedule preventive maintenance based on risk thresholds.",
+      data: maintenance
     };
   }
 
   /* ===============================
-     SUMMARY COMMAND
+     3. RISK INTENT
   =============================== */
 
-  if (cmd.includes("summary")) {
+  const riskKeywords = [
+    "risk",
+    "danger",
+    "unsafe",
+    "warning"
+  ];
+
+  if (riskKeywords.some(k => text.includes(k))) {
+
+    const risk = fleetData.filter(
+      f => f.failure > 50
+    );
+
+    return {
+      intent: "RISK_ANALYSIS",
+      summary: "Analyzing medium-to-high risk aircraft across fleet.",
+      recommendation: "Monitor elevated-risk aircraft and adjust flight schedules if needed.",
+      data: risk
+    };
+  }
+
+  /* ===============================
+     4. SUMMARY INTENT
+  =============================== */
+
+  if (text.includes("summary") || text.includes("overview")) {
 
     const avg =
-      fleetData.reduce((a, b) => a + b.failure, 0) /
+      fleetData.reduce((sum, f) => sum + f.failure, 0) /
       (fleetData.length || 1);
 
     return {
-      type: "SUMMARY",
-      response: `Fleet average failure probability is ${Math.round(avg)}%.`,
-      data: []
+      intent: "FLEET_SUMMARY",
+      summary: "Generated fleet-wide operational overview.",
+      recommendation:
+        avg > 60
+          ? "Fleet risk elevated — review maintenance capacity."
+          : "Fleet operating within acceptable thresholds.",
+      data: [
+        {
+          metric: "average_failure",
+          value: Math.round(avg)
+        }
+      ]
     };
   }
 
   /* ===============================
-     DEFAULT
+     5. DEFAULT INTENT (ASSISTANT MODE)
   =============================== */
 
   return {
-    type: "HELP",
-    response:
-      "Try commands: critical, maintenance, risk, summary",
+    intent: "ASSISTANT_HELP",
+    summary: "I can analyze fleet status, risk, or maintenance needs.",
+    recommendation:
+      "Try: 'show critical aircraft', 'maintenance status', or 'fleet summary'.",
     data: []
   };
 }
