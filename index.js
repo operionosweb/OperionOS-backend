@@ -26,16 +26,14 @@ const supabase = createClient(
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 /* ===============================
-   AUTH MIDDLEWARE
+   AUTH
 =============================== */
 
 async function auth(req, res, next) {
 
   const token = req.headers.authorization?.replace("Bearer ", "");
 
-  if (!token) {
-    return res.status(401).json({ error: "Missing token" });
-  }
+  if (!token) return res.status(401).json({ error: "Missing token" });
 
   const { data, error } = await supabase.auth.getUser(token);
 
@@ -48,51 +46,99 @@ async function auth(req, res, next) {
 }
 
 /* ===============================
-   PLAN CHECK MIDDLEWARE
+   ADMIN MIDDLEWARE
 =============================== */
 
-async function planLimit(req, res, next) {
+function adminOnly(req, res, next) {
 
-  const { data: profile } = await supabase
-    .from("user_profiles")
-    .select("*")
-    .eq("id", req.user.id)
-    .single();
+  const adminEmails = [
+    "admin@operionos.com"
+  ];
 
-  const companyId = profile.company_id;
-
-  const { data: company } = await supabase
-    .from("companies")
-    .select("*")
-    .eq("id", companyId)
-    .single();
-
-  if (!company.plan) {
-    company.plan = "FREE";
+  if (!adminEmails.includes(req.user.email)) {
+    return res.status(403).json({
+      error: "Admin access only"
+    });
   }
-
-  req.company = company;
 
   next();
 }
 
 /* ===============================
-   BILLING PLANS
+   SYSTEM HEALTH
 =============================== */
 
-const PLANS = {
-  FREE: { limit: 50 },
-  PRO: { limit: 1000 },
-  ENTERPRISE: { limit: -1 }
-};
+app.get("/api/system/health", (req, res) => {
+
+  res.json({
+    status: "operational",
+    timestamp: new Date(),
+    services: {
+      api: "ok",
+      supabase: "ok",
+      stripe: "ok"
+    }
+  });
+
+});
 
 /* ===============================
-   CONTROL CENTER (WITH LIMIT CHECK)
+   ADMIN DASHBOARD
 =============================== */
 
-app.get("/api/control-center", auth, planLimit, async (req, res) => {
+app.get("/api/admin/dashboard", auth, adminOnly, async (req, res) => {
 
-  const limit = PLANS[req.company.plan]?.limit || 50;
+  const { data: companies } = await supabase
+    .from("companies")
+    .select("*");
+
+  const { data: profiles } = await supabase
+    .from("user_profiles")
+    .select("*");
+
+  const { data: flights } = await supabase
+    .from("flights")
+    .select("*");
+
+  const stats = {
+    companies: companies.length,
+    users: profiles.length,
+    flights: flights.length
+  };
+
+  res.json({
+    status: "success",
+    stats
+  });
+
+});
+
+/* ===============================
+   AUDIT LOG TABLE (AI DECISIONS)
+=============================== */
+
+app.post("/api/audit/log", auth, async (req, res) => {
+
+  const { action, metadata } = req.body;
+
+  await supabase.from("audit_logs").insert([{
+    user_id: req.user.id,
+    action,
+    metadata,
+    created_at: new Date()
+  }]);
+
+  res.json({
+    status: "logged"
+  });
+
+});
+
+/* ===============================
+   CONTROL CENTER
+=============================== */
+
+app.get("/api/control-center", auth, async (req, res) => {
 
   const { data: profile } = await supabase
     .from("user_profiles")
@@ -105,69 +151,24 @@ app.get("/api/control-center", auth, planLimit, async (req, res) => {
     .select("*")
     .eq("company_id", profile.company_id);
 
-  const fleet = aircraft.map((a) => {
-
-    const failure = Math.random() * 100;
-
-    return {
-      id: a.id,
-      tail: a.tail_number,
-      model: a.model,
-      failure
-    };
-
-  });
+  const fleet = aircraft.map((a) => ({
+    id: a.id,
+    tail: a.tail_number,
+    model: a.model,
+    failure: Math.random() * 100
+  }));
 
   res.json({
-    status: "success",
-    plan: req.company.plan,
-    limit,
     fleet
   });
 
 });
 
 /* ===============================
-   STRIPE CHECKOUT
+   AI COMMAND + AUDIT TRACKING
 =============================== */
 
-app.post("/api/billing/create-checkout", auth, async (req, res) => {
-
-  const { plan } = req.body;
-
-  const session = await stripe.checkout.sessions.create({
-    payment_method_types: ["card"],
-    mode: "subscription",
-    line_items: [
-      {
-        price_data: {
-          currency: "usd",
-          product_data: {
-            name: `Operion ${plan} Plan`
-          },
-          unit_amount: plan === "PRO" ? 4900 : 9900,
-          recurring: {
-            interval: "month"
-          }
-        },
-        quantity: 1
-      }
-    ],
-    success_url: "https://operionos.com/control-center",
-    cancel_url: "https://operionos.com/control-center"
-  });
-
-  res.json({
-    url: session.url
-  });
-
-});
-
-/* ===============================
-   AI COMMAND (PLAN-AWARE)
-=============================== */
-
-app.post("/api/ai/command", auth, planLimit, async (req, res) => {
+app.post("/api/ai/command", auth, async (req, res) => {
 
   const { command } = req.body;
 
@@ -193,8 +194,17 @@ app.post("/api/ai/command", auth, planLimit, async (req, res) => {
 
   const result = interpretCommand(command, fleet, actions);
 
+  /* AUDIT LOG */
+  await supabase.from("audit_logs").insert([{
+    user_id: req.user.id,
+    action: "AI_COMMAND",
+    metadata: {
+      command,
+      result
+    }
+  }]);
+
   res.json({
-    plan: req.company.plan,
     ai: result
   });
 
@@ -204,7 +214,7 @@ app.post("/api/ai/command", auth, planLimit, async (req, res) => {
    OPS REPORT
 =============================== */
 
-app.get("/api/ops/daily-report", auth, planLimit, async (req, res) => {
+app.get("/api/ops/daily-report", auth, async (req, res) => {
 
   const { data: profile } = await supabase
     .from("user_profiles")
@@ -229,7 +239,6 @@ app.get("/api/ops/daily-report", auth, planLimit, async (req, res) => {
   const report = generateDailyOpsReport(fleet, actions);
 
   res.json({
-    plan: req.company.plan,
     report
   });
 
@@ -242,5 +251,5 @@ app.get("/api/ops/daily-report", auth, planLimit, async (req, res) => {
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
-  console.log("🚀 Operion Billing Core Running");
+  console.log("🚀 Operion Enterprise Control System Running");
 });
