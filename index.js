@@ -15,7 +15,7 @@ app.use(cors());
 app.use(express.json());
 
 /* ===============================
-   SUPABASE CLIENT
+   SUPABASE
 =============================== */
 
 const supabase = createClient(
@@ -24,64 +24,70 @@ const supabase = createClient(
 );
 
 /* ===============================
-   HEALTH CHECK
+   HEALTH
 =============================== */
 
 app.get("/", (req, res) => {
   res.json({
     status: "ok",
-    message: "Operion Autonomous Ops Backend Running"
+    message: "Operion AI Copilot vFinal Running"
   });
 });
 
 /* ===============================
-   CONTROL CENTER API
+   SHARED FLEET BUILDER
+=============================== */
+
+async function buildFleet() {
+
+  const { data: aircraft } = await supabase
+    .from("aircraft")
+    .select("*");
+
+  const { data: flights } = await supabase
+    .from("flights")
+    .select("*");
+
+  return aircraft.map((a) => {
+
+    const related = flights.filter(
+      f => f.aircraft_id === a.id
+    );
+
+    const totalHours = related.reduce(
+      (sum, f) => sum + Number(f.flight_hours || 0),
+      0
+    );
+
+    const failure =
+      Math.min(100, totalHours * 0.08 + Math.random() * 25);
+
+    return {
+      id: a.id,
+      tail: a.tail_number,
+      model: a.model,
+      failure
+    };
+
+  });
+}
+
+/* ===============================
+   CONTROL CENTER
 =============================== */
 
 app.get("/api/control-center", async (req, res) => {
 
   try {
 
-    const { data: aircraft } = await supabase
-      .from("aircraft")
-      .select("*");
-
-    const { data: flights } = await supabase
-      .from("flights")
-      .select("*");
-
-    const aircraftRankings = aircraft.map((a) => {
-
-      const related = flights.filter(
-        (f) => f.aircraft_id === a.id
-      );
-
-      const totalHours = related.reduce(
-        (sum, f) => sum + Number(f.flight_hours || 0),
-        0
-      );
-
-      const riskScore =
-        totalHours * 0.04 + Math.random() * 10;
-
-      return {
-        aircraft: a,
-        metrics: {
-          totalHours,
-          riskScore
-        }
-      };
-
-    });
+    const fleet = await buildFleet();
 
     res.json({
       status: "success",
-      aircraftRankings
+      fleet
     });
 
   } catch (err) {
-
-    console.error(err);
 
     res.status(500).json({
       status: "error",
@@ -93,66 +99,7 @@ app.get("/api/control-center", async (req, res) => {
 });
 
 /* ===============================
-   ACTION ENGINE API
-=============================== */
-
-app.get("/api/actions", async (req, res) => {
-
-  try {
-
-    const { data: aircraft } = await supabase
-      .from("aircraft")
-      .select("*");
-
-    const { data: flights } = await supabase
-      .from("flights")
-      .select("*");
-
-    const enriched = aircraft.map((a) => {
-
-      const related = flights.filter(
-        (f) => f.aircraft_id === a.id
-      );
-
-      const totalHours = related.reduce(
-        (sum, f) => sum + Number(f.flight_hours || 0),
-        0
-      );
-
-      const failure =
-        Math.min(100, totalHours * 0.05 + Math.random() * 20);
-
-      return {
-        id: a.id,
-        tail: a.tail_number,
-        failure
-      };
-
-    });
-
-    const actions = generateActions(enriched);
-
-    res.json({
-      status: "success",
-      totalActions: actions.length,
-      actions
-    });
-
-  } catch (err) {
-
-    console.error(err);
-
-    res.status(500).json({
-      status: "error",
-      message: err.message
-    });
-
-  }
-
-});
-
-/* ===============================
-   AI COMMAND ENDPOINT
+   AI COMMAND
 =============================== */
 
 app.post("/api/ai/command", async (req, res) => {
@@ -161,36 +108,7 @@ app.post("/api/ai/command", async (req, res) => {
 
     const { command } = req.body;
 
-    const { data: aircraft } = await supabase
-      .from("aircraft")
-      .select("*");
-
-    const { data: flights } = await supabase
-      .from("flights")
-      .select("*");
-
-    const fleet = aircraft.map((a) => {
-
-      const related = flights.filter(
-        f => f.aircraft_id === a.id
-      );
-
-      const totalHours = related.reduce(
-        (sum, f) => sum + Number(f.flight_hours || 0),
-        0
-      );
-
-      const failure =
-        Math.min(100, totalHours * 0.08 + Math.random() * 25);
-
-      return {
-        id: a.id,
-        tail: a.tail_number,
-        model: a.model,
-        failure
-      };
-
-    });
+    const fleet = await buildFleet();
 
     const actions = generateActions(fleet);
 
@@ -203,12 +121,10 @@ app.post("/api/ai/command", async (req, res) => {
     res.json({
       status: "success",
       command,
-      ...result
+      ai: result
     });
 
   } catch (err) {
-
-    console.error(err);
 
     res.status(500).json({
       status: "error",
@@ -220,45 +136,42 @@ app.post("/api/ai/command", async (req, res) => {
 });
 
 /* ===============================
-   AUTONOMOUS OPS REPORT (NEW)
+   ACTION ENGINE
+=============================== */
+
+app.get("/api/actions", async (req, res) => {
+
+  try {
+
+    const fleet = await buildFleet();
+
+    const actions = generateActions(fleet);
+
+    res.json({
+      status: "success",
+      actions
+    });
+
+  } catch (err) {
+
+    res.status(500).json({
+      status: "error",
+      message: err.message
+    });
+
+  }
+
+});
+
+/* ===============================
+   AUTONOMOUS OPS REPORT
 =============================== */
 
 app.get("/api/ops/daily-report", async (req, res) => {
 
   try {
 
-    const { data: aircraft } = await supabase
-      .from("aircraft")
-      .select("*");
-
-    const { data: flights } = await supabase
-      .from("flights")
-      .select("*");
-
-    const fleet = aircraft.map((a) => {
-
-      const related = flights.filter(
-        f => f.aircraft_id === a.id
-      );
-
-      const totalHours = related.reduce(
-        (sum, f) => sum + Number(f.flight_hours || 0),
-        0
-      );
-
-      const failure =
-        Math.min(100, totalHours * 0.08 + Math.random() * 25);
-
-      return {
-        id: a.id,
-        tail: a.tail_number,
-        model: a.model,
-        failure
-      };
-
-    });
-
-    const { generateActions } = await import("./actionEngine.js");
+    const fleet = await buildFleet();
 
     const actions = generateActions(fleet);
 
@@ -271,7 +184,78 @@ app.get("/api/ops/daily-report", async (req, res) => {
 
   } catch (err) {
 
-    console.error(err);
+    res.status(500).json({
+      status: "error",
+      message: err.message
+    });
+
+  }
+
+});
+
+/* ===============================
+   🧠 AI COPILOT (NEW CORE ENDPOINT)
+=============================== */
+
+app.get("/api/ai/copilot", async (req, res) => {
+
+  try {
+
+    const fleet = await buildFleet();
+
+    const actions = generateActions(fleet);
+
+    const report = generateDailyOpsReport(fleet, actions);
+
+    /* ===============================
+       DECISION ENGINE
+    =============================== */
+
+    const critical = report.riskGroups.critical.length;
+    const high = report.riskGroups.high.length;
+
+    let priorityDecision = "";
+    let operationalMode = "";
+
+    if (critical > 0) {
+      operationalMode = "EMERGENCY";
+      priorityDecision =
+        "Ground critical aircraft immediately and trigger inspections.";
+    } else if (high > 3) {
+      operationalMode = "ELEVATED";
+      priorityDecision =
+        "Increase maintenance scheduling and reduce flight load.";
+    } else {
+      operationalMode = "NORMAL";
+      priorityDecision =
+        "Continue standard operations with monitoring.";
+    }
+
+    /* ===============================
+       FINAL COPILOT OUTPUT
+    =============================== */
+
+    res.json({
+      status: "success",
+
+      copilot: {
+        operationalMode,
+
+        executiveSummary: report.executiveSummary,
+
+        priorityDecision,
+
+        metrics: report.metrics,
+
+        topRisks: report.riskGroups.critical.slice(0, 5),
+
+        predictedFailures: report.predictedFailures.slice(0, 5),
+
+        recommendedActions: report.priorityActions.slice(0, 5)
+      }
+    });
+
+  } catch (err) {
 
     res.status(500).json({
       status: "error",
@@ -289,5 +273,5 @@ app.get("/api/ops/daily-report", async (req, res) => {
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
-  console.log(`Operion Autonomous Ops running on port ${PORT}`);
+  console.log(`Operion AI Copilot running on port ${PORT}`);
 });
