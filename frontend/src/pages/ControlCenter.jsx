@@ -4,41 +4,54 @@ export default function ControlCenter() {
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [error, setError] = useState(null);
 
   const API =
     "https://operionos-backend-1.onrender.com/api/control-center";
 
+  const fetchData = async () => {
+    try {
+      const res = await fetch(API);
+      const json = await res.json();
+
+      setData(json);
+      setLastUpdated(new Date());
+      setError(null);
+      setLoading(false);
+
+    } catch (err) {
+      setError("Failed to fetch live data");
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
 
-    fetch(API)
-      .then((res) => res.json())
-      .then((result) => {
-        setData(result);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error("Control Center error:", err);
-        setLoading(false);
-      });
+    // Initial load
+    fetchData();
+
+    // LIVE MODE: refresh every 20 seconds
+    const interval = setInterval(() => {
+      fetchData();
+    }, 20000);
+
+    return () => clearInterval(interval);
 
   }, []);
 
   if (loading) {
     return (
-      <div style={styles.loadingContainer}>
-        <div style={styles.loadingText}>
-          Loading Operion Control Center...
-        </div>
+      <div style={styles.loading}>
+        Loading Operion Live Control Center...
       </div>
     );
   }
 
-  if (!data) {
+  if (error) {
     return (
-      <div style={styles.loadingContainer}>
-        <div style={styles.errorText}>
-          Failed to load Control Center
-        </div>
+      <div style={styles.loading}>
+        {error}
       </div>
     );
   }
@@ -55,154 +68,143 @@ export default function ControlCenter() {
           </h1>
 
           <p style={styles.subtitle}>
-            Aviation Operational Intelligence Platform
+            Live Aviation Operations Intelligence
           </p>
         </div>
 
-        <div style={styles.statusBox}>
-          LIVE SYSTEM
+        <div style={styles.liveBadge}>
+          ● LIVE
         </div>
 
       </div>
 
-      {/* TOP METRICS */}
+      {/* LAST UPDATED */}
+      <div style={styles.updated}>
+        Last updated:{" "}
+        {lastUpdated?.toLocaleTimeString()}
+      </div>
+
+      {/* ALERT STRIP */}
+      {data?.aircraftRankings?.some(
+        a => a.metrics.riskScore > 70
+      ) && (
+        <div style={styles.alert}>
+          ⚠ HIGH RISK AIRCRAFT DETECTED
+        </div>
+      )}
+
+      {/* METRICS */}
       <div style={styles.metricsGrid}>
 
-        {/* Fleet Health */}
-        <div style={styles.metricCard}>
-
-          <div style={styles.metricLabel}>
-            Fleet Health Score
+        <div style={styles.card}>
+          <div style={styles.label}>
+            Fleet Health
           </div>
 
-          <div style={styles.metricValue}>
+          <div style={styles.value}>
             {Math.round(
-              data.fleetHealthScore || 0
+              data?.fleetHealthScore || 0
             )}
           </div>
-
         </div>
 
-        {/* Fleet Cost */}
-        <div style={styles.metricCard}>
-
-          <div style={styles.metricLabel}>
-            Projected 30 Day Cost
+        <div style={styles.card}>
+          <div style={styles.label}>
+            30 Day Cost
           </div>
 
-          <div style={styles.metricValue}>
+          <div style={styles.value}>
             €
             {Math.round(
-              data.projectedFleet30DayCost || 0
+              data?.projectedFleet30DayCost || 0
             ).toLocaleString()}
           </div>
-
         </div>
 
-        {/* Aircraft Count */}
-        <div style={styles.metricCard}>
-
-          <div style={styles.metricLabel}>
-            Total Aircraft
+        <div style={styles.card}>
+          <div style={styles.label}>
+            Aircraft
           </div>
 
-          <div style={styles.metricValue}>
-            {data.aircraftRankings?.length || 0}
+          <div style={styles.value}>
+            {data?.aircraftRankings?.length || 0}
           </div>
-
         </div>
 
       </div>
 
-      {/* AIRCRAFT TABLE */}
+      {/* TABLE */}
       <div style={styles.tableContainer}>
 
-        <div style={styles.sectionHeader}>
-          Aircraft Risk Rankings
-        </div>
+        <h2 style={styles.section}>
+          Fleet Risk Ranking (Live)
+        </h2>
 
         <table style={styles.table}>
 
           <thead>
-
-            <tr style={styles.tableHeaderRow}>
-
-              <th style={styles.th}>Tail Number</th>
-
-              <th style={styles.th}>Aircraft</th>
-
-              <th style={styles.th}>Risk Score</th>
-
-              <th style={styles.th}>Flight Hours</th>
-
-              <th style={styles.th}>30 Day Forecast</th>
-
-              <th style={styles.th}>Recommendation</th>
-
+            <tr>
+              <th>Tail</th>
+              <th>Model</th>
+              <th>Risk</th>
+              <th>Hours</th>
+              <th>Forecast</th>
+              <th>Status</th>
             </tr>
-
           </thead>
 
           <tbody>
 
-            {data.aircraftRankings?.map(
-              (item, index) => {
+            {data?.aircraftRankings?.map(
+              (a, i) => {
 
                 const risk =
-                  item.metrics?.riskScore || 0;
+                  a.metrics.riskScore;
 
-                let riskColor = "#22c55e";
+                let color = "#22c55e";
+                let status = "OK";
 
                 if (risk > 70) {
-                  riskColor = "#ef4444";
+                  color = "#ef4444";
+                  status = "CRITICAL";
                 } else if (risk > 40) {
-                  riskColor = "#f59e0b";
+                  color = "#f59e0b";
+                  status = "WATCH";
                 }
 
                 return (
-                  <tr
-                    key={index}
-                    style={styles.tableRow}
-                  >
+                  <tr key={i}>
 
-                    <td style={styles.td}>
-                      {item.aircraft?.tail_number}
-                    </td>
+                    <td>{a.aircraft.tail_number}</td>
 
-                    <td style={styles.td}>
-                      {item.aircraft?.model}
-                    </td>
+                    <td>{a.aircraft.model}</td>
 
-                    <td style={styles.td}>
-
+                    <td>
                       <span
                         style={{
-                          ...styles.riskBadge,
-                          background: riskColor
+                          ...styles.badge,
+                          background: color
                         }}
                       >
                         {Math.round(risk)}
                       </span>
-
                     </td>
 
-                    <td style={styles.td}>
+                    <td>
                       {Math.round(
-                        item.metrics?.totalHours || 0
+                        a.metrics.totalHours
                       )}
                     </td>
 
-                    <td style={styles.td}>
+                    <td>
                       €
                       {Math.round(
-                        item.metrics
-                          ?.projected30DayCost || 0
+                        a.metrics
+                          .projected30DayCost
                       ).toLocaleString()}
                     </td>
 
-                    <td style={styles.td}>
-                      {item.recommendation}
-                    </td>
+                    <td>{status}</td>
 
                   </tr>
                 );
@@ -215,116 +217,103 @@ export default function ControlCenter() {
 
       </div>
 
-      {/* FOOTER */}
-      <div style={styles.footer}>
-        Operion OS • Aviation Intelligence Platform
-      </div>
-
     </div>
   );
 }
 
-/* =========================================
+/* ===============================
    STYLES
-========================================= */
+=============================== */
 
 const styles = {
 
   page: {
     minHeight: "100vh",
     background: "#081018",
-    color: "#ffffff",
+    color: "white",
     padding: "40px",
-    fontFamily:
-      "Inter, Arial, Helvetica, sans-serif"
+    fontFamily: "Arial"
   },
 
-  loadingContainer: {
+  loading: {
     minHeight: "100vh",
     background: "#081018",
+    color: "white",
     display: "flex",
     alignItems: "center",
     justifyContent: "center"
   },
 
-  loadingText: {
-    color: "#ffffff",
-    fontSize: "24px"
-  },
-
-  errorText: {
-    color: "#ef4444",
-    fontSize: "24px"
-  },
-
   header: {
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "40px",
-    flexWrap: "wrap",
-    gap: "20px"
+    alignItems: "center"
   },
 
   title: {
-    fontSize: "42px",
-    fontWeight: "700",
+    fontSize: "40px",
     margin: 0
   },
 
   subtitle: {
-    color: "#94a3b8",
-    marginTop: "10px",
-    fontSize: "16px"
+    color: "#94a3b8"
   },
 
-  statusBox: {
+  liveBadge: {
     background: "#22c55e",
     color: "#081018",
-    padding: "10px 18px",
+    padding: "8px 14px",
     borderRadius: "999px",
-    fontWeight: "700",
+    fontWeight: "bold"
+  },
+
+  updated: {
+    marginTop: "10px",
+    color: "#94a3b8",
     fontSize: "14px"
+  },
+
+  alert: {
+    marginTop: "20px",
+    padding: "12px",
+    background: "#ef4444",
+    borderRadius: "10px",
+    fontWeight: "bold"
   },
 
   metricsGrid: {
     display: "grid",
     gridTemplateColumns:
-      "repeat(auto-fit, minmax(260px, 1fr))",
+      "repeat(auto-fit, minmax(200px, 1fr))",
     gap: "20px",
-    marginBottom: "40px"
+    marginTop: "30px"
   },
 
-  metricCard: {
+  card: {
     background: "#111827",
-    borderRadius: "18px",
-    padding: "28px",
-    border: "1px solid #1f2937"
+    padding: "20px",
+    borderRadius: "16px"
   },
 
-  metricLabel: {
-    color: "#94a3b8",
-    marginBottom: "14px",
-    fontSize: "15px"
+  label: {
+    color: "#94a3b8"
   },
 
-  metricValue: {
-    fontSize: "38px",
-    fontWeight: "700"
+  value: {
+    fontSize: "32px",
+    marginTop: "10px",
+    fontWeight: "bold"
   },
 
   tableContainer: {
+    marginTop: "40px",
     background: "#111827",
-    borderRadius: "20px",
-    padding: "24px",
-    overflowX: "auto",
-    border: "1px solid #1f2937"
+    padding: "20px",
+    borderRadius: "16px"
   },
 
-  sectionHeader: {
-    fontSize: "22px",
-    fontWeight: "700",
-    marginBottom: "24px"
+  section: {
+    marginBottom: "20px"
   },
 
   table: {
@@ -332,42 +321,11 @@ const styles = {
     borderCollapse: "collapse"
   },
 
-  tableHeaderRow: {
-    background: "#1f2937"
-  },
-
-  th: {
-    textAlign: "left",
-    padding: "16px",
-    fontSize: "14px",
-    color: "#cbd5e1"
-  },
-
-  td: {
-    padding: "16px",
-    borderBottom: "1px solid #1f2937",
-    fontSize: "14px"
-  },
-
-  tableRow: {
-    transition: "0.2s"
-  },
-
-  riskBadge: {
-    padding: "6px 14px",
+  badge: {
+    padding: "6px 12px",
     borderRadius: "999px",
-    color: "#ffffff",
-    fontWeight: "700",
-    display: "inline-block",
-    minWidth: "50px",
-    textAlign: "center"
-  },
-
-  footer: {
-    marginTop: "40px",
-    color: "#64748b",
-    textAlign: "center",
-    fontSize: "14px"
+    color: "white",
+    fontWeight: "bold"
   }
 
 };
