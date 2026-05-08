@@ -2,15 +2,14 @@ import { useEffect, useRef, useState } from "react";
 
 export default function ControlCenter() {
 
-  const [data, setData] = useState(null);
+  const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
 
   const API =
     "https://operionos-backend-1.onrender.com/api/control-center";
 
-  // store animated positions
-  const positionsRef = useRef({});
+  const positionStore = useRef({});
 
   const fetchData = async () => {
 
@@ -19,28 +18,30 @@ export default function ControlCenter() {
       const res = await fetch(API);
       const json = await res.json();
 
-      // initialize or update aircraft state
       const enriched = json?.aircraftRankings?.map((a, i) => {
 
         const id = a.aircraft.id;
 
+        // base hub
         const baseLat = 41.3851;
         const baseLng = 2.1734;
 
-        // initialize stable position once
-        if (!positionsRef.current[id]) {
-          positionsRef.current[id] = {
-            lat: baseLat + (i * 0.3),
-            lng: baseLng + (i * 0.4)
+        if (!positionStore.current[id]) {
+          positionStore.current[id] = {
+            lat: baseLat + i * 0.4,
+            lng: baseLng + i * 0.3
           };
         }
 
-        // simulate movement drift (future ADS-B replacement point)
-        const driftLat = (Math.random() - 0.5) * 0.01;
-        const driftLng = (Math.random() - 0.5) * 0.01;
+        // movement simulation
+        positionStore.current[id].lat += (Math.random() - 0.5) * 0.01;
+        positionStore.current[id].lng += (Math.random() - 0.5) * 0.01;
 
-        positionsRef.current[id].lat += driftLat;
-        positionsRef.current[id].lng += driftLng;
+        const from = { lat: 41.3851, lng: 2.1734 }; // BCN
+        const to = { lat: 40.4168, lng: -3.7038 };  // MAD
+
+        // fake ETA model (future hook)
+        const etaMinutes = 45 + Math.round(a.metrics.riskScore / 10);
 
         return {
           id,
@@ -48,12 +49,15 @@ export default function ControlCenter() {
           model: a.aircraft.model,
           risk: a.metrics.riskScore,
           hours: a.metrics.totalHours,
-          lat: positionsRef.current[id].lat,
-          lng: positionsRef.current[id].lng,
+
+          position: positionStore.current[id],
+
           route: {
-            from: "BCN",
-            to: "MAD"
-          }
+            from,
+            to
+          },
+
+          eta: etaMinutes
         };
 
       }) || [];
@@ -72,9 +76,7 @@ export default function ControlCenter() {
 
     fetchData();
 
-    const interval = setInterval(() => {
-      fetchData();
-    }, 15000); // faster for "live feel"
+    const interval = setInterval(fetchData, 15000);
 
     return () => clearInterval(interval);
 
@@ -83,7 +85,7 @@ export default function ControlCenter() {
   if (loading) {
     return (
       <div style={styles.loading}>
-        Initializing Flight Tracking Layer...
+        Initializing Flight Route System...
       </div>
     );
   }
@@ -100,35 +102,63 @@ export default function ControlCenter() {
           </h1>
 
           <p style={styles.subtitle}>
-            Live Flight Tracking Architecture Layer
+            Live Flight Route Intelligence System
           </p>
         </div>
 
         <div style={styles.liveBadge}>
-          ● TRACKING ACTIVE
+          ● ROUTES ACTIVE
         </div>
 
       </div>
 
-      {/* LAST UPDATE */}
       <div style={styles.updated}>
         Last sync: {lastUpdated?.toLocaleTimeString()}
       </div>
 
       {/* ===============================
-          FLIGHT MAP
+          MAP WITH ROUTES
       =============================== */}
 
       <div style={styles.mapContainer}>
 
         <h2 style={styles.section}>
-          Live Aircraft Movement Layer
+          Flight Routes (Origin → Destination)
         </h2>
 
         <div style={styles.map}>
 
           <div style={styles.grid} />
 
+          {/* ROUTE LINES */}
+          {data.map((ac) => {
+
+            const x1 = 50 + ac.route.from.lng;
+            const y1 = 50 + ac.route.from.lat;
+            const x2 = 50 + ac.route.to.lng;
+            const y2 = 50 + ac.route.to.lat;
+
+            return (
+              <svg
+                key={ac.id}
+                style={styles.svg}
+              >
+
+                <line
+                  x1={`${x1}%`}
+                  y1={`${y1}%`}
+                  x2={`${x2}%`}
+                  y2={`${y2}%`}
+                  stroke="rgba(255,255,255,0.15)"
+                  strokeWidth="2"
+                />
+
+              </svg>
+            );
+
+          })}
+
+          {/* AIRCRAFT MARKERS */}
           {data.map((ac) => {
 
             let color = "#22c55e";
@@ -136,20 +166,23 @@ export default function ControlCenter() {
             if (ac.risk > 70) color = "#ef4444";
             else if (ac.risk > 40) color = "#f59e0b";
 
+            const pos = ac.position;
+
             return (
               <div
                 key={ac.id}
                 style={{
                   ...styles.marker,
-                  top: `${50 + ac.lat * 1.8}%`,
-                  left: `${50 + ac.lng * 1.8}%`,
+                  top: `${50 + pos.lat * 1.5}%`,
+                  left: `${50 + pos.lng * 1.5}%`,
                   background: color
                 }}
-                title={`${ac.tail} → ${ac.route.to}`}
+                title={`${ac.tail} ETA ${ac.eta} min`}
               >
                 ✈
               </div>
             );
+
           })}
 
         </div>
@@ -157,7 +190,7 @@ export default function ControlCenter() {
       </div>
 
       {/* ===============================
-          FLIGHT TABLE
+          TABLE
       =============================== */}
 
       <div style={styles.tableContainer}>
@@ -171,10 +204,9 @@ export default function ControlCenter() {
           <thead>
             <tr>
               <th>Aircraft</th>
-              <th>Model</th>
               <th>Route</th>
               <th>Risk</th>
-              <th>Hours</th>
+              <th>ETA</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -185,18 +217,15 @@ export default function ControlCenter() {
 
               let status = "STABLE";
 
-              if (ac.risk > 70) status = "CRITICAL FLIGHT";
+              if (ac.risk > 70) status = "CRITICAL";
               else if (ac.risk > 40) status = "MONITOR";
 
               return (
                 <tr key={ac.id}>
 
                   <td>{ac.tail}</td>
-                  <td>{ac.model}</td>
 
-                  <td>
-                    {ac.route.from} → {ac.route.to}
-                  </td>
+                  <td>BCN → MAD</td>
 
                   <td>
                     <span style={{
@@ -212,7 +241,7 @@ export default function ControlCenter() {
                     </span>
                   </td>
 
-                  <td>{Math.round(ac.hours)}</td>
+                  <td>{ac.eta} min</td>
 
                   <td>{status}</td>
 
@@ -256,8 +285,7 @@ const styles = {
 
   header: {
     display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center"
+    justifyContent: "space-between"
   },
 
   title: {
@@ -270,7 +298,7 @@ const styles = {
   },
 
   liveBadge: {
-    background: "#3b82f6",
+    background: "#a855f7",
     color: "#081018",
     padding: "8px 14px",
     borderRadius: "999px",
@@ -304,6 +332,12 @@ const styles = {
     backgroundSize: "40px 40px"
   },
 
+  svg: {
+    position: "absolute",
+    width: "100%",
+    height: "100%"
+  },
+
   marker: {
     position: "absolute",
     width: "28px",
@@ -313,7 +347,6 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     transform: "translate(-50%, -50%)",
-    cursor: "pointer",
     fontWeight: "bold",
     color: "#000"
   },
