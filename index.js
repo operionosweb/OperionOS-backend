@@ -2,6 +2,8 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
+import http from "http";
+import { Server } from "socket.io";
 
 import { generateActions } from "./actionEngine.js";
 import { interpretCommand } from "./ai/commandEngine.js";
@@ -10,9 +12,20 @@ import { generateDailyOpsReport } from "./ops/autonomousEngine.js";
 dotenv.config();
 
 const app = express();
-
 app.use(cors());
 app.use(express.json());
+
+/* ===============================
+   HTTP + WEBSOCKET SERVER
+=============================== */
+
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: "*"
+  }
+});
 
 /* ===============================
    SUPABASE
@@ -24,18 +37,29 @@ const supabase = createClient(
 );
 
 /* ===============================
-   HEALTH
+   WEBSOCKET CONNECTION
 =============================== */
 
-app.get("/", (req, res) => {
-  res.json({
-    status: "ok",
-    message: "Operion AI Copilot vFinal Running"
+io.on("connection", (socket) => {
+
+  console.log("🔵 Client connected:", socket.id);
+
+  socket.on("disconnect", () => {
+    console.log("🔴 Client disconnected:", socket.id);
   });
+
 });
 
 /* ===============================
-   SHARED FLEET BUILDER
+   BROADCAST HELPER
+=============================== */
+
+function broadcast(event, data) {
+  io.emit(event, data);
+}
+
+/* ===============================
+   FLEET BUILDER
 =============================== */
 
 async function buildFleet() {
@@ -78,23 +102,12 @@ async function buildFleet() {
 
 app.get("/api/control-center", async (req, res) => {
 
-  try {
+  const fleet = await buildFleet();
 
-    const fleet = await buildFleet();
-
-    res.json({
-      status: "success",
-      fleet
-    });
-
-  } catch (err) {
-
-    res.status(500).json({
-      status: "error",
-      message: err.message
-    });
-
-  }
+  res.json({
+    status: "success",
+    fleet
+  });
 
 });
 
@@ -104,167 +117,99 @@ app.get("/api/control-center", async (req, res) => {
 
 app.post("/api/ai/command", async (req, res) => {
 
-  try {
+  const { command } = req.body;
 
-    const { command } = req.body;
+  const fleet = await buildFleet();
 
-    const fleet = await buildFleet();
+  const actions = generateActions(fleet);
 
-    const actions = generateActions(fleet);
+  const result = interpretCommand(command, fleet, actions);
 
-    const result = interpretCommand(
-      command,
-      fleet,
-      actions
-    );
-
-    res.json({
-      status: "success",
-      command,
-      ai: result
-    });
-
-  } catch (err) {
-
-    res.status(500).json({
-      status: "error",
-      message: err.message
-    });
-
-  }
+  res.json({
+    status: "success",
+    ai: result
+  });
 
 });
 
 /* ===============================
-   ACTION ENGINE
-=============================== */
-
-app.get("/api/actions", async (req, res) => {
-
-  try {
-
-    const fleet = await buildFleet();
-
-    const actions = generateActions(fleet);
-
-    res.json({
-      status: "success",
-      actions
-    });
-
-  } catch (err) {
-
-    res.status(500).json({
-      status: "error",
-      message: err.message
-    });
-
-  }
-
-});
-
-/* ===============================
-   AUTONOMOUS OPS REPORT
+   OPS REPORT
 =============================== */
 
 app.get("/api/ops/daily-report", async (req, res) => {
 
-  try {
+  const fleet = await buildFleet();
 
-    const fleet = await buildFleet();
+  const actions = generateActions(fleet);
 
-    const actions = generateActions(fleet);
+  const report = generateDailyOpsReport(fleet, actions);
 
-    const report = generateDailyOpsReport(fleet, actions);
-
-    res.json({
-      status: "success",
-      report
-    });
-
-  } catch (err) {
-
-    res.status(500).json({
-      status: "error",
-      message: err.message
-    });
-
-  }
+  res.json({
+    status: "success",
+    report
+  });
 
 });
 
 /* ===============================
-   🧠 AI COPILOT (NEW CORE ENDPOINT)
+   🧠 LIVE OPS ENGINE (NEW CORE)
 =============================== */
 
-app.get("/api/ai/copilot", async (req, res) => {
+async function liveOpsLoop() {
 
-  try {
+  const fleet = await buildFleet();
 
-    const fleet = await buildFleet();
+  const actions = generateActions(fleet);
 
-    const actions = generateActions(fleet);
+  const report = generateDailyOpsReport(fleet, actions);
 
-    const report = generateDailyOpsReport(fleet, actions);
+  /* ===============================
+     DETECT CRITICAL EVENTS
+  =============================== */
 
-    /* ===============================
-       DECISION ENGINE
-    =============================== */
+  const critical = report.riskGroups.critical.length;
+  const high = report.riskGroups.high.length;
 
-    const critical = report.riskGroups.critical.length;
-    const high = report.riskGroups.high.length;
+  const event = {
+    timestamp: new Date().toISOString(),
+    mode:
+      critical > 0
+        ? "EMERGENCY"
+        : high > 3
+        ? "ELEVATED"
+        : "NORMAL",
+    metrics: report.metrics,
+    criticalCount: critical,
+    highCount: high
+  };
 
-    let priorityDecision = "";
-    let operationalMode = "";
+  /* ===============================
+     BROADCAST REAL-TIME UPDATE
+  =============================== */
 
-    if (critical > 0) {
-      operationalMode = "EMERGENCY";
-      priorityDecision =
-        "Ground critical aircraft immediately and trigger inspections.";
-    } else if (high > 3) {
-      operationalMode = "ELEVATED";
-      priorityDecision =
-        "Increase maintenance scheduling and reduce flight load.";
-    } else {
-      operationalMode = "NORMAL";
-      priorityDecision =
-        "Continue standard operations with monitoring.";
-    }
+  broadcast("ops_update", event);
 
-    /* ===============================
-       FINAL COPILOT OUTPUT
-    =============================== */
-
-    res.json({
-      status: "success",
-
-      copilot: {
-        operationalMode,
-
-        executiveSummary: report.executiveSummary,
-
-        priorityDecision,
-
-        metrics: report.metrics,
-
-        topRisks: report.riskGroups.critical.slice(0, 5),
-
-        predictedFailures: report.predictedFailures.slice(0, 5),
-
-        recommendedActions: report.priorityActions.slice(0, 5)
-      }
+  if (critical > 0) {
+    broadcast("alert", {
+      level: "CRITICAL",
+      message: "Critical aircraft detected — immediate action required"
     });
-
-  } catch (err) {
-
-    res.status(500).json({
-      status: "error",
-      message: err.message
-    });
-
   }
 
-});
+  if (high > 3) {
+    broadcast("alert", {
+      level: "WARNING",
+      message: "Fleet risk elevated"
+    });
+  }
+
+}
+
+/* ===============================
+   START LIVE LOOP
+=============================== */
+
+setInterval(liveOpsLoop, 10000); // every 10 seconds
 
 /* ===============================
    START SERVER
@@ -272,6 +217,6 @@ app.get("/api/ai/copilot", async (req, res) => {
 
 const PORT = process.env.PORT || 4000;
 
-app.listen(PORT, () => {
-  console.log(`Operion AI Copilot running on port ${PORT}`);
+server.listen(PORT, () => {
+  console.log(`🚀 Operion Live Ops running on port ${PORT}`);
 });
