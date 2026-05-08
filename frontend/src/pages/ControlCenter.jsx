@@ -4,6 +4,9 @@ export default function ControlCenter() {
 
   const [data, setData] = useState([]);
   const [alerts, setAlerts] = useState([]);
+  const [query, setQuery] = useState("");
+  const [view, setView] = useState([]);
+  const [summary, setSummary] = useState("");
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
 
@@ -19,8 +22,6 @@ export default function ControlCenter() {
       const res = await fetch(API);
       const json = await res.json();
 
-      let newAlerts = [];
-
       const enriched = json?.aircraftRankings?.map((a, i) => {
 
         const id = a.aircraft.id;
@@ -30,61 +31,33 @@ export default function ControlCenter() {
 
         if (!stateRef.current[id]) {
           stateRef.current[id] = {
-            lat: baseLat + i * 0.25,
+            lat: baseLat + i * 0.3,
             lng: baseLng + i * 0.2
           };
         }
 
-        // movement simulation
         stateRef.current[id].lat += (Math.random() - 0.5) * 0.01;
         stateRef.current[id].lng += (Math.random() - 0.5) * 0.01;
 
-        const flightHours = a.metrics.totalHours;
-        const baseRisk = a.metrics.riskScore;
-
-        const failureProbability =
-          baseRisk * 0.6 +
-          flightHours * 0.02 +
-          Math.random() * 8;
-
-        let recommendation = "OK TO OPERATE";
-        let alertLevel = "normal";
-
-        if (failureProbability > 75) {
-          recommendation = "IMMEDIATE MAINTENANCE REQUIRED";
-          alertLevel = "critical";
-        } else if (failureProbability > 50) {
-          recommendation = "SCHEDULE MAINTENANCE";
-          alertLevel = "warning";
-        }
-
-        // create alerts
-        if (alertLevel !== "normal") {
-          newAlerts.push({
-            id,
-            tail: a.aircraft.tail_number,
-            level: alertLevel,
-            message: recommendation,
-            score: failureProbability
-          });
-        }
+        const failure =
+          a.metrics.riskScore * 0.6 +
+          a.metrics.totalHours * 0.02 +
+          Math.random() * 5;
 
         return {
           id,
           tail: a.aircraft.tail_number,
           model: a.aircraft.model,
-          risk: baseRisk,
-          hours: flightHours,
-          failureProbability,
-          recommendation,
-          alertLevel,
+          risk: a.metrics.riskScore,
+          hours: a.metrics.totalHours,
+          failure,
           position: stateRef.current[id]
         };
 
       }) || [];
 
       setData(enriched);
-      setAlerts(newAlerts);
+      setView(enriched);
       setLastUpdated(new Date());
       setLoading(false);
 
@@ -98,29 +71,64 @@ export default function ControlCenter() {
 
     fetchData();
 
-    const interval = setInterval(fetchData, 12000);
+    const interval = setInterval(fetchData, 15000);
 
     return () => clearInterval(interval);
 
   }, []);
 
+  /* ===============================
+     COMMAND ENGINE
+  =============================== */
+
+  const runCommand = (input) => {
+
+    const cmd = input.toLowerCase();
+
+    let result = data;
+
+    if (cmd.includes("high risk")) {
+      result = data.filter(d => d.failure > 60);
+      setSummary("Showing high-risk aircraft requiring attention.");
+    }
+
+    else if (cmd.includes("critical")) {
+      result = data.filter(d => d.failure > 75);
+      setSummary("Critical aircraft only — immediate action required.");
+    }
+
+    else if (cmd.includes("low risk")) {
+      result = data.filter(d => d.failure < 40);
+      setSummary("Low-risk operational fleet.");
+    }
+
+    else if (cmd.includes("all")) {
+      result = data;
+      setSummary("Full fleet view restored.");
+    }
+
+    else if (cmd.includes("summary")) {
+
+      const avg =
+        data.reduce((acc, d) => acc + d.failure, 0) / data.length;
+
+      setSummary(
+        `Fleet average failure probability is ${Math.round(avg)}%.`
+      );
+
+      result = data;
+    }
+
+    setView(result);
+  };
+
   if (loading) {
     return (
       <div style={styles.loading}>
-        Initializing Decision Engine v1...
+        Initializing AI Command Center...
       </div>
     );
   }
-
-  /* ===============================
-     EXECUTIVE SUMMARY LOGIC
-  =============================== */
-
-  const criticalCount =
-    alerts.filter(a => a.level === "critical").length;
-
-  const warningCount =
-    alerts.filter(a => a.level === "warning").length;
 
   return (
     <div style={styles.page}>
@@ -130,133 +138,94 @@ export default function ControlCenter() {
 
         <div>
           <h1 style={styles.title}>
-            OPERION CONTROL CENTER
+            OPERION COMMAND CENTER
           </h1>
 
           <p style={styles.subtitle}>
-            Decision Intelligence & Fleet Action System
+            AI Operational Control Interface
           </p>
         </div>
 
         <div style={styles.liveBadge}>
-          ● DECISION ENGINE ACTIVE
+          ● COMMAND ACTIVE
         </div>
 
       </div>
 
       <div style={styles.updated}>
-        Last decision cycle: {lastUpdated?.toLocaleTimeString()}
+        Last update: {lastUpdated?.toLocaleTimeString()}
       </div>
 
       {/* ===============================
-          EXECUTIVE PANEL
+          COMMAND INPUT
       =============================== */}
 
-      <div style={styles.summary}>
+      <div style={styles.commandBox}>
 
-        <div style={styles.card}>
-          <h3>Critical Alerts</h3>
-          <p style={{ color: "#ef4444", fontSize: "24px" }}>
-            {criticalCount}
-          </p>
-        </div>
+        <input
+          style={styles.input}
+          placeholder="Type command: high risk / critical / summary / all"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
 
-        <div style={styles.card}>
-          <h3>Warnings</h3>
-          <p style={{ color: "#f59e0b", fontSize: "24px" }}>
-            {warningCount}
-          </p>
-        </div>
-
-        <div style={styles.card}>
-          <h3>Total Aircraft</h3>
-          <p style={{ fontSize: "24px" }}>
-            {data.length}
-          </p>
-        </div>
+        <button
+          style={styles.button}
+          onClick={() => runCommand(query)}
+        >
+          Run Command
+        </button>
 
       </div>
 
-      {/* ===============================
-          ALERT STREAM
-      =============================== */}
-
-      <div style={styles.alertBox}>
-
-        <h2>Live Alert Stream</h2>
-
-        {alerts.length === 0 ? (
-          <p style={{ color: "#94a3b8" }}>
-            No active alerts — fleet stable
-          </p>
-        ) : (
-          alerts.map((a) => (
-
-            <div
-              key={a.id}
-              style={{
-                ...styles.alert,
-                borderLeft:
-                  a.level === "critical"
-                    ? "4px solid #ef4444"
-                    : "4px solid #f59e0b"
-              }}
-            >
-              <strong>{a.tail}</strong> — {a.message}
-              <div style={{ fontSize: "12px", color: "#94a3b8" }}>
-                Risk Score: {Math.round(a.score)}
-              </div>
-            </div>
-
-          ))
-        )}
-
-      </div>
+      {summary && (
+        <div style={styles.summary}>
+          {summary}
+        </div>
+      )}
 
       {/* ===============================
-          FLEET TABLE
+          FLEET VIEW
       =============================== */}
 
       <div style={styles.tableContainer}>
 
-        <h2>Fleet Decision Queue</h2>
+        <h2>Command Output - Fleet View</h2>
 
         <table style={styles.table}>
 
           <thead>
             <tr>
               <th>Aircraft</th>
-              <th>Failure %</th>
               <th>Risk</th>
-              <th>Action</th>
+              <th>Failure</th>
+              <th>Status</th>
             </tr>
           </thead>
 
           <tbody>
 
-            {data
-              .sort((a, b) => b.failureProbability - a.failureProbability)
+            {view
+              .sort((a, b) => b.failure - a.failure)
               .map((ac) => {
 
-                let color = "#22c55e";
+                let status = "OK";
 
-                if (ac.failureProbability > 75) color = "#ef4444";
-                else if (ac.failureProbability > 50) color = "#f59e0b";
+                if (ac.failure > 75) status = "CRITICAL";
+                else if (ac.failure > 50) status = "WARNING";
 
                 return (
                   <tr key={ac.id}>
 
                     <td>{ac.tail}</td>
 
-                    <td style={{ color }}>
-                      {Math.round(ac.failureProbability)}%
-                    </td>
+                    <td>{Math.round(ac.risk)}</td>
 
                     <td>
-                      {Math.round(ac.risk)}
+                      {Math.round(ac.failure)}%
                     </td>
 
-                    <td>{ac.recommendation}</td>
+                    <td>{status}</td>
 
                   </tr>
                 );
@@ -311,7 +280,7 @@ const styles = {
   },
 
   liveBadge: {
-    background: "#ef4444",
+    background: "#22c55e",
     color: "#081018",
     padding: "8px 14px",
     borderRadius: "999px",
@@ -323,31 +292,31 @@ const styles = {
     color: "#94a3b8"
   },
 
-  summary: {
+  commandBox: {
     display: "flex",
-    gap: "20px",
+    gap: "10px",
     marginTop: "30px"
   },
 
-  card: {
+  input: {
     flex: 1,
-    background: "#111827",
-    padding: "20px",
-    borderRadius: "12px"
+    padding: "10px",
+    borderRadius: "8px",
+    border: "none"
   },
 
-  alertBox: {
-    marginTop: "30px",
-    background: "#111827",
-    padding: "20px",
-    borderRadius: "12px"
+  button: {
+    padding: "10px 20px",
+    borderRadius: "8px",
+    border: "none",
+    background: "#3b82f6",
+    color: "white",
+    cursor: "pointer"
   },
 
-  alert: {
-    background: "#0f172a",
-    padding: "12px",
-    marginTop: "10px",
-    borderRadius: "8px"
+  summary: {
+    marginTop: "15px",
+    color: "#94a3b8"
   },
 
   tableContainer: {
