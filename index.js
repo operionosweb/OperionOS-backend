@@ -33,7 +33,7 @@ app.get("/", (req, res) => {
 });
 
 /* ===============================
-   CONTROL CENTER API
+   CONTROL CENTER
 =============================== */
 
 app.get("/api/control-center", async (req, res) => {
@@ -62,15 +62,11 @@ app.get("/api/control-center", async (req, res) => {
       const riskScore =
         totalHours * 0.04 + Math.random() * 10;
 
-      const projectedCost =
-        totalHours * 120 + riskScore * 80;
-
       return {
         aircraft: a,
         metrics: {
           totalHours,
-          riskScore,
-          projectedCost
+          riskScore
         }
       };
 
@@ -95,7 +91,7 @@ app.get("/api/control-center", async (req, res) => {
 });
 
 /* ===============================
-   ACTION ENGINE API
+   ACTION ENGINE
 =============================== */
 
 app.get("/api/actions", async (req, res) => {
@@ -122,7 +118,11 @@ app.get("/api/actions", async (req, res) => {
       );
 
       const failure =
-        totalHours * 0.03 + Math.random() * 10;
+        Math.min(
+          100,
+          (totalHours * 0.05) +
+          Math.random() * 30
+        );
 
       return {
         id: a.id,
@@ -154,7 +154,7 @@ app.get("/api/actions", async (req, res) => {
 });
 
 /* ===============================
-   AI COMMAND ENDPOINT (NEW)
+   AI COMMAND ENGINE
 =============================== */
 
 app.post("/api/ai/command", async (req, res) => {
@@ -183,7 +183,11 @@ app.post("/api/ai/command", async (req, res) => {
       );
 
       const failure =
-        totalHours * 0.03 + Math.random() * 10;
+        Math.min(
+          100,
+          (totalHours * 0.08) +
+          Math.random() * 25
+        );
 
       return {
         id: a.id,
