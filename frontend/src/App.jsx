@@ -1,52 +1,24 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 
 import ControlCenter from "./pages/ControlCenter";
-
-function Home() {
-  return (
-    <div
-      style={{
-        background: "#081018",
-        minHeight: "100vh",
-        color: "white",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexDirection: "column",
-        fontFamily: "Arial"
-      }}
-    >
-      <h1>OPERION OS</h1>
-
-      <p>
-        Aviation Operational Intelligence Platform
-      </p>
-    </div>
-  );
-}
+import Copilot from "./pages/Copilot";
 
 function App() {
-
   return (
-    <BrowserRouter>
+    <Router>
 
       <Routes>
 
-        {/* HOME */}
-        <Route
-          path="/"
-          element={<Home />}
-        />
+        <Route path="/" element={<ControlCenter />} />
 
-        {/* CONTROL CENTER */}
-        <Route
-          path="/control-center"
-          element={<ControlCenter />}
-        />
+        <Route path="/control-center" element={<ControlCenter />} />
+
+        <Route path="/copilot" element={<Copilot />} />
 
       </Routes>
 
-    </BrowserRouter>
+    </Router>
   );
 }
 
