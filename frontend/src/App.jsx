@@ -38,9 +38,9 @@ function App() {
           element={<Home />}
         />
 
-        {/* CONTROL PANEL */}
+        {/* CONTROL CENTER */}
         <Route
-          path="/control-panel"
+          path="/control-center"
           element={<ControlCenter />}
         />
 
