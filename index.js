@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import { generateActions } from "./actionEngine.js";
+import { interpretCommand } from "./ai/commandEngine.js";
 
 dotenv.config();
 
@@ -12,7 +13,7 @@ app.use(cors());
 app.use(express.json());
 
 /* ===============================
-   SUPABASE INIT
+   SUPABASE CLIENT
 =============================== */
 
 const supabase = createClient(
@@ -32,24 +33,20 @@ app.get("/", (req, res) => {
 });
 
 /* ===============================
-   CONTROL CENTER DATA
+   CONTROL CENTER API
 =============================== */
 
 app.get("/api/control-center", async (req, res) => {
 
   try {
 
-    const { data: aircraft, error: aircraftError } = await supabase
+    const { data: aircraft } = await supabase
       .from("aircraft")
       .select("*");
 
-    if (aircraftError) throw aircraftError;
-
-    const { data: flights, error: flightsError } = await supabase
+    const { data: flights } = await supabase
       .from("flights")
       .select("*");
-
-    if (flightsError) throw flightsError;
 
     const aircraftRankings = aircraft.map((a) => {
 
@@ -65,7 +62,7 @@ app.get("/api/control-center", async (req, res) => {
       const riskScore =
         totalHours * 0.04 + Math.random() * 10;
 
-      const projected30DayCost =
+      const projectedCost =
         totalHours * 120 + riskScore * 80;
 
       return {
@@ -73,7 +70,7 @@ app.get("/api/control-center", async (req, res) => {
         metrics: {
           totalHours,
           riskScore,
-          projected30DayCost
+          projectedCost
         }
       };
 
@@ -98,7 +95,7 @@ app.get("/api/control-center", async (req, res) => {
 });
 
 /* ===============================
-   ACTION ENGINE ENDPOINT
+   ACTION ENGINE API
 =============================== */
 
 app.get("/api/actions", async (req, res) => {
@@ -141,6 +138,74 @@ app.get("/api/actions", async (req, res) => {
       status: "success",
       totalActions: actions.length,
       actions
+    });
+
+  } catch (err) {
+
+    console.error(err);
+
+    res.status(500).json({
+      status: "error",
+      message: err.message
+    });
+
+  }
+
+});
+
+/* ===============================
+   AI COMMAND ENDPOINT (NEW)
+=============================== */
+
+app.post("/api/ai/command", async (req, res) => {
+
+  try {
+
+    const { command } = req.body;
+
+    const { data: aircraft } = await supabase
+      .from("aircraft")
+      .select("*");
+
+    const { data: flights } = await supabase
+      .from("flights")
+      .select("*");
+
+    const fleet = aircraft.map((a) => {
+
+      const related = flights.filter(
+        (f) => f.aircraft_id === a.id
+      );
+
+      const totalHours = related.reduce(
+        (sum, f) => sum + Number(f.flight_hours || 0),
+        0
+      );
+
+      const failure =
+        totalHours * 0.03 + Math.random() * 10;
+
+      return {
+        id: a.id,
+        tail: a.tail_number,
+        model: a.model,
+        failure
+      };
+
+    });
+
+    const actions = generateActions(fleet);
+
+    const result = interpretCommand(
+      command,
+      fleet,
+      actions
+    );
+
+    res.json({
+      status: "success",
+      command,
+      ...result
     });
 
   } catch (err) {
