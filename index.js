@@ -2,8 +2,10 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
+
 import { generateActions } from "./actionEngine.js";
 import { interpretCommand } from "./ai/commandEngine.js";
+import { generateDailyOpsReport } from "./ops/autonomousEngine.js";
 
 dotenv.config();
 
@@ -13,7 +15,7 @@ app.use(cors());
 app.use(express.json());
 
 /* ===============================
-   SUPABASE
+   SUPABASE CLIENT
 =============================== */
 
 const supabase = createClient(
@@ -22,24 +24,18 @@ const supabase = createClient(
 );
 
 /* ===============================
-   SIMPLE MEMORY STORE (TEMP)
-=============================== */
-
-const sessions = {};
-
-/* ===============================
    HEALTH CHECK
 =============================== */
 
 app.get("/", (req, res) => {
   res.json({
     status: "ok",
-    message: "Operion Chat Ops Backend Running"
+    message: "Operion Autonomous Ops Backend Running"
   });
 });
 
 /* ===============================
-   CONTROL CENTER (UNCHANGED CORE)
+   CONTROL CENTER API
 =============================== */
 
 app.get("/api/control-center", async (req, res) => {
@@ -85,6 +81,8 @@ app.get("/api/control-center", async (req, res) => {
 
   } catch (err) {
 
+    console.error(err);
+
     res.status(500).json({
       status: "error",
       message: err.message
@@ -95,7 +93,7 @@ app.get("/api/control-center", async (req, res) => {
 });
 
 /* ===============================
-   ACTION ENGINE
+   ACTION ENGINE API
 =============================== */
 
 app.get("/api/actions", async (req, res) => {
@@ -142,6 +140,8 @@ app.get("/api/actions", async (req, res) => {
 
   } catch (err) {
 
+    console.error(err);
+
     res.status(500).json({
       status: "error",
       message: err.message
@@ -152,28 +152,14 @@ app.get("/api/actions", async (req, res) => {
 });
 
 /* ===============================
-   🧠 CHAT OPS AI ENDPOINT (NEW)
+   AI COMMAND ENDPOINT
 =============================== */
 
-app.post("/api/ai/chat", async (req, res) => {
+app.post("/api/ai/command", async (req, res) => {
 
   try {
 
-    const { sessionId = "default", message } = req.body;
-
-    /* ===============================
-       INIT SESSION MEMORY
-    =============================== */
-
-    if (!sessions[sessionId]) {
-      sessions[sessionId] = [];
-    }
-
-    const history = sessions[sessionId];
-
-    /* ===============================
-       FETCH FLEET DATA
-    =============================== */
+    const { command } = req.body;
 
     const { data: aircraft } = await supabase
       .from("aircraft")
@@ -186,7 +172,7 @@ app.post("/api/ai/chat", async (req, res) => {
     const fleet = aircraft.map((a) => {
 
       const related = flights.filter(
-        (f) => f.aircraft_id === a.id
+        f => f.aircraft_id === a.id
       );
 
       const totalHours = related.reduce(
@@ -208,44 +194,84 @@ app.post("/api/ai/chat", async (req, res) => {
 
     const actions = generateActions(fleet);
 
-    /* ===============================
-       AI RESPONSE (CORE)
-    =============================== */
-
-    const aiResponse = interpretCommand(
-      message,
+    const result = interpretCommand(
+      command,
       fleet,
       actions
     );
 
-    /* ===============================
-       SAVE MEMORY
-    =============================== */
-
-    history.push({
-      role: "user",
-      message
-    });
-
-    history.push({
-      role: "assistant",
-      response: aiResponse.summary
-    });
-
-    sessions[sessionId] = history.slice(-10); // keep last 10
-
-    /* ===============================
-       RESPONSE
-    =============================== */
-
     res.json({
       status: "success",
-      sessionId,
-      memory: sessions[sessionId],
-      ai: aiResponse
+      command,
+      ...result
     });
 
   } catch (err) {
+
+    console.error(err);
+
+    res.status(500).json({
+      status: "error",
+      message: err.message
+    });
+
+  }
+
+});
+
+/* ===============================
+   AUTONOMOUS OPS REPORT (NEW)
+=============================== */
+
+app.get("/api/ops/daily-report", async (req, res) => {
+
+  try {
+
+    const { data: aircraft } = await supabase
+      .from("aircraft")
+      .select("*");
+
+    const { data: flights } = await supabase
+      .from("flights")
+      .select("*");
+
+    const fleet = aircraft.map((a) => {
+
+      const related = flights.filter(
+        f => f.aircraft_id === a.id
+      );
+
+      const totalHours = related.reduce(
+        (sum, f) => sum + Number(f.flight_hours || 0),
+        0
+      );
+
+      const failure =
+        Math.min(100, totalHours * 0.08 + Math.random() * 25);
+
+      return {
+        id: a.id,
+        tail: a.tail_number,
+        model: a.model,
+        failure
+      };
+
+    });
+
+    const { generateActions } = await import("./actionEngine.js");
+
+    const actions = generateActions(fleet);
+
+    const report = generateDailyOpsReport(fleet, actions);
+
+    res.json({
+      status: "success",
+      report
+    });
+
+  } catch (err) {
+
+    console.error(err);
 
     res.status(500).json({
       status: "error",
@@ -263,5 +289,5 @@ app.post("/api/ai/chat", async (req, res) => {
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
-  console.log(`Operion Chat Ops running on port ${PORT}`);
+  console.log(`Operion Autonomous Ops running on port ${PORT}`);
 });
