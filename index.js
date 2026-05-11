@@ -9,8 +9,40 @@ dotenv.config();
 
 const app = express();
 
-app.use(cors());
+/* ===============================
+   CORS FIX
+=============================== */
+
+app.use(cors({
+  origin: "*",
+  methods: [
+    "GET",
+    "POST",
+    "PUT",
+    "DELETE",
+    "OPTIONS"
+  ],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization"
+  ]
+}));
+
+app.options("*", cors());
+
 app.use(express.json());
+
+/* ===============================
+   ROOT HEALTH
+=============================== */
+
+app.get("/", (req, res) => {
+
+  res.json({
+    status: "Operion Backend Running"
+  });
+
+});
 
 /* ===============================
    SUPABASE
@@ -31,18 +63,22 @@ async function auth(req, res, next) {
     req.headers.authorization?.replace("Bearer ", "");
 
   if (!token) {
+
     return res.status(401).json({
       error: "Missing token"
     });
+
   }
 
   const { data, error } =
     await supabase.auth.getUser(token);
 
   if (error || !data?.user) {
+
     return res.status(401).json({
       error: "Invalid token"
     });
+
   }
 
   req.user = data.user;
@@ -112,6 +148,7 @@ async function fetchWeather(city) {
     console.error(err.message);
 
     return null;
+
   }
 }
 
@@ -377,7 +414,7 @@ const PORT =
 app.listen(PORT, () => {
 
   console.log(
-    "🚀 Operion Predictive Maintenance Platform Running"
+    `🚀 Operion Backend Running On Port ${PORT}`
   );
 
 });
