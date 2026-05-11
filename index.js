@@ -9,7 +9,7 @@ dotenv.config();
 const app = express();
 
 /* ===============================
-   DEBUG REQUEST LOGGER
+   REQUEST LOGGER
 =============================== */
 
 app.use((req, res, next) => {
@@ -42,7 +42,7 @@ app.use(cors({
 }));
 
 /* ===============================
-   OPTIONS PREFLIGHT FIX
+   OPTIONS PREFLIGHT
 =============================== */
 
 app.use((req, res, next) => {
@@ -58,7 +58,7 @@ app.use((req, res, next) => {
 app.use(express.json());
 
 /* ===============================
-   ROOT HEALTH
+   ROOT
 =============================== */
 
 app.get("/", (req, res) => {
@@ -79,19 +79,23 @@ const supabase = createClient(
 );
 
 /* ===============================
-   LOGIN ROUTE (IMPORTANT FIX)
+   LOGIN
 =============================== */
 
 app.post("/auth/login", async (req, res) => {
 
   try {
 
-    const { email, password } = req.body;
+    const {
+      email,
+      password
+    } = req.body;
 
     if (!email || !password) {
 
       return res.status(400).json({
-        error: "Email and password required"
+        error:
+          "Email and password required"
       });
 
     }
@@ -121,7 +125,8 @@ app.post("/auth/login", async (req, res) => {
     console.error(err);
 
     res.status(500).json({
-      error: "Login server error"
+      error:
+        "Login server error"
     });
 
   }
@@ -129,7 +134,7 @@ app.post("/auth/login", async (req, res) => {
 });
 
 /* ===============================
-   AUTH MIDDLEWARE
+   AUTH
 =============================== */
 
 async function auth(req, res, next) {
@@ -145,7 +150,8 @@ async function auth(req, res, next) {
     if (!token) {
 
       return res.status(401).json({
-        error: "Missing token"
+        error:
+          "Missing token"
       });
 
     }
@@ -156,7 +162,8 @@ async function auth(req, res, next) {
     if (error || !data?.user) {
 
       return res.status(401).json({
-        error: "Invalid token"
+        error:
+          "Invalid token"
       });
 
     }
@@ -170,7 +177,8 @@ async function auth(req, res, next) {
     console.error(err);
 
     res.status(500).json({
-      error: "Authentication error"
+      error:
+        "Authentication error"
     });
 
   }
@@ -178,7 +186,7 @@ async function auth(req, res, next) {
 }
 
 /* ===============================
-   CORE RISK MODEL
+   RISK MODEL
 =============================== */
 
 function aircraftRisk(hours, cycles) {
@@ -404,7 +412,7 @@ app.get(
 );
 
 /* ===============================
-   GENERATE MAINTENANCE PLAN
+   MAINTENANCE GENERATE
 =============================== */
 
 app.post(
@@ -503,7 +511,7 @@ app.post(
 );
 
 /* ===============================
-   VIEW MAINTENANCE SCHEDULE
+   MAINTENANCE SCHEDULE
 =============================== */
 
 app.get(
@@ -574,10 +582,14 @@ app.get(
 const PORT =
   process.env.PORT || 4000;
 
-app.listen(PORT, () => {
+app.listen(
+  PORT,
+  "0.0.0.0",
+  () => {
 
-  console.log(
-    `🚀 Operion Backend Running On Port ${PORT}`
-  );
+    console.log(
+      `🚀 Operion Backend Running On Port ${PORT}`
+    );
 
-});
+  }
+);
