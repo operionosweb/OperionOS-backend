@@ -9,33 +9,64 @@ dotenv.config();
 const app = express();
 
 /* ===============================
-   CORS (FIXED FOR NODE 24 / EXPRESS 5)
+   DEBUG REQUEST LOGGER
+=============================== */
+
+app.use((req, res, next) => {
+
+  console.log(
+    `➡️ ${req.method} ${req.url}`
+  );
+
+  next();
+
+});
+
+/* ===============================
+   CORS
 =============================== */
 
 app.use(cors({
   origin: "*",
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
+  methods: [
+    "GET",
+    "POST",
+    "PUT",
+    "DELETE",
+    "OPTIONS"
+  ],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization"
+  ]
 }));
 
-// SAFE preflight handler (NO wildcard routes)
+/* ===============================
+   OPTIONS PREFLIGHT FIX
+=============================== */
+
 app.use((req, res, next) => {
+
   if (req.method === "OPTIONS") {
     return res.sendStatus(204);
   }
+
   next();
+
 });
 
 app.use(express.json());
 
 /* ===============================
-   ROOT HEALTH CHECK
+   ROOT HEALTH
 =============================== */
 
 app.get("/", (req, res) => {
+
   res.json({
     status: "Operion Backend Running"
   });
+
 });
 
 /* ===============================
@@ -48,43 +79,116 @@ const supabase = createClient(
 );
 
 /* ===============================
+   LOGIN ROUTE (IMPORTANT FIX)
+=============================== */
+
+app.post("/auth/login", async (req, res) => {
+
+  try {
+
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+
+      return res.status(400).json({
+        error: "Email and password required"
+      });
+
+    }
+
+    const { data, error } =
+      await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+    if (error) {
+
+      return res.status(401).json({
+        error: error.message
+      });
+
+    }
+
+    res.json({
+      success: true,
+      session: data.session,
+      user: data.user
+    });
+
+  } catch (err) {
+
+    console.error(err);
+
+    res.status(500).json({
+      error: "Login server error"
+    });
+
+  }
+
+});
+
+/* ===============================
    AUTH MIDDLEWARE
 =============================== */
 
 async function auth(req, res, next) {
 
-  const token =
-    req.headers.authorization?.replace("Bearer ", "");
+  try {
 
-  if (!token) {
-    return res.status(401).json({
-      error: "Missing token"
+    const token =
+      req.headers.authorization?.replace(
+        "Bearer ",
+        ""
+      );
+
+    if (!token) {
+
+      return res.status(401).json({
+        error: "Missing token"
+      });
+
+    }
+
+    const { data, error } =
+      await supabase.auth.getUser(token);
+
+    if (error || !data?.user) {
+
+      return res.status(401).json({
+        error: "Invalid token"
+      });
+
+    }
+
+    req.user = data.user;
+
+    next();
+
+  } catch (err) {
+
+    console.error(err);
+
+    res.status(500).json({
+      error: "Authentication error"
     });
+
   }
 
-  const { data, error } =
-    await supabase.auth.getUser(token);
-
-  if (error || !data?.user) {
-    return res.status(401).json({
-      error: "Invalid token"
-    });
-  }
-
-  req.user = data.user;
-  next();
 }
 
 /* ===============================
-   RISK MODEL
+   CORE RISK MODEL
 =============================== */
 
 function aircraftRisk(hours, cycles) {
+
   const score =
     hours * 0.08 +
     cycles * 0.12;
 
   return Math.min(100, score);
+
 }
 
 /* ===============================
@@ -110,6 +214,7 @@ function weatherImpact(weather) {
   if (wind > 15) risk += 10;
 
   return risk;
+
 }
 
 /* ===============================
@@ -132,9 +237,13 @@ async function fetchWeather(city) {
     return response.data;
 
   } catch (err) {
+
     console.error(err.message);
+
     return null;
+
   }
+
 }
 
 /* ===============================
@@ -144,27 +253,33 @@ async function fetchWeather(city) {
 function estimateMaintenance(risk) {
 
   if (risk > 80) {
+
     return {
       type: "HEAVY_CHECK",
       cost: 180000,
       daysUntilDue: 7
     };
+
   }
 
   if (risk > 60) {
+
     return {
       type: "ENGINE_INSPECTION",
       cost: 75000,
       daysUntilDue: 14
     };
+
   }
 
   if (risk > 40) {
+
     return {
       type: "PREVENTIVE_CHECK",
       cost: 25000,
       daysUntilDue: 30
     };
+
   }
 
   return {
@@ -172,169 +287,297 @@ function estimateMaintenance(risk) {
     cost: 5000,
     daysUntilDue: 90
   };
+
 }
 
 /* ===============================
    CONTROL CENTER
 =============================== */
 
-app.get("/api/control-center", auth, async (req, res) => {
+app.get(
+  "/api/control-center",
+  auth,
+  async (req, res) => {
 
-  const { data: profile } =
-    await supabase
-      .from("user_profiles")
-      .select("*")
-      .eq("id", req.user.id)
-      .single();
+    try {
 
-  const { data: aircraft } =
-    await supabase
-      .from("aircraft")
-      .select("*")
-      .eq("company_id", profile.company_id);
+      const { data: profile } =
+        await supabase
+          .from("user_profiles")
+          .select("*")
+          .eq("id", req.user.id)
+          .single();
 
-  const { data: flights } =
-    await supabase.from("flights").select("*");
+      const { data: aircraft } =
+        await supabase
+          .from("aircraft")
+          .select("*")
+          .eq(
+            "company_id",
+            profile.company_id
+          );
 
-  const fleet = [];
+      const { data: flights } =
+        await supabase
+          .from("flights")
+          .select("*");
 
-  for (const a of aircraft) {
+      const fleet = [];
 
-    const related =
-      flights.filter(f => f.aircraft_id === a.id);
+      for (const a of aircraft) {
 
-    const hours =
-      related.reduce((sum, f) => sum + Number(f.flight_hours || 0), 0);
+        const related =
+          flights.filter(
+            f => f.aircraft_id === a.id
+          );
 
-    const cycles = related.length;
+        const hours =
+          related.reduce(
+            (sum, f) =>
+              sum +
+              Number(
+                f.flight_hours || 0
+              ),
+            0
+          );
 
-    const baseRisk = aircraftRisk(hours, cycles);
+        const cycles =
+          related.length;
 
-    const city =
-      related[0]?.destination || "London";
+        const baseRisk =
+          aircraftRisk(hours, cycles);
 
-    const weather =
-      await fetchWeather(city);
+        const city =
+          related[0]?.destination ||
+          "London";
 
-    const totalRisk =
-      Math.min(100, baseRisk + weatherImpact(weather));
+        const weather =
+          await fetchWeather(city);
 
-    const maintenance =
-      estimateMaintenance(totalRisk);
+        const totalRisk =
+          Math.min(
+            100,
+            baseRisk +
+            weatherImpact(weather)
+          );
 
-    fleet.push({
-      id: a.id,
-      tail: a.tail_number,
-      model: a.model,
-      risk: totalRisk,
-      maintenance,
-      weather: {
-        city,
-        condition: weather?.weather?.[0]?.main || "Unknown"
+        const maintenance =
+          estimateMaintenance(totalRisk);
+
+        fleet.push({
+
+          id: a.id,
+          tail: a.tail_number,
+          model: a.model,
+
+          risk: totalRisk,
+
+          maintenance,
+
+          weather: {
+            city,
+            condition:
+              weather?.weather?.[0]?.main ||
+              "Unknown"
+          }
+
+        });
+
       }
+
+      res.json({
+        fleet
+      });
+
+    } catch (err) {
+
+      console.error(err);
+
+      res.status(500).json({
+        error:
+          "Control center error"
+      });
+
+    }
+
+  }
+);
+
+/* ===============================
+   GENERATE MAINTENANCE PLAN
+=============================== */
+
+app.post(
+  "/api/maintenance/generate",
+  auth,
+  async (req, res) => {
+
+    try {
+
+      const { data: profile } =
+        await supabase
+          .from("user_profiles")
+          .select("*")
+          .eq("id", req.user.id)
+          .single();
+
+      const { data: aircraft } =
+        await supabase
+          .from("aircraft")
+          .select("*")
+          .eq(
+            "company_id",
+            profile.company_id
+          );
+
+      const schedule = [];
+
+      for (const a of aircraft) {
+
+        const risk =
+          Math.random() * 100;
+
+        const plan =
+          estimateMaintenance(risk);
+
+        const dueDate =
+          new Date();
+
+        dueDate.setDate(
+          dueDate.getDate() +
+          plan.daysUntilDue
+        );
+
+        const item = {
+
+          aircraft_id: a.id,
+
+          company_id:
+            profile.company_id,
+
+          maintenance_type:
+            plan.type,
+
+          predicted_due_hours:
+            Math.floor(
+              Math.random() * 500
+            ),
+
+          predicted_due_date:
+            dueDate,
+
+          estimated_cost:
+            plan.cost
+
+        };
+
+        await supabase
+          .from(
+            "maintenance_schedule"
+          )
+          .insert([item]);
+
+        schedule.push(item);
+
+      }
+
+      res.json({
+        status: "success",
+        generated:
+          schedule.length,
+        schedule
+      });
+
+    } catch (err) {
+
+      console.error(err);
+
+      res.status(500).json({
+        error:
+          "Maintenance generation failed"
+      });
+
+    }
+
+  }
+);
+
+/* ===============================
+   VIEW MAINTENANCE SCHEDULE
+=============================== */
+
+app.get(
+  "/api/maintenance/schedule",
+  auth,
+  async (req, res) => {
+
+    try {
+
+      const { data: profile } =
+        await supabase
+          .from("user_profiles")
+          .select("*")
+          .eq("id", req.user.id)
+          .single();
+
+      const { data } =
+        await supabase
+          .from(
+            "maintenance_schedule"
+          )
+          .select("*")
+          .eq(
+            "company_id",
+            profile.company_id
+          );
+
+      res.json({
+        schedule: data
+      });
+
+    } catch (err) {
+
+      console.error(err);
+
+      res.status(500).json({
+        error:
+          "Schedule fetch failed"
+      });
+
+    }
+
+  }
+);
+
+/* ===============================
+   HEALTH
+=============================== */
+
+app.get(
+  "/api/system/health",
+  (req, res) => {
+
+    res.json({
+      status: "operational",
+      layer:
+        "predictive-maintenance-v1",
+      timestamp: new Date()
     });
 
   }
-
-  res.json({ fleet });
-
-});
-
-/* ===============================
-   MAINTENANCE GENERATE
-=============================== */
-
-app.post("/api/maintenance/generate", auth, async (req, res) => {
-
-  const { data: profile } =
-    await supabase
-      .from("user_profiles")
-      .select("*")
-      .eq("id", req.user.id)
-      .single();
-
-  const { data: aircraft } =
-    await supabase
-      .from("aircraft")
-      .select("*")
-      .eq("company_id", profile.company_id);
-
-  const schedule = [];
-
-  for (const a of aircraft) {
-
-    const risk = Math.random() * 100;
-
-    const plan = estimateMaintenance(risk);
-
-    const dueDate = new Date();
-    dueDate.setDate(dueDate.getDate() + plan.daysUntilDue);
-
-    const item = {
-      aircraft_id: a.id,
-      company_id: profile.company_id,
-      maintenance_type: plan.type,
-      predicted_due_hours: Math.floor(Math.random() * 500),
-      predicted_due_date: dueDate,
-      estimated_cost: plan.cost
-    };
-
-    await supabase
-      .from("maintenance_schedule")
-      .insert([item]);
-
-    schedule.push(item);
-  }
-
-  res.json({
-    status: "success",
-    generated: schedule.length,
-    schedule
-  });
-
-});
-
-/* ===============================
-   MAINTENANCE VIEW
-=============================== */
-
-app.get("/api/maintenance/schedule", auth, async (req, res) => {
-
-  const { data: profile } =
-    await supabase
-      .from("user_profiles")
-      .select("*")
-      .eq("id", req.user.id)
-      .single();
-
-  const { data } =
-    await supabase
-      .from("maintenance_schedule")
-      .select("*")
-      .eq("company_id", profile.company_id);
-
-  res.json({ schedule: data });
-
-});
-
-/* ===============================
-   SYSTEM HEALTH
-=============================== */
-
-app.get("/api/system/health", (req, res) => {
-  res.json({
-    status: "operational",
-    layer: "predictive-maintenance-v1",
-    timestamp: new Date()
-  });
-});
+);
 
 /* ===============================
    START SERVER
 =============================== */
 
-const PORT = process.env.PORT || 4000;
+const PORT =
+  process.env.PORT || 4000;
 
 app.listen(PORT, () => {
-  console.log("🚀 Operion Backend Running");
+
+  console.log(
+    `🚀 Operion Backend Running On Port ${PORT}`
+  );
+
 });
