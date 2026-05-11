@@ -2,7 +2,6 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import axios from "axios";
-
 import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
@@ -10,38 +9,33 @@ dotenv.config();
 const app = express();
 
 /* ===============================
-   CORS FIX
+   CORS (FIXED FOR NODE 24 / EXPRESS 5)
 =============================== */
 
 app.use(cors({
   origin: "*",
-  methods: [
-    "GET",
-    "POST",
-    "PUT",
-    "DELETE",
-    "OPTIONS"
-  ],
-  allowedHeaders: [
-    "Content-Type",
-    "Authorization"
-  ]
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
-app.options("/*", cors());
+// SAFE preflight handler (NO wildcard routes)
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  next();
+});
 
 app.use(express.json());
 
 /* ===============================
-   ROOT HEALTH
+   ROOT HEALTH CHECK
 =============================== */
 
 app.get("/", (req, res) => {
-
   res.json({
     status: "Operion Backend Running"
   });
-
 });
 
 /* ===============================
@@ -54,7 +48,7 @@ const supabase = createClient(
 );
 
 /* ===============================
-   AUTH
+   AUTH MIDDLEWARE
 =============================== */
 
 async function auth(req, res, next) {
@@ -63,35 +57,29 @@ async function auth(req, res, next) {
     req.headers.authorization?.replace("Bearer ", "");
 
   if (!token) {
-
     return res.status(401).json({
       error: "Missing token"
     });
-
   }
 
   const { data, error } =
     await supabase.auth.getUser(token);
 
   if (error || !data?.user) {
-
     return res.status(401).json({
       error: "Invalid token"
     });
-
   }
 
   req.user = data.user;
-
   next();
 }
 
 /* ===============================
-   CORE RISK MODEL
+   RISK MODEL
 =============================== */
 
 function aircraftRisk(hours, cycles) {
-
   const score =
     hours * 0.08 +
     cycles * 0.12;
@@ -144,11 +132,8 @@ async function fetchWeather(city) {
     return response.data;
 
   } catch (err) {
-
     console.error(err.message);
-
     return null;
-
   }
 }
 
@@ -159,33 +144,27 @@ async function fetchWeather(city) {
 function estimateMaintenance(risk) {
 
   if (risk > 80) {
-
     return {
       type: "HEAVY_CHECK",
       cost: 180000,
       daysUntilDue: 7
     };
-
   }
 
   if (risk > 60) {
-
     return {
       type: "ENGINE_INSPECTION",
       cost: 75000,
       daysUntilDue: 14
     };
-
   }
 
   if (risk > 40) {
-
     return {
       type: "PREVENTIVE_CHECK",
       cost: 25000,
       daysUntilDue: 30
     };
-
   }
 
   return {
@@ -215,31 +194,21 @@ app.get("/api/control-center", auth, async (req, res) => {
       .eq("company_id", profile.company_id);
 
   const { data: flights } =
-    await supabase
-      .from("flights")
-      .select("*");
+    await supabase.from("flights").select("*");
 
   const fleet = [];
 
   for (const a of aircraft) {
 
     const related =
-      flights.filter(
-        f => f.aircraft_id === a.id
-      );
+      flights.filter(f => f.aircraft_id === a.id);
 
     const hours =
-      related.reduce(
-        (sum, f) =>
-          sum + Number(f.flight_hours || 0),
-        0
-      );
+      related.reduce((sum, f) => sum + Number(f.flight_hours || 0), 0);
 
-    const cycles =
-      related.length;
+    const cycles = related.length;
 
-    const baseRisk =
-      aircraftRisk(hours, cycles);
+    const baseRisk = aircraftRisk(hours, cycles);
 
     const city =
       related[0]?.destination || "London";
@@ -248,173 +217,124 @@ app.get("/api/control-center", auth, async (req, res) => {
       await fetchWeather(city);
 
     const totalRisk =
-      Math.min(
-        100,
-        baseRisk + weatherImpact(weather)
-      );
+      Math.min(100, baseRisk + weatherImpact(weather));
 
     const maintenance =
       estimateMaintenance(totalRisk);
 
     fleet.push({
-
       id: a.id,
       tail: a.tail_number,
       model: a.model,
-
       risk: totalRisk,
-
       maintenance,
-
       weather: {
         city,
-        condition:
-          weather?.weather?.[0]?.main || "Unknown"
+        condition: weather?.weather?.[0]?.main || "Unknown"
       }
-
     });
 
   }
 
+  res.json({ fleet });
+
+});
+
+/* ===============================
+   MAINTENANCE GENERATE
+=============================== */
+
+app.post("/api/maintenance/generate", auth, async (req, res) => {
+
+  const { data: profile } =
+    await supabase
+      .from("user_profiles")
+      .select("*")
+      .eq("id", req.user.id)
+      .single();
+
+  const { data: aircraft } =
+    await supabase
+      .from("aircraft")
+      .select("*")
+      .eq("company_id", profile.company_id);
+
+  const schedule = [];
+
+  for (const a of aircraft) {
+
+    const risk = Math.random() * 100;
+
+    const plan = estimateMaintenance(risk);
+
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + plan.daysUntilDue);
+
+    const item = {
+      aircraft_id: a.id,
+      company_id: profile.company_id,
+      maintenance_type: plan.type,
+      predicted_due_hours: Math.floor(Math.random() * 500),
+      predicted_due_date: dueDate,
+      estimated_cost: plan.cost
+    };
+
+    await supabase
+      .from("maintenance_schedule")
+      .insert([item]);
+
+    schedule.push(item);
+  }
+
   res.json({
-    fleet
+    status: "success",
+    generated: schedule.length,
+    schedule
   });
 
 });
 
 /* ===============================
-   GENERATE MAINTENANCE PLAN
+   MAINTENANCE VIEW
 =============================== */
 
-app.post(
-  "/api/maintenance/generate",
-  auth,
-  async (req, res) => {
+app.get("/api/maintenance/schedule", auth, async (req, res) => {
 
-    const { data: profile } =
-      await supabase
-        .from("user_profiles")
-        .select("*")
-        .eq("id", req.user.id)
-        .single();
+  const { data: profile } =
+    await supabase
+      .from("user_profiles")
+      .select("*")
+      .eq("id", req.user.id)
+      .single();
 
-    const { data: aircraft } =
-      await supabase
-        .from("aircraft")
-        .select("*")
-        .eq("company_id", profile.company_id);
+  const { data } =
+    await supabase
+      .from("maintenance_schedule")
+      .select("*")
+      .eq("company_id", profile.company_id);
 
-    const schedule = [];
+  res.json({ schedule: data });
 
-    for (const a of aircraft) {
-
-      const risk =
-        Math.random() * 100;
-
-      const plan =
-        estimateMaintenance(risk);
-
-      const dueDate =
-        new Date();
-
-      dueDate.setDate(
-        dueDate.getDate() +
-        plan.daysUntilDue
-      );
-
-      const item = {
-
-        aircraft_id: a.id,
-        company_id: profile.company_id,
-
-        maintenance_type:
-          plan.type,
-
-        predicted_due_hours:
-          Math.floor(Math.random() * 500),
-
-        predicted_due_date:
-          dueDate,
-
-        estimated_cost:
-          plan.cost
-      };
-
-      await supabase
-        .from("maintenance_schedule")
-        .insert([item]);
-
-      schedule.push(item);
-
-    }
-
-    res.json({
-      status: "success",
-      generated: schedule.length,
-      schedule
-    });
-
-  }
-);
+});
 
 /* ===============================
-   VIEW MAINTENANCE SCHEDULE
-=============================== */
-
-app.get(
-  "/api/maintenance/schedule",
-  auth,
-  async (req, res) => {
-
-    const { data: profile } =
-      await supabase
-        .from("user_profiles")
-        .select("*")
-        .eq("id", req.user.id)
-        .single();
-
-    const { data } =
-      await supabase
-        .from("maintenance_schedule")
-        .select("*")
-        .eq(
-          "company_id",
-          profile.company_id
-        );
-
-    res.json({
-      schedule: data
-    });
-
-  }
-);
-
-/* ===============================
-   HEALTH
+   SYSTEM HEALTH
 =============================== */
 
 app.get("/api/system/health", (req, res) => {
-
   res.json({
     status: "operational",
-    layer:
-      "predictive-maintenance-v1",
+    layer: "predictive-maintenance-v1",
     timestamp: new Date()
   });
-
 });
 
 /* ===============================
    START SERVER
 =============================== */
 
-const PORT =
-  process.env.PORT || 4000;
+const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
-
-  console.log(
-    `🚀 Operion Backend Running On Port ${PORT}`
-  );
-
+  console.log("🚀 Operion Backend Running");
 });
