@@ -9,50 +9,44 @@ dotenv.config();
 const app = express();
 
 /* ===============================
+   SUPABASE (SAFE MODE - NO SERVICE ROLE)
+=============================== */
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
+
+/* ===============================
    REQUEST LOGGER
 =============================== */
 
 app.use((req, res, next) => {
-
-  console.log(
-    `➡️ ${req.method} ${req.url}`
-  );
-
+  console.log(`➡️ ${req.method} ${req.url}`);
   next();
-
 });
 
 /* ===============================
    CORS
 =============================== */
 
-app.use(cors({
-  origin: "*",
-  methods: [
-    "GET",
-    "POST",
-    "PUT",
-    "DELETE",
-    "OPTIONS"
-  ],
-  allowedHeaders: [
-    "Content-Type",
-    "Authorization"
-  ]
-}));
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 
 /* ===============================
-   OPTIONS PREFLIGHT
+   OPTIONS
 =============================== */
 
 app.use((req, res, next) => {
-
   if (req.method === "OPTIONS") {
     return res.sendStatus(204);
   }
-
   next();
-
 });
 
 app.use(express.json());
@@ -62,141 +56,113 @@ app.use(express.json());
 =============================== */
 
 app.get("/", (req, res) => {
-
   res.json({
-    status: "Operion Backend Running"
+    status: "Operion Backend Running",
   });
-
 });
 
 /* ===============================
-   SUPABASE
-=============================== */
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
-/* ===============================
    LOGIN
+   (USES ANON CLIENT ONLY)
 =============================== */
 
 app.post("/auth/login", async (req, res) => {
-
   try {
-
-    const {
-      email,
-      password
-    } = req.body;
+    const { email, password } = req.body;
 
     if (!email || !password) {
-
       return res.status(400).json({
-        error:
-          "Email and password required"
+        error: "Email and password required",
       });
-
     }
 
     const { data, error } =
       await supabase.auth.signInWithPassword({
         email,
-        password
+        password,
       });
 
     if (error) {
-
       return res.status(401).json({
-        error: error.message
+        error: error.message,
       });
-
     }
 
     res.json({
       success: true,
       session: data.session,
-      user: data.user
+      user: data.user,
     });
-
   } catch (err) {
-
     console.error(err);
-
     res.status(500).json({
-      error:
-        "Login server error"
+      error: "Login server error",
     });
-
   }
-
 });
 
 /* ===============================
-   AUTH
+   AUTH MIDDLEWARE
 =============================== */
 
 async function auth(req, res, next) {
-
   try {
-
-    const token =
-      req.headers.authorization?.replace(
-        "Bearer ",
-        ""
-      );
+    const token = req.headers.authorization?.replace(
+      "Bearer ",
+      ""
+    );
 
     if (!token) {
-
       return res.status(401).json({
-        error:
-          "Missing token"
+        error: "Missing token",
       });
-
     }
 
     const { data, error } =
       await supabase.auth.getUser(token);
 
     if (error || !data?.user) {
-
       return res.status(401).json({
-        error:
-          "Invalid token"
+        error: "Invalid token",
       });
-
     }
 
     req.user = data.user;
 
     next();
-
   } catch (err) {
-
     console.error(err);
-
     res.status(500).json({
-      error:
-        "Authentication error"
+      error: "Authentication error",
     });
-
   }
-
 }
 
 /* ===============================
-   RISK MODEL
+   GET USER PROFILE (TENANT SOURCE OF TRUTH)
+=============================== */
+
+async function getProfile(userId) {
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .select("*")
+    .eq("id", userId)
+    .single();
+
+  if (error || !data) {
+    throw new Error("User profile not found");
+  }
+
+  return data;
+}
+
+/* ===============================
+   RISK ENGINE
 =============================== */
 
 function aircraftRisk(hours, cycles) {
-
-  const score =
-    hours * 0.08 +
-    cycles * 0.12;
-
+  const score = hours * 0.08 + cycles * 0.12;
   return Math.min(100, score);
-
 }
 
 /* ===============================
@@ -204,25 +170,21 @@ function aircraftRisk(hours, cycles) {
 =============================== */
 
 function weatherImpact(weather) {
-
   if (!weather) return 0;
 
   let risk = 0;
 
-  const main =
-    weather.weather?.[0]?.main || "";
+  const main = weather.weather?.[0]?.main || "";
 
   if (main.includes("Thunderstorm")) risk += 25;
   if (main.includes("Rain")) risk += 10;
   if (main.includes("Snow")) risk += 18;
 
-  const wind =
-    weather.wind?.speed || 0;
+  const wind = weather.wind?.speed || 0;
 
   if (wind > 15) risk += 10;
 
   return risk;
-
 }
 
 /* ===============================
@@ -230,28 +192,18 @@ function weatherImpact(weather) {
 =============================== */
 
 async function fetchWeather(city) {
-
   try {
+    const apiKey = process.env.OPENWEATHER_API_KEY;
 
-    const apiKey =
-      process.env.OPENWEATHER_API_KEY;
+    const url = `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}`;
 
-    const url =
-      `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}`;
-
-    const response =
-      await axios.get(url);
+    const response = await axios.get(url);
 
     return response.data;
-
   } catch (err) {
-
     console.error(err.message);
-
     return null;
-
   }
-
 }
 
 /* ===============================
@@ -259,337 +211,189 @@ async function fetchWeather(city) {
 =============================== */
 
 function estimateMaintenance(risk) {
-
   if (risk > 80) {
-
-    return {
-      type: "HEAVY_CHECK",
-      cost: 180000,
-      daysUntilDue: 7
-    };
-
+    return { type: "HEAVY_CHECK", cost: 180000, daysUntilDue: 7 };
   }
 
   if (risk > 60) {
-
-    return {
-      type: "ENGINE_INSPECTION",
-      cost: 75000,
-      daysUntilDue: 14
-    };
-
+    return { type: "ENGINE_INSPECTION", cost: 75000, daysUntilDue: 14 };
   }
 
   if (risk > 40) {
-
-    return {
-      type: "PREVENTIVE_CHECK",
-      cost: 25000,
-      daysUntilDue: 30
-    };
-
+    return { type: "PREVENTIVE_CHECK", cost: 25000, daysUntilDue: 30 };
   }
 
   return {
     type: "ROUTINE_MONITORING",
     cost: 5000,
-    daysUntilDue: 90
+    daysUntilDue: 90,
   };
-
 }
 
 /* ===============================
-   CONTROL CENTER
+   CONTROL CENTER (TENANT SAFE)
 =============================== */
 
-app.get(
-  "/api/control-center",
-  auth,
-  async (req, res) => {
+app.get("/api/control-center", auth, async (req, res) => {
+  try {
+    const profile = await getProfile(req.user.id);
 
-    try {
+    const companyId = profile.company_id;
 
-      const { data: profile } =
-        await supabase
-          .from("user_profiles")
-          .select("*")
-          .eq("id", req.user.id)
-          .single();
+    const { data: aircraft } = await supabase
+      .from("aircraft")
+      .select("*")
+      .eq("company_id", companyId);
 
-      const { data: aircraft } =
-        await supabase
-          .from("aircraft")
-          .select("*")
-          .eq(
-            "company_id",
-            profile.company_id
-          );
+    const { data: flights } = await supabase
+      .from("flights")
+      .select("*")
+      .eq("company_id", companyId);
 
-      const { data: flights } =
-        await supabase
-          .from("flights")
-          .select("*");
+    const fleet = [];
 
-      const fleet = [];
+    for (const a of aircraft || []) {
+      const related = flights.filter(
+        (f) => f.aircraft_id === a.id
+      );
 
-      for (const a of aircraft) {
+      const hours = related.reduce(
+        (sum, f) => sum + Number(f.flight_hours || 0),
+        0
+      );
 
-        const related =
-          flights.filter(
-            f => f.aircraft_id === a.id
-          );
+      const cycles = related.length;
 
-        const hours =
-          related.reduce(
-            (sum, f) =>
-              sum +
-              Number(
-                f.flight_hours || 0
-              ),
-            0
-          );
+      const baseRisk = aircraftRisk(hours, cycles);
 
-        const cycles =
-          related.length;
+      const city = related[0]?.destination || "London";
 
-        const baseRisk =
-          aircraftRisk(hours, cycles);
+      const weather = await fetchWeather(city);
 
-        const city =
-          related[0]?.destination ||
-          "London";
+      const totalRisk = Math.min(
+        100,
+        baseRisk + weatherImpact(weather)
+      );
 
-        const weather =
-          await fetchWeather(city);
+      const maintenance = estimateMaintenance(totalRisk);
 
-        const totalRisk =
-          Math.min(
-            100,
-            baseRisk +
-            weatherImpact(weather)
-          );
-
-        const maintenance =
-          estimateMaintenance(totalRisk);
-
-        fleet.push({
-
-          id: a.id,
-          tail: a.tail_number,
-          model: a.model,
-
-          risk: totalRisk,
-
-          maintenance,
-
-          weather: {
-            city,
-            condition:
-              weather?.weather?.[0]?.main ||
-              "Unknown"
-          }
-
-        });
-
-      }
-
-      res.json({
-        fleet
+      fleet.push({
+        id: a.id,
+        tail: a.tail_number,
+        model: a.model,
+        risk: totalRisk,
+        maintenance,
+        weather: {
+          city,
+          condition:
+            weather?.weather?.[0]?.main || "Unknown",
+        },
       });
-
-    } catch (err) {
-
-      console.error(err);
-
-      res.status(500).json({
-        error:
-          "Control center error"
-      });
-
     }
 
+    res.json({ fleet });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: "Control center error",
+    });
   }
-);
+});
 
 /* ===============================
-   MAINTENANCE GENERATE
+   MAINTENANCE GENERATE (TENANT SAFE)
 =============================== */
 
-app.post(
-  "/api/maintenance/generate",
-  auth,
-  async (req, res) => {
+app.post("/api/maintenance/generate", auth, async (req, res) => {
+  try {
+    const profile = await getProfile(req.user.id);
 
-    try {
+    const companyId = profile.company_id;
 
-      const { data: profile } =
-        await supabase
-          .from("user_profiles")
-          .select("*")
-          .eq("id", req.user.id)
-          .single();
+    const { data: aircraft } = await supabase
+      .from("aircraft")
+      .select("*")
+      .eq("company_id", companyId);
 
-      const { data: aircraft } =
-        await supabase
-          .from("aircraft")
-          .select("*")
-          .eq(
-            "company_id",
-            profile.company_id
-          );
+    const schedule = [];
 
-      const schedule = [];
+    for (const a of aircraft || []) {
+      const risk = Math.random() * 100;
 
-      for (const a of aircraft) {
+      const plan = estimateMaintenance(risk);
 
-        const risk =
-          Math.random() * 100;
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + plan.daysUntilDue);
 
-        const plan =
-          estimateMaintenance(risk);
+      const item = {
+        aircraft_id: a.id,
+        company_id: companyId,
+        maintenance_type: plan.type,
+        predicted_due_hours: Math.floor(Math.random() * 500),
+        predicted_due_date: dueDate,
+        estimated_cost: plan.cost,
+      };
 
-        const dueDate =
-          new Date();
+      await supabase.from("maintenance_schedule").insert([item]);
 
-        dueDate.setDate(
-          dueDate.getDate() +
-          plan.daysUntilDue
-        );
-
-        const item = {
-
-          aircraft_id: a.id,
-
-          company_id:
-            profile.company_id,
-
-          maintenance_type:
-            plan.type,
-
-          predicted_due_hours:
-            Math.floor(
-              Math.random() * 500
-            ),
-
-          predicted_due_date:
-            dueDate,
-
-          estimated_cost:
-            plan.cost
-
-        };
-
-        await supabase
-          .from(
-            "maintenance_schedule"
-          )
-          .insert([item]);
-
-        schedule.push(item);
-
-      }
-
-      res.json({
-        status: "success",
-        generated:
-          schedule.length,
-        schedule
-      });
-
-    } catch (err) {
-
-      console.error(err);
-
-      res.status(500).json({
-        error:
-          "Maintenance generation failed"
-      });
-
+      schedule.push(item);
     }
 
+    res.json({
+      status: "success",
+      generated: schedule.length,
+      schedule,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: "Maintenance generation failed",
+    });
   }
-);
+});
 
 /* ===============================
    MAINTENANCE SCHEDULE
 =============================== */
 
-app.get(
-  "/api/maintenance/schedule",
-  auth,
-  async (req, res) => {
+app.get("/api/maintenance/schedule", auth, async (req, res) => {
+  try {
+    const profile = await getProfile(req.user.id);
 
-    try {
+    const companyId = profile.company_id;
 
-      const { data: profile } =
-        await supabase
-          .from("user_profiles")
-          .select("*")
-          .eq("id", req.user.id)
-          .single();
+    const { data } = await supabase
+      .from("maintenance_schedule")
+      .select("*")
+      .eq("company_id", companyId);
 
-      const { data } =
-        await supabase
-          .from(
-            "maintenance_schedule"
-          )
-          .select("*")
-          .eq(
-            "company_id",
-            profile.company_id
-          );
-
-      res.json({
-        schedule: data
-      });
-
-    } catch (err) {
-
-      console.error(err);
-
-      res.status(500).json({
-        error:
-          "Schedule fetch failed"
-      });
-
-    }
-
+    res.json({ schedule: data });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: "Schedule fetch failed",
+    });
   }
-);
+});
 
 /* ===============================
    HEALTH
 =============================== */
 
-app.get(
-  "/api/system/health",
-  (req, res) => {
-
-    res.json({
-      status: "operational",
-      layer:
-        "predictive-maintenance-v1",
-      timestamp: new Date()
-    });
-
-  }
-);
+app.get("/api/system/health", (req, res) => {
+  res.json({
+    status: "operational",
+    layer: "predictive-maintenance-v1",
+    timestamp: new Date(),
+  });
+});
 
 /* ===============================
    START SERVER
 =============================== */
 
-const PORT =
-  process.env.PORT || 4000;
+const PORT = process.env.PORT || 4000;
 
-app.listen(
-  PORT,
-  "0.0.0.0",
-  () => {
-
-    console.log(
-      `🚀 Operion Backend Running On Port ${PORT}`
-    );
-
-  }
-);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Operion Backend Running On Port ${PORT}`);
+});
