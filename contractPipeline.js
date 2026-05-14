@@ -1,44 +1,19 @@
 import pdf from "pdf-parse";
 import { logAudit } from "./db.js";
-import { createContractVersion } from "./contractVersionEngine.js";
+import { analyzeContract } from "./aiEngine.js";
 
 /* ===============================
    PDF TEXT EXTRACTION
 =============================== */
 
 async function extractText(buffer) {
-  const data = await pdf(buffer);
-  return data.text;
-}
-
-/* ===============================
-   SIMPLE AI ENGINE (HYBRID READY)
-   (MISTRAL / OPENAI SWITCH LAYER)
-=============================== */
-
-async function runAIExtraction(text) {
-  // For now: deterministic structured mock
-  // Next step: plug Mistral/OpenAI here
-
-  const clauses = text
-    .split("\n")
-    .filter(line => line.length > 30)
-    .slice(0, 15)
-    .map((c, i) => ({
-      id: i + 1,
-      text: c,
-      risk: Math.random() * 100
-    }));
-
-  const avgRisk =
-    clauses.reduce((s, c) => s + c.risk, 0) /
-    (clauses.length || 1);
-
-  return {
-    clauses,
-    risk_score: Math.round(avgRisk),
-    summary: "Auto-extracted contract analysis (v1)"
-  };
+  try {
+    const data = await pdf(buffer);
+    return data.text || "";
+  } catch (err) {
+    console.error("PDF extraction failed:", err.message);
+    throw new Error("Failed to extract PDF text");
+  }
 }
 
 /* ===============================
@@ -56,40 +31,61 @@ export async function processContractPipeline({
   try {
 
     /* ===============================
-       1. EXTRACT TEXT
+       1. EXTRACT TEXT FROM PDF
     =============================== */
 
     const extractedText = await extractText(fileBuffer);
 
+    if (!extractedText || extractedText.length < 50) {
+      throw new Error("Contract text too short or empty");
+    }
+
     /* ===============================
-       2. AI ANALYSIS
+       2. AI ANALYSIS (HYBRID ENGINE)
     =============================== */
 
-    const aiResult = await runAIExtraction(extractedText);
+    const aiResult = await analyzeContract(extractedText);
+
+    if (!aiResult || !aiResult.clauses) {
+      throw new Error("AI analysis failed");
+    }
 
     /* ===============================
-       3. STORE FILE METADATA
+       3. STORE CONTRACT FILE
     =============================== */
 
     await supabase.from("contract_files").upsert({
       id: file_id,
       company_id,
       file_name,
-      extracted_text: extractedText
+      extracted_text: extractedText,
+      created_at: new Date()
     });
 
     /* ===============================
-       4. CREATE VERSION
+       4. STORE CONTRACT VERSION
     =============================== */
 
-    const version = await createContractVersion({
-      supabase,
-      file_id,
-      company_id,
-      clauses: aiResult.clauses,
-      risk_score: aiResult.risk_score,
-      user_id: user.id
-    });
+    const { data: version, error: versionError } =
+      await supabase
+        .from("contract_versions")
+        .insert([
+          {
+            contract_id: file_id,
+            company_id,
+            summary: aiResult.summary,
+            overall_risk: aiResult.overall_risk,
+            clauses: aiResult.clauses,
+            created_by: user.id,
+            created_at: new Date()
+          }
+        ])
+        .select()
+        .single();
+
+    if (versionError) {
+      console.error("Version insert failed:", versionError.message);
+    }
 
     /* ===============================
        5. AUDIT LOG
@@ -102,23 +98,29 @@ export async function processContractPipeline({
       entity_type: "contract",
       entity_id: file_id,
       metadata: {
-        risk_score: aiResult.risk_score,
-        clauses: aiResult.clauses.length
+        file_name,
+        overall_risk: aiResult.overall_risk,
+        clause_count: aiResult.clauses.length
       }
     });
 
     /* ===============================
-       RESULT
+       RESULT RETURN
     =============================== */
 
     return {
       success: true,
+      file_id,
+      file_name,
       ai: aiResult,
-      version
+      version_id: version?.id || null
     };
 
   } catch (err) {
-    console.error("Pipeline error:", err);
-    throw new Error("Contract pipeline failed");
+    console.error("Contract pipeline error:", err.message);
+
+    throw new Error(
+      "Contract processing pipeline failed: " + err.message
+    );
   }
 }
