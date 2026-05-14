@@ -3,9 +3,13 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 
-import {
-  generateAviationFinancialStressTest
-} from "./aviationFinancialStressTestEngine.js";
+/* ===============================
+   IMPORT ALL ENGINES
+=============================== */
+
+import { generateAircraftTransition } from "./aircraftTransitionEngine.js";
+import { generateAviationFinancialStressTest } from "./aviationFinancialStressTestEngine.js";
+import { generateDecisionOS } from "./decisionOS.js";
 
 dotenv.config();
 
@@ -39,8 +43,8 @@ app.use(express.json());
 
 app.get("/", (req, res) => {
   res.json({
-    status: "Operion Aviation Intelligence Live",
-    layer: "Financial Stress Test Engine"
+    status: "Operion Decision OS Live",
+    layer: "Unified Aviation Intelligence System"
   });
 });
 
@@ -49,9 +53,7 @@ app.get("/", (req, res) => {
 =============================== */
 
 async function auth(req, res, next) {
-
   try {
-
     const token = req.headers.authorization?.replace("Bearer ", "");
 
     if (!token) {
@@ -68,12 +70,9 @@ async function auth(req, res, next) {
     next();
 
   } catch (err) {
-
     console.error(err);
     res.status(500).json({ error: "Auth failed" });
-
   }
-
 }
 
 /* ===============================
@@ -81,7 +80,6 @@ async function auth(req, res, next) {
 =============================== */
 
 async function getLatestContract(contract_id) {
-
   const { data, error } = await supabase
     .from("contract_versions")
     .select("*")
@@ -90,51 +88,62 @@ async function getLatestContract(contract_id) {
     .limit(1)
     .single();
 
-  if (error || !data) {
-    throw new Error("Contract not found");
-  }
+  if (error || !data) throw new Error("Contract not found");
 
   return data;
-
 }
 
 /* ===============================
-   STRESS TEST ENDPOINT
+   DECISION OS ENDPOINT
 =============================== */
 
-app.get("/api/contracts/:id/stress-test", auth, async (req, res) => {
+app.get("/api/contracts/:id/decision", auth, async (req, res) => {
 
   try {
 
     const contract = await getLatestContract(req.params.id);
 
-    const result = await generateAviationFinancialStressTest({
-      contract
+    // ===========================
+    // PARALLEL ENGINE EXECUTION
+    // ===========================
+
+    const [
+      stressTest,
+      transition
+    ] = await Promise.all([
+      generateAviationFinancialStressTest({ contract }),
+      generateAircraftTransition({ contract })
+    ]);
+
+    // ===========================
+    // DECISION OS LAYER
+    // ===========================
+
+    const decision = await generateDecisionOS({
+      contract,
+      stressTest,
+      transition
     });
 
     res.json({
       contract_id: req.params.id,
-      stress_test: result
+      decision
     });
 
   } catch (err) {
-
     console.error(err);
-
     res.status(500).json({
-      error: "Stress test failed"
+      error: "Decision OS failed"
     });
-
   }
-
 });
 
 /* ===============================
-   START
+   START SERVER
 =============================== */
 
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Operion running on port ${PORT}`);
+  console.log(`🚀 Operion Decision OS running on port ${PORT}`);
 });
