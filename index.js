@@ -8,44 +8,8 @@ import { createClient } from "@supabase/supabase-js";
 =============================== */
 
 import {
-  generateContractCopilot
-} from "./contractCopilotEngine.js";
-
-import {
-  generateNegotiationSimulation
-} from "./contractNegotiationSimulator.js";
-
-import {
-  generateBenchmarkAnalysis
-} from "./contractBenchmarkEngine.js";
-
-import {
-  generateRiskScoring
-} from "./contractRiskScoringEngine.js";
-
-import {
-  generateExecutiveDashboard
-} from "./executiveDashboardEngine.js";
-
-import {
-  generateContractRedlines
-} from "./contractRedlineEngine.js";
-
-import {
-  generateMaintenanceReserveAnalysis
-} from "./maintenanceReserveEngine.js";
-
-import {
-  generateFleetEconomics
-} from "./fleetEconomicsEngine.js";
-
-import {
-  generateLeaseReturnSimulation
-} from "./leaseReturnSimulator.js";
-
-import {
-  generateLLPForecast
-} from "./engineLLPForecastingEngine.js";
+  generateAircraftTransition
+} from "./aircraftTransitionEngine.js";
 
 dotenv.config();
 
@@ -106,7 +70,7 @@ app.get("/", (req, res) => {
       "Operion Aviation Intelligence Live",
 
     layer:
-      "AI + Lease Intelligence + LLP Forecasting"
+      "Aircraft Transition Intelligence Engine"
   });
 
 });
@@ -173,7 +137,7 @@ app.get(
       status: "operational",
 
       layer:
-        "aviation-intelligence-v6",
+        "aviation-transition-intelligence-v1",
 
       timestamp: new Date()
     });
@@ -220,11 +184,11 @@ async function getLatestContract(contract_id) {
 }
 
 /* ===============================
-   LLP FORECAST
+   AIRCRAFT TRANSITION
 =============================== */
 
 app.get(
-  "/api/contracts/:id/llp-forecast",
+  "/api/contracts/:id/transition",
   auth,
   async (req, res) => {
 
@@ -235,8 +199,8 @@ app.get(
           req.params.id
         );
 
-      const forecast =
-        await generateLLPForecast({
+      const transition =
+        await generateAircraftTransition({
           contract: latest
         });
 
@@ -244,7 +208,7 @@ app.get(
         contract_id:
           req.params.id,
 
-        forecast
+        transition
       });
 
     } catch (err) {
@@ -253,7 +217,7 @@ app.get(
 
       res.status(500).json({
         error:
-          "LLP forecasting failed"
+          "Aircraft transition failed"
       });
 
     }
