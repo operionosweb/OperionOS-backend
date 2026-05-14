@@ -1,6 +1,7 @@
 import pdf from "pdf-parse";
 import { logAudit } from "./db.js";
 import { analyzeContract } from "./aiEngine.js";
+import { reasonClauses } from "./clauseReasoningEngine.js";
 
 /* ===============================
    PDF TEXT EXTRACTION
@@ -31,7 +32,7 @@ export async function processContractPipeline({
   try {
 
     /* ===============================
-       1. EXTRACT TEXT FROM PDF
+       1. EXTRACT TEXT
     =============================== */
 
     const extractedText = await extractText(fileBuffer);
@@ -41,7 +42,7 @@ export async function processContractPipeline({
     }
 
     /* ===============================
-       2. AI ANALYSIS (HYBRID ENGINE)
+       2. AI ANALYSIS (BASE MODEL)
     =============================== */
 
     const aiResult = await analyzeContract(extractedText);
@@ -51,7 +52,15 @@ export async function processContractPipeline({
     }
 
     /* ===============================
-       3. STORE CONTRACT FILE
+       3. CLAUSE REASONING LAYER (NEW)
+    =============================== */
+
+    const clausesWithReasoning = await reasonClauses(aiResult.clauses);
+
+    aiResult.clauses = clausesWithReasoning;
+
+    /* ===============================
+       4. STORE CONTRACT FILE
     =============================== */
 
     await supabase.from("contract_files").upsert({
@@ -63,7 +72,7 @@ export async function processContractPipeline({
     });
 
     /* ===============================
-       4. STORE CONTRACT VERSION
+       5. STORE CONTRACT VERSION
     =============================== */
 
     const { data: version, error: versionError } =
@@ -88,7 +97,7 @@ export async function processContractPipeline({
     }
 
     /* ===============================
-       5. AUDIT LOG
+       6. AUDIT LOG
     =============================== */
 
     await logAudit({
@@ -105,7 +114,7 @@ export async function processContractPipeline({
     });
 
     /* ===============================
-       RESULT RETURN
+       RESULT
     =============================== */
 
     return {
@@ -118,9 +127,6 @@ export async function processContractPipeline({
 
   } catch (err) {
     console.error("Contract pipeline error:", err.message);
-
-    throw new Error(
-      "Contract processing pipeline failed: " + err.message
-    );
+    throw new Error("Contract processing pipeline failed: " + err.message);
   }
 }
