@@ -2,38 +2,76 @@ import axios from "axios";
 import { logAudit } from "./db.js";
 
 /* ===============================
-   SIMPLE AI EXTRACTION ENGINE
-   (starter version - safe + upgradeable)
+   GPT CONTRACT INTELLIGENCE ENGINE
+   (production-safe version)
 =============================== */
 
-function extractClauses(text) {
-  if (!text) return [];
-
-  const clauses = [];
-
-  const patterns = [
-    { type: "PAYMENT", keyword: "payment" },
-    { type: "TERMINATION", keyword: "termination" },
-    { type: "LIABILITY", keyword: "liability" },
-    { type: "DURATION", keyword: "term" },
-    { type: "DELIVERY", keyword: "delivery" }
-  ];
-
-  for (const p of patterns) {
-    if (text.toLowerCase().includes(p.keyword)) {
-      clauses.push({
-        clause_type: p.type,
-        content: `Detected ${p.type} clause`,
-        confidence: 0.72
-      });
+function fallbackExtraction(text) {
+  return [
+    {
+      clause_type: "GENERAL",
+      content: "Fallback extraction used (AI unavailable)",
+      confidence: 0.4
     }
-  }
-
-  return clauses;
+  ];
 }
 
 /* ===============================
-   MAIN CONTRACT PROCESSOR
+   GPT CALL
+=============================== */
+
+async function callGPT(contractText) {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
+
+  const prompt = `
+You are an aviation contract intelligence system.
+
+Extract key clauses from this contract and return ONLY valid JSON in this format:
+
+{
+  "clauses": [
+    {
+      "type": "PAYMENT | LIABILITY | TERMINATION | DURATION | DELIVERY | OTHER",
+      "summary": "short explanation",
+      "risk": 0-100
+    }
+  ],
+  "risk_score": 0-100
+}
+
+Contract:
+"""
+${contractText}
+"""
+`;
+
+  const response = await axios.post(
+    "https://api.openai.com/v1/chat/completions",
+    {
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "You extract structured contract intelligence." },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.2
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      }
+    }
+  );
+
+  const content = response.data.choices[0].message.content;
+
+  return JSON.parse(content);
+}
+
+/* ===============================
+   MAIN CONTRACT EXTRACTOR
 =============================== */
 
 export async function extractContract(req, res) {
@@ -46,47 +84,54 @@ export async function extractContract(req, res) {
       });
     }
 
-    // 1. Extract clauses
-    const clauses = extractClauses(contract_text);
+    let result;
 
-    // 2. Simulated risk scoring
-    const risk_score = Math.min(
-      100,
-      clauses.length * 18 + Math.random() * 10
-    );
+    try {
+      result = await callGPT(contract_text);
+    } catch (aiErr) {
+      console.error("GPT failed, using fallback:", aiErr.message);
 
-    // 3. Store extraction log (AI pipeline trace)
+      result = {
+        clauses: fallbackExtraction(contract_text),
+        risk_score: 50
+      };
+    }
+
+    // ===============================
+    // AUDIT LOG
+    // ===============================
+
     await logAudit({
       user_id: req.user?.id || null,
       company_id,
-      action: "CONTRACT_EXTRACTED",
+      action: "CONTRACT_AI_EXTRACTED",
       entity_type: "contract",
       entity_id: file_id || null,
       metadata: {
-        clauses_found: clauses.length,
-        risk_score
+        risk_score: result.risk_score,
+        clause_count: result.clauses?.length || 0
       }
     });
 
-    // 4. Return structured AI output
     res.json({
       success: true,
       file_id,
-      risk_score,
-      clauses,
+      risk_score: result.risk_score,
+      clauses: result.clauses,
       summary: {
-        total_clauses: clauses.length,
+        total_clauses: result.clauses.length,
         risk_level:
-          risk_score > 70
+          result.risk_score > 70
             ? "HIGH"
-            : risk_score > 40
+            : result.risk_score > 40
             ? "MEDIUM"
             : "LOW"
       }
     });
 
   } catch (err) {
-    console.error("Contract extraction error:", err);
+    console.error("Contract engine error:", err);
+
     res.status(500).json({
       error: "Contract extraction failed"
     });
