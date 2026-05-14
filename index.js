@@ -3,6 +3,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 import axios from "axios";
 import { createClient } from "@supabase/supabase-js";
+import { logAudit } from "./db.js";
+import { extractContract } from "./aiEngine.js";
 
 dotenv.config();
 
@@ -35,17 +37,23 @@ app.use((req, res, next) => {
 
 app.get("/", (req, res) => {
   res.json({
-    status: "Operion Core v2 Running"
+    status: "Operion Core v2 + Contracts Connected"
   });
 });
 
 /* ===============================
-   AUTH
+   AUTH LOGIN
 =============================== */
 
 app.post("/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        error: "Email and password required"
+      });
+    }
 
     const { data, error } =
       await supabase.auth.signInWithPassword({
@@ -54,7 +62,9 @@ app.post("/auth/login", async (req, res) => {
       });
 
     if (error) {
-      return res.status(401).json({ error: error.message });
+      return res.status(401).json({
+        error: error.message
+      });
     }
 
     res.json({
@@ -64,6 +74,7 @@ app.post("/auth/login", async (req, res) => {
     });
 
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Login failed" });
   }
 });
@@ -74,13 +85,15 @@ app.post("/auth/login", async (req, res) => {
 
 async function auth(req, res, next) {
   try {
-    const token = req.headers.authorization?.replace("Bearer ", "");
+    const token =
+      req.headers.authorization?.replace("Bearer ", "");
 
     if (!token) {
       return res.status(401).json({ error: "Missing token" });
     }
 
-    const { data, error } = await supabase.auth.getUser(token);
+    const { data, error } =
+      await supabase.auth.getUser(token);
 
     if (error || !data?.user) {
       return res.status(401).json({ error: "Invalid token" });
@@ -89,7 +102,8 @@ async function auth(req, res, next) {
     req.user = data.user;
     next();
 
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Auth error" });
   }
 }
@@ -113,47 +127,7 @@ async function getProfile(userId) {
 }
 
 /* ===============================
-   RISK ENGINE
-=============================== */
-
-function aircraftRisk(hours, cycles) {
-  return Math.min(100, hours * 0.08 + cycles * 0.12);
-}
-
-/* ===============================
-   WEATHER
-=============================== */
-
-function weatherImpact(weather) {
-  if (!weather) return 0;
-
-  let risk = 0;
-  const main = weather.weather?.[0]?.main || "";
-
-  if (main.includes("Thunderstorm")) risk += 25;
-  if (main.includes("Rain")) risk += 10;
-  if (main.includes("Snow")) risk += 18;
-
-  const wind = weather.wind?.speed || 0;
-  if (wind > 15) risk += 10;
-
-  return risk;
-}
-
-async function fetchWeather(city) {
-  try {
-    const url =
-      `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${process.env.OPENWEATHER_API_KEY}`;
-
-    const res = await axios.get(url);
-    return res.data;
-  } catch {
-    return null;
-  }
-}
-
-/* ===============================
-   CONTROL CENTER (REAL v2)
+   CONTROL CENTER (SAFE v2)
 =============================== */
 
 app.get("/api/control-center", auth, async (req, res) => {
@@ -174,7 +148,6 @@ app.get("/api/control-center", auth, async (req, res) => {
     const fleet = [];
 
     for (const a of aircraft || []) {
-
       const related = flights.filter(
         f => f.aircraft_id === a.id
       );
@@ -186,32 +159,14 @@ app.get("/api/control-center", auth, async (req, res) => {
 
       const cycles = related.length;
 
-      const baseRisk = aircraftRisk(hours, cycles);
-
-      const city = related[0]?.destination || "London";
-      const weather = await fetchWeather(city);
-
-      const totalRisk = Math.min(
-        100,
-        baseRisk + weatherImpact(weather)
-      );
+      const risk = Math.min(100, hours * 0.08 + cycles * 0.12);
 
       fleet.push({
         id: a.id,
         tail: a.tail_number,
         model: a.model,
-
-        utilization: {
-          hours,
-          cycles
-        },
-
-        risk: totalRisk,
-
-        weather: {
-          city,
-          condition: weather?.weather?.[0]?.main || "Unknown"
-        }
+        utilization: { hours, cycles },
+        risk
       });
     }
 
@@ -224,7 +179,13 @@ app.get("/api/control-center", auth, async (req, res) => {
 });
 
 /* ===============================
-   MAINTENANCE (SAFE READ ONLY)
+   CONTRACT INTELLIGENCE ROUTE (NEW)
+=============================== */
+
+app.post("/api/contracts/extract", auth, extractContract);
+
+/* ===============================
+   MAINTENANCE SCHEDULE
 =============================== */
 
 app.get("/api/maintenance/schedule", auth, async (req, res) => {
@@ -239,6 +200,7 @@ app.get("/api/maintenance/schedule", auth, async (req, res) => {
     res.json({ schedule: data });
 
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: "Schedule fetch failed" });
   }
 });
@@ -250,16 +212,16 @@ app.get("/api/maintenance/schedule", auth, async (req, res) => {
 app.get("/api/system/health", (req, res) => {
   res.json({
     status: "operational",
-    version: "v2-core"
+    version: "v2-contracts-connected"
   });
 });
 
 /* ===============================
-   START
+   START SERVER
 =============================== */
 
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Operion Core v2 running on ${PORT}`);
+  console.log(`🚀 Operion running on ${PORT}`);
 });
