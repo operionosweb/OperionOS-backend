@@ -2,33 +2,50 @@ import axios from "axios";
 import { logAudit } from "./db.js";
 
 /* ===============================
-   GPT CONTRACT INTELLIGENCE ENGINE
-   (production-safe version)
+   CONFIG
+=============================== */
+
+const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+/* ===============================
+   SAFE FALLBACK
 =============================== */
 
 function fallbackExtraction(text) {
-  return [
-    {
-      clause_type: "GENERAL",
-      content: "Fallback extraction used (AI unavailable)",
-      confidence: 0.4
-    }
-  ];
+  return {
+    clauses: [
+      {
+        type: "GENERAL",
+        summary: "Fallback extraction used",
+        risk: 50
+      }
+    ],
+    risk_score: 50
+  };
 }
 
 /* ===============================
-   GPT CALL
+   MISTRAL PRIMARY ENGINE (EU)
 =============================== */
 
-async function callGPT(contractText) {
-  const apiKey = process.env.OPENAI_API_KEY;
+async function callMistral(contractText) {
+  const response = await axios.post(
+    "https://api.mistral.ai/v1/chat/completions",
+    {
+      model: "mistral-large-latest",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are an aviation contract analysis system. Return ONLY valid JSON."
+        },
+        {
+          role: "user",
+          content: `
+Extract contract intelligence.
 
-  if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
-
-  const prompt = `
-You are an aviation contract intelligence system.
-
-Extract key clauses from this contract and return ONLY valid JSON in this format:
+Return ONLY JSON in this format:
 
 {
   "clauses": [
@@ -45,21 +62,14 @@ Contract:
 """
 ${contractText}
 """
-`;
-
-  const response = await axios.post(
-    "https://api.openai.com/v1/chat/completions",
-    {
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: "You extract structured contract intelligence." },
-        { role: "user", content: prompt }
+`
+        }
       ],
       temperature: 0.2
     },
     {
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${MISTRAL_API_KEY}`,
         "Content-Type": "application/json"
       }
     }
@@ -71,7 +81,60 @@ ${contractText}
 }
 
 /* ===============================
-   MAIN CONTRACT EXTRACTOR
+   OPENAI FALLBACK ENGINE (PRECISION LAYER)
+=============================== */
+
+async function callOpenAI(contractText) {
+  const response = await axios.post(
+    "https://api.openai.com/v1/chat/completions",
+    {
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You extract structured aviation contract intelligence. Output ONLY valid JSON."
+        },
+        {
+          role: "user",
+          content: `
+Return ONLY JSON:
+
+{
+  "clauses": [
+    {
+      "type": "PAYMENT | LIABILITY | TERMINATION | DURATION | DELIVERY | OTHER",
+      "summary": "short explanation",
+      "risk": 0-100
+    }
+  ],
+  "risk_score": 0-100
+}
+
+Contract:
+"""
+${contractText}
+"""
+`
+        }
+      ],
+      temperature: 0.1
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
+      }
+    }
+  );
+
+  const content = response.data.choices[0].message.content;
+
+  return JSON.parse(content);
+}
+
+/* ===============================
+   MAIN HYBRID ENGINE
 =============================== */
 
 export async function extractContract(req, res) {
@@ -86,32 +149,49 @@ export async function extractContract(req, res) {
 
     let result;
 
-    try {
-      result = await callGPT(contract_text);
-    } catch (aiErr) {
-      console.error("GPT failed, using fallback:", aiErr.message);
+    /* ===============================
+       1. TRY MISTRAL FIRST (EU PRIMARY)
+    =============================== */
 
-      result = {
-        clauses: fallbackExtraction(contract_text),
-        risk_score: 50
-      };
+    try {
+      result = await callMistral(contract_text);
+    } catch (mistralErr) {
+      console.error("Mistral failed, switching to OpenAI:", mistralErr.message);
+
+      /* ===============================
+         2. FALLBACK TO OPENAI (PRECISION LAYER)
+      =============================== */
+
+      try {
+        result = await callOpenAI(contract_text);
+      } catch (openaiErr) {
+        console.error("OpenAI also failed:", openaiErr.message);
+
+        result = fallbackExtraction(contract_text);
+      }
     }
 
-    // ===============================
-    // AUDIT LOG
-    // ===============================
+    /* ===============================
+       AUDIT LOG
+    =============================== */
 
     await logAudit({
       user_id: req.user?.id || null,
       company_id,
-      action: "CONTRACT_AI_EXTRACTED",
+      action: "CONTRACT_AI_HYBRID_EXTRACTED",
       entity_type: "contract",
       entity_id: file_id || null,
       metadata: {
         risk_score: result.risk_score,
-        clause_count: result.clauses?.length || 0
+        clause_count: result.clauses?.length || 0,
+        engine_used:
+          result.source || "mistral->openai->fallback"
       }
     });
+
+    /* ===============================
+       RESPONSE
+    =============================== */
 
     res.json({
       success: true,
@@ -130,7 +210,7 @@ export async function extractContract(req, res) {
     });
 
   } catch (err) {
-    console.error("Contract engine error:", err);
+    console.error("Hybrid contract engine error:", err);
 
     res.status(500).json({
       error: "Contract extraction failed"
