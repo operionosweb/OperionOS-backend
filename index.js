@@ -39,6 +39,10 @@ import {
   generateFleetEconomics
 } from "./fleetEconomicsEngine.js";
 
+import {
+  generateLeaseReturnSimulation
+} from "./leaseReturnSimulator.js";
+
 dotenv.config();
 
 const app = express();
@@ -98,7 +102,7 @@ app.get("/", (req, res) => {
       "Operion Aviation Intelligence Live",
 
     layer:
-      "AI + Copilot + Negotiation + Benchmark + Risk + Executive Dashboard + Redline + Maintenance Reserve + Fleet Economics"
+      "AI + Copilot + Negotiation + Benchmark + Risk + Executive Dashboard + Redline + Maintenance Reserve + Fleet Economics + Lease Return Simulator"
   });
 
 });
@@ -165,7 +169,7 @@ app.get(
       status: "operational",
 
       layer:
-        "aviation-intelligence-v4",
+        "aviation-intelligence-v5",
 
       timestamp: new Date()
     });
@@ -498,6 +502,48 @@ app.get(
       res.status(500).json({
         error:
           "Fleet economics generation failed"
+      });
+
+    }
+
+  }
+);
+
+/* ===============================
+   LEASE RETURN SIMULATOR
+=============================== */
+
+app.get(
+  "/api/contracts/:id/lease-return",
+  auth,
+  async (req, res) => {
+
+    try {
+
+      const latest =
+        await getLatestContract(
+          req.params.id
+        );
+
+      const simulation =
+        await generateLeaseReturnSimulation({
+          contract: latest
+        });
+
+      res.json({
+        contract_id:
+          req.params.id,
+
+        simulation
+      });
+
+    } catch (err) {
+
+      console.error(err);
+
+      res.status(500).json({
+        error:
+          "Lease return simulation failed"
       });
 
     }
