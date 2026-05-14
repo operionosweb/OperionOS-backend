@@ -1,18 +1,18 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import axios from "axios";
 import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
 
 import { logAudit } from "./db.js";
+import { processContractPipeline } from "./contractPipeline.js";
 
 dotenv.config();
 
 const app = express();
 
 /* ===============================
-   SUPABASE (ANON SAFE MODE)
+   SUPABASE
 =============================== */
 
 const supabase = createClient(
@@ -43,8 +43,8 @@ app.use((req, res, next) => {
 
 app.get("/", (req, res) => {
   res.json({
-    status: "Operion Backend Live",
-    layer: "contracts + storage + ingestion ready"
+    status: "Operion Contracts Engine Live",
+    layer: "AI + Pipeline + Versioning"
   });
 });
 
@@ -142,7 +142,7 @@ async function getProfile(userId) {
 }
 
 /* ===============================
-   CONTRACT UPLOAD TEST (FULL PIPELINE)
+   CONTRACT PIPELINE UPLOAD
 =============================== */
 
 app.post("/api/contracts/test-upload", auth, async (req, res) => {
@@ -161,88 +161,41 @@ app.post("/api/contracts/test-upload", auth, async (req, res) => {
     const file_id = crypto.randomUUID();
     const fileBuffer = Buffer.from(file_base64, "base64");
 
-    const filePath = `${company_id}/${file_id}_${file_name}`;
+    const result = await processContractPipeline({
+      supabase,
+      fileBuffer,
+      file_id,
+      file_name,
+      user: req.user,
+      company_id
+    });
 
     /* ===============================
-       1. UPLOAD TO SUPABASE STORAGE
-    =============================== */
-
-    const { error: uploadError } = await supabase.storage
-      .from("contract-files")
-      .upload(filePath, fileBuffer, {
-        contentType: "application/pdf",
-        upsert: false
-      });
-
-    if (uploadError) {
-      return res.status(500).json({
-        error: uploadError.message
-      });
-    }
-
-    /* ===============================
-       2. GET FILE URL
-    =============================== */
-
-    const { data: urlData } = supabase.storage
-      .from("contract-files")
-      .getPublicUrl(filePath);
-
-    /* ===============================
-       3. STORE IN DATABASE
-    =============================== */
-
-    const { data: inserted, error: dbError } =
-      await supabase
-        .from("contract_files")
-        .insert([
-          {
-            id: file_id,
-            company_id,
-            file_name,
-            file_url: urlData.publicUrl,
-            extracted_text: null
-          }
-        ])
-        .select()
-        .single();
-
-    if (dbError) {
-      return res.status(500).json({
-        error: dbError.message
-      });
-    }
-
-    /* ===============================
-       4. AUDIT LOG
+       AUDIT LOG
     =============================== */
 
     await logAudit({
       user_id: req.user.id,
       company_id,
-      action: "CONTRACT_FILE_UPLOADED",
-      entity_type: "contract_file",
+      action: "CONTRACT_PIPELINE_EXECUTED",
+      entity_type: "contract",
       entity_id: file_id,
       metadata: {
-        file_name
+        file_name,
+        risk_score: result?.ai?.risk_score || null
       }
     });
-
-    /* ===============================
-       RESPONSE
-    =============================== */
 
     res.json({
       success: true,
       file_id,
-      file_url: urlData.publicUrl,
-      db_record: inserted
+      result
     });
 
   } catch (err) {
     console.error(err);
     res.status(500).json({
-      error: "Upload failed"
+      error: "Pipeline execution failed"
     });
   }
 });
@@ -254,7 +207,7 @@ app.post("/api/contracts/test-upload", auth, async (req, res) => {
 app.get("/api/system/health", (req, res) => {
   res.json({
     status: "operational",
-    system: "operion-contracts-v1"
+    system: "operion-contract-pipeline-v2"
   });
 });
 
@@ -265,5 +218,5 @@ app.get("/api/system/health", (req, res) => {
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Operion Backend running on port ${PORT}`);
+  console.log(`🚀 Operion running on port ${PORT}`);
 });
