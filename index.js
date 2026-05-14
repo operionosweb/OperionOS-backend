@@ -7,8 +7,14 @@ import { createClient } from "@supabase/supabase-js";
    AI ENGINES
 =============================== */
 
-import { generateContractCopilot } from "./contractCopilotEngine.js";
-import { generateNegotiationSimulation } from "./contractNegotiationSimulator.js";
+import { generateContractCopilot }
+from "./contractCopilotEngine.js";
+
+import { generateNegotiationSimulation }
+from "./contractNegotiationSimulator.js";
+
+import { generateBenchmarkAnalysis }
+from "./contractBenchmarkEngine.js";
 
 dotenv.config();
 
@@ -28,15 +34,29 @@ const supabase = createClient(
 =============================== */
 
 app.use((req, res, next) => {
-  console.log(`➡️ ${req.method} ${req.url}`);
+
+  console.log(
+    `➡️ ${req.method} ${req.url}`
+  );
+
   next();
+
 });
 
 app.use(
   cors({
     origin: "*",
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    methods: [
+      "GET",
+      "POST",
+      "PUT",
+      "DELETE",
+      "OPTIONS"
+    ],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization"
+    ]
   })
 );
 
@@ -47,19 +67,25 @@ app.use(express.json());
 =============================== */
 
 app.get("/", (req, res) => {
+
   res.json({
-    status: "Operion Contracts Engine Live",
+    status:
+      "Operion Contracts Engine Live",
+
     layer:
-      "AI + Pipeline + Versioning + Copilot + Negotiation",
+      "AI + Pipeline + Copilot + Negotiation + Benchmark"
   });
+
 });
 
 /* ===============================
-   AUTH MIDDLEWARE
+   AUTH
 =============================== */
 
 async function auth(req, res, next) {
+
   try {
+
     const token =
       req.headers.authorization?.replace(
         "Bearer ",
@@ -67,88 +93,120 @@ async function auth(req, res, next) {
       );
 
     if (!token) {
+
       return res.status(401).json({
-        error: "Missing token",
+        error: "Missing token"
       });
+
     }
 
     const { data, error } =
       await supabase.auth.getUser(token);
 
     if (error || !data?.user) {
+
       return res.status(401).json({
-        error: "Invalid token",
+        error: "Invalid token"
       });
+
     }
 
     req.user = data.user;
 
     next();
+
   } catch (err) {
+
     console.error(err);
 
     res.status(500).json({
-      error: "Authentication failed",
+      error: "Authentication failed"
     });
+
   }
+
 }
 
 /* ===============================
    HEALTH
 =============================== */
 
-app.get("/api/system/health", (req, res) => {
-  res.json({
-    status: "operational",
-    layer: "contracts-intelligence-v4",
-    timestamp: new Date(),
-  });
-});
+app.get(
+  "/api/system/health",
+  (req, res) => {
+
+    res.json({
+      status: "operational",
+      layer:
+        "contracts-intelligence-v5",
+      timestamp: new Date()
+    });
+
+  }
+);
 
 /* ===============================
-   CONTRACT COPILOT
+   COPILOT
 =============================== */
 
 app.get(
   "/api/contracts/:id/copilot",
   auth,
   async (req, res) => {
-    try {
-      const contract_id = req.params.id;
 
-      const { data: latest, error } =
+    try {
+
+      const contract_id =
+        req.params.id;
+
+      const {
+        data: latest,
+        error
+      } =
         await supabase
           .from("contract_versions")
           .select("*")
-          .eq("contract_id", contract_id)
-          .order("created_at", {
-            ascending: false,
-          })
+          .eq(
+            "contract_id",
+            contract_id
+          )
+          .order(
+            "created_at",
+            { ascending: false }
+          )
           .limit(1)
           .single();
 
       if (error || !latest) {
+
         return res.status(404).json({
-          error: "Contract not found",
+          error:
+            "Contract not found"
         });
+
       }
 
       const copilot =
         await generateContractCopilot({
-          contract: latest,
+          contract: latest
         });
 
       res.json({
         contract_id,
-        copilot,
+        copilot
       });
+
     } catch (err) {
+
       console.error(err);
 
       res.status(500).json({
-        error: "Copilot generation failed",
+        error:
+          "Copilot generation failed"
       });
+
     }
+
   }
 );
 
@@ -160,43 +218,125 @@ app.get(
   "/api/contracts/:id/negotiation",
   auth,
   async (req, res) => {
-    try {
-      const contract_id = req.params.id;
 
-      const { data: latest, error } =
+    try {
+
+      const contract_id =
+        req.params.id;
+
+      const {
+        data: latest,
+        error
+      } =
         await supabase
           .from("contract_versions")
           .select("*")
-          .eq("contract_id", contract_id)
-          .order("created_at", {
-            ascending: false,
-          })
+          .eq(
+            "contract_id",
+            contract_id
+          )
+          .order(
+            "created_at",
+            { ascending: false }
+          )
           .limit(1)
           .single();
 
       if (error || !latest) {
+
         return res.status(404).json({
-          error: "Contract not found",
+          error:
+            "Contract not found"
         });
+
       }
 
       const negotiation =
         await generateNegotiationSimulation({
-          contract: latest,
+          contract: latest
         });
 
       res.json({
         contract_id,
-        negotiation,
+        negotiation
       });
+
     } catch (err) {
+
       console.error(err);
 
       res.status(500).json({
         error:
-          "Negotiation simulation failed",
+          "Negotiation simulation failed"
       });
+
     }
+
+  }
+);
+
+/* ===============================
+   BENCHMARK ENGINE
+=============================== */
+
+app.get(
+  "/api/contracts/:id/benchmark",
+  auth,
+  async (req, res) => {
+
+    try {
+
+      const contract_id =
+        req.params.id;
+
+      const {
+        data: latest,
+        error
+      } =
+        await supabase
+          .from("contract_versions")
+          .select("*")
+          .eq(
+            "contract_id",
+            contract_id
+          )
+          .order(
+            "created_at",
+            { ascending: false }
+          )
+          .limit(1)
+          .single();
+
+      if (error || !latest) {
+
+        return res.status(404).json({
+          error:
+            "Contract not found"
+        });
+
+      }
+
+      const benchmark =
+        await generateBenchmarkAnalysis({
+          contract: latest
+        });
+
+      res.json({
+        contract_id,
+        benchmark
+      });
+
+    } catch (err) {
+
+      console.error(err);
+
+      res.status(500).json({
+        error:
+          "Benchmark generation failed"
+      });
+
+    }
+
   }
 );
 
@@ -207,8 +347,14 @@ app.get(
 const PORT =
   process.env.PORT || 4000;
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(
-    `🚀 Operion running on port ${PORT}`
-  );
-});
+app.listen(
+  PORT,
+  "0.0.0.0",
+  () => {
+
+    console.log(
+      `🚀 Operion running on port ${PORT}`
+    );
+
+  }
+);
