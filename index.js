@@ -16,6 +16,9 @@ from "./contractNegotiationSimulator.js";
 import { generateBenchmarkAnalysis }
 from "./contractBenchmarkEngine.js";
 
+import { generateRiskScoring }
+from "./contractRiskScoringEngine.js";
+
 dotenv.config();
 
 const app = express();
@@ -73,7 +76,7 @@ app.get("/", (req, res) => {
       "Operion Contracts Engine Live",
 
     layer:
-      "AI + Pipeline + Copilot + Negotiation + Benchmark"
+      "AI + Copilot + Negotiation + Benchmark + Risk"
   });
 
 });
@@ -138,7 +141,7 @@ app.get(
     res.json({
       status: "operational",
       layer:
-        "contracts-intelligence-v5",
+        "contracts-intelligence-v6",
       timestamp: new Date()
     });
 
@@ -211,7 +214,7 @@ app.get(
 );
 
 /* ===============================
-   NEGOTIATION SIMULATOR
+   NEGOTIATION
 =============================== */
 
 app.get(
@@ -276,7 +279,7 @@ app.get(
 );
 
 /* ===============================
-   BENCHMARK ENGINE
+   BENCHMARK
 =============================== */
 
 app.get(
@@ -333,6 +336,71 @@ app.get(
       res.status(500).json({
         error:
           "Benchmark generation failed"
+      });
+
+    }
+
+  }
+);
+
+/* ===============================
+   RISK SCORING
+=============================== */
+
+app.get(
+  "/api/contracts/:id/risk",
+  auth,
+  async (req, res) => {
+
+    try {
+
+      const contract_id =
+        req.params.id;
+
+      const {
+        data: latest,
+        error
+      } =
+        await supabase
+          .from("contract_versions")
+          .select("*")
+          .eq(
+            "contract_id",
+            contract_id
+          )
+          .order(
+            "created_at",
+            { ascending: false }
+          )
+          .limit(1)
+          .single();
+
+      if (error || !latest) {
+
+        return res.status(404).json({
+          error:
+            "Contract not found"
+        });
+
+      }
+
+      const risk =
+        await generateRiskScoring({
+          contract: latest
+        });
+
+      res.json({
+        contract_id,
+        risk
+      });
+
+    } catch (err) {
+
+      console.error(err);
+
+      res.status(500).json({
+        error:
+          "Risk scoring failed"
       });
 
     }
