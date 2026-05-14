@@ -11,7 +11,7 @@ dotenv.config();
 const app = express();
 
 /* ===============================
-   SUPABASE (SAFE MODE)
+   SUPABASE
 =============================== */
 
 const supabase = createClient(
@@ -20,17 +20,13 @@ const supabase = createClient(
 );
 
 /* ===============================
-   REQUEST LOGGER
+   MIDDLEWARE
 =============================== */
 
 app.use((req, res, next) => {
   console.log(`➡️ ${req.method} ${req.url}`);
   next();
 });
-
-/* ===============================
-   CORS
-=============================== */
 
 app.use(
   cors({
@@ -40,14 +36,8 @@ app.use(
   })
 );
 
-/* ===============================
-   OPTIONS
-=============================== */
-
 app.use((req, res, next) => {
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(204);
-  }
+  if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
 });
 
@@ -58,9 +48,7 @@ app.use(express.json());
 =============================== */
 
 app.get("/", (req, res) => {
-  res.json({
-    status: "Operion Backend Running",
-  });
+  res.json({ status: "Operion Backend Running" });
 });
 
 /* ===============================
@@ -72,31 +60,22 @@ app.post("/auth/login", async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({
-        error: "Email and password required",
-      });
+      return res.status(400).json({ error: "Email and password required" });
     }
 
     const { data, error } =
-      await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      return res.status(401).json({
-        error: error.message,
-      });
+      return res.status(401).json({ error: error.message });
     }
 
-    // AUDIT LOG
     try {
-      const { data: profile } =
-        await supabase
-          .from("user_profiles")
-          .select("*")
-          .eq("id", data.user.id)
-          .single();
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("*")
+        .eq("id", data.user.id)
+        .single();
 
       await logAudit({
         user_id: data.user.id,
@@ -105,9 +84,8 @@ app.post("/auth/login", async (req, res) => {
         entity_type: "auth",
         metadata: { email },
       });
-    } catch (auditErr) {
-      console.error("Audit login failed");
-      console.error(auditErr.message);
+    } catch (e) {
+      console.error("Audit failed:", e.message);
     }
 
     res.json({
@@ -117,43 +95,33 @@ app.post("/auth/login", async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({
-      error: "Login server error",
-    });
+    res.status(500).json({ error: "Login server error" });
   }
 });
 
 /* ===============================
-   AUTH MIDDLEWARE
+   AUTH
 =============================== */
 
 async function auth(req, res, next) {
   try {
-    const token =
-      req.headers.authorization?.replace("Bearer ", "");
+    const token = req.headers.authorization?.replace("Bearer ", "");
 
     if (!token) {
-      return res.status(401).json({
-        error: "Missing token",
-      });
+      return res.status(401).json({ error: "Missing token" });
     }
 
-    const { data, error } =
-      await supabase.auth.getUser(token);
+    const { data, error } = await supabase.auth.getUser(token);
 
     if (error || !data?.user) {
-      return res.status(401).json({
-        error: "Invalid token",
-      });
+      return res.status(401).json({ error: "Invalid token" });
     }
 
     req.user = data.user;
     next();
   } catch (err) {
     console.error(err);
-    res.status(500).json({
-      error: "Authentication error",
-    });
+    res.status(500).json({ error: "Auth error" });
   }
 }
 
@@ -162,37 +130,29 @@ async function auth(req, res, next) {
 =============================== */
 
 async function getProfile(userId) {
-  const { data, error } =
-    await supabase
-      .from("user_profiles")
-      .select("*")
-      .eq("id", userId)
-      .single();
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .select("*")
+    .eq("id", userId)
+    .single();
 
-  if (error || !data) {
-    throw new Error("User profile not found");
-  }
+  if (error || !data) throw new Error("Profile not found");
 
   return data;
 }
 
 /* ===============================
-   RISK ENGINE
+   ENGINE
 =============================== */
 
 function aircraftRisk(hours, cycles) {
   return Math.min(100, hours * 0.08 + cycles * 0.12);
 }
 
-/* ===============================
-   WEATHER IMPACT
-=============================== */
-
 function weatherImpact(weather) {
   if (!weather) return 0;
 
   let risk = 0;
-
   const main = weather.weather?.[0]?.main || "";
 
   if (main.includes("Thunderstorm")) risk += 25;
@@ -200,35 +160,20 @@ function weatherImpact(weather) {
   if (main.includes("Snow")) risk += 18;
 
   const wind = weather.wind?.speed || 0;
-
   if (wind > 15) risk += 10;
 
   return risk;
 }
 
-/* ===============================
-   WEATHER API
-=============================== */
-
 async function fetchWeather(city) {
   try {
-    const apiKey = process.env.OPENWEATHER_API_KEY;
-
-    const url =
-      `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}`;
-
-    const response = await axios.get(url);
-
-    return response.data;
-  } catch (err) {
-    console.error(err.message);
+    const url = `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${process.env.OPENWEATHER_API_KEY}`;
+    const res = await axios.get(url);
+    return res.data;
+  } catch {
     return null;
   }
 }
-
-/* ===============================
-   MAINTENANCE ENGINE
-=============================== */
 
 function estimateMaintenance(risk) {
   if (risk > 80)
@@ -244,7 +189,7 @@ function estimateMaintenance(risk) {
 }
 
 /* ===============================
-   CONTRACT AI ENDPOINT (NEW)
+   CONTRACT AI
 =============================== */
 
 app.post("/api/contracts/extract", auth, extractContract);
@@ -268,3 +213,122 @@ app.get("/api/control-center", auth, async (req, res) => {
     const { data: aircraft } = await supabase
       .from("aircraft")
       .select("*")
+      .eq("company_id", companyId);
+
+    const { data: flights } = await supabase
+      .from("flights")
+      .select("*")
+      .eq("company_id", companyId);
+
+    const fleet = [];
+
+    for (const a of aircraft || []) {
+      const related = flights.filter(f => f.aircraft_id === a.id);
+
+      const hours = related.reduce(
+        (s, f) => s + Number(f.flight_hours || 0),
+        0
+      );
+
+      const cycles = related.length;
+
+      const baseRisk = aircraftRisk(hours, cycles);
+
+      const city = related[0]?.destination || "London";
+      const weather = await fetchWeather(city);
+
+      const totalRisk = Math.min(
+        100,
+        baseRisk + weatherImpact(weather)
+      );
+
+      fleet.push({
+        id: a.id,
+        tail: a.tail_number,
+        model: a.model,
+        risk: totalRisk,
+        maintenance: estimateMaintenance(totalRisk),
+        weather: {
+          city,
+          condition: weather?.weather?.[0]?.main || "Unknown",
+        },
+      });
+    }
+
+    res.json({ fleet });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Control center error" });
+  }
+});
+
+/* ===============================
+   MAINTENANCE GENERATE
+=============================== */
+
+app.post("/api/maintenance/generate", auth, async (req, res) => {
+  try {
+    const profile = await getProfile(req.user.id);
+    const companyId = profile.company_id;
+
+    const { data: aircraft } = await supabase
+      .from("aircraft")
+      .select("*")
+      .eq("company_id", companyId);
+
+    const schedule = [];
+
+    for (const a of aircraft || []) {
+      const risk = Math.random() * 100;
+      const plan = estimateMaintenance(risk);
+
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + plan.daysUntilDue);
+
+      const item = {
+        aircraft_id: a.id,
+        company_id: companyId,
+        maintenance_type: plan.type,
+        predicted_due_hours: Math.floor(Math.random() * 500),
+        predicted_due_date: dueDate,
+        estimated_cost: plan.cost,
+      };
+
+      const { data: inserted } = await supabase
+        .from("maintenance_schedule")
+        .insert([item])
+        .select()
+        .single();
+
+      await logAudit({
+        user_id: req.user.id,
+        company_id: companyId,
+        action: "MAINTENANCE_GENERATED",
+        entity_type: "maintenance_schedule",
+        entity_id: inserted?.id || null,
+        metadata: { aircraft_id: a.id, maintenance_type: plan.type },
+      });
+
+      schedule.push(item);
+    }
+
+    res.json({ status: "success", generated: schedule.length, schedule });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Maintenance generation failed" });
+  }
+});
+
+/* ===============================
+   SCHEDULE
+=============================== */
+
+app.get("/api/maintenance/schedule", auth, async (req, res) => {
+  try {
+    const profile = await getProfile(req.user.id);
+    const companyId = profile.company_id;
+
+    const { data } = await supabase
+      .from("maintenance_schedule")
+      .select("*")
+      .eq("company_id", companyId);
