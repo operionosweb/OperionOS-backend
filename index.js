@@ -35,6 +35,10 @@ import {
   generateMaintenanceReserveAnalysis
 } from "./maintenanceReserveEngine.js";
 
+import {
+  generateFleetEconomics
+} from "./fleetEconomicsEngine.js";
+
 dotenv.config();
 
 const app = express();
@@ -94,7 +98,7 @@ app.get("/", (req, res) => {
       "Operion Aviation Intelligence Live",
 
     layer:
-      "AI + Copilot + Negotiation + Benchmark + Risk + Executive Dashboard + Redline + Maintenance Reserve"
+      "AI + Copilot + Negotiation + Benchmark + Risk + Executive Dashboard + Redline + Maintenance Reserve + Fleet Economics"
   });
 
 });
@@ -161,7 +165,7 @@ app.get(
       status: "operational",
 
       layer:
-        "aviation-intelligence-v3",
+        "aviation-intelligence-v4",
 
       timestamp: new Date()
     });
@@ -452,6 +456,48 @@ app.get(
       res.status(500).json({
         error:
           "Maintenance reserve generation failed"
+      });
+
+    }
+
+  }
+);
+
+/* ===============================
+   FLEET ECONOMICS
+=============================== */
+
+app.get(
+  "/api/contracts/:id/fleet-economics",
+  auth,
+  async (req, res) => {
+
+    try {
+
+      const latest =
+        await getLatestContract(
+          req.params.id
+        );
+
+      const economics =
+        await generateFleetEconomics({
+          contract: latest
+        });
+
+      res.json({
+        contract_id:
+          req.params.id,
+
+        economics
+      });
+
+    } catch (err) {
+
+      console.error(err);
+
+      res.status(500).json({
+        error:
+          "Fleet economics generation failed"
       });
 
     }
