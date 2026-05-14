@@ -43,6 +43,10 @@ import {
   generateLeaseReturnSimulation
 } from "./leaseReturnSimulator.js";
 
+import {
+  generateLLPForecast
+} from "./engineLLPForecastingEngine.js";
+
 dotenv.config();
 
 const app = express();
@@ -102,7 +106,7 @@ app.get("/", (req, res) => {
       "Operion Aviation Intelligence Live",
 
     layer:
-      "AI + Copilot + Negotiation + Benchmark + Risk + Executive Dashboard + Redline + Maintenance Reserve + Fleet Economics + Lease Return Simulator"
+      "AI + Lease Intelligence + LLP Forecasting"
   });
 
 });
@@ -169,7 +173,7 @@ app.get(
       status: "operational",
 
       layer:
-        "aviation-intelligence-v5",
+        "aviation-intelligence-v6",
 
       timestamp: new Date()
     });
@@ -216,11 +220,11 @@ async function getLatestContract(contract_id) {
 }
 
 /* ===============================
-   COPILOT
+   LLP FORECAST
 =============================== */
 
 app.get(
-  "/api/contracts/:id/copilot",
+  "/api/contracts/:id/llp-forecast",
   auth,
   async (req, res) => {
 
@@ -231,8 +235,8 @@ app.get(
           req.params.id
         );
 
-      const copilot =
-        await generateContractCopilot({
+      const forecast =
+        await generateLLPForecast({
           contract: latest
         });
 
@@ -240,7 +244,7 @@ app.get(
         contract_id:
           req.params.id,
 
-        copilot
+        forecast
       });
 
     } catch (err) {
@@ -249,349 +253,7 @@ app.get(
 
       res.status(500).json({
         error:
-          "Copilot generation failed"
-      });
-
-    }
-
-  }
-);
-
-/* ===============================
-   NEGOTIATION
-=============================== */
-
-app.get(
-  "/api/contracts/:id/negotiation",
-  auth,
-  async (req, res) => {
-
-    try {
-
-      const latest =
-        await getLatestContract(
-          req.params.id
-        );
-
-      const negotiation =
-        await generateNegotiationSimulation({
-          contract: latest
-        });
-
-      res.json({
-        contract_id:
-          req.params.id,
-
-        negotiation
-      });
-
-    } catch (err) {
-
-      console.error(err);
-
-      res.status(500).json({
-        error:
-          "Negotiation generation failed"
-      });
-
-    }
-
-  }
-);
-
-/* ===============================
-   BENCHMARK
-=============================== */
-
-app.get(
-  "/api/contracts/:id/benchmark",
-  auth,
-  async (req, res) => {
-
-    try {
-
-      const latest =
-        await getLatestContract(
-          req.params.id
-        );
-
-      const benchmark =
-        await generateBenchmarkAnalysis({
-          contract: latest
-        });
-
-      res.json({
-        contract_id:
-          req.params.id,
-
-        benchmark
-      });
-
-    } catch (err) {
-
-      console.error(err);
-
-      res.status(500).json({
-        error:
-          "Benchmark generation failed"
-      });
-
-    }
-
-  }
-);
-
-/* ===============================
-   RISK
-=============================== */
-
-app.get(
-  "/api/contracts/:id/risk",
-  auth,
-  async (req, res) => {
-
-    try {
-
-      const latest =
-        await getLatestContract(
-          req.params.id
-        );
-
-      const risk =
-        await generateRiskScoring({
-          contract: latest
-        });
-
-      res.json({
-        contract_id:
-          req.params.id,
-
-        risk
-      });
-
-    } catch (err) {
-
-      console.error(err);
-
-      res.status(500).json({
-        error:
-          "Risk scoring failed"
-      });
-
-    }
-
-  }
-);
-
-/* ===============================
-   REDLINES
-=============================== */
-
-app.get(
-  "/api/contracts/:id/redlines",
-  auth,
-  async (req, res) => {
-
-    try {
-
-      const latest =
-        await getLatestContract(
-          req.params.id
-        );
-
-      const redlines =
-        await generateContractRedlines({
-          contract: latest
-        });
-
-      res.json({
-        contract_id:
-          req.params.id,
-
-        redlines
-      });
-
-    } catch (err) {
-
-      console.error(err);
-
-      res.status(500).json({
-        error:
-          "Redline generation failed"
-      });
-
-    }
-
-  }
-);
-
-/* ===============================
-   MAINTENANCE RESERVE
-=============================== */
-
-app.get(
-  "/api/contracts/:id/maintenance-reserve",
-  auth,
-  async (req, res) => {
-
-    try {
-
-      const latest =
-        await getLatestContract(
-          req.params.id
-        );
-
-      const maintenanceReserve =
-        await generateMaintenanceReserveAnalysis({
-          contract: latest
-        });
-
-      res.json({
-        contract_id:
-          req.params.id,
-
-        maintenanceReserve
-      });
-
-    } catch (err) {
-
-      console.error(err);
-
-      res.status(500).json({
-        error:
-          "Maintenance reserve generation failed"
-      });
-
-    }
-
-  }
-);
-
-/* ===============================
-   FLEET ECONOMICS
-=============================== */
-
-app.get(
-  "/api/contracts/:id/fleet-economics",
-  auth,
-  async (req, res) => {
-
-    try {
-
-      const latest =
-        await getLatestContract(
-          req.params.id
-        );
-
-      const economics =
-        await generateFleetEconomics({
-          contract: latest
-        });
-
-      res.json({
-        contract_id:
-          req.params.id,
-
-        economics
-      });
-
-    } catch (err) {
-
-      console.error(err);
-
-      res.status(500).json({
-        error:
-          "Fleet economics generation failed"
-      });
-
-    }
-
-  }
-);
-
-/* ===============================
-   LEASE RETURN SIMULATOR
-=============================== */
-
-app.get(
-  "/api/contracts/:id/lease-return",
-  auth,
-  async (req, res) => {
-
-    try {
-
-      const latest =
-        await getLatestContract(
-          req.params.id
-        );
-
-      const simulation =
-        await generateLeaseReturnSimulation({
-          contract: latest
-        });
-
-      res.json({
-        contract_id:
-          req.params.id,
-
-        simulation
-      });
-
-    } catch (err) {
-
-      console.error(err);
-
-      res.status(500).json({
-        error:
-          "Lease return simulation failed"
-      });
-
-    }
-
-  }
-);
-
-/* ===============================
-   EXECUTIVE DASHBOARD
-=============================== */
-
-app.get(
-  "/api/executive/dashboard",
-  auth,
-  async (req, res) => {
-
-    try {
-
-      const {
-        data: contracts
-      } =
-        await supabase
-          .from("contract_versions")
-          .select("*")
-          .order(
-            "created_at",
-            {
-              ascending: false
-            }
-          );
-
-      const dashboard =
-        await generateExecutiveDashboard({
-          contracts:
-            contracts || []
-        });
-
-      res.json({
-        dashboard
-      });
-
-    } catch (err) {
-
-      console.error(err);
-
-      res.status(500).json({
-        error:
-          "Executive dashboard failed"
+          "LLP forecasting failed"
       });
 
     }
