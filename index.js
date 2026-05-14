@@ -31,6 +31,10 @@ import {
   generateContractRedlines
 } from "./contractRedlineEngine.js";
 
+import {
+  generateMaintenanceReserveAnalysis
+} from "./maintenanceReserveEngine.js";
+
 dotenv.config();
 
 const app = express();
@@ -87,10 +91,10 @@ app.get("/", (req, res) => {
 
   res.json({
     status:
-      "Operion Executive Intelligence Live",
+      "Operion Aviation Intelligence Live",
 
     layer:
-      "AI + Copilot + Negotiation + Benchmark + Risk + Executive Dashboard + Redline Engine"
+      "AI + Copilot + Negotiation + Benchmark + Risk + Executive Dashboard + Redline + Maintenance Reserve"
   });
 
 });
@@ -157,7 +161,7 @@ app.get(
       status: "operational",
 
       layer:
-        "executive-intelligence-v2",
+        "aviation-intelligence-v3",
 
       timestamp: new Date()
     });
@@ -166,7 +170,7 @@ app.get(
 );
 
 /* ===============================
-   GET LATEST CONTRACT VERSION
+   GET LATEST CONTRACT
 =============================== */
 
 async function getLatestContract(contract_id) {
@@ -406,6 +410,48 @@ app.get(
       res.status(500).json({
         error:
           "Redline generation failed"
+      });
+
+    }
+
+  }
+);
+
+/* ===============================
+   MAINTENANCE RESERVE
+=============================== */
+
+app.get(
+  "/api/contracts/:id/maintenance-reserve",
+  auth,
+  async (req, res) => {
+
+    try {
+
+      const latest =
+        await getLatestContract(
+          req.params.id
+        );
+
+      const maintenanceReserve =
+        await generateMaintenanceReserveAnalysis({
+          contract: latest
+        });
+
+      res.json({
+        contract_id:
+          req.params.id,
+
+        maintenanceReserve
+      });
+
+    } catch (err) {
+
+      console.error(err);
+
+      res.status(500).json({
+        error:
+          "Maintenance reserve generation failed"
       });
 
     }
