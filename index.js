@@ -27,6 +27,10 @@ import {
   generateExecutiveDashboard
 } from "./executiveDashboardEngine.js";
 
+import {
+  generateContractRedlines
+} from "./contractRedlineEngine.js";
+
 dotenv.config();
 
 const app = express();
@@ -86,7 +90,7 @@ app.get("/", (req, res) => {
       "Operion Executive Intelligence Live",
 
     layer:
-      "AI + Copilot + Negotiation + Benchmark + Risk + Executive Dashboard"
+      "AI + Copilot + Negotiation + Benchmark + Risk + Executive Dashboard + Redline Engine"
   });
 
 });
@@ -153,13 +157,51 @@ app.get(
       status: "operational",
 
       layer:
-        "executive-intelligence-v1",
+        "executive-intelligence-v2",
 
       timestamp: new Date()
     });
 
   }
 );
+
+/* ===============================
+   GET LATEST CONTRACT VERSION
+=============================== */
+
+async function getLatestContract(contract_id) {
+
+  const {
+    data: latest,
+    error
+  } =
+    await supabase
+      .from("contract_versions")
+      .select("*")
+      .eq(
+        "contract_id",
+        contract_id
+      )
+      .order(
+        "created_at",
+        {
+          ascending: false
+        }
+      )
+      .limit(1)
+      .single();
+
+  if (error || !latest) {
+
+    throw new Error(
+      "Contract not found"
+    );
+
+  }
+
+  return latest;
+
+}
 
 /* ===============================
    COPILOT
@@ -172,36 +214,10 @@ app.get(
 
     try {
 
-      const contract_id =
-        req.params.id;
-
-      const {
-        data: latest
-      } =
-        await supabase
-          .from("contract_versions")
-          .select("*")
-          .eq(
-            "contract_id",
-            contract_id
-          )
-          .order(
-            "created_at",
-            {
-              ascending: false
-            }
-          )
-          .limit(1)
-          .single();
-
-      if (!latest) {
-
-        return res.status(404).json({
-          error:
-            "Contract not found"
-        });
-
-      }
+      const latest =
+        await getLatestContract(
+          req.params.id
+        );
 
       const copilot =
         await generateContractCopilot({
@@ -209,7 +225,9 @@ app.get(
         });
 
       res.json({
-        contract_id,
+        contract_id:
+          req.params.id,
+
         copilot
       });
 
@@ -238,36 +256,10 @@ app.get(
 
     try {
 
-      const contract_id =
-        req.params.id;
-
-      const {
-        data: latest
-      } =
-        await supabase
-          .from("contract_versions")
-          .select("*")
-          .eq(
-            "contract_id",
-            contract_id
-          )
-          .order(
-            "created_at",
-            {
-              ascending: false
-            }
-          )
-          .limit(1)
-          .single();
-
-      if (!latest) {
-
-        return res.status(404).json({
-          error:
-            "Contract not found"
-        });
-
-      }
+      const latest =
+        await getLatestContract(
+          req.params.id
+        );
 
       const negotiation =
         await generateNegotiationSimulation({
@@ -275,7 +267,9 @@ app.get(
         });
 
       res.json({
-        contract_id,
+        contract_id:
+          req.params.id,
+
         negotiation
       });
 
@@ -304,36 +298,10 @@ app.get(
 
     try {
 
-      const contract_id =
-        req.params.id;
-
-      const {
-        data: latest
-      } =
-        await supabase
-          .from("contract_versions")
-          .select("*")
-          .eq(
-            "contract_id",
-            contract_id
-          )
-          .order(
-            "created_at",
-            {
-              ascending: false
-            }
-          )
-          .limit(1)
-          .single();
-
-      if (!latest) {
-
-        return res.status(404).json({
-          error:
-            "Contract not found"
-        });
-
-      }
+      const latest =
+        await getLatestContract(
+          req.params.id
+        );
 
       const benchmark =
         await generateBenchmarkAnalysis({
@@ -341,7 +309,9 @@ app.get(
         });
 
       res.json({
-        contract_id,
+        contract_id:
+          req.params.id,
+
         benchmark
       });
 
@@ -370,36 +340,10 @@ app.get(
 
     try {
 
-      const contract_id =
-        req.params.id;
-
-      const {
-        data: latest
-      } =
-        await supabase
-          .from("contract_versions")
-          .select("*")
-          .eq(
-            "contract_id",
-            contract_id
-          )
-          .order(
-            "created_at",
-            {
-              ascending: false
-            }
-          )
-          .limit(1)
-          .single();
-
-      if (!latest) {
-
-        return res.status(404).json({
-          error:
-            "Contract not found"
-        });
-
-      }
+      const latest =
+        await getLatestContract(
+          req.params.id
+        );
 
       const risk =
         await generateRiskScoring({
@@ -407,7 +351,9 @@ app.get(
         });
 
       res.json({
-        contract_id,
+        contract_id:
+          req.params.id,
+
         risk
       });
 
@@ -418,6 +364,48 @@ app.get(
       res.status(500).json({
         error:
           "Risk scoring failed"
+      });
+
+    }
+
+  }
+);
+
+/* ===============================
+   REDLINES
+=============================== */
+
+app.get(
+  "/api/contracts/:id/redlines",
+  auth,
+  async (req, res) => {
+
+    try {
+
+      const latest =
+        await getLatestContract(
+          req.params.id
+        );
+
+      const redlines =
+        await generateContractRedlines({
+          contract: latest
+        });
+
+      res.json({
+        contract_id:
+          req.params.id,
+
+        redlines
+      });
+
+    } catch (err) {
+
+      console.error(err);
+
+      res.status(500).json({
+        error:
+          "Redline generation failed"
       });
 
     }
