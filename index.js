@@ -3,8 +3,14 @@ import cors from "cors";
 import dotenv from "dotenv";
 import axios from "axios";
 import { createClient } from "@supabase/supabase-js";
+
 import { logAudit } from "./db.js";
 import { extractContract } from "./aiEngine.js";
+import {
+  createContractVersion,
+  diffClauses,
+  calculateRiskDelta
+} from "./contractVersionEngine.js";
 
 dotenv.config();
 
@@ -37,7 +43,7 @@ app.use((req, res, next) => {
 
 app.get("/", (req, res) => {
   res.json({
-    status: "Operion Core v2 + Contracts Connected"
+    status: "Operion v2 - Contracts + Versioning Active"
   });
 });
 
@@ -127,7 +133,7 @@ async function getProfile(userId) {
 }
 
 /* ===============================
-   CONTROL CENTER (SAFE v2)
+   CONTROL CENTER
 =============================== */
 
 app.get("/api/control-center", auth, async (req, res) => {
@@ -149,7 +155,7 @@ app.get("/api/control-center", auth, async (req, res) => {
 
     for (const a of aircraft || []) {
       const related = flights.filter(
-        f => f.aircraft_id === a.id
+        (f) => f.aircraft_id === a.id
       );
 
       const hours = related.reduce(
@@ -159,7 +165,10 @@ app.get("/api/control-center", auth, async (req, res) => {
 
       const cycles = related.length;
 
-      const risk = Math.min(100, hours * 0.08 + cycles * 0.12);
+      const risk = Math.min(
+        100,
+        hours * 0.08 + cycles * 0.12
+      );
 
       fleet.push({
         id: a.id,
@@ -179,10 +188,64 @@ app.get("/api/control-center", auth, async (req, res) => {
 });
 
 /* ===============================
-   CONTRACT INTELLIGENCE ROUTE (NEW)
+   CONTRACT EXTRACTION
 =============================== */
 
 app.post("/api/contracts/extract", auth, extractContract);
+
+/* ===============================
+   CONTRACT VERSIONING (NEW CORE)
+=============================== */
+
+app.post("/api/contracts/version", auth, async (req, res) => {
+  try {
+    const {
+      file_id,
+      clauses,
+      risk_score,
+      previous_version
+    } = req.body;
+
+    const profile = await getProfile(req.user.id);
+
+    const version = await createContractVersion({
+      supabase,
+      file_id,
+      company_id: profile.company_id,
+      clauses,
+      risk_score,
+      user_id: req.user.id
+    });
+
+    let diff = null;
+    let riskDelta = null;
+
+    if (previous_version) {
+      diff = diffClauses(
+        previous_version.clauses,
+        clauses
+      );
+
+      riskDelta = calculateRiskDelta(
+        previous_version.risk_score,
+        risk_score
+      );
+    }
+
+    res.json({
+      success: true,
+      version,
+      diff,
+      riskDelta
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      error: "Versioning failed"
+    });
+  }
+});
 
 /* ===============================
    MAINTENANCE SCHEDULE
@@ -212,7 +275,7 @@ app.get("/api/maintenance/schedule", auth, async (req, res) => {
 app.get("/api/system/health", (req, res) => {
   res.json({
     status: "operational",
-    version: "v2-contracts-connected"
+    version: "contracts + versioning v3"
   });
 });
 
