@@ -7,17 +7,25 @@ import { createClient } from "@supabase/supabase-js";
    AI ENGINES
 =============================== */
 
-import { generateContractCopilot }
-from "./contractCopilotEngine.js";
+import {
+  generateContractCopilot
+} from "./contractCopilotEngine.js";
 
-import { generateNegotiationSimulation }
-from "./contractNegotiationSimulator.js";
+import {
+  generateNegotiationSimulation
+} from "./contractNegotiationSimulator.js";
 
-import { generateBenchmarkAnalysis }
-from "./contractBenchmarkEngine.js";
+import {
+  generateBenchmarkAnalysis
+} from "./contractBenchmarkEngine.js";
 
-import { generateRiskScoring }
-from "./contractRiskScoringEngine.js";
+import {
+  generateRiskScoring
+} from "./contractRiskScoringEngine.js";
+
+import {
+  generateExecutiveDashboard
+} from "./executiveDashboardEngine.js";
 
 dotenv.config();
 
@@ -49,6 +57,7 @@ app.use((req, res, next) => {
 app.use(
   cors({
     origin: "*",
+
     methods: [
       "GET",
       "POST",
@@ -56,6 +65,7 @@ app.use(
       "DELETE",
       "OPTIONS"
     ],
+
     allowedHeaders: [
       "Content-Type",
       "Authorization"
@@ -73,10 +83,10 @@ app.get("/", (req, res) => {
 
   res.json({
     status:
-      "Operion Contracts Engine Live",
+      "Operion Executive Intelligence Live",
 
     layer:
-      "AI + Copilot + Negotiation + Benchmark + Risk"
+      "AI + Copilot + Negotiation + Benchmark + Risk + Executive Dashboard"
   });
 
 });
@@ -123,7 +133,8 @@ async function auth(req, res, next) {
     console.error(err);
 
     res.status(500).json({
-      error: "Authentication failed"
+      error:
+        "Authentication failed"
     });
 
   }
@@ -140,8 +151,10 @@ app.get(
 
     res.json({
       status: "operational",
+
       layer:
-        "contracts-intelligence-v6",
+        "executive-intelligence-v1",
+
       timestamp: new Date()
     });
 
@@ -163,8 +176,7 @@ app.get(
         req.params.id;
 
       const {
-        data: latest,
-        error
+        data: latest
       } =
         await supabase
           .from("contract_versions")
@@ -175,12 +187,14 @@ app.get(
           )
           .order(
             "created_at",
-            { ascending: false }
+            {
+              ascending: false
+            }
           )
           .limit(1)
           .single();
 
-      if (error || !latest) {
+      if (!latest) {
 
         return res.status(404).json({
           error:
@@ -228,8 +242,7 @@ app.get(
         req.params.id;
 
       const {
-        data: latest,
-        error
+        data: latest
       } =
         await supabase
           .from("contract_versions")
@@ -240,12 +253,14 @@ app.get(
           )
           .order(
             "created_at",
-            { ascending: false }
+            {
+              ascending: false
+            }
           )
           .limit(1)
           .single();
 
-      if (error || !latest) {
+      if (!latest) {
 
         return res.status(404).json({
           error:
@@ -270,7 +285,7 @@ app.get(
 
       res.status(500).json({
         error:
-          "Negotiation simulation failed"
+          "Negotiation generation failed"
       });
 
     }
@@ -293,8 +308,7 @@ app.get(
         req.params.id;
 
       const {
-        data: latest,
-        error
+        data: latest
       } =
         await supabase
           .from("contract_versions")
@@ -305,12 +319,14 @@ app.get(
           )
           .order(
             "created_at",
-            { ascending: false }
+            {
+              ascending: false
+            }
           )
           .limit(1)
           .single();
 
-      if (error || !latest) {
+      if (!latest) {
 
         return res.status(404).json({
           error:
@@ -344,7 +360,7 @@ app.get(
 );
 
 /* ===============================
-   RISK SCORING
+   RISK
 =============================== */
 
 app.get(
@@ -358,8 +374,7 @@ app.get(
         req.params.id;
 
       const {
-        data: latest,
-        error
+        data: latest
       } =
         await supabase
           .from("contract_versions")
@@ -370,12 +385,14 @@ app.get(
           )
           .order(
             "created_at",
-            { ascending: false }
+            {
+              ascending: false
+            }
           )
           .limit(1)
           .single();
 
-      if (error || !latest) {
+      if (!latest) {
 
         return res.status(404).json({
           error:
@@ -401,6 +418,54 @@ app.get(
       res.status(500).json({
         error:
           "Risk scoring failed"
+      });
+
+    }
+
+  }
+);
+
+/* ===============================
+   EXECUTIVE DASHBOARD
+=============================== */
+
+app.get(
+  "/api/executive/dashboard",
+  auth,
+  async (req, res) => {
+
+    try {
+
+      const {
+        data: contracts
+      } =
+        await supabase
+          .from("contract_versions")
+          .select("*")
+          .order(
+            "created_at",
+            {
+              ascending: false
+            }
+          );
+
+      const dashboard =
+        await generateExecutiveDashboard({
+          contracts:
+            contracts || []
+        });
+
+      res.json({
+        dashboard
+      });
+
+    } catch (err) {
+
+      console.error(err);
+
+      res.status(500).json({
+        error:
+          "Executive dashboard failed"
       });
 
     }
