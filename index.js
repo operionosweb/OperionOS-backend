@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import multer from "multer";
+import pdfParse from "pdf-parse";
 
 import { createClient } from "@supabase/supabase-js";
 
@@ -131,7 +132,7 @@ async function getLatestContract(contract_id) {
 }
 
 /* ===============================
-   CONTRACT FILE UPLOAD
+   CONTRACT FILE UPLOAD + PDF EXTRACTION
 =============================== */
 
 app.post(
@@ -158,7 +159,36 @@ app.post(
         `${Date.now()}-${file.originalname}`;
 
       /* =========================
-         UPLOAD TO STORAGE
+         PDF TEXT EXTRACTION
+      ========================= */
+
+      let extractedText = "";
+
+      if (
+        file.mimetype === "application/pdf"
+      ) {
+
+        try {
+
+          const parsed =
+            await pdfParse(file.buffer);
+
+          extractedText =
+            parsed.text || "";
+
+        } catch (pdfError) {
+
+          console.error(
+            "PDF parsing failed",
+            pdfError
+          );
+
+        }
+
+      }
+
+      /* =========================
+         STORAGE UPLOAD
       ========================= */
 
       const {
@@ -203,7 +233,8 @@ app.post(
               storage_path: storageData.path,
               mime_type: file.mimetype,
               file_size: file.size,
-              status: "uploaded"
+              extracted_text: extractedText,
+              status: "processed"
             }
           ])
           .select()
@@ -220,12 +251,14 @@ app.post(
       }
 
       /* =========================
-         SUCCESS RESPONSE
+         RESPONSE
       ========================= */
 
       res.json({
         success: true,
-        contract: contractData
+        contract: contractData,
+        extracted_text_preview:
+          extractedText.slice(0, 1000)
       });
 
     } catch (err) {
@@ -234,6 +267,46 @@ app.post(
 
       res.status(500).json({
         error: "Contract upload failed"
+      });
+
+    }
+
+  }
+);
+
+/* ===============================
+   CONTRACT LIST
+=============================== */
+
+app.get(
+  "/api/contracts",
+  auth,
+  async (req, res) => {
+
+    try {
+
+      const { data, error } =
+        await supabase
+          .from("contracts")
+          .select("*")
+          .order("created_at", {
+            ascending: false
+          });
+
+      if (error) {
+        throw error;
+      }
+
+      res.json({
+        contracts: data
+      });
+
+    } catch (err) {
+
+      console.error(err);
+
+      res.status(500).json({
+        error: "Failed to fetch contracts"
       });
 
     }
@@ -257,10 +330,6 @@ app.get(
           req.params.id
         );
 
-      /* =========================
-         PARALLEL ENGINE EXECUTION
-      ========================= */
-
       const [
         stressTest,
         transition
@@ -273,10 +342,6 @@ app.get(
             contract
           })
         ]);
-
-      /* =========================
-         DECISION OS LAYER
-      ========================= */
 
       const decision =
         await generateDecisionOS({
@@ -312,22 +377,3 @@ app.get("/health", (req, res) => {
   res.json({
     status: "healthy",
     service: "Operion Backend",
-    timestamp: new Date()
-  });
-
-});
-
-/* ===============================
-   START SERVER
-=============================== */
-
-const PORT =
-  process.env.PORT || 4000;
-
-app.listen(PORT, "0.0.0.0", () => {
-
-  console.log(
-    `🚀 Operion Decision OS running on port ${PORT}`
-  );
-
-});
