@@ -2,6 +2,9 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
+import multer from "multer";
+import fs from "fs";
+import crypto from "crypto";
 
 /* ===============================
    IMPORT ALL ENGINES
@@ -14,6 +17,10 @@ import { generateDecisionOS } from "./decisionOS.js";
 dotenv.config();
 
 const app = express();
+
+/* ===============================
+   SUPABASE
+=============================== */
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -98,26 +105,13 @@ async function getLatestContract(contract_id) {
 =============================== */
 
 app.get("/api/contracts/:id/decision", auth, async (req, res) => {
-
   try {
-
     const contract = await getLatestContract(req.params.id);
 
-    // ===========================
-    // PARALLEL ENGINE EXECUTION
-    // ===========================
-
-    const [
-      stressTest,
-      transition
-    ] = await Promise.all([
+    const [stressTest, transition] = await Promise.all([
       generateAviationFinancialStressTest({ contract }),
       generateAircraftTransition({ contract })
     ]);
-
-    // ===========================
-    // DECISION OS LAYER
-    // ===========================
 
     const decision = await generateDecisionOS({
       contract,
@@ -136,6 +130,70 @@ app.get("/api/contracts/:id/decision", auth, async (req, res) => {
       error: "Decision OS failed"
     });
   }
+});
+
+/* ===============================
+   🚀 FILE INGESTION SYSTEM
+=============================== */
+
+const upload = multer({ dest: "uploads/" });
+
+if (!fs.existsSync("uploads")) {
+  fs.mkdirSync("uploads");
+}
+
+/**
+ * POST /api/contracts/upload
+ * Upload contract file (PDF/DOCX/etc.)
+ */
+app.post("/api/contracts/upload", auth, upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const fileBuffer = fs.readFileSync(req.file.path);
+
+    const contractRecord = {
+      id: crypto.randomUUID(),
+      fileName: req.file.originalname,
+      uploadedAt: new Date().toISOString(),
+
+      status: "UPLOADED",
+
+      // raw file (temporary placeholder for OCR/AI step)
+      rawFileBase64: fileBuffer.toString("base64"),
+
+      parsed: null,
+      obligations: [],
+      riskScore: null
+    };
+
+    // cleanup temp file
+    fs.unlinkSync(req.file.path);
+
+    res.json({
+      success: true,
+      message: "Contract uploaded successfully",
+      contract: contractRecord
+    });
+
+  } catch (err) {
+    console.error("Upload error:", err);
+    res.status(500).json({ error: "Upload failed" });
+  }
+});
+
+/* ===============================
+   HEALTH CHECK
+=============================== */
+
+app.get("/api/system/health", (req, res) => {
+  res.json({
+    status: "operational",
+    layer: "decision-os + ingestion",
+    timestamp: new Date()
+  });
 });
 
 /* ===============================
