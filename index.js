@@ -6,10 +6,6 @@ import pdfParse from "pdf-parse";
 
 import { createClient } from "@supabase/supabase-js";
 
-/* ===============================
-   IMPORT ALL ENGINES
-=============================== */
-
 import { generateAircraftTransition } from "./aircraftTransitionEngine.js";
 import { generateAviationFinancialStressTest } from "./aviationFinancialStressTestEngine.js";
 import { generateDecisionOS } from "./decisionOS.js";
@@ -28,7 +24,7 @@ const supabase = createClient(
 );
 
 /* ===============================
-   MULTER MEMORY STORAGE
+   MULTER
 =============================== */
 
 const upload = multer({
@@ -63,6 +59,18 @@ app.get("/", (req, res) => {
   res.json({
     status: "Operion Decision OS Live",
     layer: "Unified Aviation Intelligence System"
+  });
+});
+
+/* ===============================
+   HEALTH
+=============================== */
+
+app.get("/health", (req, res) => {
+  res.json({
+    status: "healthy",
+    service: "Operion Backend",
+    timestamp: new Date()
   });
 });
 
@@ -105,6 +113,7 @@ async function auth(req, res, next) {
     });
 
   }
+
 }
 
 /* ===============================
@@ -129,10 +138,11 @@ async function getLatestContract(contract_id) {
   }
 
   return data;
+
 }
 
 /* ===============================
-   CONTRACT FILE UPLOAD + PDF EXTRACTION
+   CONTRACT UPLOAD + PDF EXTRACTION
 =============================== */
 
 app.post(
@@ -151,16 +161,8 @@ app.post(
 
       const file = req.file;
 
-      /* =========================
-         UNIQUE FILE NAME
-      ========================= */
-
       const fileName =
         `${Date.now()}-${file.originalname}`;
-
-      /* =========================
-         PDF TEXT EXTRACTION
-      ========================= */
 
       let extractedText = "";
 
@@ -187,10 +189,6 @@ app.post(
 
       }
 
-      /* =========================
-         STORAGE UPLOAD
-      ========================= */
-
       const {
         data: storageData,
         error: storageError
@@ -215,10 +213,6 @@ app.post(
         });
 
       }
-
-      /* =========================
-         SAVE CONTRACT RECORD
-      ========================= */
 
       const {
         data: contractData,
@@ -249,10 +243,6 @@ app.post(
         });
 
       }
-
-      /* =========================
-         RESPONSE
-      ========================= */
 
       res.json({
         success: true,
@@ -315,7 +305,7 @@ app.get(
 );
 
 /* ===============================
-   DECISION OS ENDPOINT
+   DECISION OS
 =============================== */
 
 app.get(
@@ -369,11 +359,16 @@ app.get(
 );
 
 /* ===============================
-   HEALTH CHECK
+   START SERVER
 =============================== */
 
-app.get("/health", (req, res) => {
+const PORT =
+  process.env.PORT || 4000;
 
-  res.json({
-    status: "healthy",
-    service: "Operion Backend",
+app.listen(PORT, "0.0.0.0", () => {
+
+  console.log(
+    `🚀 Operion Decision OS running on port ${PORT}`
+  );
+
+});
