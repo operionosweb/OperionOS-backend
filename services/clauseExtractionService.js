@@ -1,119 +1,49 @@
-const CLAUSE_PATTERNS = [
-  {
-    category: "payment",
-    keywords: [
-      "payment",
-      "invoice",
-      "fee",
-      "fees",
-      "rent",
-      "charges",
-      "rate",
-      "cost",
-      "liable to pay",
-      "on demand"
-    ],
-  },
-  {
-    category: "maintenance",
-    keywords: [
-      "maintenance",
-      "repair",
-      "overhaul",
-      "inspection",
-      "airworthy",
-      "mechanical condition",
-      "breakdown"
-    ],
-  },
-  {
-    category: "insurance",
-    keywords: [
-      "insurance",
-      "liability",
-      "bodily injury",
-      "deductible",
-      "coverage",
-      "occurrence",
-      "physical damage"
-    ],
-  },
-  {
-    category: "operational",
-    keywords: [
-      "flight",
-      "operation",
-      "weather",
-      "vfr",
-      "ifr",
-      "pilot in command",
-      "take-off",
-      "landing",
-      "airport"
-    ],
-  },
-  {
-    category: "redelivery",
-    keywords: [
-      "return",
-      "redelivery",
-      "return the aircraft",
-      "abandoned",
-      "home base",
-      "scheduled time"
-    ],
-  },
-];
-
-function cleanText(text) {
-  return text
-    .replace(/\r/g, "")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n{2,}/g, "\n")
-    .trim();
-}
-
-/**
- * FIXED CLAUSE DETECTION (stable version)
- */
 export function extractClauses(text) {
   if (!text) return [];
 
-  const cleaned = cleanText(text);
+  const clean = text
+    .replace(/\r/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 
-  // STEP 1: split ONLY by double line breaks OR bullet blocks
-  const rawBlocks = cleaned.split(/\n(?=\*|\d+\.|\([A-Z]\)|[A-Z]\.)/g);
+  // STEP 1: detect real clause blocks using paragraph clustering
+  const paragraphs = clean
+    .split("\n")
+    .map((p) => p.trim())
+    .filter((p) => p.length > 40);
 
-  const clauses = [];
+  const blocks = [];
+  let currentBlock = "";
 
-  rawBlocks.forEach((block, index) => {
-    const section = block.trim();
+  for (const p of paragraphs) {
+    const looksLikeNewClause =
+      /^[A-Z]\.|^\(\d+\)|^\d+\.|^FLIGHT|^NOTICE|^TRANSIENT|^[A-Z ]{6,}/.test(p);
 
-    if (section.length < 40) return;
-
-    let detectedCategory = "general";
-
-    const lower = section.toLowerCase();
-
-    for (const pattern of CLAUSE_PATTERNS) {
-      if (pattern.keywords.some((k) => lower.includes(k))) {
-        detectedCategory = pattern.category;
-        break;
-      }
+    if (looksLikeNewClause && currentBlock.length > 100) {
+      blocks.push(currentBlock);
+      currentBlock = p;
+    } else {
+      currentBlock += " " + p;
     }
+  }
 
-    clauses.push({
-      clause_title: `Clause ${index + 1}`,
-      clause_category: detectedCategory,
-      clause_text: section,
-      risk_level:
-        detectedCategory === "insurance" ||
-        detectedCategory === "maintenance"
-          ? "high"
-          : "medium",
-      trigger_type: "auto_detected",
-    });
+  if (currentBlock.length > 0) {
+    blocks.push(currentBlock);
+  }
+
+  // STEP 2: fallback if segmentation failed
+  const finalBlocks =
+    blocks.length > 1
+      ? blocks
+      : clean.split(/\n\n+/).filter((b) => b.length > 120);
+
+  // STEP 3: return structured clauses
+  return finalBlocks.map((block, i) => {
+    return {
+      id: `clause_${i + 1}`,
+      contract_id: null,
+      clause_title: `Clause ${i + 1}`,
+      clause_text: block.trim(),
+    };
   });
-
-  return clauses;
 }
