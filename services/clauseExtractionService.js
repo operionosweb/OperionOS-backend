@@ -25,60 +25,85 @@ function cleanText(text) {
   return text
     .replace(/\r/g, "")
     .replace(/\n+/g, "\n")
-    .replace(/\s+/g, " ")
+    .replace(/[ \t]+/g, " ")
     .trim();
 }
 
 /**
- * NEW APPROACH:
- * We detect clause blocks instead of splitting randomly.
+ * FIXED VERSION:
+ * - NO dangerous length gating
+ * - proper structural flushing
+ * - bullet + section awareness
  */
 export function extractClauses(text) {
   if (!text) return [];
 
   const cleaned = cleanText(text);
-
   const lines = cleaned.split("\n");
 
   const clauses = [];
-  let currentClause = "";
 
-  const isNewClauseStart = (line) => {
-    return (
-      /^[A-H]\.\s/.test(line) || // A. B. C.
-      /^\(\d+\)/.test(line) || // (1) (2)
-      /^[A-Z\s]{6,}$/.test(line) || // SECTION HEADERS
-      line.includes("FLIGHT OPERATIONS SAFETY RULES") ||
-      line.includes("TRANSIENT MAINTENANCE POLICY") ||
-      line.includes("NOTICE OF INSURANCE COVERAGE")
-    );
+  let buffer = "";
+  let lastWasHeader = false;
+
+  const isHeader = (line) =>
+    /^[A-H]\.\s/.test(line) || // A. B. C.
+    /^\(\d+\)/.test(line) || // (1)
+    /^[A-Z\s]{6,}$/.test(line) || // ALL CAPS HEADER
+    line.includes("FLIGHT OPERATIONS SAFETY RULES") ||
+    line.includes("TRANSIENT MAINTENANCE POLICY") ||
+    line.includes("NOTICE OF INSURANCE COVERAGE");
+
+  const isBullet = (line) =>
+    /^\*/.test(line) || // * bullets
+    /^•/.test(line);
+
+  const flush = () => {
+    const trimmed = buffer.trim();
+    if (trimmed.length > 60) {
+      clauses.push(trimmed);
+    }
+    buffer = "";
   };
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;
 
-    if (isNewClauseStart(line) && currentClause.length > 80) {
-      clauses.push(currentClause.trim());
-      currentClause = line + " ";
-    } else {
-      currentClause += line + " ";
+    const header = isHeader(line);
+    const bullet = isBullet(line);
+
+    // 🔥 FORCE FLUSH on headers (IMPORTANT FIX)
+    if (header) {
+      flush();
+      buffer += line + " ";
+      lastWasHeader = true;
+      continue;
     }
+
+    // bullets belong to current clause
+    if (bullet) {
+      buffer += line + " ";
+      lastWasHeader = false;
+      continue;
+    }
+
+    // normal line
+    buffer += line + " ";
+    lastWasHeader = false;
   }
 
-  if (currentClause.length > 80) {
-    clauses.push(currentClause.trim());
-  }
+  flush();
 
   return clauses.map((section, index) => {
     let detectedCategory = "general";
 
     for (const pattern of CLAUSE_PATTERNS) {
-      const found = pattern.keywords.some((keyword) =>
-        section.toLowerCase().includes(keyword.toLowerCase())
-      );
-
-      if (found) {
+      if (
+        pattern.keywords.some((keyword) =>
+          section.toLowerCase().includes(keyword)
+        )
+      ) {
         detectedCategory = pattern.category;
         break;
       }
