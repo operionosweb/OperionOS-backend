@@ -81,12 +81,11 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     }
 
     /* =========================
-       CLAUSE EXTRACTION
+       CLAUSE EXTRACTION (AI LAYER)
     ========================= */
 
     const clauses = extractClauses(extractedText);
 
-    // 🔥 DEBUG LOGS (STEP 6G.1)
     console.log("RAW CLAUSES OUTPUT:", clauses);
     console.log("CLAUSES COUNT:", Array.isArray(clauses) ? clauses.length : "NOT_ARRAY");
 
@@ -114,17 +113,14 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     }
 
     /* =========================
-       OBLIGATION EXTRACTION
+       OBLIGATION EXTRACTION (FIXED ARCHITECTURE)
+       IMPORTANT: uses AI clauses, NOT DB rows
     ========================= */
 
-    const obligations = extractObligations(insertedClauses);
+    const obligations = extractObligations(clauses);
 
-    // 🔥 DEBUG LOGS (ADDED FOR NEXT STEP VISIBILITY)
     console.log("RAW OBLIGATIONS OUTPUT:", obligations);
-    console.log(
-      "OBLIGATIONS COUNT:",
-      Array.isArray(obligations) ? obligations.length : "NOT_ARRAY"
-    );
+    console.log("OBLIGATIONS COUNT:", Array.isArray(obligations) ? obligations.length : "NOT_ARRAY");
 
     let insertedObligations = [];
 
