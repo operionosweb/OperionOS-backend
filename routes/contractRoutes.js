@@ -86,6 +86,10 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 
     const clauses = extractClauses(extractedText);
 
+    // 🔥 DEBUG LOGS (STEP 6G.1)
+    console.log("RAW CLAUSES OUTPUT:", clauses);
+    console.log("CLAUSES COUNT:", Array.isArray(clauses) ? clauses.length : "NOT_ARRAY");
+
     const clausesToInsert = clauses.map((clause) => ({
       contract_id: contractData.id,
       clause_name: clause.clause_title,
@@ -114,6 +118,13 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     ========================= */
 
     const obligations = extractObligations(insertedClauses);
+
+    // 🔥 DEBUG LOGS (ADDED FOR NEXT STEP VISIBILITY)
+    console.log("RAW OBLIGATIONS OUTPUT:", obligations);
+    console.log(
+      "OBLIGATIONS COUNT:",
+      Array.isArray(obligations) ? obligations.length : "NOT_ARRAY"
+    );
 
     let insertedObligations = [];
 
