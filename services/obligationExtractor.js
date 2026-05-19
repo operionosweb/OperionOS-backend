@@ -1,66 +1,130 @@
 export function extractObligations(clauses = []) {
-  if (!Array.isArray(clauses)) return [];
-
   const obligations = [];
 
-  for (const clause of clauses) {
-    const text = (clause?.clause_text || "").toLowerCase();
+  // 🔧 SAFETY: ensure array input
+  if (!Array.isArray(clauses)) {
+    console.warn("extractObligations expected array but got:", typeof clauses);
+    return obligations;
+  }
 
-    if (!text) continue;
+  clauses.forEach((clause) => {
+    const text = ((clause?.clause_text || "") + "").toLowerCase().trim();
+
+    if (!text) return;
 
     let obligationType = null;
     let priority = "medium";
 
-    // FINANCIAL
+    // -------------------------
+    // FINANCIAL OBLIGATIONS
+    // -------------------------
     if (
-      /fee|charges|rent|liable to pay|on demand|cost|payment/.test(text)
+      text.includes("fee") ||
+      text.includes("fees") ||
+      text.includes("charge") ||
+      text.includes("charges") ||
+      text.includes("rent") ||
+      text.includes("payment") ||
+      text.includes("pay") ||
+      text.includes("liable to pay") ||
+      text.includes("on demand") ||
+      text.includes("cost") ||
+      text.includes("expense")
     ) {
       obligationType = "financial";
       priority = "high";
     }
 
+    // -------------------------
     // MAINTENANCE / AIRWORTHINESS
+    // -------------------------
     if (
-      /maintenance|repair|airworthy|mechanical|breakdown/.test(text)
+      text.includes("maintenance") ||
+      text.includes("repair") ||
+      text.includes("repairs") ||
+      text.includes("airworthy") ||
+      text.includes("mechanical") ||
+      text.includes("breakdown") ||
+      text.includes("service")
     ) {
       obligationType = obligationType || "maintenance";
       priority = "high";
     }
 
-    // INSURANCE (CRITICAL)
+    // -------------------------
+    // INSURANCE
+    // -------------------------
     if (
-      /insurance|liability|deductible|bodily injury|coverage|occurrence|physical damage/.test(text)
+      text.includes("insurance") ||
+      text.includes("liability") ||
+      text.includes("deductible") ||
+      text.includes("bodily injury") ||
+      text.includes("coverage") ||
+      text.includes("insured") ||
+      text.includes("occurrence") ||
+      text.includes("physical damage")
     ) {
       obligationType = "insurance";
       priority = "critical";
     }
 
-    // OPERATIONAL SAFETY
+    // -------------------------
+    // OPERATIONAL / SAFETY
+    // -------------------------
     if (
-      /pilot|flight|vfr|ifr|weather|airport|take-off|landing/.test(text)
+      text.includes("pilot") ||
+      text.includes("flight") ||
+      text.includes("vfr") ||
+      text.includes("ifr") ||
+      text.includes("weather") ||
+      text.includes("airport") ||
+      text.includes("take-off") ||
+      text.includes("landing") ||
+      text.includes("operate") ||
+      text.includes("operation")
     ) {
       obligationType = obligationType || "operational";
     }
 
+    // -------------------------
     // RETURN / REDELIVERY
+    // -------------------------
     if (
-      /return|home base|abandoned|scheduled time/.test(text)
+      text.includes("return") ||
+      text.includes("return aircraft") ||
+      text.includes("home base") ||
+      text.includes("abandoned") ||
+      text.includes("scheduled time")
     ) {
       obligationType = obligationType || "redelivery";
       priority = "critical";
     }
 
+    // -------------------------
+    // LEGAL / PENALTY
+    // -------------------------
+    if (
+      text.includes("attorney") ||
+      text.includes("lawsuit") ||
+      text.includes("suit") ||
+      text.includes("legal") ||
+      text.includes("damages")
+    ) {
+      obligationType = obligationType || "legal";
+      priority = "high";
+    }
+
     if (obligationType) {
       obligations.push({
         contract_id: clause.contract_id || null,
-        clause_id: clause.id,
+        clause_id: clause.id || null,
         obligation_type: obligationType,
         priority,
-        description: clause.clause_text,
+        description: clause.clause_text || "",
         status: "open",
       });
     }
-  }
+  });
 
   return obligations;
 }
