@@ -88,11 +88,10 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 
     const clausesToInsert = clauses.map((clause) => ({
       contract_id: contractData.id,
-      clause_title: clause.clause_title,
-      clause_category: clause.clause_category,
+      clause_name: clause.clause_title,
+      clause_type: clause.clause_category,
       clause_text: clause.clause_text,
       risk_level: clause.risk_level,
-      trigger_type: clause.trigger_type,
     }));
 
     let insertedClauses = [];
@@ -104,7 +103,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
         .select();
 
       if (clauseError) {
-        console.error(clauseError);
+        console.error("Clause insert error:", clauseError);
       } else {
         insertedClauses = data || [];
       }
@@ -116,13 +115,18 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 
     const obligations = extractObligations(insertedClauses);
 
+    let insertedObligations = [];
+
     if (obligations.length > 0) {
-      const { error: obligationError } = await supabase
+      const { data, error: obligationError } = await supabase
         .from("obligations")
-        .insert(obligations);
+        .insert(obligations)
+        .select();
 
       if (obligationError) {
-        console.error(obligationError);
+        console.error("Obligation insert error:", obligationError);
+      } else {
+        insertedObligations = data || [];
       }
     }
 
@@ -134,12 +138,12 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       success: true,
       contract: contractData,
       clausesDetected: insertedClauses.length,
-      obligationsDetected: obligations.length,
+      obligationsDetected: insertedObligations.length,
       extractedCharacters: extractedText.length,
       extractedPreview: extractedText.substring(0, 500),
     });
   } catch (error) {
-    console.error(error);
+    console.error("Upload error:", error);
 
     return res.status(500).json({
       error: error.message,
