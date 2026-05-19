@@ -4,77 +4,116 @@ export function extractObligations(clauses = []) {
   clauses.forEach((clause) => {
     const text = (clause.clause_text || "").toLowerCase();
 
-    let obligationType = null;
-    let priority = "medium";
+    const types = [];
+    let priority = "low";
 
-    // FINANCIAL
-    if (
-      text.includes("fee") ||
-      text.includes("charges") ||
-      text.includes("rent") ||
-      text.includes("liable to pay") ||
-      text.includes("on demand")
-    ) {
-      obligationType = "financial";
+    // =========================
+    // FINANCIAL OBLIGATIONS
+    // =========================
+    const financialKeywords = [
+      "fee",
+      "fees",
+      "charges",
+      "charge",
+      "rent",
+      "payment",
+      "pay",
+      "liable to pay",
+      "on demand",
+      "cost",
+      "invoice",
+    ];
+
+    if (financialKeywords.some((k) => text.includes(k))) {
+      types.push("financial");
       priority = "high";
     }
 
+    // =========================
     // MAINTENANCE / AIRWORTHINESS
-    if (
-      text.includes("maintenance") ||
-      text.includes("repair") ||
-      text.includes("airworthy") ||
-      text.includes("mechanical condition") ||
-      text.includes("breakdown")
-    ) {
-      obligationType = "maintenance";
-      priority = "high";
+    // =========================
+    const maintenanceKeywords = [
+      "maintenance",
+      "repair",
+      "airworthy",
+      "mechanical condition",
+      "breakdown",
+      "inspection",
+      "overhaul",
+    ];
+
+    if (maintenanceKeywords.some((k) => text.includes(k))) {
+      types.push("maintenance");
+      priority = Math.max(priority === "critical" ? 3 : priority === "high" ? 2 : 1, 2)
+        ? "high"
+        : "medium";
     }
 
-    // INSURANCE (IMPORTANT FIX)
-    if (
-      text.includes("insurance") ||
-      text.includes("liability") ||
-      text.includes("deductible") ||
-      text.includes("bodily injury") ||
-      text.includes("coverage") ||
-      text.includes("occurrence") ||
-      text.includes("physical damage")
-    ) {
-      obligationType = "insurance";
+    // =========================
+    // INSURANCE (HIGHEST PRIORITY DOMAIN)
+    // =========================
+    const insuranceKeywords = [
+      "insurance",
+      "liability",
+      "deductible",
+      "bodily injury",
+      "coverage",
+      "occurrence",
+      "physical damage",
+      "policy",
+    ];
+
+    if (insuranceKeywords.some((k) => text.includes(k))) {
+      types.push("insurance");
       priority = "critical";
     }
 
-    // OPERATIONAL SAFETY
-    if (
-      text.includes("pilot") ||
-      text.includes("flight") ||
-      text.includes("vfr") ||
-      text.includes("ifr") ||
-      text.includes("weather") ||
-      text.includes("airport") ||
-      text.includes("take-off") ||
-      text.includes("landing")
-    ) {
-      obligationType = obligationType || "operational";
+    // =========================
+    // OPERATIONAL / SAFETY
+    // =========================
+    const operationalKeywords = [
+      "pilot",
+      "flight",
+      "vfr",
+      "ifr",
+      "weather",
+      "airport",
+      "take-off",
+      "landing",
+      "operations",
+      "aircraft",
+    ];
+
+    if (operationalKeywords.some((k) => text.includes(k))) {
+      types.push("operational");
+      if (priority !== "critical") priority = "medium";
     }
 
-    // RETURN / REDELIVERY
-    if (
-      text.includes("return") ||
-      text.includes("home base") ||
-      text.includes("abandoned") ||
-      text.includes("scheduled time")
-    ) {
-      obligationType = obligationType || "redelivery";
+    // =========================
+    // REDELIVERY / RETURN
+    // =========================
+    const redeliveryKeywords = [
+      "return",
+      "returned",
+      "home base",
+      "abandoned",
+      "scheduled time",
+      "re-delivery",
+    ];
+
+    if (redeliveryKeywords.some((k) => text.includes(k))) {
+      types.push("redelivery");
       priority = "critical";
     }
 
-    if (obligationType) {
+    // =========================
+    // OUTPUT (ONE OR MULTI TYPE)
+    // =========================
+    if (types.length > 0) {
       obligations.push({
-        contract_id: clause.contract_id,
-        clause_id: clause.id,
-        obligation_type: obligationType,
+        contract_id: clause.contract_id || null,
+        clause_id: clause.id || null,
+        obligation_type: types.join("+"), // supports multi-label like "insurance+financial"
         priority,
         description: clause.clause_text,
         status: "open",
