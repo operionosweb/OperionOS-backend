@@ -1,89 +1,118 @@
 const CLAUSE_PATTERNS = [
-  { category: "payment", keywords: ["payment", "fee", "rent", "charges", "reimburse"] },
-  { category: "maintenance", keywords: ["maintenance", "repair", "inspection", "service"] },
-  { category: "insurance", keywords: ["insurance", "liability", "deductible", "damage"] },
-  { category: "operational_restriction", keywords: ["not be used", "prohibited", "shall not"] },
-  { category: "compliance", keywords: ["certificate", "rated", "comply", "regulation"] },
-  { category: "redelivery", keywords: ["return", "redelivery", "home base", "abandoned"] },
+  {
+    category: "payment",
+    keywords: [
+      "payment",
+      "invoice",
+      "fee",
+      "fees",
+      "rent",
+      "charges",
+      "rate",
+      "cost",
+      "liable to pay",
+      "on demand"
+    ],
+  },
+  {
+    category: "maintenance",
+    keywords: [
+      "maintenance",
+      "repair",
+      "overhaul",
+      "inspection",
+      "airworthy",
+      "mechanical condition",
+      "breakdown"
+    ],
+  },
+  {
+    category: "insurance",
+    keywords: [
+      "insurance",
+      "liability",
+      "bodily injury",
+      "deductible",
+      "coverage",
+      "occurrence",
+      "physical damage"
+    ],
+  },
+  {
+    category: "operational",
+    keywords: [
+      "flight",
+      "operation",
+      "weather",
+      "vfr",
+      "ifr",
+      "pilot in command",
+      "take-off",
+      "landing",
+      "airport"
+    ],
+  },
+  {
+    category: "redelivery",
+    keywords: [
+      "return",
+      "redelivery",
+      "return the aircraft",
+      "abandoned",
+      "home base",
+      "scheduled time"
+    ],
+  },
 ];
 
 function cleanText(text) {
   return text
-    .replace(/\r/g, " ")
-    .replace(/\n+/g, " ")
-    .replace(/\s+/g, " ")
+    .replace(/\r/g, "")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{2,}/g, "\n")
     .trim();
 }
 
-/* =========================
-   SMART SENTENCE EXTRACTION
-   (not structure-based)
-========================= */
-
-function splitSentences(text) {
-  return text
-    .split(/(?<=[.!?])\s+|\n+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 30);
-}
-
-/* =========================
-   CATEGORY DETECTION
-========================= */
-
-function detectCategory(text) {
-  const lower = text.toLowerCase();
-
-  for (const p of CLAUSE_PATTERNS) {
-    if (p.keywords.some((k) => lower.includes(k))) {
-      return p.category;
-    }
-  }
-
-  return "general";
-}
-
-/* =========================
-   OBLIGATION DETECTION
-========================= */
-
-function isObligation(text) {
-  const lower = text.toLowerCase();
-
-  return (
-    lower.includes("shall") ||
-    lower.includes("must") ||
-    lower.includes("agrees") ||
-    lower.includes("will") ||
-    lower.includes("liable") ||
-    lower.includes("responsible") ||
-    lower.includes("not be") ||
-    lower.includes("prohibited") ||
-    lower.includes("required")
-  );
-}
-
-/* =========================
-   MAIN ENGINE
-========================= */
-
+/**
+ * FIXED CLAUSE DETECTION (stable version)
+ */
 export function extractClauses(text) {
   if (!text) return [];
 
   const cleaned = cleanText(text);
-  const sentences = splitSentences(cleaned);
 
-  const clauses = sentences.map((sentence, index) => {
-    const category = detectCategory(sentence);
-    const obligation = isObligation(sentence);
+  // STEP 1: split ONLY by double line breaks OR bullet blocks
+  const rawBlocks = cleaned.split(/\n(?=\*|\d+\.|\([A-Z]\)|[A-Z]\.)/g);
 
-    return {
+  const clauses = [];
+
+  rawBlocks.forEach((block, index) => {
+    const section = block.trim();
+
+    if (section.length < 40) return;
+
+    let detectedCategory = "general";
+
+    const lower = section.toLowerCase();
+
+    for (const pattern of CLAUSE_PATTERNS) {
+      if (pattern.keywords.some((k) => lower.includes(k))) {
+        detectedCategory = pattern.category;
+        break;
+      }
+    }
+
+    clauses.push({
       clause_title: `Clause ${index + 1}`,
-      clause_category: category,
-      clause_text: sentence,
-      risk_level: obligation ? "high" : "low",
-      trigger_type: "stream_v2",
-    };
+      clause_category: detectedCategory,
+      clause_text: section,
+      risk_level:
+        detectedCategory === "insurance" ||
+        detectedCategory === "maintenance"
+          ? "high"
+          : "medium",
+      trigger_type: "auto_detected",
+    });
   });
 
   return clauses;
