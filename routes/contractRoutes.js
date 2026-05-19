@@ -2,7 +2,9 @@ import express from "express";
 import multer from "multer";
 
 import supabase from "../config/supabase.js";
+
 import { extractPdfText } from "../services/pdfService.js";
+import { extractClauses } from "../services/clauseExtractionService.js";
 
 const router = express.Router();
 
@@ -55,7 +57,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     }
 
     /* =========================
-       DATABASE INSERT
+       CONTRACT INSERT
     ========================= */
 
     const { data: contractData, error: contractError } = await supabase
@@ -78,12 +80,38 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     }
 
     /* =========================
+       CLAUSE EXTRACTION
+    ========================= */
+
+    const clauses = extractClauses(extractedText);
+
+    const clausesToInsert = clauses.map((clause) => ({
+      contract_id: contractData.id,
+      clause_title: clause.clause_title,
+      clause_category: clause.clause_category,
+      clause_text: clause.clause_text,
+      risk_level: clause.risk_level,
+      trigger_type: clause.trigger_type,
+    }));
+
+    if (clausesToInsert.length > 0) {
+      const { error: clauseError } = await supabase
+        .from("contract_clauses")
+        .insert(clausesToInsert);
+
+      if (clauseError) {
+        console.error(clauseError);
+      }
+    }
+
+    /* =========================
        RESPONSE
     ========================= */
 
     return res.json({
       success: true,
       contract: contractData,
+      clausesDetected: clausesToInsert.length,
       extractedCharacters: extractedText.length,
       extractedPreview: extractedText.substring(0, 500),
     });
