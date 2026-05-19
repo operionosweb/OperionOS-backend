@@ -1,29 +1,15 @@
 const CLAUSE_PATTERNS = [
-  {
-    category: "payment",
-    keywords: ["payment", "invoice", "fee", "rent", "charges", "reimburse"],
-  },
-  {
-    category: "maintenance",
-    keywords: ["maintenance", "repair", "inspection", "overhaul", "service"],
-  },
-  {
-    category: "insurance",
-    keywords: ["insurance", "liability", "damage", "deductible"],
-  },
-  {
-    category: "redelivery",
-    keywords: ["return", "redelivery", "abandoned", "home base"],
-  },
-  {
-    category: "operational_restriction",
-    keywords: ["not be used", "shall not", "prohibited", "restricted"],
-  },
-  {
-    category: "compliance",
-    keywords: ["certificate", "rated", "medical", "regulations", "comply"],
-  },
+  { category: "payment", keywords: ["payment", "fee", "rent", "charges", "reimburse"] },
+  { category: "maintenance", keywords: ["maintenance", "repair", "inspection", "service"] },
+  { category: "insurance", keywords: ["insurance", "liability", "deductible", "damage"] },
+  { category: "operational_restriction", keywords: ["not be used", "prohibited", "shall not"] },
+  { category: "compliance", keywords: ["certificate", "rated", "comply", "regulation"] },
+  { category: "redelivery", keywords: ["return", "redelivery", "home base", "abandoned"] },
 ];
+
+/* =========================
+   CLEAN TEXT
+========================= */
 
 function cleanText(text) {
   return text
@@ -34,24 +20,27 @@ function cleanText(text) {
 }
 
 /* =========================
-   SENTENCE SPLITTER (CRITICAL FIX)
+   SPLIT BY LEGAL BOUNDARIES
+   (NOT SENTENCES)
 ========================= */
 
-function splitSentences(text) {
+function splitLegalBlocks(text) {
   return text
-    .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+    .split(/\n(?=[A-Z]\.|[A-Z]\s|•|\*)/g) // section markers
+    .map((t) => t.trim())
+    .filter((t) => t.length > 60);
 }
 
-function detectCategory(sentence) {
-  const lower = sentence.toLowerCase();
+/* =========================
+   CATEGORY DETECTION
+========================= */
 
-  for (const pattern of CLAUSE_PATTERNS) {
-    if (
-      pattern.keywords.some((kw) => lower.includes(kw.toLowerCase()))
-    ) {
-      return pattern.category;
+function detectCategory(text) {
+  const lower = text.toLowerCase();
+
+  for (const p of CLAUSE_PATTERNS) {
+    if (p.keywords.some((k) => lower.includes(k))) {
+      return p.category;
     }
   }
 
@@ -59,46 +48,46 @@ function detectCategory(sentence) {
 }
 
 /* =========================
-   OBLIGATION FILTER (KEY FIX)
+   OBLIGATION DETECTION
 ========================= */
 
-function isObligation(sentence) {
-  const lower = sentence.toLowerCase();
+function isObligation(text) {
+  const lower = text.toLowerCase();
 
   return (
     lower.includes("shall") ||
     lower.includes("must") ||
     lower.includes("agrees") ||
     lower.includes("will") ||
-    lower.includes("required") ||
     lower.includes("liable") ||
+    lower.includes("responsible") ||
     lower.includes("not be") ||
-    lower.includes("prohibited") ||
-    lower.includes("responsible")
+    lower.includes("prohibited")
   );
 }
+
+/* =========================
+   MAIN EXTRACTOR
+========================= */
 
 export function extractClauses(text) {
   if (!text) return [];
 
   const cleaned = cleanText(text);
-  const sentences = splitSentences(cleaned);
+  const blocks = splitLegalBlocks(cleaned);
 
-  const clauses = sentences
-    .filter((sentence) => sentence.length > 40)
-    .map((sentence, index) => {
-      const category = detectCategory(sentence);
-      const obligation = isObligation(sentence);
+  const clauses = blocks.map((block, index) => {
+    const category = detectCategory(block);
+    const obligation = isObligation(block);
 
-      return {
-        clause_title: `Clause ${index + 1}`,
-        clause_category: category,
-        clause_text: sentence,
-        risk_level: obligation ? "high" : "low",
-        trigger_type: "auto_detect",
-      };
-    })
-    .filter((c) => c.clause_text.length > 0);
+    return {
+      clause_title: `Clause ${index + 1}`,
+      clause_category: category,
+      clause_text: block,
+      risk_level: obligation ? "high" : "low",
+      trigger_type: "hybrid_v1",
+    };
+  });
 
   return clauses;
 }
