@@ -2,113 +2,100 @@ export function extractObligations(clauses = []) {
   const obligations = [];
 
   clauses.forEach((clause) => {
-    const text = (clause.clause_text || "").toLowerCase();
+    const text = (
+      clause.clause_text ||
+      clause.clause_name ||
+      ""
+    ).toLowerCase();
 
     let obligationType = null;
     let priority = "medium";
 
     /* =========================
-       CORE OBLIGATION SIGNALS
-       (IMPORTANT ADDITION)
+       IMPORTANT: NO EARLY RETURN
+       (we evaluate ALL clauses)
     ========================= */
 
-    const hasObligationLanguage =
-      text.includes("shall") ||
-      text.includes("must") ||
-      text.includes("agrees") ||
-      text.includes("will") ||
-      text.includes("required") ||
-      text.includes("responsible for");
-
-    if (!hasObligationLanguage) {
-      return; // skip non-obligations early
-    }
-
     /* =========================
-       PAYMENT OBLIGATIONS
+       PAYMENT / FINANCIAL
     ========================= */
 
     if (
       text.includes("payment") ||
       text.includes("rent") ||
-      text.includes("maintenance reserve") ||
       text.includes("fee") ||
       text.includes("charges") ||
       text.includes("cost") ||
-      text.includes("reimburse")
+      text.includes("reimburse") ||
+      text.includes("charged") ||
+      text.includes("liable") ||
+      text.includes("liability")
     ) {
       obligationType = "financial";
       priority = "high";
     }
 
     /* =========================
-       MAINTENANCE OBLIGATIONS
+       MAINTENANCE / TECHNICAL
     ========================= */
 
     if (
       text.includes("maintenance") ||
-      text.includes("overhaul") ||
-      text.includes("inspection") ||
       text.includes("repair") ||
-      text.includes("service")
+      text.includes("inspection") ||
+      text.includes("overhaul") ||
+      text.includes("service") ||
+      text.includes("mechanical")
     ) {
       obligationType = "maintenance";
       priority = "high";
     }
 
     /* =========================
-       LLP OBLIGATIONS
-    ========================= */
-
-    if (
-      text.includes("life limited part") ||
-      text.includes("llp")
-    ) {
-      obligationType = "llp";
-      priority = "critical";
-    }
-
-    /* =========================
-       INSURANCE OBLIGATIONS
-    ========================= */
-
-    if (
-      text.includes("insurance") ||
-      text.includes("liability coverage") ||
-      text.includes("deductible")
-    ) {
-      obligationType = "insurance";
-    }
-
-    /* =========================
-       OPERATIONAL / USAGE RESTRICTIONS
+       OPERATIONAL RESTRICTIONS
     ========================= */
 
     if (
       text.includes("not be used") ||
-      text.includes("not operate") ||
-      text.includes("prohibited") ||
       text.includes("shall not") ||
+      text.includes("prohibited") ||
+      text.includes("restricted") ||
       text.includes("outside") ||
-      text.includes("restricted")
+      text.includes("illegal") ||
+      text.includes("authorized") === false
     ) {
       obligationType = "operational_restriction";
       priority = "high";
     }
 
     /* =========================
-       SAFETY / COMPLIANCE
+       COMPLIANCE / CERTIFICATION
     ========================= */
 
     if (
+      text.includes("certificate") ||
       text.includes("certified") ||
       text.includes("license") ||
       text.includes("medical") ||
       text.includes("regulation") ||
-      text.includes("compliance")
+      text.includes("compliance") ||
+      text.includes("rated")
     ) {
       obligationType = "compliance";
       priority = "critical";
+    }
+
+    /* =========================
+       INSURANCE / LIABILITY
+    ========================= */
+
+    if (
+      text.includes("insurance") ||
+      text.includes("liability") ||
+      text.includes("deductible") ||
+      text.includes("coverage")
+    ) {
+      obligationType = "insurance";
     }
 
     /* =========================
@@ -118,11 +105,27 @@ export function extractObligations(clauses = []) {
     if (
       text.includes("return") ||
       text.includes("redelivery") ||
-      text.includes("return condition") ||
-      text.includes("scheduled time")
+      text.includes("scheduled time") ||
+      text.includes("return the aircraft")
     ) {
       obligationType = "redelivery";
       priority = "critical";
+    }
+
+    /* =========================
+       GENERAL OBLIGATION DETECTION
+       (KEY FIX — ENSURES COVERAGE)
+    ========================= */
+
+    const hasLegalVerb =
+      text.includes("shall") ||
+      text.includes("must") ||
+      text.includes("agrees") ||
+      text.includes("will");
+
+    if (!obligationType && hasLegalVerb) {
+      obligationType = "general_obligation";
+      priority = "medium";
     }
 
     /* =========================
@@ -135,7 +138,10 @@ export function extractObligations(clauses = []) {
         clause_id: clause.id,
         obligation_type: obligationType,
         priority,
-        description: clause.clause_text,
+        description:
+          clause.clause_text ||
+          clause.clause_name ||
+          "",
         status: "open",
       });
     }
