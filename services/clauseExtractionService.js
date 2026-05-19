@@ -7,28 +7,24 @@ const CLAUSE_PATTERNS = [
   { category: "redelivery", keywords: ["return", "redelivery", "home base", "abandoned"] },
 ];
 
-/* =========================
-   CLEAN TEXT
-========================= */
-
 function cleanText(text) {
   return text
-    .replace(/\r/g, "")
+    .replace(/\r/g, " ")
     .replace(/\n+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 /* =========================
-   SPLIT BY LEGAL BOUNDARIES
-   (NOT SENTENCES)
+   SMART SENTENCE EXTRACTION
+   (not structure-based)
 ========================= */
 
-function splitLegalBlocks(text) {
+function splitSentences(text) {
   return text
-    .split(/\n(?=[A-Z]\.|[A-Z]\s|•|\*)/g) // section markers
-    .map((t) => t.trim())
-    .filter((t) => t.length > 60);
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 30);
 }
 
 /* =========================
@@ -62,30 +58,31 @@ function isObligation(text) {
     lower.includes("liable") ||
     lower.includes("responsible") ||
     lower.includes("not be") ||
-    lower.includes("prohibited")
+    lower.includes("prohibited") ||
+    lower.includes("required")
   );
 }
 
 /* =========================
-   MAIN EXTRACTOR
+   MAIN ENGINE
 ========================= */
 
 export function extractClauses(text) {
   if (!text) return [];
 
   const cleaned = cleanText(text);
-  const blocks = splitLegalBlocks(cleaned);
+  const sentences = splitSentences(cleaned);
 
-  const clauses = blocks.map((block, index) => {
-    const category = detectCategory(block);
-    const obligation = isObligation(block);
+  const clauses = sentences.map((sentence, index) => {
+    const category = detectCategory(sentence);
+    const obligation = isObligation(sentence);
 
     return {
       clause_title: `Clause ${index + 1}`,
       clause_category: category,
-      clause_text: block,
+      clause_text: sentence,
       risk_level: obligation ? "high" : "low",
-      trigger_type: "hybrid_v1",
+      trigger_type: "stream_v2",
     };
   });
 
