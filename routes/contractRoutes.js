@@ -18,29 +18,15 @@ const upload = multer({
   },
 });
 
-/* =========================
-   CONTRACT UPLOAD
-========================= */
-
 router.post("/upload", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({
-        error: "No file uploaded",
-      });
+      return res.status(400).json({ error: "No file uploaded" });
     }
 
     const file = req.file;
 
-    /* =========================
-       PDF EXTRACTION
-    ========================= */
-
     const extractedText = await extractPdfText(file.buffer);
-
-    /* =========================
-       STORAGE UPLOAD
-    ========================= */
 
     const fileName = `${Date.now()}-${file.originalname}`;
 
@@ -52,14 +38,8 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       });
 
     if (uploadError) {
-      return res.status(500).json({
-        error: uploadError.message,
-      });
+      return res.status(500).json({ error: uploadError.message });
     }
-
-    /* =========================
-       CONTRACT INSERT
-    ========================= */
 
     const { data: contractData, error: contractError } = await supabase
       .from("contracts")
@@ -75,19 +55,18 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       .single();
 
     if (contractError) {
-      return res.status(500).json({
-        error: contractError.message,
-      });
+      return res.status(500).json({ error: contractError.message });
     }
 
     /* =========================
-       CLAUSE EXTRACTION (AI LAYER)
+       CLAUSES
     ========================= */
 
     const clauses = extractClauses(extractedText);
 
-    console.log("RAW CLAUSES OUTPUT:", clauses);
-    console.log("CLAUSES COUNT:", Array.isArray(clauses) ? clauses.length : "NOT_ARRAY");
+    console.log("🔥 RAW CLAUSES TYPE:", typeof clauses);
+    console.log("🔥 RAW CLAUSES:", clauses);
+    console.log("🔥 CLAUSES LENGTH:", clauses?.length);
 
     const clausesToInsert = clauses.map((clause) => ({
       contract_id: contractData.id,
@@ -97,64 +76,55 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       risk_level: clause.risk_level,
     }));
 
-    let insertedClauses = [];
-
-    if (clausesToInsert.length > 0) {
-      const { data, error: clauseError } = await supabase
+    const { data: insertedClauses, error: clauseError } =
+      await supabase
         .from("contract_clauses")
         .insert(clausesToInsert)
         .select();
 
-      if (clauseError) {
-        console.error("Clause insert error:", clauseError);
-      } else {
-        insertedClauses = data || [];
-      }
+    if (clauseError) {
+      console.log("❌ CLAUSE INSERT ERROR:", clauseError);
     }
 
+    console.log("✅ INSERTED CLAUSES COUNT:", insertedClauses?.length);
+
     /* =========================
-       OBLIGATION EXTRACTION (FIXED ARCHITECTURE)
-       IMPORTANT: uses AI clauses, NOT DB rows
+       OBLIGATIONS (DEBUG)
     ========================= */
+
+    console.log("🔥 PASSING TO OBLIGATIONS:", clauses);
 
     const obligations = extractObligations(clauses);
 
-    console.log("RAW OBLIGATIONS OUTPUT:", obligations);
-    console.log("OBLIGATIONS COUNT:", Array.isArray(obligations) ? obligations.length : "NOT_ARRAY");
+    console.log("🔥 RAW OBLIGATIONS OUTPUT:", obligations);
+    console.log("🔥 OBLIGATIONS LENGTH:", obligations?.length);
 
-    let insertedObligations = [];
-
-    if (obligations.length > 0) {
-      const { data, error: obligationError } = await supabase
+    const { data: insertedObligations, error: obligationError } =
+      await supabase
         .from("obligations")
         .insert(obligations)
         .select();
 
-      if (obligationError) {
-        console.error("Obligation insert error:", obligationError);
-      } else {
-        insertedObligations = data || [];
-      }
+    if (obligationError) {
+      console.log("❌ OBLIGATION INSERT ERROR:", obligationError);
     }
 
-    /* =========================
-       RESPONSE
-    ========================= */
+    console.log("✅ INSERTED OBLIGATIONS COUNT:", insertedObligations?.length);
 
     return res.json({
       success: true,
       contract: contractData,
-      clausesDetected: insertedClauses.length,
-      obligationsDetected: insertedObligations.length,
-      extractedCharacters: extractedText.length,
-      extractedPreview: extractedText.substring(0, 500),
+      clausesDetected: insertedClauses?.length || 0,
+      obligationsDetected: insertedObligations?.length || 0,
+      debug: {
+        clausesType: typeof clauses,
+        obligationsType: typeof obligations,
+      },
     });
   } catch (error) {
-    console.error("Upload error:", error);
+    console.error("❌ FATAL ERROR:", error);
 
-    return res.status(500).json({
-      error: error.message,
-    });
+    return res.status(500).json({ error: error.message });
   }
 });
 
