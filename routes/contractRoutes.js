@@ -15,6 +15,10 @@ const upload = multer({
   },
 });
 
+/* =========================
+   CONTRACT UPLOAD
+========================= */
+
 router.post("/upload", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) {
@@ -25,7 +29,15 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 
     const file = req.file;
 
+    /* =========================
+       PDF EXTRACTION
+    ========================= */
+
     const extractedText = await extractPdfText(file.buffer);
+
+    /* =========================
+       STORAGE UPLOAD
+    ========================= */
 
     const fileName = `${Date.now()}-${file.originalname}`;
 
@@ -42,12 +54,36 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       });
     }
 
+    /* =========================
+       DATABASE INSERT
+    ========================= */
+
+    const { data: contractData, error: contractError } = await supabase
+      .from("contracts")
+      .insert([
+        {
+          contract_name: file.originalname,
+          contract_type: "unclassified",
+          source_file: fileName,
+          extracted_text: extractedText,
+        },
+      ])
+      .select()
+      .single();
+
+    if (contractError) {
+      return res.status(500).json({
+        error: contractError.message,
+      });
+    }
+
+    /* =========================
+       RESPONSE
+    ========================= */
+
     return res.json({
       success: true,
-      filename: fileName,
-      originalName: file.originalname,
-      size: file.size,
-      mimetype: file.mimetype,
+      contract: contractData,
       extractedCharacters: extractedText.length,
       extractedPreview: extractedText.substring(0, 500),
     });
