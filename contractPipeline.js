@@ -1,145 +1,74 @@
-// contractPipeline.js
-
-import { extractClauses } from "./services/clauseExtractionService.js";
-import { extractObligations } from "./services/obligationExtractor.js";
-
-/**
- * Normalize OCR / PDF text into deterministic format
- */
-function normalizeText(text = "") {
-  return text
-    .replace(/\r/g, "\n")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .replace(/•/g, "*")
-    .trim();
-}
-
-/**
- * Two-level deterministic clause segmentation:
- * 1. Section level (A, B, C...)
- * 2. Clause level ((1), (2), bullets)
- */
 function segmentClauses(text) {
-  const normalized = normalizeText(text);
+  if (!text || typeof text !== "string") return [];
 
-  // STEP 1: split into sections A-H (high-level grouping)
-  const sections = normalized.split(/\n\s*[A-H]\.\s/g);
+  const normalized = normalizeText(text);
 
   const allClauses = [];
 
-  for (const section of sections) {
-    const trimmedSection = section.trim();
-    if (!trimmedSection) continue;
+  // -------------------------------
+  // STEP 1: Split by major sections (A. B. C. ... or A) B) formats)
+  // -------------------------------
+  const sectionSplitRegex = /\n\s*[A-Z]\.\s|\n\s*[A-Z]\)\s/g;
+  const sections = normalized.split(sectionSplitRegex);
 
-    // STEP 2: split numbered clauses inside section
-    const numberedParts = trimmedSection.split(/(?=\(\d+\))/g);
+  for (const section of sections) {
+    if (!section || !section.trim()) continue;
+
+    let workingSection = section.trim();
+
+    // -------------------------------
+    // STEP 2: Extract numbered clauses (1) (2) (3)
+    // -------------------------------
+    const numberedParts = workingSection.split(/(?=\(\d+\))/g);
 
     for (const part of numberedParts) {
-      const clean = part.trim();
+      if (part && part.trim()) {
+        allClauses.push(part.trim());
+      }
+    }
+
+    // -------------------------------
+    // STEP 3: Extract bullet points (*, •, -)
+    // -------------------------------
+    const bulletParts = workingSection.split(/\n\s*[\*\-•]\s/g);
+
+    for (const b of bulletParts) {
+      const clean = b.trim();
       if (!clean) continue;
+
+      // avoid junk fragments
+      if (clean.length < 8) continue;
+
       allClauses.push(clean);
     }
   }
 
-  // STEP 3: extract bullet rules separately (* items)
-  const bulletParts = normalized.split(/\n\s*\*\s/g);
-
-  for (const bullet of bulletParts) {
-    const clean = bullet.trim();
-
-    if (!clean) continue;
-    if (clean.length < 10) continue;
-
-    allClauses.push(clean);
+  // -------------------------------
+  // STEP 4: Global fallback extraction
+  // (catches missed clauses outside A–H structure)
+  // -------------------------------
+  const fallbackNumbered = normalized.match(/\(\d+\)[^\(\)]*/g);
+  if (fallbackNumbered) {
+    for (const item of fallbackNumbered) {
+      allClauses.push(item.trim());
+    }
   }
 
-  // STEP 4: deterministic deduplication
-  const unique = Array.from(new Set(allClauses));
+  const fallbackBullets = normalized.match(/(?:^|\n)\s*[\*\-•]\s.*(?=\n|$)/g);
+  if (fallbackBullets) {
+    for (const item of fallbackBullets) {
+      allClauses.push(item.replace(/^\s*[\*\-•]\s*/, "").trim());
+    }
+  }
+
+  // -------------------------------
+  // STEP 5: Clean + deduplicate
+  // -------------------------------
+  const cleaned = allClauses
+    .map(c => c.replace(/\s+/g, " ").trim())
+    .filter(c => c.length > 10);
+
+  const unique = Array.from(new Set(cleaned));
 
   return unique;
-}
-
-/**
- * Stable hash for debugging consistency
- */
-function generateStableKey(text = "") {
-  let hash = 0;
-
-  for (let i = 0; i < text.length; i++) {
-    const char = text.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0;
-  }
-
-  return hash;
-}
-
-/**
- * Main pipeline
- */
-export async function processContract(contract) {
-  if (!contract?.extracted_text) {
-    throw new Error("Missing extracted_text in contract");
-  }
-
-  // STEP 1: normalize
-  const normalizedText = normalizeText(contract.extracted_text);
-
-  // STEP 2: deterministic segmentation
-  const segments = segmentClauses(normalizedText);
-
-  // STEP 3: extract clauses per segment
-  const clauseResults = await Promise.all(
-    segments.map(async (segment, index) => {
-      const result = await extractClauses(segment);
-
-      return {
-        index,
-        text: segment,
-        clauses: result?.clauses || []
-      };
-    })
-  );
-
-  // STEP 4: flatten clauses
-  const flatClauses = clauseResults.flatMap(c => c.clauses);
-
-  // STEP 5: deduplicate clauses deterministically
-  const seen = new Set();
-  const uniqueClauses = [];
-
-  for (const clause of flatClauses) {
-    const key = (clause?.text || clause).toString().trim();
-
-    if (!seen.has(key)) {
-      seen.add(key);
-      uniqueClauses.push(clause);
-    }
-  }
-
-  // STEP 6: obligations (run once, full text only)
-  const obligationsResult = await extractObligations(normalizedText);
-  const obligations = obligationsResult?.obligations || [];
-
-  // STEP 7: final output
-  return {
-    success: true,
-    contract: {
-      ...contract,
-      extracted_text: normalizedText
-    },
-    clausesDetected: uniqueClauses.length,
-    obligationsDetected: obligations.length,
-
-    clauses: uniqueClauses,
-    obligations,
-
-    debug: {
-      segments: segments.length,
-      rawClauses: flatClauses.length,
-      uniqueClauses: uniqueClauses.length,
-      textHash: generateStableKey(normalizedText)
-    }
-  };
 }
