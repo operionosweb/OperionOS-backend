@@ -8,13 +8,34 @@ export function extractObligations(clauses = []) {
     let priority = "medium";
 
     /* =========================
+       CORE OBLIGATION SIGNALS
+       (IMPORTANT ADDITION)
+    ========================= */
+
+    const hasObligationLanguage =
+      text.includes("shall") ||
+      text.includes("must") ||
+      text.includes("agrees") ||
+      text.includes("will") ||
+      text.includes("required") ||
+      text.includes("responsible for");
+
+    if (!hasObligationLanguage) {
+      return; // skip non-obligations early
+    }
+
+    /* =========================
        PAYMENT OBLIGATIONS
     ========================= */
 
     if (
       text.includes("payment") ||
       text.includes("rent") ||
-      text.includes("maintenance reserve")
+      text.includes("maintenance reserve") ||
+      text.includes("fee") ||
+      text.includes("charges") ||
+      text.includes("cost") ||
+      text.includes("reimburse")
     ) {
       obligationType = "financial";
       priority = "high";
@@ -27,7 +48,9 @@ export function extractObligations(clauses = []) {
     if (
       text.includes("maintenance") ||
       text.includes("overhaul") ||
-      text.includes("inspection")
+      text.includes("inspection") ||
+      text.includes("repair") ||
+      text.includes("service")
     ) {
       obligationType = "maintenance";
       priority = "high";
@@ -51,18 +74,52 @@ export function extractObligations(clauses = []) {
 
     if (
       text.includes("insurance") ||
-      text.includes("liability coverage")
+      text.includes("liability coverage") ||
+      text.includes("deductible")
     ) {
       obligationType = "insurance";
     }
 
     /* =========================
-       RETURN CONDITIONS
+       OPERATIONAL / USAGE RESTRICTIONS
     ========================= */
 
     if (
+      text.includes("not be used") ||
+      text.includes("not operate") ||
+      text.includes("prohibited") ||
+      text.includes("shall not") ||
+      text.includes("outside") ||
+      text.includes("restricted")
+    ) {
+      obligationType = "operational_restriction";
+      priority = "high";
+    }
+
+    /* =========================
+       SAFETY / COMPLIANCE
+    ========================= */
+
+    if (
+      text.includes("certified") ||
+      text.includes("license") ||
+      text.includes("medical") ||
+      text.includes("regulation") ||
+      text.includes("compliance")
+    ) {
+      obligationType = "compliance";
+      priority = "critical";
+    }
+
+    /* =========================
+       RETURN / REDELIVERY
+    ========================= */
+
+    if (
+      text.includes("return") ||
       text.includes("redelivery") ||
-      text.includes("return condition")
+      text.includes("return condition") ||
+      text.includes("scheduled time")
     ) {
       obligationType = "redelivery";
       priority = "critical";
