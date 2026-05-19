@@ -1,59 +1,124 @@
+// contractPipeline.js
+
 import { extractClauses } from "./services/clauseExtractionService.js";
 import { extractObligations } from "./services/obligationExtractor.js";
 
-export async function processContract(contract) {
-  try {
-    const text = contract?.extracted_text || "";
+/**
+ * Normalize contract text into a deterministic format.
+ * This is the #1 fix for inconsistent clause detection.
+ */
+function normalizeText(text = "") {
+  return text
+    .replace(/\r/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/•/g, "*")
+    .trim();
+}
 
-    if (!text) {
-      return {
-        success: false,
-        error: "No extracted text found in contract",
-      };
-    }
+/**
+ * Stable clause segmentation:
+ * We force structure BEFORE AI/heuristics run.
+ */
+function segmentClauses(text) {
+  const normalized = normalizeText(text);
 
-    // STEP 1: Extract clauses
-    let rawClauses = await extractClauses(text);
+  // Split on strong structural markers FIRST (most reliable)
+  const structuredSplit = normalized.split(
+    /(?=\n\s*[A-H]\.\s|\n\s*\(\d+\)\s|\n\s*\*\s)/g
+  );
 
-    // 🔧 FIX: normalize clauses into array ALWAYS
-    const clauses = Array.isArray(rawClauses)
-      ? rawClauses
-      : rawClauses?.clauses
-      ? rawClauses.clauses
-      : Object.values(rawClauses || {});
+  // Clean segments
+  const cleaned = structuredSplit
+    .map(s => s.trim())
+    .filter(Boolean);
 
-    // STEP 2: Ensure clause structure consistency
-    const normalizedClauses = clauses
-      .filter((c) => c && typeof c === "object")
-      .map((c, index) => ({
-        id: c.id || `clause_${index}`,
-        contract_id: contract.id,
-        clause_text: c.clause_text || c.text || c.content || "",
-      }))
-      .filter((c) => c.clause_text.length > 0);
+  // Deduplicate (important for OCR / PDF duplication issues)
+  const unique = Array.from(new Set(cleaned));
 
-    // STEP 3: Extract obligations (NOW GUARANTEED ARRAY INPUT)
-    const obligations = extractObligations(normalizedClauses);
+  return unique;
+}
 
-    // STEP 4: Optional debug logging
-    console.log("Clauses extracted:", normalizedClauses.length);
-    console.log("Obligations extracted:", obligations.length);
-
-    // STEP 5: Return structured result
-    return {
-      success: true,
-      contract,
-      clauses: normalizedClauses,
-      obligations,
-      clausesDetected: normalizedClauses.length,
-      obligationsDetected: obligations.length,
-    };
-  } catch (error) {
-    console.error("Contract pipeline error:", error);
-
-    return {
-      success: false,
-      error: error.message || "Unknown pipeline error",
-    };
+/**
+ * Deterministic hash-like key for stability tracking
+ */
+function generateStableKey(contractText) {
+  let hash = 0;
+  for (let i = 0; i < contractText.length; i++) {
+    const char = contractText.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash |= 0;
   }
+  return hash;
+}
+
+/**
+ * Main pipeline entry
+ */
+export async function processContract(contract) {
+  if (!contract || !contract.extracted_text) {
+    throw new Error("Invalid contract input: missing extracted_text");
+  }
+
+  // STEP 1: Normalize ONCE (critical fix)
+  const normalizedText = normalizeText(contract.extracted_text);
+
+  // STEP 2: Stable segmentation (this removes randomness)
+  const segments = segmentClauses(normalizedText);
+
+  // STEP 3: Deterministic clause extraction (NO re-feeding raw text)
+  const clauses = await Promise.all(
+    segments.map(async (segment, index) => {
+      const result = await extractClauses(segment);
+
+      return {
+        index,
+        text: segment,
+        clauses: result?.clauses || [],
+        raw: result
+      };
+    })
+  );
+
+  // STEP 4: Flatten clauses deterministically
+  const flatClauses = clauses.flatMap(c => c.clauses || []);
+
+  // STEP 5: Stable deduplication (important for repeated PDF patterns)
+  const seen = new Set();
+  const uniqueClauses = [];
+
+  for (const clause of flatClauses) {
+    const key = (clause.text || clause).toString().trim();
+
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueClauses.push(clause);
+    }
+  }
+
+  // STEP 6: Obligation extraction (ONLY once, full text)
+  const obligationsResult = await extractObligations(normalizedText);
+
+  const obligations = obligationsResult?.obligations || [];
+
+  // STEP 7: Final deterministic output
+  return {
+    success: true,
+    contract: {
+      ...contract,
+      extracted_text: normalizedText
+    },
+    clausesDetected: uniqueClauses.length,
+    obligationsDetected: obligations.length,
+
+    clauses: uniqueClauses,
+    obligations,
+
+    debug: {
+      segments: segments.length,
+      clausesRaw: flatClauses.length,
+      clausesUnique: uniqueClauses.length,
+      textHash: generateStableKey(normalizedText)
+    }
+  };
 }
