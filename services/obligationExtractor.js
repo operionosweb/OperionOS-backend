@@ -1,129 +1,66 @@
 export function extractObligations(clauses = []) {
+  if (!Array.isArray(clauses)) return [];
+
   const obligations = [];
 
-  const matchAny = (text, keywords) =>
-    keywords.some((k) => text.includes(k));
+  for (const clause of clauses) {
+    const text = (clause?.clause_text || "").toLowerCase();
 
-  clauses.forEach((clause) => {
-    const text = (clause.clause_text || "").toLowerCase();
+    if (!text) continue;
 
-    const detected = new Set();
-    let priority = "low";
+    let obligationType = null;
+    let priority = "medium";
 
-    // =========================
-    // FINANCIAL OBLIGATIONS
-    // =========================
+    // FINANCIAL
     if (
-      matchAny(text, [
-        "fee",
-        "fees",
-        "charge",
-        "charges",
-        "rent",
-        "payment",
-        "pay",
-        "liable",
-        "on demand",
-        "cost",
-        "invoice",
-        "rates",
-      ])
+      /fee|charges|rent|liable to pay|on demand|cost|payment/.test(text)
     ) {
-      detected.add("financial");
+      obligationType = "financial";
       priority = "high";
     }
 
-    // =========================
-    // MAINTENANCE / AIRCRAFT CONDITION
-    // =========================
+    // MAINTENANCE / AIRWORTHINESS
     if (
-      matchAny(text, [
-        "maintenance",
-        "repair",
-        "airworthy",
-        "mechanical",
-        "breakdown",
-        "inspection",
-        "overhaul",
-      ])
+      /maintenance|repair|airworthy|mechanical|breakdown/.test(text)
     ) {
-      detected.add("maintenance");
+      obligationType = obligationType || "maintenance";
       priority = "high";
     }
 
-    // =========================
-    // INSURANCE / LIABILITY (CRITICAL)
-    // =========================
+    // INSURANCE (CRITICAL)
     if (
-      matchAny(text, [
-        "insurance",
-        "liability",
-        "deductible",
-        "bodily injury",
-        "coverage",
-        "occurrence",
-        "physical damage",
-        "policy",
-      ])
+      /insurance|liability|deductible|bodily injury|coverage|occurrence|physical damage/.test(text)
     ) {
-      detected.add("insurance");
+      obligationType = "insurance";
       priority = "critical";
     }
 
-    // =========================
-    // OPERATIONAL / FLIGHT RULES
-    // =========================
+    // OPERATIONAL SAFETY
     if (
-      matchAny(text, [
-        "pilot",
-        "flight",
-        "vfr",
-        "ifr",
-        "weather",
-        "airport",
-        "take-off",
-        "landing",
-        "operate",
-        "aircraft",
-        "command",
-      ])
+      /pilot|flight|vfr|ifr|weather|airport|take-off|landing/.test(text)
     ) {
-      detected.add("operational");
-      if (priority !== "critical") priority = "medium";
+      obligationType = obligationType || "operational";
     }
 
-    // =========================
-    // REDELIVERY / RETURN OBLIGATIONS
-    // =========================
+    // RETURN / REDELIVERY
     if (
-      matchAny(text, [
-        "return",
-        "returned",
-        "home base",
-        "abandoned",
-        "scheduled time",
-        "reimburse",
-        "expenses",
-      ])
+      /return|home base|abandoned|scheduled time/.test(text)
     ) {
-      detected.add("redelivery");
+      obligationType = obligationType || "redelivery";
       priority = "critical";
     }
 
-    // =========================
-    // OUTPUT
-    // =========================
-    if (detected.size > 0) {
+    if (obligationType) {
       obligations.push({
         contract_id: clause.contract_id || null,
-        clause_id: clause.id || null,
-        obligation_type: Array.from(detected).join("+"),
+        clause_id: clause.id,
+        obligation_type: obligationType,
         priority,
         description: clause.clause_text,
         status: "open",
       });
     }
-  });
+  }
 
   return obligations;
 }
