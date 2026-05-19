@@ -1,58 +1,95 @@
+const CLAUSE_PATTERNS = [
+  {
+    category: "payment",
+    keywords: ["payment", "invoice", "fee", "rent", "charges"],
+  },
+  {
+    category: "maintenance",
+    keywords: ["maintenance", "repair", "inspection", "overhaul"],
+  },
+  {
+    category: "insurance",
+    keywords: ["insurance", "liability", "damage", "coverage", "deductible"],
+  },
+  {
+    category: "redelivery",
+    keywords: ["return", "redelivery", "home base", "scheduled time"],
+  },
+  {
+    category: "operational",
+    keywords: ["flight", "operation", "weather", "vfr", "ifr", "airport"],
+  },
+];
+
+function cleanText(text) {
+  return text
+    .replace(/\r/g, "")
+    .replace(/\n+/g, "\n")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * NEW APPROACH:
+ * We detect clause blocks instead of splitting randomly.
+ */
 export function extractClauses(text) {
   if (!text) return [];
 
-  const clean = text
-    .replace(/\r/g, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  const cleaned = cleanText(text);
 
-  // =========================
-  // STEP 1: split by major headers
-  // =========================
-  const sectionSplitRegex =
-    /(?=\n[A-Z]\.\s)|(?=\nFLIGHT OPERATIONS)|(?=\nTRANSIENT MAINTENANCE)|(?=\nNOTICE OF)|(?=\n[A-Z][A-Z ]{5,}\n)/g;
-
-  const sections = clean.split(sectionSplitRegex).filter(Boolean);
+  const lines = cleaned.split("\n");
 
   const clauses = [];
+  let currentClause = "";
 
-  let clauseIndex = 1;
-
-  for (const section of sections) {
-    const trimmed = section.trim();
-    if (trimmed.length < 80) continue;
-
-    // =========================
-    // STEP 2: detect sub-clauses
-    // =========================
-    const subParts = trimmed.split(
-      /(?=\(\d+\))|(?=\*\s)|(?=\n\d+\.)|(?=\n•)/
+  const isNewClauseStart = (line) => {
+    return (
+      /^[A-H]\.\s/.test(line) || // A. B. C.
+      /^\(\d+\)/.test(line) || // (1) (2)
+      /^[A-Z\s]{6,}$/.test(line) || // SECTION HEADERS
+      line.includes("FLIGHT OPERATIONS SAFETY RULES") ||
+      line.includes("TRANSIENT MAINTENANCE POLICY") ||
+      line.includes("NOTICE OF INSURANCE COVERAGE")
     );
+  };
 
-    if (subParts.length === 1) {
-      // no sub-structure → keep as single clause
-      clauses.push({
-        id: `clause_${clauseIndex++}`,
-        contract_id: null,
-        clause_title: `Clause ${clauseIndex - 1}`,
-        clause_text: trimmed,
-      });
-      continue;
-    }
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
 
-    // multiple structured parts → expand
-    for (const part of subParts) {
-      const p = part.trim();
-      if (p.length < 60) continue;
-
-      clauses.push({
-        id: `clause_${clauseIndex++}`,
-        contract_id: null,
-        clause_title: `Clause ${clauseIndex - 1}`,
-        clause_text: p,
-      });
+    if (isNewClauseStart(line) && currentClause.length > 80) {
+      clauses.push(currentClause.trim());
+      currentClause = line + " ";
+    } else {
+      currentClause += line + " ";
     }
   }
 
-  return clauses;
+  if (currentClause.length > 80) {
+    clauses.push(currentClause.trim());
+  }
+
+  return clauses.map((section, index) => {
+    let detectedCategory = "general";
+
+    for (const pattern of CLAUSE_PATTERNS) {
+      const found = pattern.keywords.some((keyword) =>
+        section.toLowerCase().includes(keyword.toLowerCase())
+      );
+
+      if (found) {
+        detectedCategory = pattern.category;
+        break;
+      }
+    }
+
+    return {
+      clause_title: `Clause ${index + 1}`,
+      clause_category: detectedCategory,
+      clause_text: section,
+      risk_level: "medium",
+      trigger_type: "manual_review",
+    };
+  });
 }
