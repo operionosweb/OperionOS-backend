@@ -1,119 +1,123 @@
 export function extractObligations(clauses = []) {
   const obligations = [];
 
+  const matchAny = (text, keywords) =>
+    keywords.some((k) => text.includes(k));
+
   clauses.forEach((clause) => {
     const text = (clause.clause_text || "").toLowerCase();
 
-    const types = [];
+    const detected = new Set();
     let priority = "low";
 
     // =========================
     // FINANCIAL OBLIGATIONS
     // =========================
-    const financialKeywords = [
-      "fee",
-      "fees",
-      "charges",
-      "charge",
-      "rent",
-      "payment",
-      "pay",
-      "liable to pay",
-      "on demand",
-      "cost",
-      "invoice",
-    ];
-
-    if (financialKeywords.some((k) => text.includes(k))) {
-      types.push("financial");
+    if (
+      matchAny(text, [
+        "fee",
+        "fees",
+        "charge",
+        "charges",
+        "rent",
+        "payment",
+        "pay",
+        "liable",
+        "on demand",
+        "cost",
+        "invoice",
+        "rates",
+      ])
+    ) {
+      detected.add("financial");
       priority = "high";
     }
 
     // =========================
-    // MAINTENANCE / AIRWORTHINESS
+    // MAINTENANCE / AIRCRAFT CONDITION
     // =========================
-    const maintenanceKeywords = [
-      "maintenance",
-      "repair",
-      "airworthy",
-      "mechanical condition",
-      "breakdown",
-      "inspection",
-      "overhaul",
-    ];
-
-    if (maintenanceKeywords.some((k) => text.includes(k))) {
-      types.push("maintenance");
-      priority = Math.max(priority === "critical" ? 3 : priority === "high" ? 2 : 1, 2)
-        ? "high"
-        : "medium";
+    if (
+      matchAny(text, [
+        "maintenance",
+        "repair",
+        "airworthy",
+        "mechanical",
+        "breakdown",
+        "inspection",
+        "overhaul",
+      ])
+    ) {
+      detected.add("maintenance");
+      priority = "high";
     }
 
     // =========================
-    // INSURANCE (HIGHEST PRIORITY DOMAIN)
+    // INSURANCE / LIABILITY (CRITICAL)
     // =========================
-    const insuranceKeywords = [
-      "insurance",
-      "liability",
-      "deductible",
-      "bodily injury",
-      "coverage",
-      "occurrence",
-      "physical damage",
-      "policy",
-    ];
-
-    if (insuranceKeywords.some((k) => text.includes(k))) {
-      types.push("insurance");
+    if (
+      matchAny(text, [
+        "insurance",
+        "liability",
+        "deductible",
+        "bodily injury",
+        "coverage",
+        "occurrence",
+        "physical damage",
+        "policy",
+      ])
+    ) {
+      detected.add("insurance");
       priority = "critical";
     }
 
     // =========================
-    // OPERATIONAL / SAFETY
+    // OPERATIONAL / FLIGHT RULES
     // =========================
-    const operationalKeywords = [
-      "pilot",
-      "flight",
-      "vfr",
-      "ifr",
-      "weather",
-      "airport",
-      "take-off",
-      "landing",
-      "operations",
-      "aircraft",
-    ];
-
-    if (operationalKeywords.some((k) => text.includes(k))) {
-      types.push("operational");
+    if (
+      matchAny(text, [
+        "pilot",
+        "flight",
+        "vfr",
+        "ifr",
+        "weather",
+        "airport",
+        "take-off",
+        "landing",
+        "operate",
+        "aircraft",
+        "command",
+      ])
+    ) {
+      detected.add("operational");
       if (priority !== "critical") priority = "medium";
     }
 
     // =========================
-    // REDELIVERY / RETURN
+    // REDELIVERY / RETURN OBLIGATIONS
     // =========================
-    const redeliveryKeywords = [
-      "return",
-      "returned",
-      "home base",
-      "abandoned",
-      "scheduled time",
-      "re-delivery",
-    ];
-
-    if (redeliveryKeywords.some((k) => text.includes(k))) {
-      types.push("redelivery");
+    if (
+      matchAny(text, [
+        "return",
+        "returned",
+        "home base",
+        "abandoned",
+        "scheduled time",
+        "reimburse",
+        "expenses",
+      ])
+    ) {
+      detected.add("redelivery");
       priority = "critical";
     }
 
     // =========================
-    // OUTPUT (ONE OR MULTI TYPE)
+    // OUTPUT
     // =========================
-    if (types.length > 0) {
+    if (detected.size > 0) {
       obligations.push({
         contract_id: clause.contract_id || null,
         clause_id: clause.id || null,
-        obligation_type: types.join("+"), // supports multi-label like "insurance+financial"
+        obligation_type: Array.from(detected).join("+"),
         priority,
         description: clause.clause_text,
         status: "open",
