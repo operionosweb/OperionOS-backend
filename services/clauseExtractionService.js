@@ -5,7 +5,7 @@ const CLAUSE_PATTERNS = [
   },
   {
     category: "maintenance",
-    keywords: ["maintenance", "repair", "airworthy", "inspection"],
+    keywords: ["maintenance", "repair", "inspection", "overhaul"],
   },
   {
     category: "insurance",
@@ -21,36 +21,52 @@ const CLAUSE_PATTERNS = [
   },
 ];
 
+function cleanText(text) {
+  return text
+    .replace(/\r/g, "")
+    .replace(/\n+/g, "\n")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function extractClauses(text) {
   if (!text) return [];
 
-  const paragraphs = text
-    .split(/\n\s*\n/)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 50);
+  const cleaned = cleanText(text);
 
-  const clauses = paragraphs.map((paragraph, index) => {
-    let detectedCategory = "general";
+  /* =========================
+     SPLIT BY LEGAL SECTIONS
+  ========================= */
 
-    for (const pattern of CLAUSE_PATTERNS) {
-      const found = pattern.keywords.some((keyword) =>
-        paragraph.toLowerCase().includes(keyword.toLowerCase())
-      );
+  const sections = cleaned.split(
+    /(?=\b[A-Z]\.\s)|(?=\*\s)|(?=NOTICE OF)|(?=TRANSIENT MAINTENANCE POLICY)|(?=FLIGHT OPERATIONS SAFETY RULES)/g
+  );
 
-      if (found) {
-        detectedCategory = pattern.category;
-        break;
+  const clauses = sections
+    .map((section) => section.trim())
+    .filter((section) => section.length > 80)
+    .map((section, index) => {
+      let detectedCategory = "general";
+
+      for (const pattern of CLAUSE_PATTERNS) {
+        const found = pattern.keywords.some((keyword) =>
+          section.toLowerCase().includes(keyword.toLowerCase())
+        );
+
+        if (found) {
+          detectedCategory = pattern.category;
+          break;
+        }
       }
-    }
 
-    return {
-      clause_title: `Clause ${index + 1}`,
-      clause_category: detectedCategory,
-      clause_text: paragraph,
-      risk_level: "medium",
-      trigger_type: "manual_review",
-    };
-  });
+      return {
+        clause_title: `Clause ${index + 1}`,
+        clause_category: detectedCategory,
+        clause_text: section,
+        risk_level: "medium",
+        trigger_type: "manual_review",
+      };
+    });
 
   return clauses;
 }
