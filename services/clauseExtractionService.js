@@ -6,44 +6,53 @@ export function extractClauses(text) {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  // STEP 1: detect real clause blocks using paragraph clustering
-  const paragraphs = clean
-    .split("\n")
-    .map((p) => p.trim())
-    .filter((p) => p.length > 40);
+  // =========================
+  // STEP 1: split by major headers
+  // =========================
+  const sectionSplitRegex =
+    /(?=\n[A-Z]\.\s)|(?=\nFLIGHT OPERATIONS)|(?=\nTRANSIENT MAINTENANCE)|(?=\nNOTICE OF)|(?=\n[A-Z][A-Z ]{5,}\n)/g;
 
-  const blocks = [];
-  let currentBlock = "";
+  const sections = clean.split(sectionSplitRegex).filter(Boolean);
 
-  for (const p of paragraphs) {
-    const looksLikeNewClause =
-      /^[A-Z]\.|^\(\d+\)|^\d+\.|^FLIGHT|^NOTICE|^TRANSIENT|^[A-Z ]{6,}/.test(p);
+  const clauses = [];
 
-    if (looksLikeNewClause && currentBlock.length > 100) {
-      blocks.push(currentBlock);
-      currentBlock = p;
-    } else {
-      currentBlock += " " + p;
+  let clauseIndex = 1;
+
+  for (const section of sections) {
+    const trimmed = section.trim();
+    if (trimmed.length < 80) continue;
+
+    // =========================
+    // STEP 2: detect sub-clauses
+    // =========================
+    const subParts = trimmed.split(
+      /(?=\(\d+\))|(?=\*\s)|(?=\n\d+\.)|(?=\n•)/
+    );
+
+    if (subParts.length === 1) {
+      // no sub-structure → keep as single clause
+      clauses.push({
+        id: `clause_${clauseIndex++}`,
+        contract_id: null,
+        clause_title: `Clause ${clauseIndex - 1}`,
+        clause_text: trimmed,
+      });
+      continue;
+    }
+
+    // multiple structured parts → expand
+    for (const part of subParts) {
+      const p = part.trim();
+      if (p.length < 60) continue;
+
+      clauses.push({
+        id: `clause_${clauseIndex++}`,
+        contract_id: null,
+        clause_title: `Clause ${clauseIndex - 1}`,
+        clause_text: p,
+      });
     }
   }
 
-  if (currentBlock.length > 0) {
-    blocks.push(currentBlock);
-  }
-
-  // STEP 2: fallback if segmentation failed
-  const finalBlocks =
-    blocks.length > 1
-      ? blocks
-      : clean.split(/\n\n+/).filter((b) => b.length > 120);
-
-  // STEP 3: return structured clauses
-  return finalBlocks.map((block, i) => {
-    return {
-      id: `clause_${i + 1}`,
-      contract_id: null,
-      clause_title: `Clause ${i + 1}`,
-      clause_text: block.trim(),
-    };
-  });
+  return clauses;
 }
