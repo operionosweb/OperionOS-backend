@@ -5,6 +5,7 @@ import supabase from "../config/supabase.js";
 
 import { extractPdfText } from "../services/pdfService.js";
 import { extractClauses } from "../services/clauseExtractionService.js";
+import { extractObligations } from "../services/obligationExtractor.js";
 
 const router = express.Router();
 
@@ -94,13 +95,34 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       trigger_type: clause.trigger_type,
     }));
 
+    let insertedClauses = [];
+
     if (clausesToInsert.length > 0) {
-      const { error: clauseError } = await supabase
+      const { data, error: clauseError } = await supabase
         .from("contract_clauses")
-        .insert(clausesToInsert);
+        .insert(clausesToInsert)
+        .select();
 
       if (clauseError) {
         console.error(clauseError);
+      } else {
+        insertedClauses = data || [];
+      }
+    }
+
+    /* =========================
+       OBLIGATION EXTRACTION
+    ========================= */
+
+    const obligations = extractObligations(insertedClauses);
+
+    if (obligations.length > 0) {
+      const { error: obligationError } = await supabase
+        .from("obligations")
+        .insert(obligations);
+
+      if (obligationError) {
+        console.error(obligationError);
       }
     }
 
@@ -111,7 +133,8 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     return res.json({
       success: true,
       contract: contractData,
-      clausesDetected: clausesToInsert.length,
+      clausesDetected: insertedClauses.length,
+      obligationsDetected: obligations.length,
       extractedCharacters: extractedText.length,
       extractedPreview: extractedText.substring(0, 500),
     });
