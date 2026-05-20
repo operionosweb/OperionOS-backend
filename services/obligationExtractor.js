@@ -1,130 +1,103 @@
-export function extractObligations(clauses = []) {
-  const obligations = [];
+export async function extractObligations(clauses = []) {
+  try {
+    const obligations = [];
 
-  // 🔧 SAFETY: ensure array input
-  if (!Array.isArray(clauses)) {
-    console.warn("extractObligations expected array but got:", typeof clauses);
+    for (const clause of clauses) {
+      const text = clause.clause_text || "";
+      const clauseName = clause.clause_name || "Unknown Clause";
+
+      // Split into sentences
+      const sentences = text
+        .replace(/\n/g, " ")
+        .split(/[.?!]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      for (const sentence of sentences) {
+        const lower = sentence.toLowerCase();
+
+        // Detect obligation language
+        const isObligation =
+          lower.includes("shall") ||
+          lower.includes("must") ||
+          lower.includes("required to") ||
+          lower.includes("agrees to") ||
+          lower.includes("will pay") ||
+          lower.includes("is liable for");
+
+        if (isObligation) {
+          obligations.push({
+            clause_name: clauseName,
+            obligation_text: sentence,
+            obligation_type: detectObligationType(sentence),
+            priority: detectPriority(sentence),
+            created_at: new Date().toISOString(),
+          });
+        }
+      }
+    }
+
     return obligations;
+  } catch (error) {
+    console.error("Obligation extraction failed:", error);
+    return [];
+  }
+}
+
+function detectObligationType(text = "") {
+  const lower = text.toLowerCase();
+
+  if (
+    lower.includes("pay") ||
+    lower.includes("fee") ||
+    lower.includes("tax") ||
+    lower.includes("reimburse")
+  ) {
+    return "financial";
   }
 
-  clauses.forEach((clause) => {
-    const text = ((clause?.clause_text || "") + "").toLowerCase().trim();
+  if (
+    lower.includes("maintain") ||
+    lower.includes("repair") ||
+    lower.includes("inspection")
+  ) {
+    return "maintenance";
+  }
 
-    if (!text) return;
+  if (
+    lower.includes("insurance") ||
+    lower.includes("insured")
+  ) {
+    return "insurance";
+  }
 
-    let obligationType = null;
-    let priority = "medium";
+  if (
+    lower.includes("terminate") ||
+    lower.includes("notice")
+  ) {
+    return "termination";
+  }
 
-    // -------------------------
-    // FINANCIAL OBLIGATIONS
-    // -------------------------
-    if (
-      text.includes("fee") ||
-      text.includes("fees") ||
-      text.includes("charge") ||
-      text.includes("charges") ||
-      text.includes("rent") ||
-      text.includes("payment") ||
-      text.includes("pay") ||
-      text.includes("liable to pay") ||
-      text.includes("on demand") ||
-      text.includes("cost") ||
-      text.includes("expense")
-    ) {
-      obligationType = "financial";
-      priority = "high";
-    }
+  return "general";
+}
 
-    // -------------------------
-    // MAINTENANCE / AIRWORTHINESS
-    // -------------------------
-    if (
-      text.includes("maintenance") ||
-      text.includes("repair") ||
-      text.includes("repairs") ||
-      text.includes("airworthy") ||
-      text.includes("mechanical") ||
-      text.includes("breakdown") ||
-      text.includes("service")
-    ) {
-      obligationType = obligationType || "maintenance";
-      priority = "high";
-    }
+function detectPriority(text = "") {
+  const lower = text.toLowerCase();
 
-    // -------------------------
-    // INSURANCE
-    // -------------------------
-    if (
-      text.includes("insurance") ||
-      text.includes("liability") ||
-      text.includes("deductible") ||
-      text.includes("bodily injury") ||
-      text.includes("coverage") ||
-      text.includes("insured") ||
-      text.includes("occurrence") ||
-      text.includes("physical damage")
-    ) {
-      obligationType = "insurance";
-      priority = "critical";
-    }
+  if (
+    lower.includes("immediately") ||
+    lower.includes("within 30 days") ||
+    lower.includes("termination")
+  ) {
+    return "high";
+  }
 
-    // -------------------------
-    // OPERATIONAL / SAFETY
-    // -------------------------
-    if (
-      text.includes("pilot") ||
-      text.includes("flight") ||
-      text.includes("vfr") ||
-      text.includes("ifr") ||
-      text.includes("weather") ||
-      text.includes("airport") ||
-      text.includes("take-off") ||
-      text.includes("landing") ||
-      text.includes("operate") ||
-      text.includes("operation")
-    ) {
-      obligationType = obligationType || "operational";
-    }
+  if (
+    lower.includes("shall") ||
+    lower.includes("must")
+  ) {
+    return "medium";
+  }
 
-    // -------------------------
-    // RETURN / REDELIVERY
-    // -------------------------
-    if (
-      text.includes("return") ||
-      text.includes("return aircraft") ||
-      text.includes("home base") ||
-      text.includes("abandoned") ||
-      text.includes("scheduled time")
-    ) {
-      obligationType = obligationType || "redelivery";
-      priority = "critical";
-    }
-
-    // -------------------------
-    // LEGAL / PENALTY
-    // -------------------------
-    if (
-      text.includes("attorney") ||
-      text.includes("lawsuit") ||
-      text.includes("suit") ||
-      text.includes("legal") ||
-      text.includes("damages")
-    ) {
-      obligationType = obligationType || "legal";
-      priority = "high";
-    }
-
-    if (obligationType) {
-      obligations.push({
-        contract_id: clause.contract_id || null,
-        clause_id: clause.id || null,
-        obligation_type: obligationType,
-        priority,
-        description: clause.clause_text || "",
-        status: "open",
-      });
-    }
-  });
-
-  return obligations;
+  return "low";
 }
