@@ -1,3 +1,5 @@
+// contractPipeline.js
+
 const clauseExtractionService = require("./services/clauseExtractionService");
 const obligationExtractor = require("./services/obligationExtractor");
 
@@ -13,6 +15,7 @@ function normalizeText(text) {
     .replace(/\t/g, " ")
     .replace(/[ ]{2,}/g, " ")
     .replace(/\n{3,}/g, "\n\n")
+    .replace(/[^\S\r\n]+/g, " ")
     .trim();
 }
 
@@ -24,14 +27,11 @@ function segmentClauses(text) {
   if (!text || typeof text !== "string") return [];
 
   const normalized = normalizeText(text);
-
   const allClauses = [];
 
-  // ------------------------------------
-  // ARTICLE extraction
-  // ------------------------------------
-
-  const articleRegex = /(ARTICLE\s+\d+\s*[-–—:]?.*?)(?=ARTICLE\s+\d+\s*[-–—:]|$)/gis;
+  // ARTICLE-based segmentation
+  const articleRegex =
+    /(ARTICLE\s+\d+\s*[-–—:]?.*?)(?=ARTICLE\s+\d+\s*[-–—:]|$)/gis;
 
   const articleMatches = normalized.match(articleRegex);
 
@@ -43,94 +43,102 @@ function segmentClauses(text) {
         allClauses.push(cleanArticle);
       }
 
-      // ------------------------------------
       // Numbered subclauses
-      // ------------------------------------
-
       const numberedClauses = cleanArticle.match(
         /\d+\.\s[\s\S]*?(?=\n\d+\.|\nARTICLE|$)/g
       );
 
       if (numberedClauses) {
         for (const clause of numberedClauses) {
-          const clean = clause.trim();
-
-          if (clean.length > 10) {
-            allClauses.push(clean);
+          if (clause.trim().length > 10) {
+            allClauses.push(clause.trim());
           }
         }
       }
 
-      // ------------------------------------
       // Letter clauses
-      // ------------------------------------
-
       const letterClauses = cleanArticle.match(
         /[a-z]\)\s[\s\S]*?(?=\n[a-z]\)|$)/gi
       );
 
       if (letterClauses) {
         for (const clause of letterClauses) {
-          const clean = clause.trim();
-
-          if (clean.length > 10) {
-            allClauses.push(clean);
+          if (clause.trim().length > 10) {
+            allClauses.push(clause.trim());
           }
         }
       }
     }
   }
 
-  // ------------------------------------
-  // Bullet extraction
-  // ------------------------------------
-
+  // Bullet extraction fallback
   const bullets = normalized.match(/(?:^|\n)\s*[\*\-•]\s.+/g);
 
   if (bullets) {
     for (const bullet of bullets) {
       const clean = bullet.replace(/^\s*[\*\-•]\s*/, "").trim();
-
       if (clean.length > 10) {
         allClauses.push(clean);
       }
     }
   }
 
-  // ------------------------------------
-  // Cleanup
-  // ------------------------------------
-
+  // Cleanup + deduplicate
   const cleaned = allClauses
-    .map(c => c.replace(/\s+/g, " ").trim())
-    .filter(c => c.length > 10);
+    .map((c) => c.replace(/\s+/g, " ").trim())
+    .filter((c) => c.length > 10);
 
-  const unique = [...new Set(cleaned)];
-
-  return unique;
+  return [...new Set(cleaned)];
 }
 
 // ---------------------------------------------------
-// MAIN PIPELINE
+// CLAUSE NORMALIZATION (CRITICAL FIX)
+// ---------------------------------------------------
+
+function normalizeClauses(rawClauses) {
+  if (!Array.isArray(rawClauses)) return [];
+
+  return rawClauses.map((clause, index) => {
+    if (typeof clause === "string") {
+      return {
+        clause_number: index + 1,
+        clause_title: `Clause ${index + 1}`,
+        clause_text: clause,
+        clause_type: "general"
+      };
+    }
+
+    return {
+      clause_number: clause.clause_number || index + 1,
+      clause_title: clause.clause_title || `Clause ${index + 1}`,
+      clause_text: clause.clause_text || "",
+      clause_type: clause.clause_type || "general"
+    };
+  });
+}
+
+// ---------------------------------------------------
+// MAIN PIPELINE (FIXED + UNIFIED)
 // ---------------------------------------------------
 
 async function processContract(contract) {
   try {
-    const extractedText = contract.extracted_text || "";
+    const extractedText =
+      typeof contract === "string"
+        ? contract
+        : contract?.extracted_text || contract?.text || "";
 
-    // ------------------------------------
-    // CLAUSE SEGMENTATION
-    // ------------------------------------
+    if (!extractedText) {
+      throw new Error("No contract text provided to pipeline");
+    }
 
+    // STEP 1: Normalize + segment
     const segmentedClauses = segmentClauses(extractedText);
 
     console.log("SEGMENTED CLAUSES:", segmentedClauses.length);
 
-    // ------------------------------------
-    // AI CLAUSE EXTRACTION
-    // ------------------------------------
-
-    let extractedClauses = [];
+    // STEP 2: Normalize structure BEFORE AI processing
+    let extractedClauses;
 
     try {
       extractedClauses =
@@ -138,17 +146,12 @@ async function processContract(contract) {
     } catch (err) {
       console.error("Clause extraction failed:", err.message);
 
-      extractedClauses = segmentedClauses.map((c, index) => ({
-        clause_name: `Clause ${index + 1}`,
-        clause_text: c,
-        clause_type: "general"
-      }));
+      extractedClauses = normalizeClauses(segmentedClauses);
     }
 
-    // ------------------------------------
-    // OBLIGATION EXTRACTION
-    // ------------------------------------
+    extractedClauses = normalizeClauses(extractedClauses);
 
+    // STEP 3: Obligation extraction (stable structured input)
     let obligations = [];
 
     try {
@@ -159,14 +162,9 @@ async function processContract(contract) {
       obligations = [];
     }
 
-    // ------------------------------------
-    // FINAL RESPONSE
-    // ------------------------------------
-
+    // STEP 4: Final response
     return {
       success: true,
-
-      contract,
 
       clauses: extractedClauses,
 
@@ -192,8 +190,11 @@ async function processContract(contract) {
   }
 }
 
+// ---------------------------------------------------
+
 module.exports = {
   processContract,
   segmentClauses,
-  normalizeText
+  normalizeText,
+  normalizeClauses
 };
