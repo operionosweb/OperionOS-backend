@@ -1,103 +1,72 @@
-export async function extractObligations(clauses = []) {
+export async function extractObligations(text) {
   try {
+    if (!text || typeof text !== "string") {
+      return [];
+    }
+
+    const obligationPatterns = [
+      /\bshall\b/gi,
+      /\bmust\b/gi,
+      /\bagrees to\b/gi,
+      /\brequired to\b/gi,
+      /\bwill\b/gi
+    ];
+
+    const sentences = text
+      .replace(/\n/g, " ")
+      .split(/[.?!]/)
+      .map(s => s.trim())
+      .filter(Boolean);
+
     const obligations = [];
 
-    for (const clause of clauses) {
-      const text = clause.clause_text || "";
-      const clauseName = clause.clause_name || "Unknown Clause";
+    for (const sentence of sentences) {
+      const isObligation = obligationPatterns.some(pattern =>
+        pattern.test(sentence)
+      );
 
-      // Split into sentences
-      const sentences = text
-        .replace(/\n/g, " ")
-        .split(/[.?!]/)
-        .map((s) => s.trim())
-        .filter(Boolean);
+      if (!isObligation) continue;
 
-      for (const sentence of sentences) {
-        const lower = sentence.toLowerCase();
+      let responsibleParty = "Unknown";
 
-        // Detect obligation language
-        const isObligation =
-          lower.includes("shall") ||
-          lower.includes("must") ||
-          lower.includes("required to") ||
-          lower.includes("agrees to") ||
-          lower.includes("will pay") ||
-          lower.includes("is liable for");
-
-        if (isObligation) {
-          obligations.push({
-            clause_name: clauseName,
-            obligation_text: sentence,
-            obligation_type: detectObligationType(sentence),
-            priority: detectPriority(sentence),
-            created_at: new Date().toISOString(),
-          });
-        }
+      if (/club/i.test(sentence)) {
+        responsibleParty = "Club";
+      } else if (/lessor/i.test(sentence)) {
+        responsibleParty = "Lessor";
       }
+
+      let triggerType = "general";
+
+      if (/pay|payment|fee|cost|invoice/i.test(sentence)) {
+        triggerType = "payment";
+      } else if (/insurance/i.test(sentence)) {
+        triggerType = "insurance";
+      } else if (/maintain|maintenance|repair/i.test(sentence)) {
+        triggerType = "maintenance";
+      } else if (/terminate|termination/i.test(sentence)) {
+        triggerType = "termination";
+      }
+
+      let riskLevel = "low";
+
+      if (/penalty|liable|violation|breach/i.test(sentence)) {
+        riskLevel = "high";
+      } else if (/shall|must/i.test(sentence)) {
+        riskLevel = "medium";
+      }
+
+      obligations.push({
+        obligation_text: sentence,
+        responsible_party: responsibleParty,
+        trigger_type: triggerType,
+        risk_level: riskLevel
+      });
     }
 
     return obligations;
+
   } catch (error) {
     console.error("Obligation extraction failed:", error);
     return [];
   }
-}
-
-function detectObligationType(text = "") {
-  const lower = text.toLowerCase();
-
-  if (
-    lower.includes("pay") ||
-    lower.includes("fee") ||
-    lower.includes("tax") ||
-    lower.includes("reimburse")
-  ) {
-    return "financial";
-  }
-
-  if (
-    lower.includes("maintain") ||
-    lower.includes("repair") ||
-    lower.includes("inspection")
-  ) {
-    return "maintenance";
-  }
-
-  if (
-    lower.includes("insurance") ||
-    lower.includes("insured")
-  ) {
-    return "insurance";
-  }
-
-  if (
-    lower.includes("terminate") ||
-    lower.includes("notice")
-  ) {
-    return "termination";
-  }
-
-  return "general";
-}
-
-function detectPriority(text = "") {
-  const lower = text.toLowerCase();
-
-  if (
-    lower.includes("immediately") ||
-    lower.includes("within 30 days") ||
-    lower.includes("termination")
-  ) {
-    return "high";
-  }
-
-  if (
-    lower.includes("shall") ||
-    lower.includes("must")
-  ) {
-    return "medium";
-  }
-
-  return "low";
 }
