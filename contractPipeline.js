@@ -1,11 +1,16 @@
-import clauseExtractionService from "./services/clauseExtractionService.js";
-import obligationExtractor from "./services/obligationExtractor.js";
+import {
+  extractClauses as serviceExtractClauses,
+} from "./services/clauseExtractionService.js";
+
+import {
+  extractObligations as serviceExtractObligations,
+} from "./services/obligationExtractor.js";
 
 // ---------------------------------------------------
 // NORMALIZE TEXT
 // ---------------------------------------------------
 
-export function normalizeText(text) {
+function normalizeText(text) {
   if (!text || typeof text !== "string") return "";
 
   return text
@@ -20,7 +25,7 @@ export function normalizeText(text) {
 // SEGMENT CLAUSES
 // ---------------------------------------------------
 
-export function segmentClauses(text) {
+function segmentClauses(text) {
   if (!text || typeof text !== "string") return [];
 
   const normalized = normalizeText(text);
@@ -85,32 +90,39 @@ export function segmentClauses(text) {
 
 export async function processContract(contract) {
   try {
-    const extractedText = contract.extracted_text || "";
+    const extractedText = contract?.extracted_text || "";
 
     const segmentedClauses = segmentClauses(extractedText);
 
     console.log("SEGMENTED CLAUSES:", segmentedClauses.length);
 
+    // ------------------------------------
+    // CLAUSE EXTRACTION (SERVICE)
+    // ------------------------------------
+
     let extractedClauses = [];
 
     try {
-      extractedClauses =
-        await clauseExtractionService.extractClauses(segmentedClauses);
+      extractedClauses = await serviceExtractClauses(segmentedClauses);
     } catch (err) {
       console.error("Clause extraction failed:", err.message);
 
       extractedClauses = segmentedClauses.map((c, index) => ({
-        clause_name: `Clause ${index + 1}`,
+        clause_number: index + 1,
+        clause_title: `Clause ${index + 1}`,
         clause_text: c,
         clause_type: "general",
       }));
     }
 
+    // ------------------------------------
+    // OBLIGATION EXTRACTION (SERVICE)
+    // ------------------------------------
+
     let obligations = [];
 
     try {
-      obligations =
-        await obligationExtractor.extractObligations(extractedClauses);
+      obligations = await serviceExtractObligations(extractedClauses);
     } catch (err) {
       console.error("Obligation extraction failed:", err.message);
       obligations = [];
@@ -138,3 +150,9 @@ export async function processContract(contract) {
     };
   }
 }
+
+// optional exports (if needed elsewhere)
+export {
+  segmentClauses,
+  normalizeText,
+};
