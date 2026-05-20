@@ -5,13 +5,11 @@ const router = express.Router();
 
 router.post("/", async (req, res) => {
   try {
-    const contract = req.body;
-
-    const result = await processContract(contract);
+    const result = await processContract(req.body);
 
     res.json(result);
   } catch (err) {
-    console.error("Contract route error:", err);
+    console.error("Contract error:", err);
 
     res.status(500).json({
       success: false,
