@@ -1,158 +1,189 @@
-// contractPipeline.js
+// services/clauseExtractionService.js
 
-function normalizeText(text = "") {
+function normalizeText(text) {
+  if (!text) return "";
+
   return text
     .replace(/\r/g, "\n")
     .replace(/\t/g, " ")
     .replace(/[ ]{2,}/g, " ")
     .replace(/\n{3,}/g, "\n\n")
+    .replace(/Page\s+\d+/gi, "")
     .trim();
 }
 
-function cleanClause(clause = "") {
-  return clause
+function cleanClause(text) {
+  return text
     .replace(/\s+/g, " ")
-    .replace(/^[•*\-]\s*/, "")
+    .replace(/\n/g, " ")
     .trim();
 }
 
-function isUsefulClause(text = "") {
-  if (!text) return false;
-
-  const clean = text.trim();
-
-  if (clean.length < 20) return false;
-
-  if (/^initials$/i.test(clean)) return false;
-
-  if (/^signed:/i.test(clean)) return false;
-
-  if (/^witness:/i.test(clean)) return false;
-
-  return true;
-}
-
-function segmentClauses(text = "") {
+export function extractClauses(text) {
   const normalized = normalizeText(text);
 
   const clauses = [];
 
   // =====================================================
-  // ARTICLE blocks
+  // ARTICLE-BASED CONTRACTS
   // =====================================================
 
   const articleRegex =
-    /(ARTICLE\s+\d+\s*[–-]\s*[\w\s,:&()\/]+:?)/gi;
+    /(ARTICLE\s+\d+\s*[–—\-:]*[\s\S]*?)(?=ARTICLE\s+\d+\s*[–—\-:]|APPENDIX|$)/gi;
 
-  const articleMatches = [...normalized.matchAll(articleRegex)];
+  const articleMatches = normalized.match(articleRegex);
 
-  if (articleMatches.length > 0) {
-    for (let i = 0; i < articleMatches.length; i++) {
-      const start = articleMatches[i].index;
+  if (articleMatches) {
+    for (const article of articleMatches) {
+      const clean = cleanClause(article);
 
-      const end =
-        i + 1 < articleMatches.length
-          ? articleMatches[i + 1].index
-          : normalized.length;
-
-      const block = normalized.slice(start, end).trim();
-
-      if (isUsefulClause(block)) {
-        clauses.push(block);
-      }
-    }
-  }
-
-  // =====================================================
-  // LETTER SECTIONS
-  // =====================================================
-
-  const letterSections = normalized.split(
-    /\n\s*[A-Z]\.\s+/g
-  );
-
-  for (const section of letterSections) {
-    const clean = cleanClause(section);
-
-    if (isUsefulClause(clean)) {
-      clauses.push(clean);
-    }
-  }
-
-  // =====================================================
-  // NUMBERED CLAUSES
-  // =====================================================
-
-  const numberedClauses = normalized.split(
-    /(?=\n?\s*\d+\.\s+)/
-  );
-
-  for (const clause of numberedClauses) {
-    const clean = cleanClause(clause);
-
-    if (isUsefulClause(clean)) {
-      clauses.push(clean);
-    }
-  }
-
-  // =====================================================
-  // SUBCLAUSES (1)
-  // =====================================================
-
-  const subClauses = normalized.split(
-    /(?=\(\d+\))/
-  );
-
-  for (const clause of subClauses) {
-    const clean = cleanClause(clause);
-
-    if (isUsefulClause(clean)) {
-      clauses.push(clean);
-    }
-  }
-
-  // =====================================================
-  // BULLETS
-  // =====================================================
-
-  const bulletClauses = normalized.split(
-    /\n\s*[•*\-]\s+/g
-  );
-
-  for (const clause of bulletClauses) {
-    const clean = cleanClause(clause);
-
-    if (isUsefulClause(clean)) {
-      clauses.push(clean);
-    }
-  }
-
-  // =====================================================
-  // OBLIGATION SENTENCES
-  // =====================================================
-
-  const obligationSentences = normalized.match(
-    /[^.!\n]+(?:shall|must|will|agree(?:s|d)? to|required to)[^.!\n]*[.]/gi
-  );
-
-  if (obligationSentences) {
-    for (const sentence of obligationSentences) {
-      const clean = cleanClause(sentence);
-
-      if (isUsefulClause(clean)) {
+      if (clean.length > 40) {
         clauses.push(clean);
       }
     }
   }
 
   // =====================================================
-  // DEDUPLICATION
+  // LETTERED CLAUSES (A. B. C.)
   // =====================================================
 
-  return [...new Set(clauses)];
+  const letterRegex =
+    /([A-Z]\.\s+[\s\S]*?)(?=\n[A-Z]\.\s+|$)/g;
+
+  const letterMatches = normalized.match(letterRegex);
+
+  if (letterMatches) {
+    for (const clause of letterMatches) {
+      const clean = cleanClause(clause);
+
+      if (clean.length > 30) {
+        clauses.push(clean);
+      }
+    }
+  }
+
+  // =====================================================
+  // NUMBERED CLAUSES (1. 2. 3.)
+  // =====================================================
+
+  const numberedRegex =
+    /(\(?\d+\)?[.)]?\s+[\s\S]*?)(?=\n\(?\d+\)?[.)]?\s+|$)/g;
+
+  const numberedMatches = normalized.match(numberedRegex);
+
+  if (numberedMatches) {
+    for (const clause of numberedMatches) {
+      const clean = cleanClause(clause);
+
+      if (clean.length > 30) {
+        clauses.push(clean);
+      }
+    }
+  }
+
+  // =====================================================
+  // BULLET CLAUSES (* • -)
+  // =====================================================
+
+  const bulletRegex =
+    /([•*\-]\s+[\s\S]*?)(?=\n[•*\-]\s+|$)/g;
+
+  const bulletMatches = normalized.match(bulletRegex);
+
+  if (bulletMatches) {
+    for (const clause of bulletMatches) {
+      const clean = cleanClause(clause);
+
+      if (clean.length > 30) {
+        clauses.push(clean);
+      }
+    }
+  }
+
+  // =====================================================
+  // FALLBACK: SPLIT LARGE PARAGRAPHS
+  // =====================================================
+
+  if (clauses.length < 10) {
+    const paragraphs = normalized.split(/\n\s*\n/);
+
+    for (const p of paragraphs) {
+      const clean = cleanClause(p);
+
+      if (clean.length > 80) {
+        clauses.push(clean);
+      }
+    }
+  }
+
+  // =====================================================
+  // REMOVE DUPLICATES
+  // =====================================================
+
+  const uniqueClauses = [...new Set(clauses)];
+
+  // =====================================================
+  // RETURN STRUCTURED CLAUSES
+  // =====================================================
+
+  return uniqueClauses.map((clause, index) => ({
+    clause_number: index + 1,
+    clause_title: clause.substring(0, 80),
+    clause_text: clause,
+    clause_type: detectClauseType(clause)
+  }));
 }
 
-module.exports = {
-  segmentClauses,
-  normalizeText,
-};
+function detectClauseType(text) {
+  const lower = text.toLowerCase();
+
+  if (
+    lower.includes("payment") ||
+    lower.includes("fee") ||
+    lower.includes("invoice") ||
+    lower.includes("tax")
+  ) {
+    return "financial";
+  }
+
+  if (
+    lower.includes("terminate") ||
+    lower.includes("termination")
+  ) {
+    return "termination";
+  }
+
+  if (
+    lower.includes("insurance") ||
+    lower.includes("liability")
+  ) {
+    return "liability";
+  }
+
+  if (
+    lower.includes("maintenance") ||
+    lower.includes("repair")
+  ) {
+    return "maintenance";
+  }
+
+  if (
+    lower.includes("notice")
+  ) {
+    return "notice";
+  }
+
+  if (
+    lower.includes("assignment")
+  ) {
+    return "assignment";
+  }
+
+  if (
+    lower.includes("confidential")
+  ) {
+    return "confidentiality";
+  }
+
+  return "general";
+}
