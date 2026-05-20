@@ -38,28 +38,6 @@ function segmentClauses(text) {
       if (cleanArticle.length > 20) {
         allClauses.push(cleanArticle);
       }
-
-      const numberedClauses = cleanArticle.match(
-        /\d+\.\s[\s\S]*?(?=\n\d+\.|\nARTICLE|$)/g
-      );
-
-      if (numberedClauses) {
-        for (const clause of numberedClauses) {
-          const clean = clause.trim();
-          if (clean.length > 10) allClauses.push(clean);
-        }
-      }
-
-      const letterClauses = cleanArticle.match(
-        /[a-z]\)\s[\s\S]*?(?=\n[a-z]\)|$)/gi
-      );
-
-      if (letterClauses) {
-        for (const clause of letterClauses) {
-          const clean = clause.trim();
-          if (clean.length > 10) allClauses.push(clean);
-        }
-      }
     }
   }
 
@@ -91,10 +69,6 @@ export async function processContract(contract) {
 
     console.log("SEGMENTED CLAUSES:", segmentedClauses.length);
 
-    // ------------------------------------
-    // CLAUSE EXTRACTION
-    // ------------------------------------
-
     let extractedClauses = [];
 
     try {
@@ -110,10 +84,6 @@ export async function processContract(contract) {
         clause_type: "general",
       }));
     }
-
-    // ------------------------------------
-    // OBLIGATION EXTRACTION
-    // ------------------------------------
 
     let obligations = [];
 
@@ -132,9 +102,6 @@ export async function processContract(contract) {
       obligations,
       clausesDetected: extractedClauses.length,
       obligationsDetected: obligations.length,
-      debug: {
-        segmentedClauses: segmentedClauses.length,
-      },
     };
   } catch (error) {
     console.error("Contract pipeline failed:", error);
@@ -146,5 +113,12 @@ export async function processContract(contract) {
   }
 }
 
-// helpers
-export { segmentClauses, normalizeText };
+// ---------------------------------------------------
+// IMPORTANT: DEFAULT EXPORT FIX (THIS WAS MISSING)
+// ---------------------------------------------------
+
+export default {
+  processContract,
+  segmentClauses,
+  normalizeText,
+};
