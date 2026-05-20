@@ -1,55 +1,45 @@
-// routes/contractRoutes.js
+import express from "express";
+import { processContract } from "../contractPipeline.js";
 
-const express = require("express");
 const router = express.Router();
-const multer = require("multer");
 
-const { analyzeContract } = require("../services/contractAnalysisService");
+/* =========================
+   HEALTH CHECK
+========================= */
 
-// Use memory storage for PDF uploads (no disk needed)
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
-
-/**
- * Health check for contract service
- */
-router.get("/health", (req, res) => {
-  return res.status(200).json({
-    success: true,
-    service: "contract-routes",
-    status: "active"
+router.get("/", (req, res) => {
+  res.json({
+    status: "contract routes active",
+    timestamp: new Date().toISOString(),
   });
 });
 
-/**
- * POST /api/contracts/analyze
- * Upload PDF and run full contract intelligence pipeline
- */
-router.post("/analyze", upload.single("file"), async (req, res) => {
+/* =========================
+   PROCESS CONTRACT
+========================= */
+
+router.post("/process", async (req, res) => {
   try {
-    if (!req.file) {
+    const contract = req.body;
+
+    if (!contract) {
       return res.status(400).json({
         success: false,
-        error: "No file uploaded. Expected field name: 'file'"
+        error: "No contract provided",
       });
     }
 
-    const fileBuffer = req.file.buffer;
-    const fileName = req.file.originalname;
+    const result = await processContract(contract);
 
-    // Call unified analysis pipeline
-    const result = await analyzeContract(fileBuffer, fileName);
-
-    return res.status(200).json(result);
-
+    return res.json(result);
   } catch (error) {
-    console.error("Contract analysis error:", error);
+    console.error("Contract route error:", error);
 
     return res.status(500).json({
       success: false,
-      error: error.message || "Internal server error during contract analysis"
+      error: error.message || "Internal server error",
     });
   }
 });
 
-module.exports = router;
+export default router;
