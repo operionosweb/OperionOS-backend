@@ -11,6 +11,7 @@ export function extractClauses(text) {
 
   while ((match = articleRegex.exec(text)) !== null) {
     const clauseNumber = parseInt(match[1]);
+
     const clauseTitle = match[2].trim();
 
     const clauseText = `
@@ -36,26 +37,69 @@ export function extractObligations(clauses) {
 
   const obligations = [];
 
-  const obligationRegex =
-    /\b(shall|must|will|agree to|required to|responsible for)\b[\s\S]*?(?:\.|\n)/gi;
-
   clauses.forEach((clause) => {
-    const matches = clause.clause_text.match(obligationRegex);
+    const sentences = splitIntoSentences(clause.clause_text);
 
-    if (matches) {
-      matches.forEach((matchText) => {
+    sentences.forEach((sentence) => {
+      if (containsObligation(sentence)) {
         obligations.push({
           clause_id: clause.clause_number,
-          obligation_text: matchText.trim(),
-          responsible_party: detectResponsibleParty(matchText),
-          obligation_type: detectObligationType(matchText),
+          obligation_text: cleanSentence(sentence),
+          responsible_party: detectResponsibleParty(sentence),
+          obligation_type: detectObligationType(sentence),
         });
-      });
-    }
+      }
+    });
   });
 
   return obligations;
 }
+
+/* =========================
+   SENTENCE SPLITTING
+========================= */
+
+function splitIntoSentences(text) {
+  return text
+    .replace(/\n/g, " ")
+    .replace(/\s+/g, " ")
+    .split(/(?<=[.?!])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 20);
+}
+
+/* =========================
+   OBLIGATION DETECTION
+========================= */
+
+function containsObligation(sentence) {
+  const lower = sentence.toLowerCase();
+
+  return (
+    lower.includes("shall") ||
+    lower.includes("must") ||
+    lower.includes("will") ||
+    lower.includes("agree to") ||
+    lower.includes("agrees to") ||
+    lower.includes("required to") ||
+    lower.includes("responsible for")
+  );
+}
+
+/* =========================
+   CLEANING
+========================= */
+
+function cleanSentence(sentence) {
+  return sentence
+    .replace(/\n/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/* =========================
+   CLAUSE TYPE DETECTION
+========================= */
 
 function detectClauseType(title, text) {
   const combined = `${title} ${text}`.toLowerCase();
@@ -63,7 +107,8 @@ function detectClauseType(title, text) {
   if (
     combined.includes("payment") ||
     combined.includes("fee") ||
-    combined.includes("invoice")
+    combined.includes("invoice") ||
+    combined.includes("tax")
   ) {
     return "financial";
   }
@@ -92,48 +137,76 @@ function detectClauseType(title, text) {
   return "general";
 }
 
-function detectResponsibleParty(text) {
-  const lower = text.toLowerCase();
+/* =========================
+   RESPONSIBLE PARTY DETECTION
+========================= */
 
-  if (lower.includes("club")) {
+function detectResponsibleParty(sentence) {
+  const lower = sentence.toLowerCase();
+
+  if (
+    lower.includes("club shall") ||
+    lower.includes("club will") ||
+    lower.includes("club agrees") ||
+    lower.includes("club must")
+  ) {
     return "Club";
   }
 
-  if (lower.includes("lessor")) {
+  if (
+    lower.includes("lessor shall") ||
+    lower.includes("lessor will") ||
+    lower.includes("lessor agrees") ||
+    lower.includes("lessor must")
+  ) {
     return "Lessor";
   }
 
   return "Unknown";
 }
 
-function detectObligationType(text) {
-  const lower = text.toLowerCase();
+/* =========================
+   OBLIGATION TYPE DETECTION
+========================= */
+
+function detectObligationType(sentence) {
+  const lower = sentence.toLowerCase();
 
   if (
     lower.includes("pay") ||
     lower.includes("fee") ||
-    lower.includes("cost")
+    lower.includes("cost") ||
+    lower.includes("invoice") ||
+    lower.includes("tax")
   ) {
     return "payment";
   }
 
   if (
     lower.includes("maintain") ||
-    lower.includes("repair")
+    lower.includes("repair") ||
+    lower.includes("service") ||
+    lower.includes("overhaul")
   ) {
     return "maintenance";
   }
 
-  if (
-    lower.includes("insurance")
-  ) {
+  if (lower.includes("insurance")) {
     return "insurance";
   }
 
   if (
-    lower.includes("terminate")
+    lower.includes("terminate") ||
+    lower.includes("termination")
   ) {
     return "termination";
+  }
+
+  if (
+    lower.includes("notice") ||
+    lower.includes("notify")
+  ) {
+    return "notification";
   }
 
   return "general";
