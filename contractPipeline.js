@@ -1,10 +1,5 @@
-import {
-  extractClauses as serviceExtractClauses,
-} from "./services/clauseExtractionService.js";
-
-import {
-  extractObligations as serviceExtractObligations,
-} from "./services/obligationExtractor.js";
+import clauseExtractionService from "./services/clauseExtractionService.js";
+import obligationExtractor from "./services/obligationExtractor.js";
 
 // ---------------------------------------------------
 // NORMALIZE TEXT
@@ -97,13 +92,14 @@ export async function processContract(contract) {
     console.log("SEGMENTED CLAUSES:", segmentedClauses.length);
 
     // ------------------------------------
-    // CLAUSE EXTRACTION (SERVICE)
+    // CLAUSE EXTRACTION
     // ------------------------------------
 
     let extractedClauses = [];
 
     try {
-      extractedClauses = await serviceExtractClauses(segmentedClauses);
+      extractedClauses =
+        await clauseExtractionService.extractClauses(segmentedClauses);
     } catch (err) {
       console.error("Clause extraction failed:", err.message);
 
@@ -116,13 +112,14 @@ export async function processContract(contract) {
     }
 
     // ------------------------------------
-    // OBLIGATION EXTRACTION (SERVICE)
+    // OBLIGATION EXTRACTION
     // ------------------------------------
 
     let obligations = [];
 
     try {
-      obligations = await serviceExtractObligations(extractedClauses);
+      obligations =
+        await obligationExtractor.extractObligations(extractedClauses);
     } catch (err) {
       console.error("Obligation extraction failed:", err.message);
       obligations = [];
@@ -137,8 +134,6 @@ export async function processContract(contract) {
       obligationsDetected: obligations.length,
       debug: {
         segmentedClauses: segmentedClauses.length,
-        extractedClausesType: typeof extractedClauses,
-        obligationsType: typeof obligations,
       },
     };
   } catch (error) {
@@ -151,8 +146,5 @@ export async function processContract(contract) {
   }
 }
 
-// optional exports (if needed elsewhere)
-export {
-  segmentClauses,
-  normalizeText,
-};
+// helpers
+export { segmentClauses, normalizeText };
