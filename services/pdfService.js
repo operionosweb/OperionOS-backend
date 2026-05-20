@@ -1,13 +1,15 @@
+import fs from "fs";
 import pdfParse from "pdf-parse";
 
-export async function extractPdfText(buffer) {
+export async function extractTextFromPDF(filePath) {
   try {
-    const pdfData = await pdfParse(buffer);
+    const dataBuffer = fs.readFileSync(filePath);
 
-    return pdfData.text || "";
+    const data = await pdfParse(dataBuffer);
+
+    return data.text || "";
   } catch (error) {
     console.error("PDF extraction failed:", error);
-
-    return "";
+    throw error;
   }
 }
