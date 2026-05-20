@@ -1,43 +1,158 @@
-export function extractClauses(text = "") {
-  if (!text || typeof text !== "string") {
-    return [];
-  }
+// contractPipeline.js
 
-  // Normalize text
-  const cleanText = text
+function normalizeText(text = "") {
+  return text
     .replace(/\r/g, "\n")
+    .replace(/\t/g, " ")
+    .replace(/[ ]{2,}/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
 
-  // STEP 1: Split ONLY on strong structural markers
-  // We do NOT use naive split('.' or line breaks anymore)
-  const blocks = cleanText.split(/\n(?=[A-Z][\w\s]{0,40}\.)/g);
+function cleanClause(clause = "") {
+  return clause
+    .replace(/\s+/g, " ")
+    .replace(/^[•*\-]\s*/, "")
+    .trim();
+}
+
+function isUsefulClause(text = "") {
+  if (!text) return false;
+
+  const clean = text.trim();
+
+  if (clean.length < 20) return false;
+
+  if (/^initials$/i.test(clean)) return false;
+
+  if (/^signed:/i.test(clean)) return false;
+
+  if (/^witness:/i.test(clean)) return false;
+
+  return true;
+}
+
+function segmentClauses(text = "") {
+  const normalized = normalizeText(text);
 
   const clauses = [];
-  let clauseId = 0;
 
-  for (const block of blocks) {
-    const trimmed = block.trim();
+  // =====================================================
+  // ARTICLE blocks
+  // =====================================================
 
-    if (trimmed.length < 20) continue;
+  const articleRegex =
+    /(ARTICLE\s+\d+\s*[–-]\s*[\w\s,:&()\/]+:?)/gi;
 
-    clauses.push({
-      id: `clause_${clauseId++}`,
-      clause_text: trimmed,
-    });
+  const articleMatches = [...normalized.matchAll(articleRegex)];
+
+  if (articleMatches.length > 0) {
+    for (let i = 0; i < articleMatches.length; i++) {
+      const start = articleMatches[i].index;
+
+      const end =
+        i + 1 < articleMatches.length
+          ? articleMatches[i + 1].index
+          : normalized.length;
+
+      const block = normalized.slice(start, end).trim();
+
+      if (isUsefulClause(block)) {
+        clauses.push(block);
+      }
+    }
   }
 
-  // FALLBACK: if structure fails, do paragraph-based split
-  if (clauses.length <= 3) {
-    const fallbackBlocks = cleanText.split(/\n\s*\n/);
+  // =====================================================
+  // LETTER SECTIONS
+  // =====================================================
 
-    return fallbackBlocks
-      .filter((b) => b.trim().length > 20)
-      .map((b, i) => ({
-        id: `clause_${i}`,
-        clause_text: b.trim(),
-      }));
+  const letterSections = normalized.split(
+    /\n\s*[A-Z]\.\s+/g
+  );
+
+  for (const section of letterSections) {
+    const clean = cleanClause(section);
+
+    if (isUsefulClause(clean)) {
+      clauses.push(clean);
+    }
   }
 
-  return clauses;
+  // =====================================================
+  // NUMBERED CLAUSES
+  // =====================================================
+
+  const numberedClauses = normalized.split(
+    /(?=\n?\s*\d+\.\s+)/
+  );
+
+  for (const clause of numberedClauses) {
+    const clean = cleanClause(clause);
+
+    if (isUsefulClause(clean)) {
+      clauses.push(clean);
+    }
+  }
+
+  // =====================================================
+  // SUBCLAUSES (1)
+  // =====================================================
+
+  const subClauses = normalized.split(
+    /(?=\(\d+\))/
+  );
+
+  for (const clause of subClauses) {
+    const clean = cleanClause(clause);
+
+    if (isUsefulClause(clean)) {
+      clauses.push(clean);
+    }
+  }
+
+  // =====================================================
+  // BULLETS
+  // =====================================================
+
+  const bulletClauses = normalized.split(
+    /\n\s*[•*\-]\s+/g
+  );
+
+  for (const clause of bulletClauses) {
+    const clean = cleanClause(clause);
+
+    if (isUsefulClause(clean)) {
+      clauses.push(clean);
+    }
+  }
+
+  // =====================================================
+  // OBLIGATION SENTENCES
+  // =====================================================
+
+  const obligationSentences = normalized.match(
+    /[^.!\n]+(?:shall|must|will|agree(?:s|d)? to|required to)[^.!\n]*[.]/gi
+  );
+
+  if (obligationSentences) {
+    for (const sentence of obligationSentences) {
+      const clean = cleanClause(sentence);
+
+      if (isUsefulClause(clean)) {
+        clauses.push(clean);
+      }
+    }
+  }
+
+  // =====================================================
+  // DEDUPLICATION
+  // =====================================================
+
+  return [...new Set(clauses)];
 }
+
+module.exports = {
+  segmentClauses,
+  normalizeText,
+};
