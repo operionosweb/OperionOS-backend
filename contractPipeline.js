@@ -1,9 +1,9 @@
-import clauseExtractionService from "./services/clauseExtractionService.js";
-import obligationExtractor from "./services/obligationExtractor.js";
+import { extractClauses as serviceExtractClauses } from "./services/clauseExtractionService.js";
+import { extractObligations as serviceExtractObligations } from "./services/obligationExtractor.js";
 
-// ---------------------------------------------------
-// NORMALIZE TEXT
-// ---------------------------------------------------
+/* =========================
+   NORMALIZE TEXT
+========================= */
 
 function normalizeText(text) {
   if (!text || typeof text !== "string") return "";
@@ -16,50 +16,29 @@ function normalizeText(text) {
     .trim();
 }
 
-// ---------------------------------------------------
-// SEGMENT CLAUSES
-// ---------------------------------------------------
+/* =========================
+   SEGMENT CLAUSES
+========================= */
 
 function segmentClauses(text) {
   if (!text || typeof text !== "string") return [];
 
   const normalized = normalizeText(text);
-  const allClauses = [];
 
-  const articleRegex =
-    /(ARTICLE\s+\d+\s*[-–—:]?.*?)(?=ARTICLE\s+\d+\s*[-–—:]|$)/gis;
+  const articleRegex = /(ARTICLE\s+\d+\s*[-–—:]?.*?)(?=ARTICLE\s+\d+\s*[-–—:]|$)/gis;
 
-  const articleMatches = normalized.match(articleRegex);
+  const matches = normalized.match(articleRegex);
 
-  if (articleMatches) {
-    for (const article of articleMatches) {
-      const cleanArticle = article.trim();
+  if (!matches) return [];
 
-      if (cleanArticle.length > 20) {
-        allClauses.push(cleanArticle);
-      }
-    }
-  }
-
-  const bullets = normalized.match(/(?:^|\n)\s*[\*\-•]\s.+/g);
-
-  if (bullets) {
-    for (const bullet of bullets) {
-      const clean = bullet.replace(/^\s*[\*\-•]\s*/, "").trim();
-      if (clean.length > 10) allClauses.push(clean);
-    }
-  }
-
-  const cleaned = allClauses
-    .map((c) => c.replace(/\s+/g, " ").trim())
-    .filter((c) => c.length > 10);
-
-  return [...new Set(cleaned)];
+  return matches
+    .map(m => m.trim())
+    .filter(m => m.length > 10);
 }
 
-// ---------------------------------------------------
-// MAIN PIPELINE
-// ---------------------------------------------------
+/* =========================
+   MAIN PIPELINE
+========================= */
 
 export async function processContract(contract) {
   try {
@@ -67,29 +46,25 @@ export async function processContract(contract) {
 
     const segmentedClauses = segmentClauses(extractedText);
 
-    console.log("SEGMENTED CLAUSES:", segmentedClauses.length);
-
     let extractedClauses = [];
 
     try {
-      extractedClauses =
-        await clauseExtractionService.extractClauses(segmentedClauses);
+      extractedClauses = await serviceExtractClauses(segmentedClauses);
     } catch (err) {
       console.error("Clause extraction failed:", err.message);
 
-      extractedClauses = segmentedClauses.map((c, index) => ({
-        clause_number: index + 1,
-        clause_title: `Clause ${index + 1}`,
+      extractedClauses = segmentedClauses.map((c, i) => ({
+        clause_number: i + 1,
+        clause_title: `Clause ${i + 1}`,
         clause_text: c,
-        clause_type: "general",
+        clause_type: "general"
       }));
     }
 
     let obligations = [];
 
     try {
-      obligations =
-        await obligationExtractor.extractObligations(extractedClauses);
+      obligations = await serviceExtractObligations(extractedClauses);
     } catch (err) {
       console.error("Obligation extraction failed:", err.message);
       obligations = [];
@@ -101,24 +76,15 @@ export async function processContract(contract) {
       clauses: extractedClauses,
       obligations,
       clausesDetected: extractedClauses.length,
-      obligationsDetected: obligations.length,
+      obligationsDetected: obligations.length
     };
+
   } catch (error) {
-    console.error("Contract pipeline failed:", error);
+    console.error("Pipeline failed:", error);
 
     return {
       success: false,
-      error: error.message,
+      error: error.message
     };
   }
 }
-
-// ---------------------------------------------------
-// IMPORTANT: DEFAULT EXPORT FIX (THIS WAS MISSING)
-// ---------------------------------------------------
-
-export default {
-  processContract,
-  segmentClauses,
-  normalizeText,
-};
