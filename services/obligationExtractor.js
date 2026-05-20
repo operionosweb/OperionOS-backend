@@ -1,72 +1,220 @@
-export async function extractObligations(text) {
-  try {
-    if (!text || typeof text !== "string") {
-      return [];
-    }
+export function extractClauses(text) {
+  if (!text) return [];
 
-    const obligationPatterns = [
-      /\bshall\b/gi,
-      /\bmust\b/gi,
-      /\bagrees to\b/gi,
-      /\brequired to\b/gi,
-      /\bwill\b/gi
-    ];
+  const clauses = [];
 
-    const sentences = text
+  // Match ARTICLE sections
+  const articleRegex =
+    /ARTICLE\s+(\d+)\s*[–-]\s*([^\n:]+):([\s\S]*?)(?=ARTICLE\s+\d+\s*[–-]|$)/gi;
+
+  let match;
+
+  while ((match = articleRegex.exec(text)) !== null) {
+    const clauseNumber = parseInt(match[1]);
+    const clauseTitle = match[2].trim();
+
+    const clauseText = `
+ARTICLE ${clauseNumber} - ${clauseTitle}:
+${match[3].trim()}
+    `.trim();
+
+    clauses.push({
+      clause_number: clauseNumber,
+      clause_title: clauseTitle,
+      clause_text: clauseText,
+      clause_type: detectClauseType(clauseTitle, clauseText),
+    });
+  }
+
+  return clauses;
+}
+
+export function extractObligations(clauses) {
+  if (!clauses || !Array.isArray(clauses)) {
+    return [];
+  }
+
+  const obligations = [];
+
+  clauses.forEach((clause) => {
+    // Clean formatting
+    const normalizedText = clause.clause_text
       .replace(/\n/g, " ")
-      .split(/[.?!]/)
-      .map(s => s.trim())
-      .filter(Boolean);
+      .replace(/\s+/g, " ")
+      .trim();
 
-    const obligations = [];
+    // Split into readable legal sentences
+    const sentences = normalizedText.split(/(?<=\.)\s+/);
 
-    for (const sentence of sentences) {
-      const isObligation = obligationPatterns.some(pattern =>
-        pattern.test(sentence)
-      );
+    sentences.forEach((sentence) => {
+      const cleaned = sentence.trim();
 
-      if (!isObligation) continue;
-
-      let responsibleParty = "Unknown";
-
-      if (/club/i.test(sentence)) {
-        responsibleParty = "Club";
-      } else if (/lessor/i.test(sentence)) {
-        responsibleParty = "Lessor";
+      if (!cleaned || cleaned.length < 20) {
+        return;
       }
 
-      let triggerType = "general";
+      const lower = cleaned.toLowerCase();
 
-      if (/pay|payment|fee|cost|invoice/i.test(sentence)) {
-        triggerType = "payment";
-      } else if (/insurance/i.test(sentence)) {
-        triggerType = "insurance";
-      } else if (/maintain|maintenance|repair/i.test(sentence)) {
-        triggerType = "maintenance";
-      } else if (/terminate|termination/i.test(sentence)) {
-        triggerType = "termination";
-      }
+      const isObligation =
+        lower.includes(" shall ") ||
+        lower.includes(" must ") ||
+        lower.includes(" will ") ||
+        lower.includes(" agrees to ") ||
+        lower.includes(" agree to ") ||
+        lower.includes(" required to ") ||
+        lower.includes(" responsible for ");
 
-      let riskLevel = "low";
-
-      if (/penalty|liable|violation|breach/i.test(sentence)) {
-        riskLevel = "high";
-      } else if (/shall|must/i.test(sentence)) {
-        riskLevel = "medium";
+      if (!isObligation) {
+        return;
       }
 
       obligations.push({
-        obligation_text: sentence,
-        responsible_party: responsibleParty,
-        trigger_type: triggerType,
-        risk_level: riskLevel
+        clause_id: clause.clause_number,
+        obligation_text: cleaned,
+        responsible_party: detectResponsibleParty(cleaned),
+        obligation_type: detectObligationType(cleaned),
       });
-    }
+    });
+  });
 
-    return obligations;
+  return obligations;
+}
 
-  } catch (error) {
-    console.error("Obligation extraction failed:", error);
-    return [];
+function detectClauseType(title, text) {
+  const combined = `${title} ${text}`.toLowerCase();
+
+  if (
+    combined.includes("payment") ||
+    combined.includes("fee") ||
+    combined.includes("invoice") ||
+    combined.includes("tax") ||
+    combined.includes("reimburse")
+  ) {
+    return "financial";
   }
+
+  if (
+    combined.includes("termination") ||
+    combined.includes("terminate") ||
+    combined.includes("expire")
+  ) {
+    return "termination";
+  }
+
+  if (
+    combined.includes("insurance") ||
+    combined.includes("liability")
+  ) {
+    return "liability";
+  }
+
+  if (
+    combined.includes("maintenance") ||
+    combined.includes("repair") ||
+    combined.includes("service") ||
+    combined.includes("airworthy")
+  ) {
+    return "maintenance";
+  }
+
+  if (
+    combined.includes("notice") ||
+    combined.includes("notify")
+  ) {
+    return "notification";
+  }
+
+  return "general";
+}
+
+function detectResponsibleParty(text) {
+  const lower = text.toLowerCase();
+
+  if (
+    lower.startsWith("club") ||
+    lower.includes(" the club ") ||
+    lower.includes("club shall") ||
+    lower.includes("club will") ||
+    lower.includes("club agrees")
+  ) {
+    return "Club";
+  }
+
+  if (
+    lower.startsWith("lessor") ||
+    lower.includes(" the lessor ") ||
+    lower.includes("lessor shall") ||
+    lower.includes("lessor will") ||
+    lower.includes("lessor agrees")
+  ) {
+    return "Lessor";
+  }
+
+  if (
+    lower.includes("either party") ||
+    lower.includes("both parties")
+  ) {
+    return "Both Parties";
+  }
+
+  return "Unknown";
+}
+
+function detectObligationType(text) {
+  const lower = text.toLowerCase();
+
+  if (
+    lower.includes("pay") ||
+    lower.includes("payment") ||
+    lower.includes("fee") ||
+    lower.includes("cost") ||
+    lower.includes("expense") ||
+    lower.includes("reimburse") ||
+    lower.includes("tax")
+  ) {
+    return "payment";
+  }
+
+  if (
+    lower.includes("maintain") ||
+    lower.includes("maintenance") ||
+    lower.includes("repair") ||
+    lower.includes("service") ||
+    lower.includes("overhaul")
+  ) {
+    return "maintenance";
+  }
+
+  if (
+    lower.includes("insurance") ||
+    lower.includes("insured") ||
+    lower.includes("coverage")
+  ) {
+    return "insurance";
+  }
+
+  if (
+    lower.includes("terminate") ||
+    lower.includes("termination")
+  ) {
+    return "termination";
+  }
+
+  if (
+    lower.includes("notice") ||
+    lower.includes("notify")
+  ) {
+    return "notification";
+  }
+
+  if (
+    lower.includes("law") ||
+    lower.includes("regulation") ||
+    lower.includes("governmental") ||
+    lower.includes("compliance")
+  ) {
+    return "compliance";
+  }
+
+  return "general";
 }
