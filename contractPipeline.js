@@ -1,3 +1,25 @@
+const clauseExtractionService = require("./services/clauseExtractionService");
+const obligationExtractor = require("./services/obligationExtractor");
+
+// ---------------------------------------------------
+// NORMALIZE TEXT
+// ---------------------------------------------------
+
+function normalizeText(text) {
+  if (!text || typeof text !== "string") return "";
+
+  return text
+    .replace(/\r/g, "\n")
+    .replace(/\t/g, " ")
+    .replace(/[ ]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+// ---------------------------------------------------
+// SEGMENT CLAUSES
+// ---------------------------------------------------
+
 function segmentClauses(text) {
   if (!text || typeof text !== "string") return [];
 
@@ -6,77 +28,79 @@ function segmentClauses(text) {
   const allClauses = [];
 
   // ------------------------------------
-  // STEP 1: Extract SECTION blocks A–H
+  // ARTICLE extraction
   // ------------------------------------
-  const sectionRegex = /([A-H]\.)\s/g;
-  const parts = normalized.split(sectionRegex);
 
-  // We reconstruct proper sections (split removes markers)
-  const sections = [];
+  const articleRegex = /(ARTICLE\s+\d+\s*[-–—:]?.*?)(?=ARTICLE\s+\d+\s*[-–—:]|$)/gis;
 
-  for (let i = 1; i < parts.length; i += 2) {
-    const sectionHeader = parts[i];
-    const sectionBody = parts[i + 1] || "";
-    sections.push(sectionHeader + sectionBody);
-  }
+  const articleMatches = normalized.match(articleRegex);
 
-  // ------------------------------------
-  // STEP 2: Process each section
-  // ------------------------------------
-  for (const section of sections) {
-    if (!section || !section.trim()) continue;
+  if (articleMatches) {
+    for (const article of articleMatches) {
+      const cleanArticle = article.trim();
 
-    const sectionText = section.trim();
+      if (cleanArticle.length > 20) {
+        allClauses.push(cleanArticle);
+      }
 
-    // ------------------------------------
-    // STEP 3: Extract numbered clauses (1)-(99)
-    // ------------------------------------
-    const numberedClauses = sectionText.match(/\(\d+\)[\s\S]*?(?=\(\d+\)|$)/g);
+      // ------------------------------------
+      // Numbered subclauses
+      // ------------------------------------
 
-    if (numberedClauses) {
-      for (const clause of numberedClauses) {
-        const clean = clause.trim();
-        if (clean.length > 5) {
-          allClauses.push(clean);
+      const numberedClauses = cleanArticle.match(
+        /\d+\.\s[\s\S]*?(?=\n\d+\.|\nARTICLE|$)/g
+      );
+
+      if (numberedClauses) {
+        for (const clause of numberedClauses) {
+          const clean = clause.trim();
+
+          if (clean.length > 10) {
+            allClauses.push(clean);
+          }
+        }
+      }
+
+      // ------------------------------------
+      // Letter clauses
+      // ------------------------------------
+
+      const letterClauses = cleanArticle.match(
+        /[a-z]\)\s[\s\S]*?(?=\n[a-z]\)|$)/gi
+      );
+
+      if (letterClauses) {
+        for (const clause of letterClauses) {
+          const clean = clause.trim();
+
+          if (clean.length > 10) {
+            allClauses.push(clean);
+          }
         }
       }
     }
+  }
 
-    // ------------------------------------
-    // STEP 4: Extract bullet clauses (*, •, -)
-    // ------------------------------------
-    const bulletClauses = sectionText.match(/(?:^|\n)\s*[\*\-•]\s.*(?=\n|$)/g);
+  // ------------------------------------
+  // Bullet extraction
+  // ------------------------------------
 
-    if (bulletClauses) {
-      for (const bullet of bulletClauses) {
-        const clean = bullet.replace(/^\s*[\*\-•]\s*/, "").trim();
-        if (clean.length > 8) {
-          allClauses.push(clean);
-        }
+  const bullets = normalized.match(/(?:^|\n)\s*[\*\-•]\s.+/g);
+
+  if (bullets) {
+    for (const bullet of bullets) {
+      const clean = bullet.replace(/^\s*[\*\-•]\s*/, "").trim();
+
+      if (clean.length > 10) {
+        allClauses.push(clean);
       }
     }
   }
 
   // ------------------------------------
-  // STEP 5: Global fallback (important)
+  // Cleanup
   // ------------------------------------
-  const fallbackNumbered = normalized.match(/\(\d+\)[^\n]+/g);
-  if (fallbackNumbered) {
-    for (const item of fallbackNumbered) {
-      allClauses.push(item.trim());
-    }
-  }
 
-  const fallbackBullets = normalized.match(/(?:^|\n)\s*[\*\-•]\s.+/g);
-  if (fallbackBullets) {
-    for (const item of fallbackBullets) {
-      allClauses.push(item.replace(/^\s*[\*\-•]\s*/, "").trim());
-    }
-  }
-
-  // ------------------------------------
-  // STEP 6: CLEAN + DEDUPE (LAST STEP ONLY)
-  // ------------------------------------
   const cleaned = allClauses
     .map(c => c.replace(/\s+/g, " ").trim())
     .filter(c => c.length > 10);
@@ -85,3 +109,91 @@ function segmentClauses(text) {
 
   return unique;
 }
+
+// ---------------------------------------------------
+// MAIN PIPELINE
+// ---------------------------------------------------
+
+async function processContract(contract) {
+  try {
+    const extractedText = contract.extracted_text || "";
+
+    // ------------------------------------
+    // CLAUSE SEGMENTATION
+    // ------------------------------------
+
+    const segmentedClauses = segmentClauses(extractedText);
+
+    console.log("SEGMENTED CLAUSES:", segmentedClauses.length);
+
+    // ------------------------------------
+    // AI CLAUSE EXTRACTION
+    // ------------------------------------
+
+    let extractedClauses = [];
+
+    try {
+      extractedClauses =
+        await clauseExtractionService.extractClauses(segmentedClauses);
+    } catch (err) {
+      console.error("Clause extraction failed:", err.message);
+
+      extractedClauses = segmentedClauses.map((c, index) => ({
+        clause_name: `Clause ${index + 1}`,
+        clause_text: c,
+        clause_type: "general"
+      }));
+    }
+
+    // ------------------------------------
+    // OBLIGATION EXTRACTION
+    // ------------------------------------
+
+    let obligations = [];
+
+    try {
+      obligations =
+        await obligationExtractor.extractObligations(extractedClauses);
+    } catch (err) {
+      console.error("Obligation extraction failed:", err.message);
+      obligations = [];
+    }
+
+    // ------------------------------------
+    // FINAL RESPONSE
+    // ------------------------------------
+
+    return {
+      success: true,
+
+      contract,
+
+      clauses: extractedClauses,
+
+      obligations,
+
+      clausesDetected: extractedClauses.length,
+
+      obligationsDetected: obligations.length,
+
+      debug: {
+        segmentedClauses: segmentedClauses.length,
+        extractedClausesType: typeof extractedClauses,
+        obligationsType: typeof obligations
+      }
+    };
+  } catch (error) {
+    console.error("Contract pipeline failed:", error);
+
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+module.exports = {
+  processContract,
+  segmentClauses,
+  normalizeText
+};
