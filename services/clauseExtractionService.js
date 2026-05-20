@@ -1,9 +1,8 @@
-export function extractClauses(text) {
+function extractClauses(text) {
   if (!text) return [];
 
   const clauses = [];
 
-  // Match ARTICLE sections
   const articleRegex =
     /ARTICLE\s+(\d+)\s*[–-]\s*([^\n:]+):([\s\S]*?)(?=ARTICLE\s+\d+\s*[–-]|$)/gi;
 
@@ -29,7 +28,7 @@ ${match[3].trim()}
   return clauses;
 }
 
-export function extractObligations(clauses) {
+function extractObligations(clauses) {
   if (!clauses || !Array.isArray(clauses)) {
     return [];
   }
@@ -47,7 +46,6 @@ export function extractObligations(clauses) {
     matches.forEach((matchText) => {
       const cleaned = cleanObligationText(matchText);
 
-      // Ignore garbage / tiny matches
       if (cleaned.length < 25) return;
 
       obligations.push({
@@ -104,9 +102,7 @@ function detectClauseType(title, text) {
     return "maintenance";
   }
 
-  if (
-    combined.includes("notice")
-  ) {
+  if (combined.includes("notice")) {
     return "notification";
   }
 
@@ -132,9 +128,7 @@ function detectResponsibleParty(text) {
     return "Lessor";
   }
 
-  if (
-    lower.includes("either party")
-  ) {
+  if (lower.includes("either party")) {
     return "Both Parties";
   }
 
@@ -144,7 +138,6 @@ function detectResponsibleParty(text) {
 function detectObligationType(text) {
   const lower = text.toLowerCase();
 
-  // Payment
   if (
     lower.includes("pay") ||
     lower.includes("payment") ||
@@ -156,7 +149,6 @@ function detectObligationType(text) {
     return "payment";
   }
 
-  // Maintenance
   if (
     lower.includes("maintain") ||
     lower.includes("repair") ||
@@ -167,7 +159,6 @@ function detectObligationType(text) {
     return "maintenance";
   }
 
-  // Insurance
   if (
     lower.includes("insurance") ||
     lower.includes("insured") ||
@@ -176,7 +167,6 @@ function detectObligationType(text) {
     return "insurance";
   }
 
-  // Termination
   if (
     lower.includes("terminate") ||
     lower.includes("termination") ||
@@ -185,7 +175,6 @@ function detectObligationType(text) {
     return "termination";
   }
 
-  // Notification
   if (
     lower.includes("notice") ||
     lower.includes("notify") ||
@@ -194,7 +183,6 @@ function detectObligationType(text) {
     return "notification";
   }
 
-  // Compliance
   if (
     lower.includes("law") ||
     lower.includes("regulation") ||
@@ -205,3 +193,12 @@ function detectObligationType(text) {
 
   return "general";
 }
+
+/* =========================
+   ESM DEFAULT EXPORT (CRITICAL FIX)
+========================= */
+
+export default {
+  extractClauses,
+  extractObligations,
+};
