@@ -2,71 +2,46 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 
+import healthRoutes from "./routes/healthRoutes.js";
+import contractRoutes from "./routes/contractRoutes.js";
+
 dotenv.config();
 
 const app = express();
 
 /* =========================
-   SECURITY + CORS
+   BASIC MIDDLEWARE
 ========================= */
 
-app.use(
-  cors({
-    origin: "*",
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
-
-/* =========================
-   BODY LIMITS
-========================= */
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 /* =========================
-   ROUTES (FIXED ESM IMPORT HANDLING)
-========================= */
-
-// Dynamic imports to avoid "default export" crashes on Render
-const healthRoutesModule = await import("./routes/healthRoutes.js");
-const contractRoutesModule = await import("./routes/contractRoutes.js");
-
-// Safe resolution (supports default OR named exports OR CommonJS interop)
-const healthRoutes =
-  healthRoutesModule.default ||
-  healthRoutesModule.router ||
-  healthRoutesModule;
-
-const contractRoutes =
-  contractRoutesModule.default ||
-  contractRoutesModule.router ||
-  contractRoutesModule.contractRoutes ||
-  contractRoutesModule;
-
-/* =========================
-   ROOT HEALTH CHECK
+   ROOT ROUTE (IMPORTANT FOR DEBUGGING)
 ========================= */
 
 app.get("/", (req, res) => {
   res.json({
-    status: "Operion Decision OS Live",
-    layer: "Unified Aviation Intelligence System",
-    architecture: "Modular Backend",
-    timestamp: new Date().toISOString(),
+    status: "Operion backend alive",
+    timestamp: new Date().toISOString()
   });
 });
 
 /* =========================
-   ROUTES
+   ROUTES (CRITICAL)
 ========================= */
 
 app.use("/health", healthRoutes);
 app.use("/api/contracts", contractRoutes);
 
 /* =========================
-   GLOBAL ERROR HANDLER
+   ERROR HANDLER
 ========================= */
 
 app.use((err, req, res, next) => {
@@ -74,16 +49,16 @@ app.use((err, req, res, next) => {
 
   res.status(500).json({
     success: false,
-    error: err.message || "Internal Server Error",
+    error: err.message || "Internal Server Error"
   });
 });
 
 /* =========================
-   SERVER
+   START SERVER (IMPORTANT)
 ========================= */
 
 const PORT = process.env.PORT || 10000;
 
-app.listen(PORT, () => {
-  console.log(`Operion backend running on port ${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Operion backend running on port ${PORT}`);
 });
