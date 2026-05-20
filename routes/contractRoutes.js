@@ -1,5 +1,9 @@
 import express from "express";
-import { processContract } from "../contractPipeline.js";
+
+// CommonJS compatibility import (IMPORTANT FIX)
+import contractPipeline from "../contractPipeline.js";
+
+const { processContract } = contractPipeline;
 
 const router = express.Router();
 
