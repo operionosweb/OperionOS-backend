@@ -1,188 +1,139 @@
-// services/clauseExtractionService.js
-
-function normalizeText(text) {
-  if (!text) return "";
-
-  return text
-    .replace(/\r/g, "\n")
-    .replace(/\t/g, " ")
-    .replace(/[ ]{2,}/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .replace(/Page\s+\d+/gi, "")
-    .trim();
-}
-
-function cleanClause(text) {
-  return text
-    .replace(/\s+/g, " ")
-    .replace(/\n/g, " ")
-    .trim();
-}
-
 export function extractClauses(text) {
-  const normalized = normalizeText(text);
+  if (!text) return [];
 
   const clauses = [];
 
-  // =====================================================
-  // ARTICLE-BASED CONTRACTS
-  // =====================================================
-
+  // Match ARTICLE sections
   const articleRegex =
-    /(ARTICLE\s+\d+\s*[–—\-:]*[\s\S]*?)(?=ARTICLE\s+\d+\s*[–—\-:]|APPENDIX|$)/gi;
+    /ARTICLE\s+(\d+)\s*[–-]\s*([^\n:]+):([\s\S]*?)(?=ARTICLE\s+\d+\s*[–-]|$)/gi;
 
-  const articleMatches = normalized.match(articleRegex);
+  let match;
 
-  if (articleMatches) {
-    for (const article of articleMatches) {
-      const clean = cleanClause(article);
+  while ((match = articleRegex.exec(text)) !== null) {
+    const clauseNumber = parseInt(match[1]);
+    const clauseTitle = match[2].trim();
 
-      if (clean.length > 40) {
-        clauses.push(clean);
-      }
-    }
+    const clauseText = `
+ARTICLE ${clauseNumber} - ${clauseTitle}:
+${match[3].trim()}
+    `.trim();
+
+    clauses.push({
+      clause_number: clauseNumber,
+      clause_title: clauseTitle,
+      clause_text: clauseText,
+      clause_type: detectClauseType(clauseTitle, clauseText),
+    });
   }
 
-  // =====================================================
-  // LETTERED CLAUSES (A. B. C.)
-  // =====================================================
-
-  const letterRegex =
-    /([A-Z]\.\s+[\s\S]*?)(?=\n[A-Z]\.\s+|$)/g;
-
-  const letterMatches = normalized.match(letterRegex);
-
-  if (letterMatches) {
-    for (const clause of letterMatches) {
-      const clean = cleanClause(clause);
-
-      if (clean.length > 30) {
-        clauses.push(clean);
-      }
-    }
-  }
-
-  // =====================================================
-  // NUMBERED CLAUSES (1. 2. 3.)
-  // =====================================================
-
-  const numberedRegex =
-    /(\(?\d+\)?[.)]?\s+[\s\S]*?)(?=\n\(?\d+\)?[.)]?\s+|$)/g;
-
-  const numberedMatches = normalized.match(numberedRegex);
-
-  if (numberedMatches) {
-    for (const clause of numberedMatches) {
-      const clean = cleanClause(clause);
-
-      if (clean.length > 30) {
-        clauses.push(clean);
-      }
-    }
-  }
-
-  // =====================================================
-  // BULLET CLAUSES (* • -)
-  // =====================================================
-
-  const bulletRegex =
-    /([•*\-]\s+[\s\S]*?)(?=\n[•*\-]\s+|$)/g;
-
-  const bulletMatches = normalized.match(bulletRegex);
-
-  if (bulletMatches) {
-    for (const clause of bulletMatches) {
-      const clean = cleanClause(clause);
-
-      if (clean.length > 30) {
-        clauses.push(clean);
-      }
-    }
-  }
-
-  // =====================================================
-  // FALLBACK: SPLIT LARGE PARAGRAPHS
-  // =====================================================
-
-  if (clauses.length < 10) {
-    const paragraphs = normalized.split(/\n\s*\n/);
-
-    for (const p of paragraphs) {
-      const clean = cleanClause(p);
-
-      if (clean.length > 80) {
-        clauses.push(clean);
-      }
-    }
-  }
-
-  // =====================================================
-  // REMOVE DUPLICATES
-  // =====================================================
-
-  const uniqueClauses = [...new Set(clauses)];
-
-  // =====================================================
-  // RETURN STRUCTURED CLAUSES
-  // =====================================================
-
-  return uniqueClauses.map((clause, index) => ({
-    clause_number: index + 1,
-    clause_title: clause.substring(0, 80),
-    clause_text: clause,
-    clause_type: detectClauseType(clause)
-  }));
+  return clauses;
 }
 
-function detectClauseType(text) {
-  const lower = text.toLowerCase();
+export function extractObligations(clauses) {
+  if (!clauses || !Array.isArray(clauses)) {
+    return [];
+  }
+
+  const obligations = [];
+
+  const obligationRegex =
+    /\b(shall|must|will|agree to|required to|responsible for)\b[\s\S]*?(?:\.|\n)/gi;
+
+  clauses.forEach((clause) => {
+    const matches = clause.clause_text.match(obligationRegex);
+
+    if (matches) {
+      matches.forEach((matchText) => {
+        obligations.push({
+          clause_id: clause.clause_number,
+          obligation_text: matchText.trim(),
+          responsible_party: detectResponsibleParty(matchText),
+          obligation_type: detectObligationType(matchText),
+        });
+      });
+    }
+  });
+
+  return obligations;
+}
+
+function detectClauseType(title, text) {
+  const combined = `${title} ${text}`.toLowerCase();
 
   if (
-    lower.includes("payment") ||
-    lower.includes("fee") ||
-    lower.includes("invoice") ||
-    lower.includes("tax")
+    combined.includes("payment") ||
+    combined.includes("fee") ||
+    combined.includes("invoice")
   ) {
     return "financial";
   }
 
   if (
-    lower.includes("terminate") ||
-    lower.includes("termination")
+    combined.includes("termination") ||
+    combined.includes("expire")
   ) {
     return "termination";
   }
 
   if (
-    lower.includes("insurance") ||
-    lower.includes("liability")
+    combined.includes("insurance") ||
+    combined.includes("liability")
   ) {
     return "liability";
   }
 
   if (
-    lower.includes("maintenance") ||
+    combined.includes("maintenance") ||
+    combined.includes("repair")
+  ) {
+    return "maintenance";
+  }
+
+  return "general";
+}
+
+function detectResponsibleParty(text) {
+  const lower = text.toLowerCase();
+
+  if (lower.includes("club")) {
+    return "Club";
+  }
+
+  if (lower.includes("lessor")) {
+    return "Lessor";
+  }
+
+  return "Unknown";
+}
+
+function detectObligationType(text) {
+  const lower = text.toLowerCase();
+
+  if (
+    lower.includes("pay") ||
+    lower.includes("fee") ||
+    lower.includes("cost")
+  ) {
+    return "payment";
+  }
+
+  if (
+    lower.includes("maintain") ||
     lower.includes("repair")
   ) {
     return "maintenance";
   }
 
   if (
-    lower.includes("notice")
+    lower.includes("insurance")
   ) {
-    return "notice";
+    return "insurance";
   }
 
   if (
-    lower.includes("assignment")
+    lower.includes("terminate")
   ) {
-    return "assignment";
-  }
-
-  if (
-    lower.includes("confidential")
-  ) {
-    return "confidentiality";
+    return "termination";
   }
 
   return "general";
