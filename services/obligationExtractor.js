@@ -1,129 +1,132 @@
-// ============================================
-// ADVANCED OBLIGATION EXTRACTION ENGINE
-// ============================================
-
-export function extractObligations(clauses) {
+export function extractObligations(clauses = []) {
   const obligations = [];
+
+  // Better obligation trigger detection
+  const obligationPatterns = [
+    /\bshall\b/i,
+    /\bmust\b/i,
+    /\bwill\b/i,
+    /\bagrees?\s+to\b/i,
+    /\bis required to\b/i,
+    /\bare required to\b/i
+  ];
+
+  // Detect responsible party
+  function detectResponsibleParty(text) {
+    const lower = text.toLowerCase();
+
+    if (lower.includes("club shall") || lower.includes("the club shall")) {
+      return "Club";
+    }
+
+    if (lower.includes("lessor shall") || lower.includes("the lessor shall")) {
+      return "Lessor";
+    }
+
+    if (lower.includes("either party")) {
+      return "Either Party";
+    }
+
+    if (lower.includes("both parties")) {
+      return "Both Parties";
+    }
+
+    if (lower.includes("owner shall")) {
+      return "Owner";
+    }
+
+    return "Unknown";
+  }
+
+  // Better obligation type classification
+  function classifyObligation(text, clauseType) {
+    const lower = text.toLowerCase();
+
+    if (
+      lower.includes("pay") ||
+      lower.includes("fee") ||
+      lower.includes("cost") ||
+      lower.includes("tax") ||
+      lower.includes("reimburse")
+    ) {
+      return "payment";
+    }
+
+    if (
+      lower.includes("maintain") ||
+      lower.includes("repair") ||
+      lower.includes("service") ||
+      lower.includes("inspection")
+    ) {
+      return "maintenance";
+    }
+
+    if (
+      lower.includes("terminate") ||
+      lower.includes("termination") ||
+      lower.includes("return")
+    ) {
+      return "termination";
+    }
+
+    if (
+      lower.includes("notify") ||
+      lower.includes("notice")
+    ) {
+      return "notification";
+    }
+
+    if (
+      lower.includes("comply") ||
+      lower.includes("regulation") ||
+      lower.includes("governmental")
+    ) {
+      return "compliance";
+    }
+
+    return clauseType || "general";
+  }
 
   for (const clause of clauses) {
     const text = clause.clause_text || "";
 
-    // Clean formatting
-    const normalizedText = text
+    // Split into sentences more intelligently
+    const sentences = text
       .replace(/\n/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    // Split into legal sentences
-    const sentences = normalizedText.match(/[^.!?]+[.!?]+/g) || [];
+      .split(/(?<=[.!?])\s+/);
 
     for (const sentence of sentences) {
-      const cleanSentence = sentence.trim();
+      const cleanedSentence = sentence.trim();
 
-      // Ignore very short garbage
-      if (cleanSentence.length < 25) continue;
-
-      // Detect legal obligation language
-      const obligationPatterns = [
-        /\bshall\b/i,
-        /\bmust\b/i,
-        /\bwill\b/i,
-        /\bagrees?\s+to\b/i,
-        /\bis required to\b/i,
-        /\bare required to\b/i,
-      ];
+      if (!cleanedSentence || cleanedSentence.length < 20) {
+        continue;
+      }
 
       const isObligation = obligationPatterns.some((pattern) =>
-        pattern.test(cleanSentence)
+        pattern.test(cleanedSentence)
       );
 
-      if (!isObligation) continue;
-
-      // ============================================
-      // RESPONSIBLE PARTY DETECTION
-      // ============================================
-
-      let responsibleParty = "Unknown";
-
-      if (
-        /\bClub\b/i.test(cleanSentence) &&
-        !/\bLessor\b/i.test(cleanSentence)
-      ) {
-        responsibleParty = "Club";
-      } else if (
-        /\bLessor\b/i.test(cleanSentence) &&
-        !/\bClub\b/i.test(cleanSentence)
-      ) {
-        responsibleParty = "Lessor";
-      } else if (
-        /\bEither party\b/i.test(cleanSentence)
-      ) {
-        responsibleParty = "Either Party";
-      } else if (
-        /\bboth parties\b/i.test(cleanSentence)
-      ) {
-        responsibleParty = "Both Parties";
+      if (!isObligation) {
+        continue;
       }
 
-      // ============================================
-      // OBLIGATION TYPE DETECTION
-      // ============================================
-
-      let obligationType = "general";
-
+      // Avoid obvious false positives
       if (
-        /\bpay\b|\bpayment\b|\bfee\b|\bcost\b|\btax\b|\breimburse\b/i.test(
-          cleanSentence
-        )
+        cleanedSentence.toLowerCase().includes("shall not affect") ||
+        cleanedSentence.toLowerCase().includes("shall not be construed")
       ) {
-        obligationType = "payment";
-      } else if (
-        /\binsurance\b|\binsured\b|\bcoverage\b/i.test(cleanSentence)
-      ) {
-        obligationType = "insurance";
-      } else if (
-        /\bmaintain\b|\brepair\b|\boverhaul\b|\bservice\b/i.test(
-          cleanSentence
-        )
-      ) {
-        obligationType = "maintenance";
-      } else if (
-        /\bterminate\b|\btermination\b|\breturn\b/i.test(cleanSentence)
-      ) {
-        obligationType = "termination";
-      } else if (
-        /\bnotify\b|\bnotice\b/i.test(cleanSentence)
-      ) {
-        obligationType = "notification";
-      } else if (
-        /\bcomply\b|\bregulation\b|\bgovernmental\b/i.test(cleanSentence)
-      ) {
-        obligationType = "compliance";
+        continue;
       }
-
-      // ============================================
-      // CLEAN OBLIGATION TEXT
-      // ============================================
-
-      const cleanedObligation = cleanSentence
-        .replace(/\s+/g, " ")
-        .trim();
-
-      // Avoid duplicates
-      const alreadyExists = obligations.some(
-        (o) =>
-          o.obligation_text === cleanedObligation &&
-          o.clause_id === clause.clause_number
-      );
-
-      if (alreadyExists) continue;
 
       obligations.push({
         clause_id: clause.clause_number,
         clause_title: clause.clause_title,
-        obligation_text: cleanedObligation,
-        responsible_party: responsibleParty,
-        obligation_type: obligationType,
+        obligation_text: cleanedSentence,
+        responsible_party: detectResponsibleParty(cleanedSentence),
+        obligation_type: classifyObligation(
+          cleanedSentence,
+          clause.clause_type
+        ),
       });
     }
   }
