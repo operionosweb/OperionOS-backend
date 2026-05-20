@@ -3,11 +3,18 @@ import cors from "cors";
 import dotenv from "dotenv";
 
 import healthRoutes from "./routes/healthRoutes.js";
-import contractRoutes from "./routes/contractRoutes.js";
+import contractRoutesModule from "./routes/contractRoutes.js";
 
 dotenv.config();
 
 const app = express();
+
+/* =========================
+   SAFELY RESOLVE ROUTES (FIX FOR ESM/CJS MIX ISSUES ON RENDER)
+========================= */
+
+const contractRoutes =
+  contractRoutesModule?.default || contractRoutesModule;
 
 /* =========================
    SECURITY + CORS
@@ -22,7 +29,7 @@ app.use(
 );
 
 /* =========================
-   BODY LIMITS (IMPORTANT FOR PDF BASE64 / LARGE PAYLOADS)
+   BODY LIMITS
 ========================= */
 
 app.use(express.json({ limit: "50mb" }));
@@ -49,7 +56,7 @@ app.use("/health", healthRoutes);
 app.use("/api/contracts", contractRoutes);
 
 /* =========================
-   GLOBAL ERROR HANDLER (CRITICAL FOR DEBUGGING RENDER DEPLOYS)
+   GLOBAL ERROR HANDLER
 ========================= */
 
 app.use((err, req, res, next) => {
