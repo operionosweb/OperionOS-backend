@@ -20,22 +20,20 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       });
     }
 
-    // STEP 1 — Extract PDF text
+    // STEP 1 — Extract text from PDF
     const extractedText = await extractTextFromPDF(req.file.path);
 
     // STEP 2 — Extract clauses
     const clauses = await extractClauses(extractedText);
 
-    // IMPORTANT DEBUG
-    console.log("CLAUSES FOUND:", clauses.length);
+    console.log("CLAUSES:", clauses.length);
 
     // STEP 3 — Extract obligations
     const obligations = await extractObligations(clauses);
 
-    // IMPORTANT DEBUG
-    console.log("OBLIGATIONS FOUND:", obligations.length);
+    console.log("OBLIGATIONS:", obligations.length);
 
-    // STEP 4 — Return result
+    // STEP 4 — Return response
     return res.json({
       success: true,
 
@@ -54,6 +52,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
         clausesType: typeof clauses,
         obligationsType: typeof obligations,
         firstClause: clauses[0] || null,
+        firstObligation: obligations[0] || null,
       },
     });
   } catch (error) {
