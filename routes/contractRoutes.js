@@ -1,61 +1,55 @@
-import express from "express";
-import multer from "multer";
-import pdfParse from "pdf-parse";
+// routes/contractRoutes.js
 
-import { extractClauses, extractObligations } from "../services/clauseExtractionService.js";
-
+const express = require("express");
 const router = express.Router();
+const multer = require("multer");
 
-// store file in memory (IMPORTANT FIX)
-const upload = multer({
-  storage: multer.memoryStorage(),
+const { analyzeContract } = require("../services/contractAnalysisService");
+
+// Use memory storage for PDF uploads (no disk needed)
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
+
+/**
+ * Health check for contract service
+ */
+router.get("/health", (req, res) => {
+  return res.status(200).json({
+    success: true,
+    service: "contract-routes",
+    status: "active"
+  });
 });
 
-router.post("/upload", upload.single("file"), async (req, res) => {
+/**
+ * POST /api/contracts/analyze
+ * Upload PDF and run full contract intelligence pipeline
+ */
+router.post("/analyze", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
         success: false,
-        error: "No file uploaded",
+        error: "No file uploaded. Expected field name: 'file'"
       });
     }
 
-    // ✅ IMPORTANT: this is a BUFFER
-    const pdfBuffer = req.file.buffer;
+    const fileBuffer = req.file.buffer;
+    const fileName = req.file.originalname;
 
-    // ✅ pdf-parse expects BUFFER (this is correct usage)
-    const pdfData = await pdfParse(pdfBuffer);
+    // Call unified analysis pipeline
+    const result = await analyzeContract(fileBuffer, fileName);
 
-    const text = pdfData.text;
+    return res.status(200).json(result);
 
-    if (!text) {
-      return res.status(500).json({
-        success: false,
-        error: "No text extracted from PDF",
-      });
-    }
-
-    // Pipeline
-    const clauses = extractClauses(text);
-    const obligations = extractObligations(clauses);
-
-    return res.status(200).json({
-      success: true,
-      contractName: req.file.originalname,
-      clausesDetected: clauses.length,
-      obligationsDetected: obligations.length,
-      extractedTextLength: text.length,
-      clauses,
-      obligations,
-    });
   } catch (error) {
-    console.error("UPLOAD ERROR:", error);
+    console.error("Contract analysis error:", error);
 
     return res.status(500).json({
       success: false,
-      error: error.message,
+      error: error.message || "Internal server error during contract analysis"
     });
   }
 });
 
-export default router;
+module.exports = router;
