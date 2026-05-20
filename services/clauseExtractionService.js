@@ -11,7 +11,6 @@ export function extractClauses(text) {
 
   while ((match = articleRegex.exec(text)) !== null) {
     const clauseNumber = parseInt(match[1]);
-
     const clauseTitle = match[2].trim();
 
     const clauseText = `
@@ -37,69 +36,38 @@ export function extractObligations(clauses) {
 
   const obligations = [];
 
-  clauses.forEach((clause) => {
-    const sentences = splitIntoSentences(clause.clause_text);
+  const obligationRegex =
+    /\b(shall|must|will|agree to|required to|responsible for)\b[\s\S]*?(?:\.|\n)/gi;
 
-    sentences.forEach((sentence) => {
-      if (containsObligation(sentence)) {
-        obligations.push({
-          clause_id: clause.clause_number,
-          obligation_text: cleanSentence(sentence),
-          responsible_party: detectResponsibleParty(sentence),
-          obligation_type: detectObligationType(sentence),
-        });
-      }
+  clauses.forEach((clause) => {
+    const matches = clause.clause_text.match(obligationRegex);
+
+    if (!matches) return;
+
+    matches.forEach((matchText) => {
+      const cleaned = cleanObligationText(matchText);
+
+      // Ignore garbage / tiny matches
+      if (cleaned.length < 25) return;
+
+      obligations.push({
+        clause_id: clause.clause_number,
+        obligation_text: cleaned,
+        responsible_party: detectResponsibleParty(cleaned),
+        obligation_type: detectObligationType(cleaned),
+      });
     });
   });
 
   return obligations;
 }
 
-/* =========================
-   SENTENCE SPLITTING
-========================= */
-
-function splitIntoSentences(text) {
+function cleanObligationText(text) {
   return text
-    .replace(/\n/g, " ")
     .replace(/\s+/g, " ")
-    .split(/(?<=[.?!])\s+/)
-    .map((sentence) => sentence.trim())
-    .filter((sentence) => sentence.length > 20);
-}
-
-/* =========================
-   OBLIGATION DETECTION
-========================= */
-
-function containsObligation(sentence) {
-  const lower = sentence.toLowerCase();
-
-  return (
-    lower.includes("shall") ||
-    lower.includes("must") ||
-    lower.includes("will") ||
-    lower.includes("agree to") ||
-    lower.includes("agrees to") ||
-    lower.includes("required to") ||
-    lower.includes("responsible for")
-  );
-}
-
-/* =========================
-   CLEANING
-========================= */
-
-function cleanSentence(sentence) {
-  return sentence
-    .replace(/\n/g, " ")
-    .replace(/\s+/g, " ")
+    .replace(/^[0-9]+\./, "")
     .trim();
 }
-
-/* =========================
-   CLAUSE TYPE DETECTION
-========================= */
 
 function detectClauseType(title, text) {
   const combined = `${title} ${text}`.toLowerCase();
@@ -115,7 +83,8 @@ function detectClauseType(title, text) {
 
   if (
     combined.includes("termination") ||
-    combined.includes("expire")
+    combined.includes("expire") ||
+    combined.includes("return")
   ) {
     return "termination";
   }
@@ -129,26 +98,28 @@ function detectClauseType(title, text) {
 
   if (
     combined.includes("maintenance") ||
-    combined.includes("repair")
+    combined.includes("repair") ||
+    combined.includes("airworthiness")
   ) {
     return "maintenance";
+  }
+
+  if (
+    combined.includes("notice")
+  ) {
+    return "notification";
   }
 
   return "general";
 }
 
-/* =========================
-   RESPONSIBLE PARTY DETECTION
-========================= */
-
-function detectResponsibleParty(sentence) {
-  const lower = sentence.toLowerCase();
+function detectResponsibleParty(text) {
+  const lower = text.toLowerCase();
 
   if (
     lower.includes("club shall") ||
     lower.includes("club will") ||
-    lower.includes("club agrees") ||
-    lower.includes("club must")
+    lower.includes("club agrees")
   ) {
     return "Club";
   }
@@ -156,57 +127,80 @@ function detectResponsibleParty(sentence) {
   if (
     lower.includes("lessor shall") ||
     lower.includes("lessor will") ||
-    lower.includes("lessor agrees") ||
-    lower.includes("lessor must")
+    lower.includes("lessor agrees")
   ) {
     return "Lessor";
+  }
+
+  if (
+    lower.includes("either party")
+  ) {
+    return "Both Parties";
   }
 
   return "Unknown";
 }
 
-/* =========================
-   OBLIGATION TYPE DETECTION
-========================= */
+function detectObligationType(text) {
+  const lower = text.toLowerCase();
 
-function detectObligationType(sentence) {
-  const lower = sentence.toLowerCase();
-
+  // Payment
   if (
     lower.includes("pay") ||
+    lower.includes("payment") ||
     lower.includes("fee") ||
-    lower.includes("cost") ||
     lower.includes("invoice") ||
+    lower.includes("reimburse") ||
     lower.includes("tax")
   ) {
     return "payment";
   }
 
+  // Maintenance
   if (
     lower.includes("maintain") ||
     lower.includes("repair") ||
     lower.includes("service") ||
-    lower.includes("overhaul")
+    lower.includes("overhaul") ||
+    lower.includes("airworthy")
   ) {
     return "maintenance";
   }
 
-  if (lower.includes("insurance")) {
+  // Insurance
+  if (
+    lower.includes("insurance") ||
+    lower.includes("insured") ||
+    lower.includes("coverage")
+  ) {
     return "insurance";
   }
 
+  // Termination
   if (
     lower.includes("terminate") ||
-    lower.includes("termination")
+    lower.includes("termination") ||
+    lower.includes("return the aircraft")
   ) {
     return "termination";
   }
 
+  // Notification
   if (
     lower.includes("notice") ||
-    lower.includes("notify")
+    lower.includes("notify") ||
+    lower.includes("written notice")
   ) {
     return "notification";
+  }
+
+  // Compliance
+  if (
+    lower.includes("law") ||
+    lower.includes("regulation") ||
+    lower.includes("government")
+  ) {
+    return "compliance";
   }
 
   return "general";
