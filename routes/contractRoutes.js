@@ -1,130 +1,68 @@
 import express from "express";
 import multer from "multer";
 
-import supabase from "../config/supabase.js";
-
-import { extractPdfText } from "../services/pdfService.js";
+import { extractTextFromPDF } from "../services/pdfService.js";
 import { extractClauses } from "../services/clauseExtractionService.js";
 import { extractObligations } from "../services/obligationExtractor.js";
 
 const router = express.Router();
 
-const storage = multer.memoryStorage();
-
 const upload = multer({
-  storage,
-  limits: {
-    fileSize: 25 * 1024 * 1024,
-  },
+  dest: "uploads/",
 });
 
 router.post("/upload", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: "No file uploaded" });
-    }
-
-    const file = req.file;
-
-    const extractedText = await extractPdfText(file.buffer);
-
-    const fileName = `${Date.now()}-${file.originalname}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("contracts")
-      .upload(fileName, file.buffer, {
-        contentType: file.mimetype,
-        upsert: false,
+      return res.status(400).json({
+        success: false,
+        error: "No file uploaded",
       });
-
-    if (uploadError) {
-      return res.status(500).json({ error: uploadError.message });
     }
 
-    const { data: contractData, error: contractError } = await supabase
-      .from("contracts")
-      .insert([
-        {
-          contract_name: file.originalname,
-          contract_type: "unclassified",
-          source_file: fileName,
-          extracted_text: extractedText,
-        },
-      ])
-      .select()
-      .single();
+    // STEP 1 — Extract PDF text
+    const extractedText = await extractTextFromPDF(req.file.path);
 
-    if (contractError) {
-      return res.status(500).json({ error: contractError.message });
-    }
+    // STEP 2 — Extract clauses
+    const clauses = await extractClauses(extractedText);
 
-    /* =========================
-       CLAUSES
-    ========================= */
+    // IMPORTANT DEBUG
+    console.log("CLAUSES FOUND:", clauses.length);
 
-    const clauses = extractClauses(extractedText);
+    // STEP 3 — Extract obligations
+    const obligations = await extractObligations(clauses);
 
-    console.log("🔥 RAW CLAUSES TYPE:", typeof clauses);
-    console.log("🔥 RAW CLAUSES:", clauses);
-    console.log("🔥 CLAUSES LENGTH:", clauses?.length);
+    // IMPORTANT DEBUG
+    console.log("OBLIGATIONS FOUND:", obligations.length);
 
-    const clausesToInsert = clauses.map((clause) => ({
-      contract_id: contractData.id,
-      clause_name: clause.clause_title,
-      clause_type: clause.clause_category,
-      clause_text: clause.clause_text,
-      risk_level: clause.risk_level,
-    }));
-
-    const { data: insertedClauses, error: clauseError } =
-      await supabase
-        .from("contract_clauses")
-        .insert(clausesToInsert)
-        .select();
-
-    if (clauseError) {
-      console.log("❌ CLAUSE INSERT ERROR:", clauseError);
-    }
-
-    console.log("✅ INSERTED CLAUSES COUNT:", insertedClauses?.length);
-
-    /* =========================
-       OBLIGATIONS (DEBUG)
-    ========================= */
-
-    console.log("🔥 PASSING TO OBLIGATIONS:", clauses);
-
-    const obligations = extractObligations(clauses);
-
-    console.log("🔥 RAW OBLIGATIONS OUTPUT:", obligations);
-    console.log("🔥 OBLIGATIONS LENGTH:", obligations?.length);
-
-    const { data: insertedObligations, error: obligationError } =
-      await supabase
-        .from("obligations")
-        .insert(obligations)
-        .select();
-
-    if (obligationError) {
-      console.log("❌ OBLIGATION INSERT ERROR:", obligationError);
-    }
-
-    console.log("✅ INSERTED OBLIGATIONS COUNT:", insertedObligations?.length);
-
+    // STEP 4 — Return result
     return res.json({
       success: true,
-      contract: contractData,
-      clausesDetected: insertedClauses?.length || 0,
-      obligationsDetected: insertedObligations?.length || 0,
+
+      contract: {
+        contract_name: req.file.originalname,
+        extracted_text: extractedText,
+      },
+
+      clausesDetected: clauses.length,
+      obligationsDetected: obligations.length,
+
+      clauses,
+      obligations,
+
       debug: {
         clausesType: typeof clauses,
         obligationsType: typeof obligations,
+        firstClause: clauses[0] || null,
       },
     });
   } catch (error) {
-    console.error("❌ FATAL ERROR:", error);
+    console.error("UPLOAD ERROR:", error);
 
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+    });
   }
 });
 
