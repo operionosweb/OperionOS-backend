@@ -1,27 +1,43 @@
 import fs from "fs";
+import path from "path";
+
 import multer from "multer";
 import pdfParse from "pdf-parse";
 
-/* =========================
+/* =========================================
+   ENSURE UPLOADS DIRECTORY EXISTS
+========================================= */
+
+const uploadsDir = "uploads";
+
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+
+  console.log("📁 uploads directory created");
+}
+
+/* =========================================
    MULTER STORAGE
-========================= */
+========================================= */
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, "uploads/");
+    cb(null, uploadsDir);
   },
 
   filename: function (req, file, cb) {
     const uniqueName =
-      Date.now() + "-" + file.originalname.replace(/\s+/g, "_");
+      Date.now() +
+      "-" +
+      file.originalname.replace(/\s+/g, "_");
 
     cb(null, uniqueName);
   },
 });
 
-/* =========================
+/* =========================================
    FILE FILTER
-========================= */
+========================================= */
 
 function fileFilter(req, file, cb) {
   if (file.mimetype === "application/pdf") {
@@ -31,22 +47,24 @@ function fileFilter(req, file, cb) {
   }
 }
 
-/* =========================
-   MULTER EXPORT
-========================= */
+/* =========================================
+   EXPORT MULTER
+========================================= */
 
 export const upload = multer({
   storage,
   fileFilter,
 });
 
-/* =========================
+/* =========================================
    PDF TEXT EXTRACTION
-========================= */
+========================================= */
 
 export async function extractTextFromPDF(filePath) {
   try {
-    const dataBuffer = fs.readFileSync(filePath);
+    const absolutePath = path.resolve(filePath);
+
+    const dataBuffer = fs.readFileSync(absolutePath);
 
     const pdfData = await pdfParse(dataBuffer);
 
