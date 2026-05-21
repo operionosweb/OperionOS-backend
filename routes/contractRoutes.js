@@ -1,83 +1,108 @@
-import express from "express";
-import multer from "multer";
-import fs from "fs";
-import pdfParse from "pdf-parse";
+import { createClient } from "@supabase/supabase-js";
 
-import { processContract } from "../contractPipeline.js";
-import { saveContractData } from "../services/supabaseService.js";
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
-const router = express.Router();
-
-// Ensure uploads folder exists (fixes ENOENT on Render)
-const uploadDir = "uploads";
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir);
-}
-
-// Multer config
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
-  }
-});
-
-const upload = multer({ storage });
-
-// HEALTH TEST ROUTE
-router.get("/test", (req, res) => {
-  res.json({ status: "contract route working" });
-});
-
-// MAIN UPLOAD ROUTE
-router.post("/upload", upload.single("file"), async (req, res) => {
+export async function saveContractToDB(extraction) {
   try {
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        error: "No file uploaded"
-      });
+    // ✅ normalize input (this fixes your nested object issue)
+    const contractData = extraction.contract || extraction;
+
+    const filename = contractData.filename || "unknown.pdf";
+
+    const extractedText =
+      contractData.contract?.extracted_text ||
+      contractData.extracted_text ||
+      "";
+
+    const clauses = contractData.clauses || [];
+    const obligations = contractData.obligations || [];
+
+    const clausesDetected = clauses.length;
+    const obligationsDetected = obligations.length;
+
+    // =========================
+    // 1. INSERT CONTRACT ROW
+    // =========================
+    const { data: contractRow, error: contractError } = await supabase
+      .from("contracts")
+      .insert({
+        filename,
+        extracted_text: extractedText,
+        clauses_detected: clausesDetected,
+        obligations_detected: obligationsDetected,
+      })
+      .select()
+      .single();
+
+    if (contractError) {
+      console.error("❌ CONTRACT INSERT ERROR:", contractError);
+      throw contractError;
     }
 
-    // Read PDF
-    const fileBuffer = fs.readFileSync(req.file.path);
-    const pdfData = await pdfParse(fileBuffer);
+    const contractId = contractRow.id;
 
-    // Build contract object for pipeline
-    const rawContract = {
-      filename: req.file.originalname,
-      contract: {
-        extracted_text: pdfData.text
+    // =========================
+    // 2. INSERT CLAUSES
+    // =========================
+    if (clauses.length > 0) {
+      const clauseRows = clauses.map((c) => ({
+        contract_id: contractId,
+        clause_number: c.clause_number,
+        clause_title: c.clause_title,
+        clause_text: c.clause_text,
+        clause_type: c.clause_type,
+      }));
+
+      const { error: clauseError } = await supabase
+        .from("clauses")
+        .insert(clauseRows);
+
+      if (clauseError) {
+        console.error("❌ CLAUSES INSERT ERROR:", clauseError);
+        throw clauseError;
       }
-    };
+    }
 
-    // Run your AI pipeline
-    const result = await processContract(rawContract);
+    // =========================
+    // 3. INSERT OBLIGATIONS
+    // =========================
+    if (obligations.length > 0) {
+      const obligationRows = obligations.map((o) => ({
+        contract_id: contractId,
+        clause_id: o.clause_id,
+        obligation_text: o.obligation_text,
+        responsible_party: o.responsible_party,
+        obligation_type: o.obligation_type,
+      }));
 
-    // Save to Supabase
-    const saved = await saveContractData({
-      filename: req.file.originalname,
-      contract: result.contract,
-      clauses: result.clauses,
-      obligations: result.obligations
-    });
+      const { error: obligationError } = await supabase
+        .from("obligations")
+        .insert(obligationRows);
 
-    res.json({
+      if (obligationError) {
+        console.error("❌ OBLIGATIONS INSERT ERROR:", obligationError);
+        throw obligationError;
+      }
+    }
+
+    // =========================
+    // SUCCESS RESPONSE
+    // =========================
+    return {
       success: true,
-      extraction: result,
-      database: saved
-    });
-
+      contract_id: contractId,
+      clauses_saved: clausesDetected,
+      obligations_saved: obligationsDetected,
+    };
   } catch (err) {
-    console.error("UPLOAD ERROR:", err);
+    console.error("🔥 SAVE CONTRACT FAILED:", err);
 
-    res.status(500).json({
+    return {
       success: false,
-      error: err.message
-    });
+      error: err.message,
+    };
   }
-});
-
-export default router;
+}
