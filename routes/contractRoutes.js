@@ -1,25 +1,18 @@
 import express from "express";
 import fs from "fs";
-import pdf from "pdf-parse";
 
 import { processContract } from "../contractPipeline.js";
-import { upload } from "../services/uploadService.js";
+
+import {
+  upload,
+  extractTextFromPDF,
+} from "../services/uploadService.js";
 
 const router = express.Router();
 
-/* =====================================================
-   HEALTH CHECK FOR ROUTE
-===================================================== */
-
-router.get("/test", (req, res) => {
-  res.json({
-    status: "contract routes alive"
-  });
-});
-
-/* =====================================================
-   1. RAW TEXT PROCESSING (YOUR EXISTING FLOW)
-===================================================== */
+/* =========================================
+   BASIC JSON CONTRACT PROCESSING
+========================================= */
 
 router.post("/", async (req, res) => {
   try {
@@ -31,49 +24,72 @@ router.post("/", async (req, res) => {
 
     res.status(500).json({
       success: false,
-      error: err.message
+      error: err.message,
     });
   }
 });
 
-/* =====================================================
-   2. NEW PDF UPLOAD PROCESSING
-===================================================== */
+/* =========================================
+   PDF CONTRACT UPLOAD
+========================================= */
 
-router.post("/upload", upload.single("file"), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({
+router.post(
+  "/upload",
+  upload.single("file"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          error: "No PDF uploaded",
+        });
+      }
+
+      /* =========================
+         EXTRACT PDF TEXT
+      ========================= */
+
+      const extractedText = await extractTextFromPDF(
+        req.file.path
+      );
+
+      /* =========================
+         RUN CONTRACT PIPELINE
+      ========================= */
+
+      const result = await processContract({
+        extracted_text: extractedText,
+      });
+
+      /* =========================
+         CLEAN TEMP FILE
+      ========================= */
+
+      fs.unlink(req.file.path, (err) => {
+        if (err) {
+          console.error("File cleanup failed:", err);
+        }
+      });
+
+      /* =========================
+         RESPONSE
+      ========================= */
+
+      res.json({
+        success: true,
+        filename: req.file.originalname,
+        extractedCharacters: extractedText.length,
+        ...result,
+      });
+    } catch (err) {
+      console.error("Upload route error:", err);
+
+      res.status(500).json({
         success: false,
-        error: "No file uploaded"
+        error: err.message,
       });
     }
-
-    // Read PDF file
-    const fileBuffer = fs.readFileSync(req.file.path);
-
-    // Extract text
-    const pdfData = await pdf(fileBuffer);
-    const extracted_text = pdfData.text;
-
-    // Process contract pipeline
-    const result = await processContract({
-      extracted_text
-    });
-
-    // Cleanup uploaded file
-    fs.unlinkSync(req.file.path);
-
-    res.json(result);
-
-  } catch (err) {
-    console.error("Upload error:", err);
-
-    res.status(500).json({
-      success: false,
-      error: err.message
-    });
   }
-});
+);
 
 export default router;
