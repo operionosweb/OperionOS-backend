@@ -1,64 +1,76 @@
-export function extractClauses(text) {
-  try {
-    const clauses = [];
+// ======================================================
+// PRODUCTION-GRADE CLAUSE PARSER
+// ======================================================
 
-    // Match ARTICLE X patterns
-    const regex =
-      /ARTICLE\s+(\d+)\s*[–-]\s*([A-Z\s]+):([\s\S]*?)(?=ARTICLE\s+\d+\s*[–-]|$)/gi;
+const CLAUSE_PATTERNS = [
+  /ARTICLE\s+\d+[\s\S]*?(?=ARTICLE\s+\d+|APPENDIX|$)/gi,
+  /SECTION\s+\d+[\s\S]*?(?=SECTION\s+\d+|APPENDIX|$)/gi,
+];
 
-    let match;
+function detectStructuralClauses(text) {
+  let clauses = [];
 
-    while ((match = regex.exec(text)) !== null) {
-      const clauseNumber = Number(match[1]);
-      const clauseTitle = match[2].trim();
-      const clauseText = match[3].trim();
-
-      clauses.push({
-        clause_number: clauseNumber,
-        clause_title: clauseTitle,
-        clause_text: clauseText,
-        clause_type: detectClauseType(clauseTitle, clauseText)
-      });
+  for (const pattern of CLAUSE_PATTERNS) {
+    const matches = text.match(pattern);
+    if (matches) {
+      clauses.push(...matches);
     }
-
-    return clauses;
-  } catch (err) {
-    console.error("CLAUSE EXTRACTION FAILED:", err);
-    return [];
   }
+
+  return clauses.length ? clauses : [text]; // fallback
 }
 
-function detectClauseType(title, text) {
-  const content = `${title} ${text}`.toLowerCase();
+// ======================================================
+// CLAUSE TYPE CLASSIFICATION
+// ======================================================
 
-  if (
-    content.includes("payment") ||
-    content.includes("fee") ||
-    content.includes("tax")
-  ) {
-    return "financial";
-  }
+function classifyClause(text) {
+  const t = text.toLowerCase();
 
-  if (
-    content.includes("termination") ||
-    content.includes("return")
-  ) {
+  if (t.includes("payment") || t.includes("fee") || t.includes("rent"))
+    return "payment";
+
+  if (t.includes("terminate") || t.includes("termination"))
     return "termination";
-  }
 
-  if (
-    content.includes("insurance") ||
-    content.includes("liability")
-  ) {
-    return "liability";
-  }
+  if (t.includes("insurance"))
+    return "insurance";
 
-  if (
-    content.includes("maintenance") ||
-    content.includes("repair")
-  ) {
+  if (t.includes("maintenance") || t.includes("repair"))
     return "maintenance";
-  }
+
+  if (t.includes("liability") || t.includes("indemn"))
+    return "liability";
+
+  if (t.includes("notice"))
+    return "notice";
 
   return "general";
+}
+
+// ======================================================
+// MAIN EXPORT
+// ======================================================
+
+export function extractClauses(text) {
+  const rawClauses = detectStructuralClauses(text);
+
+  return rawClauses.map((clause, index) => ({
+    clause_number: index + 1,
+    clause_title: extractTitle(clause),
+    clause_text: clause.trim(),
+    clause_type: classifyClause(clause),
+  }));
+}
+
+// ======================================================
+// TITLE EXTRACTION (SMART)
+// ======================================================
+
+function extractTitle(clauseText) {
+  const match = clauseText.match(/ARTICLE\s+\d+\s+[-–]\s*(.+)/i);
+  if (match) return match[1].trim().slice(0, 120);
+
+  const firstLine = clauseText.split("\n")[0];
+  return firstLine?.trim().slice(0, 120) || "Untitled Clause";
 }
