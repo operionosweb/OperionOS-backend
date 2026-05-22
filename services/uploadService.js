@@ -4,21 +4,22 @@ import fs from "fs";
 import { fileURLToPath } from "url";
 
 // ======================================================
-// SAFE ABSOLUTE PATHS
+// PATH SETUP (SAFE FOR LOCAL + RENDER)
 // ======================================================
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const uploadsDir = path.join(__dirname, "../uploads");
+// TEMP upload directory (Render-safe ephemeral usage)
+const uploadsDir = "/tmp/uploads";
 
-// Ensure uploads exists
+// Ensure directory exists
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
 // ======================================================
-// MULTER STORAGE
+// MULTER STORAGE (TEMP FILES ONLY)
 // ======================================================
 
 const storage = multer.diskStorage({
@@ -27,15 +28,19 @@ const storage = multer.diskStorage({
   },
 
   filename: function (req, file, cb) {
-    const uniqueName = `${Date.now()}-${file.originalname}`;
+    const safeName = file.originalname.replace(/\s+/g, "_");
+    const uniqueName = `${Date.now()}-${safeName}`;
     cb(null, uniqueName);
-  }
+  },
 });
 
 // ======================================================
-// EXPORT
+// EXPORT UPLOAD MIDDLEWARE
 // ======================================================
 
 export const upload = multer({
-  storage
+  storage,
+  limits: {
+    fileSize: 20 * 1024 * 1024, // 20MB safety limit
+  },
 });
