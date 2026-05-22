@@ -5,14 +5,18 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-/**
- * Saves extracted contract + clauses + obligations into Supabase
- */
+// ======================================================
+// SAFE CONTRACT SAVER (SCHEMA ALIGNED)
+// ======================================================
+
 export async function saveContractToDB(extraction) {
   try {
     const contractData = extraction.contract || extraction;
 
-    const filename = contractData.filename || "unknown.pdf";
+    const filename =
+      contractData.filename ||
+      contractData.source_file ||
+      "unknown.pdf";
 
     const extractedText =
       contractData.contract?.extracted_text ||
@@ -25,14 +29,26 @@ export async function saveContractToDB(extraction) {
     const clausesDetected = clauses.length;
     const obligationsDetected = obligations.length;
 
-    // =========================
-    // 1. INSERT CONTRACT
-    // =========================
+    // ======================================================
+    // INSERT CONTRACT (FULL SCHEMA SAFE)
+    // ======================================================
     const { data: contractRow, error: contractError } = await supabase
       .from("contracts")
       .insert({
         filename,
-        extracted_text: extractedText
+        source_file: filename,
+        contract_name: filename,
+        name: filename,
+
+        contract_type: "uploaded",
+
+        extracted_text: extractedText,
+
+        clauses_detected: clausesDetected,
+        obligations_detected: obligationsDetected,
+
+        created_at: new Date().toISOString(),
+        updates_at: new Date().toISOString(),
       })
       .select()
       .single();
@@ -44,16 +60,16 @@ export async function saveContractToDB(extraction) {
 
     const contractId = contractRow.id;
 
-    // =========================
-    // 2. INSERT CLAUSES
-    // =========================
+    // ======================================================
+    // CLAUSES (ONLY IF YOU HAVE CLAUSE TABLE)
+    // ======================================================
     if (clauses.length > 0) {
-      const clauseRows = clauses.map((c) => ({
+      const clauseRows = clauses.map((c, index) => ({
         contract_id: contractId,
-        clause_number: c.clause_number,
-        clause_title: c.clause_title,
-        clause_text: c.clause_text,
-        clause_type: c.clause_type
+        clause_number: c.clause_number || index + 1,
+        clause_title: c.clause_title || null,
+        clause_text: c.clause_text || "",
+        clause_type: c.clause_type || "general",
       }));
 
       const { error: clauseError } = await supabase
@@ -66,16 +82,16 @@ export async function saveContractToDB(extraction) {
       }
     }
 
-    // =========================
-    // 3. INSERT OBLIGATIONS
-    // =========================
+    // ======================================================
+    // OBLIGATIONS
+    // ======================================================
     if (obligations.length > 0) {
       const obligationRows = obligations.map((o) => ({
         contract_id: contractId,
-        clause_id: o.clause_id,
-        obligation_text: o.obligation_text,
-        responsible_party: o.responsible_party,
-        obligation_type: o.obligation_type
+        clause_id: o.clause_id || null,
+        obligation_text: o.obligation_text || "",
+        responsible_party: o.responsible_party || "unknown",
+        obligation_type: o.obligation_type || "general",
       }));
 
       const { error: obligationError } = await supabase
@@ -92,14 +108,14 @@ export async function saveContractToDB(extraction) {
       success: true,
       contract_id: contractId,
       clauses_saved: clausesDetected,
-      obligations_saved: obligationsDetected
+      obligations_saved: obligationsDetected,
     };
   } catch (err) {
     console.error("🔥 SAVE CONTRACT FAILED:", err);
 
     return {
       success: false,
-      error: err.message
+      error: err.message,
     };
   }
 }
