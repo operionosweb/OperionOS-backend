@@ -1,24 +1,47 @@
-// ======================================================
-// AI OBLIGATION NORMALIZER
-// ======================================================
+import OpenAI from "openai";
 
-export function extractObligations(clauses) {
-  const obligations = [];
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
-  clauses.forEach((clause) => {
-    if (!clause.obligations) return;
+export async function extractObligations(clauses) {
+  try {
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.2,
+      messages: [
+        {
+          role: "system",
+          content: `
+Extract obligations from contract clauses.
 
-    clause.obligations.forEach((o) => {
-      obligations.push({
-        clause_id: clause.clause_number,
-        obligation_text: o.obligation_text,
-        responsible_party: o.responsible_party,
-        obligation_type: o.obligation_type,
-        confidence: o.confidence || 0.5,
-        is_explicit: o.is_explicit ?? true,
-      });
+Return ONLY JSON:
+
+{
+  "obligations": [
+    {
+      "clause_id": 1,
+      "obligation_text": "",
+      "responsible_party": "lessor | lessee | both | unknown",
+      "obligation_type": "payment | maintenance | reporting | compliance | operational | other"
+    }
+  ]
+}
+          `,
+        },
+        {
+          role: "user",
+          content: JSON.stringify(clauses),
+        },
+      ],
+      response_format: { type: "json_object" },
     });
-  });
 
-  return obligations;
+    const parsed = JSON.parse(response.choices[0].message.content);
+
+    return parsed.obligations || [];
+  } catch (err) {
+    console.error("OBLIGATION INTELLIGENCE ERROR:", err);
+    return [];
+  }
 }
