@@ -1,79 +1,87 @@
+// ======================================================
+// PRODUCTION-GRADE OBLIGATION EXTRACTOR
+// ======================================================
+
+const OBLIGATION_VERBS = [
+  "shall",
+  "must",
+  "will",
+  "agrees to",
+  "is required to",
+  "responsible for",
+  "undertakes to",
+];
+
+// ======================================================
+// MAIN EXPORT
+// ======================================================
+
 export function extractObligations(clauses) {
-  try {
-    const obligations = [];
+  const obligations = [];
 
-    clauses.forEach((clause) => {
-      const sentences = clause.clause_text.split(".");
+  clauses.forEach((clause, clauseIndex) => {
+    const sentences = splitSentences(clause.clause_text);
 
-      sentences.forEach((sentence) => {
-        const cleaned = sentence.trim();
-
-        if (!cleaned) return;
-
-        const lower = cleaned.toLowerCase();
-
-        // obligation detection
-        if (
-          lower.includes("shall") ||
-          lower.includes("must") ||
-          lower.includes("will")
-        ) {
-          obligations.push({
-            clause_id: clause.clause_number,
-            obligation_text: cleaned,
-            responsible_party: detectResponsibleParty(cleaned),
-            obligation_type: detectObligationType(cleaned)
-          });
-        }
-      });
+    sentences.forEach((sentence) => {
+      if (isObligation(sentence)) {
+        obligations.push({
+          clause_id: clauseIndex + 1,
+          obligation_text: sentence.trim(),
+          responsible_party: detectParty(sentence),
+          obligation_type: classifyObligation(sentence),
+        });
+      }
     });
+  });
 
-    return obligations;
-  } catch (err) {
-    console.error("OBLIGATION EXTRACTION FAILED:", err);
-    return [];
-  }
+  return obligations;
 }
 
-function detectResponsibleParty(text) {
-  const lower = text.toLowerCase();
+// ======================================================
+// SENTENCE SPLITTER
+// ======================================================
 
-  if (lower.includes("club")) return "Club";
-  if (lower.includes("lessor")) return "Lessor";
-
-  return "Unknown";
+function splitSentences(text) {
+  return text
+    .replace(/\n/g, " ")
+    .split(/(?<=[.!?])\s+/)
+    .filter((s) => s.length > 20);
 }
 
-function detectObligationType(text) {
-  const lower = text.toLowerCase();
+// ======================================================
+// OBLIGATION DETECTION
+// ======================================================
 
-  if (
-    lower.includes("pay") ||
-    lower.includes("fee") ||
-    lower.includes("tax")
-  ) {
-    return "payment";
-  }
+function isObligation(sentence) {
+  const s = sentence.toLowerCase();
+  return OBLIGATION_VERBS.some((v) => s.includes(v));
+}
 
-  if (
-    lower.includes("maintain") ||
-    lower.includes("repair")
-  ) {
-    return "maintenance";
-  }
+// ======================================================
+// PARTY DETECTION
+// ======================================================
 
-  if (
-    lower.includes("terminate")
-  ) {
-    return "termination";
-  }
+function detectParty(sentence) {
+  const s = sentence.toLowerCase();
 
-  if (
-    lower.includes("notify") ||
-    lower.includes("notice")
-  ) {
-    return "notification";
-  }
+  if (s.includes("lessor")) return "lessor";
+  if (s.includes("club")) return "club";
+  if (s.includes("lessee")) return "lessee";
+
+  return "unknown";
+}
+
+// ======================================================
+// OBLIGATION TYPE CLASSIFICATION
+// ======================================================
+
+function classifyObligation(sentence) {
+  const s = sentence.toLowerCase();
+
+  if (s.includes("pay") || s.includes("payment")) return "financial";
+  if (s.includes("maintain") || s.includes("repair")) return "maintenance";
+  if (s.includes("insur")) return "insurance";
+  if (s.includes("report")) return "reporting";
 
   return "general";
 }
