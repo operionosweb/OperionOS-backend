@@ -1,76 +1,88 @@
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
 // ======================================================
-// PRODUCTION-GRADE CLAUSE PARSER
+// AI CLAUSE INTELLIGENCE ENGINE
 // ======================================================
 
-const CLAUSE_PATTERNS = [
-  /ARTICLE\s+\d+[\s\S]*?(?=ARTICLE\s+\d+|APPENDIX|$)/gi,
-  /SECTION\s+\d+[\s\S]*?(?=SECTION\s+\d+|APPENDIX|$)/gi,
-];
+export async function extractClauses(text) {
+  try {
+    const prompt = `
+You are a legal contract intelligence system for aviation/aircraft lease agreements.
 
-function detectStructuralClauses(text) {
-  let clauses = [];
+TASK:
+1. Split the contract into clauses (Articles/Sections)
+2. Classify each clause
+3. Extract obligations
+4. Detect risk level
+5. Summarize meaning
 
-  for (const pattern of CLAUSE_PATTERNS) {
-    const matches = text.match(pattern);
-    if (matches) {
-      clauses.push(...matches);
+Return STRICT JSON ONLY.
+
+FORMAT:
+{
+  "clauses": [
+    {
+      "clause_number": 1,
+      "clause_title": "",
+      "clause_text": "",
+      "clause_type": "payment | termination | insurance | maintenance | liability | notice | general",
+      "risk_level": "low | medium | high",
+      "summary": "",
+      "confidence": 0.0-1.0,
+      "obligations": [
+        {
+          "obligation_text": "",
+          "responsible_party": "lessor | lessee | club | unknown",
+          "obligation_type": "financial | maintenance | insurance | reporting | operational | general",
+          "is_explicit": true,
+          "confidence": 0.0-1.0
+        }
+      ]
     }
+  ]
+}
+
+CONTRACT:
+"""
+${text.slice(0, 120000)}
+"""
+`;
+
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You extract structured legal intelligence from contracts.",
+        },
+        { role: "user", content: prompt },
+      ],
+    });
+
+    const data = JSON.parse(response.choices[0].message.content);
+
+    return data.clauses || [];
+  } catch (err) {
+    console.error("AI CLAUSE EXTRACTION FAILED:", err);
+
+    return [
+      {
+        clause_number: 1,
+        clause_title: "Fallback Clause",
+        clause_text: text.slice(0, 5000),
+        clause_type: "general",
+        risk_level: "unknown",
+        summary: "Fallback extraction due to AI failure",
+        confidence: 0.1,
+        obligations: [],
+      },
+    ];
   }
-
-  return clauses.length ? clauses : [text]; // fallback
-}
-
-// ======================================================
-// CLAUSE TYPE CLASSIFICATION
-// ======================================================
-
-function classifyClause(text) {
-  const t = text.toLowerCase();
-
-  if (t.includes("payment") || t.includes("fee") || t.includes("rent"))
-    return "payment";
-
-  if (t.includes("terminate") || t.includes("termination"))
-    return "termination";
-
-  if (t.includes("insurance"))
-    return "insurance";
-
-  if (t.includes("maintenance") || t.includes("repair"))
-    return "maintenance";
-
-  if (t.includes("liability") || t.includes("indemn"))
-    return "liability";
-
-  if (t.includes("notice"))
-    return "notice";
-
-  return "general";
-}
-
-// ======================================================
-// MAIN EXPORT
-// ======================================================
-
-export function extractClauses(text) {
-  const rawClauses = detectStructuralClauses(text);
-
-  return rawClauses.map((clause, index) => ({
-    clause_number: index + 1,
-    clause_title: extractTitle(clause),
-    clause_text: clause.trim(),
-    clause_type: classifyClause(clause),
-  }));
-}
-
-// ======================================================
-// TITLE EXTRACTION (SMART)
-// ======================================================
-
-function extractTitle(clauseText) {
-  const match = clauseText.match(/ARTICLE\s+\d+\s+[-–]\s*(.+)/i);
-  if (match) return match[1].trim().slice(0, 120);
-
-  const firstLine = clauseText.split("\n")[0];
-  return firstLine?.trim().slice(0, 120) || "Untitled Clause";
 }
