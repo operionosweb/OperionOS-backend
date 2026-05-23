@@ -13,10 +13,7 @@ const openai = new OpenAI({
 // MAIN EXPORT
 // ======================================================
 
-export async function extractObligations(
-  clauses
-) {
-
+export async function extractObligations(clauses) {
   try {
 
     // ==================================================
@@ -140,7 +137,7 @@ Return ONLY JSON.
       {
         headers: {
           Authorization:
-            \`Bearer ${process.env.MISTRAL_API_KEY}\`,
+            `Bearer ${process.env.MISTRAL_API_KEY}`,
 
           "Content-Type":
             "application/json"
@@ -390,4 +387,4 @@ function detectDeadline(text) {
   }
 
   return null;
-}
+    }
