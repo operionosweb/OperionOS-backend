@@ -10,7 +10,88 @@ const openai = new OpenAI({
 });
 
 // ======================================================
-// MAIN EXTRACTOR
+// STANDARDIZED LEGAL TAXONOMY
+// ======================================================
+
+const CLAUSE_TAXONOMY = {
+
+  LIABILITY: [
+    "liability",
+    "limitation of liability",
+    "damages"
+  ],
+
+  INDEMNITY: [
+    "indemnity",
+    "indemnification",
+    "hold harmless"
+  ],
+
+  INSURANCE: [
+    "insurance",
+    "coverage"
+  ],
+
+  TERMINATION: [
+    "termination",
+    "cancel",
+    "default"
+  ],
+
+  PAYMENT: [
+    "payment",
+    "fees",
+    "financial",
+    "rent"
+  ],
+
+  MAINTENANCE: [
+    "maintenance",
+    "repair",
+    "inspection"
+  ],
+
+  COMPLIANCE: [
+    "compliance",
+    "regulatory",
+    "aviation authority",
+    "faa",
+    "easa"
+  ],
+
+  CONFIDENTIALITY: [
+    "confidential",
+    "non-disclosure",
+    "nda"
+  ],
+
+  FORCE_MAJEURE: [
+    "force majeure",
+    "acts of god"
+  ],
+
+  GOVERNING_LAW: [
+    "governing law",
+    "jurisdiction",
+    "venue"
+  ],
+
+  OPERATIONAL: [
+    "operation",
+    "pilot",
+    "crew",
+    "dispatch"
+  ],
+
+  DATA_PROTECTION: [
+    "data protection",
+    "privacy",
+    "gdpr"
+  ]
+};
+
+// ======================================================
+// MAIN ENGINE
 // ======================================================
 
 export async function extractClauses(
@@ -18,10 +99,6 @@ export async function extractClauses(
 ) {
 
   try {
-
-    // ==================================================
-    // VALIDATION
-    // ==================================================
 
     if (
       !text ||
@@ -32,7 +109,7 @@ export async function extractClauses(
     }
 
     // ==================================================
-    // MISTRAL FIRST
+    // MISTRAL
     // ==================================================
 
     try {
@@ -47,7 +124,9 @@ export async function extractClauses(
         mistral.length > 0
       ) {
 
-        return mistral;
+        return normalizeClauses(
+          mistral
+        );
       }
 
     } catch (err) {
@@ -59,7 +138,7 @@ export async function extractClauses(
     }
 
     // ==================================================
-    // OPENAI SECOND
+    // OPENAI
     // ==================================================
 
     try {
@@ -74,7 +153,9 @@ export async function extractClauses(
         openAI.length > 0
       ) {
 
-        return openAI;
+        return normalizeClauses(
+          openAI
+        );
       }
 
     } catch (err) {
@@ -89,8 +170,8 @@ export async function extractClauses(
     // LOCAL FALLBACK
     // ==================================================
 
-    return localClauseExtractor(
-      text
+    return normalizeClauses(
+      localClauseExtractor(text)
     );
 
   } catch (err) {
@@ -100,8 +181,8 @@ export async function extractClauses(
       err
     );
 
-    return localClauseExtractor(
-      text
+    return normalizeClauses(
+      localClauseExtractor(text)
     );
   }
 }
@@ -126,21 +207,23 @@ async function extractWithMistral(
             role: "system",
 
             content: `
-You are an enterprise legal AI system.
+You are an aviation and maritime legal AI system.
 
-Extract all major contract clauses.
+Extract ALL major contract clauses.
 
-Return ONLY valid JSON array.
+Return ONLY valid JSON.
 
-[
-  {
-    "clause_title": "",
-    "clause_type": "",
-    "risk_level": "",
-    "summary": "",
-    "clause_text": ""
-  }
-]
+{
+  "clauses": [
+    {
+      "clause_title": "",
+      "clause_type": "",
+      "risk_level": "",
+      "summary": "",
+      "clause_text": ""
+    }
+  ]
+}
 `
           },
 
@@ -178,21 +261,7 @@ Return ONLY valid JSON array.
   const parsed =
     JSON.parse(raw);
 
-  if (
-    Array.isArray(parsed)
-  ) {
-
-    return parsed;
-  }
-
-  if (
-    parsed.clauses
-  ) {
-
-    return parsed.clauses;
-  }
-
-  return [];
+  return parsed.clauses || [];
 }
 
 // ======================================================
@@ -216,21 +285,23 @@ async function extractWithOpenAI(
           role: "system",
 
           content: `
-You are an enterprise legal AI system.
+You are an aviation and maritime legal AI system.
 
-Extract all major contract clauses.
+Extract ALL major contract clauses.
 
-Return ONLY valid JSON array.
+Return ONLY valid JSON.
 
-[
-  {
-    "clause_title": "",
-    "clause_type": "",
-    "risk_level": "",
-    "summary": "",
-    "clause_text": ""
-  }
-]
+{
+  "clauses": [
+    {
+      "clause_title": "",
+      "clause_type": "",
+      "risk_level": "",
+      "summary": "",
+      "clause_text": ""
+    }
+  ]
+}
 `
         },
 
@@ -254,25 +325,215 @@ Return ONLY valid JSON array.
   const parsed =
     JSON.parse(raw);
 
-  if (
-    Array.isArray(parsed)
-  ) {
-
-    return parsed;
-  }
-
-  if (
-    parsed.clauses
-  ) {
-
-    return parsed.clauses;
-  }
-
-  return [];
+  return parsed.clauses || [];
 }
 
 // ======================================================
-// LOCAL FALLBACK EXTRACTOR
+// NORMALIZATION ENGINE
+// ======================================================
+
+function normalizeClauses(
+  clauses
+) {
+
+  return clauses.map((clause) => {
+
+    const normalizedType =
+      classifyClause(
+        clause
+      );
+
+    const severity =
+      calculateSeverity(
+        clause,
+        normalizedType
+      );
+
+    const impact =
+      calculateImpact(
+        normalizedType
+      );
+
+    return {
+
+      clause_title:
+        clause.clause_title ||
+        "Unnamed Clause",
+
+      clause_type:
+        normalizedType,
+
+      original_clause_type:
+        clause.clause_type || null,
+
+      risk_level:
+        severity,
+
+      impact_level:
+        impact,
+
+      summary:
+        clause.summary ||
+        "",
+
+      clause_text:
+        clause.clause_text ||
+        "",
+
+      confidence_score:
+        calculateConfidence(
+          clause,
+          normalizedType
+        )
+    };
+  });
+}
+
+// ======================================================
+// CLASSIFICATION
+// ======================================================
+
+function classifyClause(
+  clause
+) {
+
+  const text = `
+    ${clause.clause_title || ""}
+    ${clause.clause_text || ""}
+    ${clause.summary || ""}
+    ${clause.clause_type || ""}
+  `.toLowerCase();
+
+  for (
+    const [type, keywords]
+    of Object.entries(
+      CLAUSE_TAXONOMY
+    )
+  ) {
+
+    for (
+      const keyword
+      of keywords
+    ) {
+
+      if (
+        text.includes(keyword)
+      ) {
+
+        return type;
+      }
+    }
+  }
+
+  return "GENERAL";
+}
+
+// ======================================================
+// SEVERITY
+// ======================================================
+
+function calculateSeverity(
+  clause,
+  type
+) {
+
+  const text =
+    (
+      clause.clause_text || ""
+    ).toLowerCase();
+
+  if (
+    type === "LIABILITY" ||
+    type === "INDEMNITY"
+  ) {
+
+    return "HIGH";
+  }
+
+  if (
+    text.includes("unlimited") ||
+    text.includes("sole responsibility")
+  ) {
+
+    return "HIGH";
+  }
+
+  if (
+    type === "TERMINATION" ||
+    type === "INSURANCE"
+  ) {
+
+    return "MEDIUM";
+  }
+
+  return "LOW";
+}
+
+// ======================================================
+// IMPACT
+// ======================================================
+
+function calculateImpact(
+  type
+) {
+
+  switch (type) {
+
+    case "LIABILITY":
+    case "INDEMNITY":
+      return "CRITICAL";
+
+    case "INSURANCE":
+    case "COMPLIANCE":
+    case "TERMINATION":
+      return "HIGH";
+
+    case "PAYMENT":
+    case "MAINTENANCE":
+      return "MEDIUM";
+
+    default:
+      return "LOW";
+  }
+}
+
+// ======================================================
+// CONFIDENCE
+// ======================================================
+
+function calculateConfidence(
+  clause,
+  type
+) {
+
+  const text = `
+    ${clause.clause_title || ""}
+    ${clause.clause_text || ""}
+  `.toLowerCase();
+
+  const keywords =
+    CLAUSE_TAXONOMY[type] || [];
+
+  let matches = 0;
+
+  keywords.forEach((k) => {
+
+    if (
+      text.includes(k)
+    ) {
+
+      matches++;
+    }
+  });
+
+  return Math.min(
+    100,
+    50 + (matches * 15)
+  );
+}
+
+// ======================================================
+// LOCAL FALLBACK
 // ======================================================
 
 function localClauseExtractor(
@@ -281,150 +542,42 @@ function localClauseExtractor(
 
   const clauses = [];
 
-  const patterns = [
+  const sections =
+    text.split(/ARTICLE\s+\d+/i);
 
-    {
-      keyword: "termination",
-      title: "Termination",
-      type: "Termination"
-    },
-
-    {
-      keyword: "liability",
-      title: "Liability",
-      type: "Liability"
-    },
-
-    {
-      keyword: "insurance",
-      title: "Insurance",
-      type: "Insurance"
-    },
-
-    {
-      keyword: "payment",
-      title: "Payment",
-      type: "Financial"
-    },
-
-    {
-      keyword: "indemn",
-      title: "Indemnification",
-      type: "Indemnity"
-    },
-
-    {
-      keyword: "confidential",
-      title: "Confidentiality",
-      type: "Confidentiality"
-    },
-
-    {
-      keyword: "force majeure",
-      title: "Force Majeure",
-      type: "Force Majeure"
-    },
-
-    {
-      keyword: "governing law",
-      title: "Governing Law",
-      type: "Legal"
-    }
-  ];
-
-  patterns.forEach((pattern) => {
+  sections.forEach((section) => {
 
     if (
-      text.toLowerCase()
-        .includes(pattern.keyword)
+      section.trim().length < 100
     ) {
 
-      clauses.push({
-
-        clause_title:
-          pattern.title,
-
-        clause_type:
-          pattern.type,
-
-        risk_level:
-          "Medium",
-
-        summary:
-          `${pattern.title} clause detected.`,
-
-        clause_text:
-          extractSnippet(
-            text,
-            pattern.keyword
-          )
-      });
+      return;
     }
-  });
 
-  // ==================================================
-  // LAST RESORT
-  // ==================================================
-
-  if (
-    clauses.length === 0
-  ) {
+    const title =
+      section
+        .split("\n")[0]
+        ?.trim()
+        ?.slice(0, 80);
 
     clauses.push({
 
       clause_title:
-        "General Contract Terms",
+        title || "Contract Clause",
 
       clause_type:
-        "General",
+        "GENERAL",
 
       risk_level:
-        "Medium",
+        "LOW",
 
       summary:
-        "General contractual language detected.",
+        section.slice(0, 300),
 
       clause_text:
-        text.slice(0, 1000)
+        section.slice(0, 3000)
     });
-  }
+  });
 
   return clauses;
-}
-
-// ======================================================
-// TEXT SNIPPET
-// ======================================================
-
-function extractSnippet(
-  text,
-  keyword
-) {
-
-  const lower =
-    text.toLowerCase();
-
-  const index =
-    lower.indexOf(keyword);
-
-  if (
-    index === -1
-  ) {
-
-    return text.slice(0, 500);
-  }
-
-  const start =
-    Math.max(0, index - 200);
-
-  const end =
-    Math.min(
-      text.length,
-      index + 500
-    );
-
-  return text.slice(
-    start,
-    end
-  );
 }
