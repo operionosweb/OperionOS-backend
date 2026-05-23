@@ -1,124 +1,347 @@
 import express from "express";
 import fs from "fs";
-import pdfParse from "pdf-parse";
 
 import { upload } from "../services/uploadService.js";
-import { extractClauses } from "../services/clauseParser.js";
-import { extractObligations } from "../services/obligationParser.js";
-import { saveContractToDB } from "../services/contractService.js";
-import { analyzeContractRisk } from "../services/contractRiskEngine.js";
+
+import { extractClauses }
+from "../services/clauseParser.js";
+
+import { extractObligations }
+from "../services/obligationParser.js";
+
+import { analyzeContractRisk }
+from "../services/contractRiskEngine.js";
+
+import { saveContractToDB }
+from "../services/contractService.js";
 
 const router = express.Router();
 
 // ======================================================
-// CONTRACT UPLOAD + AI PROCESSING PIPELINE
+// EXECUTIVE CONTRACT PIPELINE
 // ======================================================
 
-router.post("/upload", upload.single("file"), async (req, res) => {
-  try {
+router.post(
+  "/upload",
+  upload.single("file"),
+  async (req, res) => {
 
-    // =========================================
-    // 1. VALIDATE FILE
-    // =========================================
+    try {
 
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        error: "No file uploaded",
-      });
-    }
+      // ==================================================
+      // VALIDATION
+      // ==================================================
 
-    // =========================================
-    // 2. READ PDF FILE
-    // =========================================
+      if (!req.file) {
 
-    const dataBuffer = fs.readFileSync(req.file.path);
+        return res.status(400).json({
+          success: false,
+          error: "No file uploaded"
+        });
+      }
 
-    // =========================================
-    // 3. PARSE PDF TEXT
-    // =========================================
+      // ==================================================
+      // READ FILE
+      // ==================================================
 
-    const pdfData = await pdfParse(dataBuffer);
+      const extractedText =
+        fs.readFileSync(
+          req.file.path,
+          "utf8"
+        );
 
-    const extractedText = pdfData.text || "";
+      // ==================================================
+      // CLAUSE EXTRACTION
+      // ==================================================
 
-    // =========================================
-    // 4. AI CLAUSE EXTRACTION
-    // =========================================
+      const clauses =
+        await extractClauses(
+          extractedText
+        );
 
-    const clauses = await extractClauses(extractedText);
+      // ==================================================
+      // OBLIGATION EXTRACTION
+      // ==================================================
 
-    // =========================================
-    // 5. AI OBLIGATION EXTRACTION
-    // =========================================
+      const obligations =
+        await extractObligations(
+          clauses
+        );
 
-    const obligations = await extractObligations(clauses);
+      // ==================================================
+      // RISK ENGINE
+      // ==================================================
 
-    // =========================================
-    // 6. AI CONTRACT RISK ENGINE
-    // =========================================
+      const risk =
+        await analyzeContractRisk(
+          clauses,
+          obligations
+        );
 
-    const riskAnalysis =
-      await analyzeContractRisk(
+      // ==================================================
+      // EXECUTIVE METRICS
+      // ==================================================
+
+      const executiveMetrics =
+        buildExecutiveMetrics(
+          clauses,
+          obligations,
+          risk
+        );
+
+      // ==================================================
+      // FINAL PAYLOAD
+      // ==================================================
+
+      const finalPayload = {
+
+        filename:
+          req.file.originalname,
+
+        extracted_text:
+          extractedText,
+
         clauses,
-        obligations
+
+        obligations,
+
+        risk,
+
+        executive_metrics:
+          executiveMetrics
+      };
+
+      // ==================================================
+      // DATABASE SAVE
+      // ==================================================
+
+      const database =
+        await saveContractToDB(
+          finalPayload
+        );
+
+      // ==================================================
+      // RESPONSE
+      // ==================================================
+
+      return res.json({
+
+        success: true,
+
+        extraction: {
+
+          filename:
+            req.file.originalname,
+
+          clausesDetected:
+            clauses.length,
+
+          obligationsDetected:
+            obligations.length,
+
+          clauses,
+
+          obligations,
+
+          risk,
+
+          executive_metrics:
+            executiveMetrics
+        },
+
+        database
+      });
+
+    } catch (err) {
+
+      console.error(
+        "UPLOAD PIPELINE ERROR:",
+        err
       );
 
-    // =========================================
-    // 7. BUILD FINAL PAYLOAD
-    // =========================================
+      return res.status(500).json({
 
-    const finalPayload = {
-      filename: req.file.originalname,
-      extracted_text: extractedText,
-      clauses,
-      obligations,
-      risk: riskAnalysis,
-    };
+        success: false,
 
-    // =========================================
-    // 8. SAVE TO SUPABASE
-    // =========================================
+        error:
+          err.message
+      });
+    }
+  }
+);
 
-    const dbResult =
-      await saveContractToDB(finalPayload);
+// ======================================================
+// EXECUTIVE METRICS ENGINE
+// ======================================================
 
-    // =========================================
-    // 9. RESPONSE
-    // =========================================
+function buildExecutiveMetrics(
+  clauses,
+  obligations,
+  risk
+) {
 
-    return res.json({
-      success: true,
-
-      extraction: {
-        filename: req.file.originalname,
-
-        clausesDetected:
-          clauses.length,
-
-        obligationsDetected:
-          obligations.length,
-
-        clauses,
-        obligations,
-        risk: riskAnalysis,
-      },
-
-      database: dbResult,
-    });
-
-  } catch (err) {
-
-    console.error(
-      "UPLOAD PIPELINE ERROR:",
-      err
+  const highRiskClauses =
+    clauses.filter(
+      (c) =>
+        (
+          c.risk_level || ""
+        ).toLowerCase() === "high"
     );
 
-    return res.status(500).json({
-      success: false,
-      error: err.message,
-    });
+  const mediumRiskClauses =
+    clauses.filter(
+      (c) =>
+        (
+          c.risk_level || ""
+        ).toLowerCase() === "medium"
+    );
+
+  const highPriorityObligations =
+    obligations.filter(
+      (o) =>
+        (
+          o.priority || ""
+        ).toLowerCase() === "high"
+    );
+
+  // ==================================================
+  // HEALTH SCORE
+  // ==================================================
+
+  const contractHealthScore =
+    Math.max(
+      0,
+      100 -
+      (
+        risk.contract_risk_score || 0
+      )
+    );
+
+  // ==================================================
+  // EXECUTIVE STATUS
+  // ==================================================
+
+  let executiveStatus =
+    "Healthy";
+
+  if (
+    contractHealthScore < 70
+  ) {
+
+    executiveStatus =
+      "Monitor";
   }
-});
+
+  if (
+    contractHealthScore < 40
+  ) {
+
+    executiveStatus =
+      "Critical";
+  }
+
+  // ==================================================
+  // FINANCIAL EXPOSURE LEVEL
+  // ==================================================
+
+  let financialExposure =
+    "Low";
+
+  if (
+    risk.critical_flags?.includes(
+      "uncapped_liability"
+    )
+  ) {
+
+    financialExposure =
+      "Critical";
+  }
+  else if (
+    risk.contract_risk_score > 60
+  ) {
+
+    financialExposure =
+      "High";
+  }
+
+  // ==================================================
+  // OPERATIONAL BURDEN
+  // ==================================================
+
+  let operationalBurden =
+    "Low";
+
+  if (
+    obligations.length > 10
+  ) {
+
+    operationalBurden =
+      "Medium";
+  }
+
+  if (
+    obligations.length > 20
+  ) {
+
+    operationalBurden =
+      "High";
+  }
+
+  // ==================================================
+  // EXECUTIVE SUMMARY
+  // ==================================================
+
+  return {
+
+    contract_health_score:
+      contractHealthScore,
+
+    executive_status:
+      executiveStatus,
+
+    financial_exposure_level:
+      financialExposure,
+
+    operational_burden:
+      operationalBurden,
+
+    clause_metrics: {
+
+      total_clauses:
+        clauses.length,
+
+      high_risk_clauses:
+        highRiskClauses.length,
+
+      medium_risk_clauses:
+        mediumRiskClauses.length
+    },
+
+    obligation_metrics: {
+
+      total_obligations:
+        obligations.length,
+
+      high_priority_obligations:
+        highPriorityObligations.length
+    },
+
+    executive_snapshot: {
+
+      primary_risk:
+        risk.risks?.[0]?.issue ||
+        "No major risk detected",
+
+      top_recommendation:
+        risk.executive_summary
+          ?.recommended_actions?.[0] ||
+        "No recommendation",
+
+      missing_protection_count:
+        risk.missing_protections
+          ?.length || 0
+    }
+  };
+}
 
 export default router;
