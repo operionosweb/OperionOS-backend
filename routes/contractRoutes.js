@@ -1,5 +1,6 @@
 import express from "express";
 import fs from "fs";
+import pdf from "pdf-parse";
 
 import { upload } from "../services/uploadService.js";
 
@@ -18,7 +19,7 @@ from "../services/contractService.js";
 const router = express.Router();
 
 // ======================================================
-// EXECUTIVE CONTRACT PIPELINE
+// CONTRACT UPLOAD PIPELINE
 // ======================================================
 
 router.post(
@@ -41,14 +42,61 @@ router.post(
       }
 
       // ==================================================
-      // READ FILE
+      // LOAD FILE BUFFER
       // ==================================================
 
-      const extractedText =
+      const fileBuffer =
         fs.readFileSync(
-          req.file.path,
-          "utf8"
+          req.file.path
         );
+
+      // ==================================================
+      // PDF TEXT EXTRACTION
+      // ==================================================
+
+      let extractedText = "";
+
+      try {
+
+        const parsed =
+          await pdf(fileBuffer);
+
+        extractedText =
+          parsed.text || "";
+
+      } catch (pdfError) {
+
+        console.error(
+          "PDF PARSE ERROR:",
+          pdfError
+        );
+
+        return res.status(500).json({
+
+          success: false,
+
+          error:
+            "Failed to parse PDF"
+        });
+      }
+
+      // ==================================================
+      // SAFETY VALIDATION
+      // ==================================================
+
+      if (
+        !extractedText ||
+        extractedText.length < 100
+      ) {
+
+        return res.status(400).json({
+
+          success: false,
+
+          error:
+            "No readable text found in PDF"
+        });
+      }
 
       // ==================================================
       // CLAUSE EXTRACTION
@@ -133,6 +181,9 @@ router.post(
           filename:
             req.file.originalname,
 
+          extractedTextPreview:
+            extractedText.slice(0, 1000),
+
           clausesDetected:
             clauses.length,
 
@@ -204,10 +255,6 @@ function buildExecutiveMetrics(
         ).toLowerCase() === "high"
     );
 
-  // ==================================================
-  // HEALTH SCORE
-  // ==================================================
-
   const contractHealthScore =
     Math.max(
       0,
@@ -216,10 +263,6 @@ function buildExecutiveMetrics(
         risk.contract_risk_score || 0
       )
     );
-
-  // ==================================================
-  // EXECUTIVE STATUS
-  // ==================================================
 
   let executiveStatus =
     "Healthy";
@@ -239,10 +282,6 @@ function buildExecutiveMetrics(
     executiveStatus =
       "Critical";
   }
-
-  // ==================================================
-  // FINANCIAL EXPOSURE LEVEL
-  // ==================================================
 
   let financialExposure =
     "Low";
@@ -264,10 +303,6 @@ function buildExecutiveMetrics(
       "High";
   }
 
-  // ==================================================
-  // OPERATIONAL BURDEN
-  // ==================================================
-
   let operationalBurden =
     "Low";
 
@@ -286,10 +321,6 @@ function buildExecutiveMetrics(
     operationalBurden =
       "High";
   }
-
-  // ==================================================
-  // EXECUTIVE SUMMARY
-  // ==================================================
 
   return {
 
