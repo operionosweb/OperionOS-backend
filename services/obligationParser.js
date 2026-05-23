@@ -1,188 +1,102 @@
+import OpenAI from "openai";
+import axios from "axios";
+
 // ======================================================
-// OBLIGATION EXTRACTION ENGINE
+// OPENAI CLIENT
 // ======================================================
 
-export async function extractObligations(clauses) {
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// ======================================================
+// MAIN EXPORT
+// ======================================================
+
+export async function extractClauses(contractText) {
 
   try {
 
-    const obligations = [];
-
     // ======================================================
-    // LOOP THROUGH CLAUSES
+    // CLEAN INPUT
     // ======================================================
 
-    for (const clause of clauses) {
+    const cleanedText = contractText
+      .replace(/\r/g, "")
+      .replace(/\t/g, " ")
+      .replace(/\n{3,}/g, "\n\n")
+      .slice(0, 30000);
 
-      const clauseText =
-        (clause.clause_text || "").toLowerCase();
+    // ======================================================
+    // TRY MISTRAL FIRST
+    // ======================================================
 
-      const clauseTitle =
-        clause.clause_title || "Unknown Clause";
+    try {
 
-      // ======================================================
-      // PAYMENT OBLIGATIONS
-      // ======================================================
+      console.log("===== TRYING MISTRAL =====");
 
-      if (
-        clauseText.includes("pay") ||
-        clauseText.includes("payment") ||
-        clauseText.includes("fees") ||
-        clauseText.includes("invoice")
-      ) {
-
-        obligations.push({
-
-          clause_title: clauseTitle,
-
-          obligation_type: "payment",
-
-          responsible_party:
-            detectResponsibleParty(clauseText),
-
-          obligation_text:
-            "Financial payment obligation detected",
-
-          priority: "HIGH",
-
-          deadline:
-            extractDeadline(clauseText),
-
-          risk_level: "HIGH"
-        });
-      }
-
-      // ======================================================
-      // NOTICE OBLIGATIONS
-      // ======================================================
+      const mistralClauses =
+        await extractWithMistral(cleanedText);
 
       if (
-        clauseText.includes("notice") ||
-        clauseText.includes("notify") ||
-        clauseText.includes("written notice")
+        mistralClauses &&
+        mistralClauses.length > 0
       ) {
 
-        obligations.push({
+        console.log("✅ MISTRAL SUCCESS");
 
-          clause_title: clauseTitle,
-
-          obligation_type: "notice",
-
-          responsible_party:
-            detectResponsibleParty(clauseText),
-
-          obligation_text:
-            "Notice obligation detected",
-
-          priority: "MEDIUM",
-
-          deadline:
-            extractDeadline(clauseText),
-
-          risk_level: "MEDIUM"
-        });
+        return mistralClauses;
       }
 
-      // ======================================================
-      // INSURANCE OBLIGATIONS
-      // ======================================================
+    } catch (err) {
 
-      if (
-        clauseText.includes("insurance") ||
-        clauseText.includes("insured")
-      ) {
+      console.error("❌ MISTRAL FAILED");
 
-        obligations.push({
-
-          clause_title: clauseTitle,
-
-          obligation_type: "insurance",
-
-          responsible_party:
-            detectResponsibleParty(clauseText),
-
-          obligation_text:
-            "Insurance obligation detected",
-
-          priority: "HIGH",
-
-          deadline: null,
-
-          risk_level: "HIGH"
-        });
-      }
-
-      // ======================================================
-      // MAINTENANCE OBLIGATIONS
-      // ======================================================
-
-      if (
-        clauseText.includes("maintain") ||
-        clauseText.includes("maintenance") ||
-        clauseText.includes("repair")
-      ) {
-
-        obligations.push({
-
-          clause_title: clauseTitle,
-
-          obligation_type: "maintenance",
-
-          responsible_party:
-            detectResponsibleParty(clauseText),
-
-          obligation_text:
-            "Maintenance obligation detected",
-
-          priority: "MEDIUM",
-
-          deadline: null,
-
-          risk_level: "MEDIUM"
-        });
-      }
-
-      // ======================================================
-      // COMPLIANCE OBLIGATIONS
-      // ======================================================
-
-      if (
-        clauseText.includes("compliance") ||
-        clauseText.includes("regulation") ||
-        clauseText.includes("law")
-      ) {
-
-        obligations.push({
-
-          clause_title: clauseTitle,
-
-          obligation_type: "compliance",
-
-          responsible_party:
-            detectResponsibleParty(clauseText),
-
-          obligation_text:
-            "Compliance obligation detected",
-
-          priority: "HIGH",
-
-          deadline: null,
-
-          risk_level: "HIGH"
-        });
-      }
+      console.error(err.message);
     }
 
     // ======================================================
-    // RETURN RESULTS
+    // TRY OPENAI SECOND
     // ======================================================
 
-    return obligations;
+    try {
+
+      console.log("===== TRYING OPENAI =====");
+
+      const openAIClauses =
+        await extractWithOpenAI(cleanedText);
+
+      if (
+        openAIClauses &&
+        openAIClauses.length > 0
+      ) {
+
+        console.log("✅ OPENAI SUCCESS");
+
+        return openAIClauses;
+      }
+
+    } catch (err) {
+
+      console.error("❌ OPENAI FAILED");
+
+      console.error(err.message);
+    }
+
+    // ======================================================
+    // LOCAL FALLBACK
+    // ======================================================
+
+    console.log(
+      "===== USING LOCAL SEMANTIC ENGINE ====="
+    );
+
+    return extractArticles(cleanedText);
 
   } catch (err) {
 
     console.error(
-      "❌ OBLIGATION ENGINE FAILED"
+      "❌ CLAUSE ENGINE FAILURE"
     );
 
     console.error(err);
@@ -192,41 +106,273 @@ export async function extractObligations(clauses) {
 }
 
 // ======================================================
-// RESPONSIBLE PARTY DETECTION
+// MISTRAL EXTRACTION
 // ======================================================
 
-function detectResponsibleParty(text) {
+async function extractWithMistral(text) {
 
-  if (text.includes("lessor")) {
-    return "Lessor";
-  }
+  const response =
+    await axios.post(
+      "https://api.mistral.ai/v1/chat/completions",
+      {
+        model: "mistral-small-latest",
 
-  if (text.includes("club")) {
-    return "Club";
-  }
+        messages: [
+          {
+            role: "system",
 
-  if (text.includes("party")) {
-    return "Both Parties";
-  }
+            content: `
+You are an enterprise legal AI system.
 
-  return "Unknown";
+Extract ALL contract clauses.
+
+Return ONLY valid JSON.
+
+{
+  "clauses": [
+    {
+      "clause_title": "",
+      "clause_type": "",
+      "risk_level": "",
+      "summary": "",
+      "clause_text": ""
+    }
+  ]
+}
+`
+          },
+
+          {
+            role: "user",
+            content: text
+          }
+        ],
+
+        temperature: 0.1,
+
+        response_format: {
+          type: "json_object"
+        }
+      },
+
+      {
+        headers: {
+          Authorization:
+            `Bearer ${process.env.MISTRAL_API_KEY}`,
+          "Content-Type":
+            "application/json"
+        }
+      }
+    );
+
+  const raw =
+    response.data.choices?.[0]?.message?.content;
+
+  const parsed =
+    JSON.parse(raw);
+
+  return parsed.clauses || [];
 }
 
 // ======================================================
-// DEADLINE EXTRACTION
+// OPENAI EXTRACTION
 // ======================================================
 
-function extractDeadline(text) {
+async function extractWithOpenAI(text) {
 
-  const regex =
-    /(\d+)\s+days/gi;
+  const completion =
+    await openai.chat.completions.create({
 
-  const match =
-    text.match(regex);
+      model: "gpt-4.1-mini",
 
-  if (match && match.length > 0) {
-    return match[0];
+      temperature: 0.1,
+
+      messages: [
+        {
+          role: "system",
+
+          content: `
+You are an enterprise legal AI system.
+
+Extract ALL contract clauses.
+
+Return ONLY valid JSON.
+
+{
+  "clauses": [
+    {
+      "clause_title": "",
+      "clause_type": "",
+      "risk_level": "",
+      "summary": "",
+      "clause_text": ""
+    }
+  ]
+}
+`
+        },
+
+        {
+          role: "user",
+          content: text
+        }
+      ],
+
+      response_format: {
+        type: "json_object"
+      }
+    });
+
+  const raw =
+    completion.choices?.[0]?.message?.content;
+
+  const parsed =
+    JSON.parse(raw);
+
+  return parsed.clauses || [];
+}
+
+// ======================================================
+// LOCAL SEMANTIC ARTICLE EXTRACTION
+// ======================================================
+
+function extractArticles(text) {
+
+  const clauses = [];
+
+  // ======================================================
+  // ARTICLE MATCHING
+  // ======================================================
+
+  const articleRegex =
+    /(ARTICLE\s+\d+[\s\S]*?)(?=ARTICLE\s+\d+|$)/gi;
+
+  const matches =
+    [...text.matchAll(articleRegex)];
+
+  // ======================================================
+  // PROCESS ARTICLES
+  // ======================================================
+
+  matches.forEach((match, index) => {
+
+    const article =
+      match[0].trim();
+
+    if (
+      article.length < 100
+    ) {
+      return;
+    }
+
+    const firstLine =
+      article
+        .split("\n")[0]
+        .trim()
+        .slice(0, 200);
+
+    const lower =
+      article.toLowerCase();
+
+    // ======================================================
+    // SEMANTIC CLASSIFICATION
+    // ======================================================
+
+    const classification =
+      classifyClause(
+        firstLine,
+        lower
+      );
+
+    clauses.push({
+
+      clause_title:
+        firstLine ||
+        `Article ${index + 1}`,
+
+      clause_type:
+        classification.type,
+
+      risk_level:
+        classification.risk,
+
+      summary:
+        article
+          .slice(0, 300),
+
+      clause_text:
+        article
+          .slice(0, 5000)
+    });
+  });
+
+  return clauses;
+}
+
+// ======================================================
+// SEMANTIC CLAUSE CLASSIFIER
+// ======================================================
+
+function classifyClause(
+  title,
+  text
+) {
+
+  const combined =
+    `${title} ${text}`.toLowerCase();
+
+  // ======================================================
+  // PARTY DEFINITIONS
+  // ======================================================
+
+  if (
+    combined.includes("parties") ||
+    combined.includes("lessor") ||
+    combined.includes("lessee") ||
+    combined.includes("club")
+  ) {
+
+    return {
+      type: "party_definition",
+      risk: "LOW"
+    };
   }
 
-  return null;
-}
+  // ======================================================
+  // DEFINITIONS
+  // ======================================================
+
+  if (
+    combined.includes("definitions") ||
+    combined.includes("defined terms")
+  ) {
+
+    return {
+      type: "definitions",
+      risk: "LOW"
+    };
+  }
+
+  // ======================================================
+  // PAYMENT
+  // ======================================================
+
+  if (
+    combined.includes("payment") ||
+    combined.includes("rent") ||
+    combined.includes("fees") ||
+    combined.includes("invoice")
+  ) {
+
+    return {
+      type: "payment",
+      risk: "HIGH"
+    };
+  }
+
+  // ======================================================
+  // LIABILITY
+  // ======================================================
+
+  if (
+    combined.includes
