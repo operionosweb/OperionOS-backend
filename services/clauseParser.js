@@ -23,7 +23,7 @@ export async function extractClauses(contractText) {
     contractText.slice(0, 15000);
 
   // =========================================
-  // 1. TRY MISTRAL FIRST (EU PRIORITY)
+  // 1. TRY MISTRAL FIRST
   // =========================================
 
   try {
@@ -87,7 +87,7 @@ export async function extractClauses(contractText) {
   }
 
   // =========================================
-  // 3. FINAL FALLBACK
+  // 3. LOCAL FALLBACK
   // =========================================
 
   console.log(
@@ -151,7 +151,7 @@ FORMAT:
       {
         headers: {
           Authorization:
-            \`Bearer ${process.env.MISTRAL_API_KEY}\`,
+            `Bearer ${process.env.MISTRAL_API_KEY}`,
           "Content-Type":
             "application/json"
         }
@@ -277,7 +277,7 @@ function localClauseParser(text) {
     {
       type: "confidentiality",
       regex:
-        /confidential/i
+        /confidential/gi
     },
 
     {
