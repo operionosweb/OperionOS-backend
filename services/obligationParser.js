@@ -1,74 +1,95 @@
 import OpenAI from "openai";
 import axios from "axios";
 
+// ======================================================
+// OPENAI
+// ======================================================
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-export async function extractObligations(clauses) {
+// ======================================================
+// MAIN EXPORT
+// ======================================================
+
+export async function extractClauses(contractText) {
 
   try {
 
-    // ==============================
-    // MISTRAL
-    // ==============================
+    const cleanedText =
+      contractText
+        .replace(/\r/g, "")
+        .replace(/\t/g, " ")
+        .replace(/\n{3,}/g, "\n\n")
+        .slice(0, 30000);
+
+    // ======================================================
+    // MISTRAL FIRST
+    // ======================================================
 
     try {
 
-      const mistral =
-        await extractWithMistral(clauses);
+      const mistralResult =
+        await extractWithMistral(cleanedText);
 
       if (
-        mistral &&
-        mistral.length > 0
+        mistralResult &&
+        mistralResult.length > 0
       ) {
-        return mistral;
+
+        return normalizeClauses(
+          mistralResult
+        );
       }
 
     } catch (err) {
 
       console.error(
-        "MISTRAL OBLIGATION ERROR:",
+        "MISTRAL CLAUSE ERROR:",
         err.message
       );
     }
 
-    // ==============================
-    // OPENAI
-    // ==============================
+    // ======================================================
+    // OPENAI SECOND
+    // ======================================================
 
     try {
 
-      const openaiResult =
-        await extractWithOpenAI(clauses);
+      const openAIResult =
+        await extractWithOpenAI(cleanedText);
 
       if (
-        openaiResult &&
-        openaiResult.length > 0
+        openAIResult &&
+        openAIResult.length > 0
       ) {
-        return openaiResult;
+
+        return normalizeClauses(
+          openAIResult
+        );
       }
 
     } catch (err) {
 
       console.error(
-        "OPENAI OBLIGATION ERROR:",
+        "OPENAI CLAUSE ERROR:",
         err.message
       );
     }
 
-    // ==============================
+    // ======================================================
     // LOCAL FALLBACK
-    // ==============================
+    // ======================================================
 
-    return localObligationEngine(
-      clauses
+    return normalizeClauses(
+      localClauseEngine(cleanedText)
     );
 
   } catch (err) {
 
     console.error(
-      "OBLIGATION ENGINE FAILURE:",
+      "CLAUSE ENGINE FAILURE:",
       err
     );
 
@@ -76,12 +97,12 @@ export async function extractObligations(clauses) {
   }
 }
 
-// ======================================
+// ======================================================
 // MISTRAL
-// ======================================
+// ======================================================
 
 async function extractWithMistral(
-  clauses
+  text
 ) {
 
   const response =
@@ -96,21 +117,27 @@ async function extractWithMistral(
             role: "system",
 
             content: `
-Extract all contractual obligations.
+Extract ALL contract clauses.
 
 Return ONLY JSON.
 
 {
-  "obligations": []
+  "clauses": [
+    {
+      "clause_title": "",
+      "clause_type": "",
+      "risk_level": "",
+      "summary": "",
+      "clause_text": ""
+    }
+  ]
 }
 `
           },
 
           {
             role: "user",
-
-            content:
-              JSON.stringify(clauses)
+            content: text
           }
         ],
 
@@ -140,15 +167,15 @@ Return ONLY JSON.
   const parsed =
     JSON.parse(raw);
 
-  return parsed.obligations || [];
+  return parsed.clauses || [];
 }
 
-// ======================================
+// ======================================================
 // OPENAI
-// ======================================
+// ======================================================
 
 async function extractWithOpenAI(
-  clauses
+  text
 ) {
 
   const completion =
@@ -164,21 +191,27 @@ async function extractWithOpenAI(
           role: "system",
 
           content: `
-Extract all contractual obligations.
+Extract ALL contract clauses.
 
 Return ONLY JSON.
 
 {
-  "obligations": []
+  "clauses": [
+    {
+      "clause_title": "",
+      "clause_type": "",
+      "risk_level": "",
+      "summary": "",
+      "clause_text": ""
+    }
+  ]
 }
 `
         },
 
         {
           role: "user",
-
-          content:
-            JSON.stringify(clauses)
+          content: text
         }
       ],
 
@@ -194,168 +227,253 @@ Return ONLY JSON.
   const parsed =
     JSON.parse(raw);
 
-  return parsed.obligations || [];
+  return parsed.clauses || [];
 }
 
-// ======================================
-// LOCAL ENGINE
-// ======================================
+// ======================================================
+// NORMALIZATION ENGINE
+// ======================================================
 
-function localObligationEngine(
+function normalizeClauses(
   clauses
 ) {
 
-  const obligations = [];
+  return clauses.map((clause) => {
 
-  clauses.forEach((clause) => {
-
-    const type =
-      clause.clause_type;
-
-    const text =
+    const rawType =
       (
-        clause.clause_text || ""
+        clause.clause_type ||
+        "general"
       ).toLowerCase();
 
+    let normalizedType =
+      "general";
+
+    // ==========================================
+    // PARTY
+    // ==========================================
+
+    if (
+      rawType.includes("part") ||
+      rawType.includes("identification")
+    ) {
+
+      normalizedType =
+        "party_definition";
+    }
+
+    // ==========================================
+    // PAYMENT
+    // ==========================================
+
+    else if (
+      rawType.includes("payment") ||
+      rawType.includes("rent") ||
+      rawType.includes("fee")
+    ) {
+
+      normalizedType =
+        "payment";
+    }
+
+    // ==========================================
+    // LIABILITY
+    // ==========================================
+
+    else if (
+      rawType.includes("liability") ||
+      rawType.includes("indemn")
+    ) {
+
+      normalizedType =
+        "liability";
+    }
+
+    // ==========================================
+    // TERMINATION
+    // ==========================================
+
+    else if (
+      rawType.includes("termination") ||
+      rawType.includes("default")
+    ) {
+
+      normalizedType =
+        "termination";
+    }
+
+    // ==========================================
+    // INSURANCE
+    // ==========================================
+
+    else if (
+      rawType.includes("insurance")
+    ) {
+
+      normalizedType =
+        "insurance";
+    }
+
+    // ==========================================
+    // MAINTENANCE
+    // ==========================================
+
+    else if (
+      rawType.includes("maintenance") ||
+      rawType.includes("repair")
+    ) {
+
+      normalizedType =
+        "maintenance";
+    }
+
+    // ==========================================
+    // COMPLIANCE
+    // ==========================================
+
+    else if (
+      rawType.includes("compliance") ||
+      rawType.includes("regulation")
+    ) {
+
+      normalizedType =
+        "compliance";
+    }
+
+    // ==========================================
+    // CONFIDENTIALITY
+    // ==========================================
+
+    else if (
+      rawType.includes("confidential")
+    ) {
+
+      normalizedType =
+        "confidentiality";
+    }
+
+    // ==========================================
+    // GOVERNING LAW
+    // ==========================================
+
+    else if (
+      rawType.includes("governing") ||
+      rawType.includes("jurisdiction")
+    ) {
+
+      normalizedType =
+        "governing_law";
+    }
+
+    // ==========================================
+    // FORCE MAJEURE
+    // ==========================================
+
+    else if (
+      rawType.includes("force majeure")
+    ) {
+
+      normalizedType =
+        "force_majeure";
+    }
+
+    return {
+
+      clause_title:
+        clause.clause_title ||
+        "Unknown Clause",
+
+      clause_type:
+        normalizedType,
+
+      risk_level:
+        normalizeRisk(
+          clause.risk_level
+        ),
+
+      summary:
+        clause.summary ||
+        "",
+
+      clause_text:
+        clause.clause_text ||
+        ""
+    };
+  });
+}
+
+// ======================================================
+// NORMALIZE RISK
+// ======================================================
+
+function normalizeRisk(
+  risk
+) {
+
+  const value =
+    (
+      risk || "LOW"
+    ).toUpperCase();
+
+  if (
+    value.includes("HIGH")
+  ) {
+    return "HIGH";
+  }
+
+  if (
+    value.includes("MEDIUM")
+  ) {
+    return "MEDIUM";
+  }
+
+  return "LOW";
+}
+
+// ======================================================
+// LOCAL FALLBACK ENGINE
+// ======================================================
+
+function localClauseEngine(
+  text
+) {
+
+  const clauses = [];
+
+  const regex =
+    /(ARTICLE\s+\d+[\s\S]*?)(?=ARTICLE\s+\d+|$)/gi;
+
+  const matches =
+    [...text.matchAll(regex)];
+
+  matches.forEach((match) => {
+
+    const article =
+      match[0];
+
     const title =
-      clause.clause_title ||
-      "Unknown";
+      article
+        .split("\n")[0]
+        .trim();
 
-    if (
-      type === "payment"
-    ) {
+    clauses.push({
 
-      obligations.push({
+      clause_title:
+        title,
 
-        clause_title:
-          title,
+      clause_type:
+        "general",
 
-        obligation_type:
-          "payment",
+      risk_level:
+        "LOW",
 
-        responsible_party:
-          detectParty(text),
+      summary:
+        article.slice(0, 300),
 
-        obligation_text:
-          "Payment obligation detected",
-
-        priority:
-          "HIGH",
-
-        deadline:
-          detectDeadline(text),
-
-        risk_level:
-          "HIGH"
-      });
-    }
-
-    if (
-      type === "insurance"
-    ) {
-
-      obligations.push({
-
-        clause_title:
-          title,
-
-        obligation_type:
-          "insurance",
-
-        responsible_party:
-          detectParty(text),
-
-        obligation_text:
-          "Insurance obligation detected",
-
-        priority:
-          "MEDIUM",
-
-        deadline:
-          detectDeadline(text),
-
-        risk_level:
-          "MEDIUM"
-      });
-    }
-
-    if (
-      type === "compliance"
-    ) {
-
-      obligations.push({
-
-        clause_title:
-          title,
-
-        obligation_type:
-          "compliance",
-
-        responsible_party:
-          detectParty(text),
-
-        obligation_text:
-          "Compliance obligation detected",
-
-        priority:
-          "HIGH",
-
-        deadline:
-          detectDeadline(text),
-
-        risk_level:
-          "HIGH"
-      });
-    }
-
+      clause_text:
+        article.slice(0, 5000)
+    });
   });
 
-  return obligations;
-}
-
-// ======================================
-// PARTY DETECTION
-// ======================================
-
-function detectParty(text) {
-
-  if (
-    text.includes("lessor")
-  ) {
-    return "Lessor";
-  }
-
-  if (
-    text.includes("lessee")
-  ) {
-    return "Lessee";
-  }
-
-  if (
-    text.includes("club")
-  ) {
-    return "Club";
-  }
-
-  return "Unknown";
-}
-
-// ======================================
-// DEADLINE DETECTION
-// ======================================
-
-function detectDeadline(text) {
-
-  const match =
-    text.match(
-      /within\s+\d+\s+days/i
-    );
-
-  if (
-    match
-  ) {
-    return match[0];
-  }
-
-  return null;
+  return clauses;
 }
