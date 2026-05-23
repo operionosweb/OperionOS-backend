@@ -1,5 +1,6 @@
 import express from "express";
 import fs from "fs";
+import pdfParse from "pdf-parse";
 
 import { upload } from "../services/uploadService.js";
 import { extractClauses } from "../services/clauseParser.js";
@@ -15,9 +16,11 @@ const router = express.Router();
 
 router.post("/upload", upload.single("file"), async (req, res) => {
   try {
+
     // =========================================
     // 1. VALIDATE FILE
     // =========================================
+
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -26,28 +29,45 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     }
 
     // =========================================
-    // 2. READ FILE CONTENT
+    // 2. READ PDF FILE
     // =========================================
-    const extractedText = fs.readFileSync(req.file.path, "utf8");
+
+    const dataBuffer = fs.readFileSync(req.file.path);
 
     // =========================================
-    // 3. AI CLAUSE EXTRACTION
+    // 3. PARSE PDF TEXT
     // =========================================
+
+    const pdfData = await pdfParse(dataBuffer);
+
+    const extractedText = pdfData.text || "";
+
+    // =========================================
+    // 4. AI CLAUSE EXTRACTION
+    // =========================================
+
     const clauses = await extractClauses(extractedText);
 
     // =========================================
-    // 4. AI OBLIGATION EXTRACTION
+    // 5. AI OBLIGATION EXTRACTION
     // =========================================
+
     const obligations = await extractObligations(clauses);
 
     // =========================================
-    // 5. AI CONTRACT RISK ENGINE (NEW)
+    // 6. AI CONTRACT RISK ENGINE
     // =========================================
-    const riskAnalysis = await analyzeContractRisk(clauses, obligations);
+
+    const riskAnalysis =
+      await analyzeContractRisk(
+        clauses,
+        obligations
+      );
 
     // =========================================
-    // 6. BUILD FINAL PAYLOAD
+    // 7. BUILD FINAL PAYLOAD
     // =========================================
+
     const finalPayload = {
       filename: req.file.originalname,
       extracted_text: extractedText,
@@ -57,27 +77,42 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     };
 
     // =========================================
-    // 7. SAVE TO SUPABASE
+    // 8. SAVE TO SUPABASE
     // =========================================
-    const dbResult = await saveContractToDB(finalPayload);
+
+    const dbResult =
+      await saveContractToDB(finalPayload);
 
     // =========================================
-    // 8. RESPONSE
+    // 9. RESPONSE
     // =========================================
+
     return res.json({
       success: true,
+
       extraction: {
         filename: req.file.originalname,
-        clausesDetected: clauses.length,
-        obligationsDetected: obligations.length,
+
+        clausesDetected:
+          clauses.length,
+
+        obligationsDetected:
+          obligations.length,
+
         clauses,
         obligations,
         risk: riskAnalysis,
       },
+
       database: dbResult,
     });
+
   } catch (err) {
-    console.error("UPLOAD PIPELINE ERROR:", err);
+
+    console.error(
+      "UPLOAD PIPELINE ERROR:",
+      err
+    );
 
     return res.status(500).json({
       success: false,
