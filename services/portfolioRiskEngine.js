@@ -1,0 +1,5 @@
+calculatePortfolioRisk(contracts)
+calculateSupplierExposure(contracts)
+calculateOperationalBurden(contracts)
+calculateRiskHeatmap(contracts)
+calculateProtectionGaps(contracts)
