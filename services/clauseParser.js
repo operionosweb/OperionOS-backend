@@ -1,55 +1,91 @@
 import OpenAI from "openai";
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
 });
 
-export async function extractClauses(text) {
+export async function extractClauses(contractText) {
   try {
-    const response = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.2,
+    // =========================================
+    // LIMIT HUGE CONTRACTS
+    // =========================================
+
+    const trimmedText = contractText.slice(0, 15000);
+
+    // =========================================
+    // GPT LEGAL ANALYSIS
+    // =========================================
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4.1-mini",
+      temperature: 0.1,
+
       messages: [
         {
           role: "system",
           content: `
-You are a legal contract analysis engine for aviation contracts.
+You are an elite legal AI system.
 
-Extract clauses with high precision.
+Analyze contracts and extract:
 
-Return ONLY valid JSON in this format:
+1. Clauses
+2. Clause types
+3. Legal risks
+4. Obligations
+5. Liability exposure
+
+Return ONLY valid JSON.
+
+Format:
 
 {
   "clauses": [
     {
-      "clause_number": 1,
       "clause_title": "",
-      "clause_text": "",
-      "clause_type": "payment | liability | termination | maintenance | insurance | operational | legal | other"
+      "clause_type": "",
+      "risk_level": "",
+      "summary": "",
+      "clause_text": ""
     }
   ]
 }
 
-Rules:
-- Do NOT include explanations
-- Do NOT hallucinate clauses
-- Keep clause_text exact from document
-- Merge small fragments into full clauses
-          `,
+Risk levels:
+LOW
+MEDIUM
+HIGH
+CRITICAL
+`
         },
+
         {
           role: "user",
-          content: text,
-        },
+          content: trimmedText
+        }
       ],
-      response_format: { type: "json_object" },
+
+      response_format: {
+        type: "json_object"
+      }
     });
 
-    const parsed = JSON.parse(response.choices[0].message.content);
+    // =========================================
+    // PARSE GPT RESPONSE
+    // =========================================
+
+    const content =
+      completion.choices[0].message.content;
+
+    const parsed = JSON.parse(content);
 
     return parsed.clauses || [];
+
   } catch (err) {
-    console.error("CLAUSE INTELLIGENCE ERROR:", err);
+    console.error(
+      "AI CLAUSE EXTRACTION FAILED:",
+      err
+    );
+
     return [];
   }
 }
