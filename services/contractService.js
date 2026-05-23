@@ -6,53 +6,53 @@
  *
  * Responsibilities:
  * - Contract ingestion
- * - Contract persistence
- * - AI analysis orchestration
- * - Portfolio normalization trigger
+ * - AI orchestration
+ * - Persistence
+ * - Portfolio normalization
  */
 
 /**
  * Supabase
  */
-const supabase = require("../config/supabase");
+import supabase from "../config/supabase.js";
 
 /**
  * AI Services
  */
-const {
+import {
   parseClauses,
-} = require("./clauseParser");
+} from "./clauseParser.js";
 
-const {
+import {
   parseObligations,
-} = require("./obligationParser");
+} from "./obligationParser.js";
 
-const {
+import {
   calculateContractRisk,
-} = require("./contractRiskEngine");
+} from "./contractRiskEngine.js";
 
-const {
+import {
   benchmarkContract,
-} = require("./benchmarkEngine");
+} from "./benchmarkEngine.js";
 
 /**
  * Normalization
  */
-const {
+import {
   normalizePortfolio,
-} = require("./normalizationService");
+} from "./normalizationService.js";
 
 /**
  * -----------------------------------------
  * CREATE CONTRACT
  * -----------------------------------------
  */
-async function createContract(
+export async function createContract(
   contractPayload = {}
 ) {
   try {
     /**
-     * Basic validation
+     * Validation
      */
     if (
       !contractPayload?.raw_text
@@ -63,9 +63,8 @@ async function createContract(
     }
 
     /**
-     * -------------------------------------
-     * STEP 1 — CLAUSE ANALYSIS
-     * -------------------------------------
+     * STEP 1
+     * Clause analysis
      */
     const clauses =
       await parseClauses(
@@ -73,9 +72,8 @@ async function createContract(
       );
 
     /**
-     * -------------------------------------
-     * STEP 2 — OBLIGATION ANALYSIS
-     * -------------------------------------
+     * STEP 2
+     * Obligation analysis
      */
     const obligations =
       await parseObligations(
@@ -83,9 +81,8 @@ async function createContract(
       );
 
     /**
-     * -------------------------------------
-     * STEP 3 — RISK ANALYSIS
-     * -------------------------------------
+     * STEP 3
+     * Risk analysis
      */
     const riskAnalysis =
       await calculateContractRisk({
@@ -97,9 +94,8 @@ async function createContract(
       });
 
     /**
-     * -------------------------------------
-     * STEP 4 — BENCHMARKING
-     * -------------------------------------
+     * STEP 4
+     * Benchmarking
      */
     const benchmark =
       await benchmarkContract({
@@ -108,9 +104,8 @@ async function createContract(
       });
 
     /**
-     * -------------------------------------
-     * STEP 5 — BUILD CONTRACT OBJECT
-     * -------------------------------------
+     * STEP 5
+     * Build contract object
      */
     const contractData = {
       name:
@@ -156,9 +151,8 @@ async function createContract(
     };
 
     /**
-     * -------------------------------------
-     * STEP 6 — SAVE CONTRACT
-     * -------------------------------------
+     * STEP 6
+     * Save contract
      */
     const {
       data,
@@ -174,19 +168,18 @@ async function createContract(
     }
 
     /**
-     * -------------------------------------
-     * STEP 7 — TRIGGER NORMALIZATION
-     * -------------------------------------
+     * STEP 7
+     * Trigger normalization
      */
     try {
       console.log(
-        "Starting portfolio normalization..."
+        "Starting normalization..."
       );
 
       await normalizePortfolio();
 
       console.log(
-        "Portfolio normalization completed."
+        "Normalization completed."
       );
     } catch (
       normalizationError
@@ -197,14 +190,8 @@ async function createContract(
       );
     }
 
-    /**
-     * -------------------------------------
-     * RETURN RESULT
-     * -------------------------------------
-     */
     return {
       success: true,
-
       contract: data,
     };
   } catch (error) {
@@ -215,7 +202,6 @@ async function createContract(
 
     return {
       success: false,
-
       error:
         error.message ||
         "Failed to create contract",
@@ -228,7 +214,7 @@ async function createContract(
  * GET ALL CONTRACTS
  * -----------------------------------------
  */
-async function getAllContracts() {
+export async function getAllContracts() {
   try {
     const {
       data,
@@ -263,7 +249,7 @@ async function getAllContracts() {
  * GET CONTRACT BY ID
  * -----------------------------------------
  */
-async function getContractById(
+export async function getContractById(
   contractId
 ) {
   try {
@@ -293,15 +279,72 @@ async function getContractById(
 
 /**
  * -----------------------------------------
+ * UPDATE CONTRACT
+ * -----------------------------------------
+ */
+export async function updateContract(
+  contractId,
+  updates = {}
+) {
+  try {
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("contracts")
+      .update(updates)
+      .eq("id", contractId)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    /**
+     * Re-normalize
+     */
+    try {
+      await normalizePortfolio();
+    } catch (
+      normalizationError
+    ) {
+      console.error(
+        "Normalization Error:",
+        normalizationError
+      );
+    }
+
+    return {
+      success: true,
+      contract: data,
+    };
+  } catch (error) {
+    console.error(
+      "updateContract() Error:",
+      error
+    );
+
+    return {
+      success: false,
+      error:
+        error.message ||
+        "Failed to update contract",
+    };
+  }
+}
+
+/**
+ * -----------------------------------------
  * DELETE CONTRACT
  * -----------------------------------------
  */
-async function deleteContract(
+export async function deleteContract(
   contractId
 ) {
   try {
     /**
-     * Delete normalized entities first
+     * Delete normalized entities
      */
     await supabase
       .from("contract_clauses")
@@ -362,74 +405,3 @@ async function deleteContract(
     };
   }
 }
-
-/**
- * -----------------------------------------
- * UPDATE CONTRACT
- * -----------------------------------------
- */
-async function updateContract(
-  contractId,
-  updates = {}
-) {
-  try {
-    const {
-      data,
-      error,
-    } = await supabase
-      .from("contracts")
-      .update(updates)
-      .eq("id", contractId)
-      .select()
-      .single();
-
-    if (error) {
-      throw error;
-    }
-
-    /**
-     * Re-normalize portfolio
-     */
-    try {
-      await normalizePortfolio();
-    } catch (
-      normalizationError
-    ) {
-      console.error(
-        "Normalization Error:",
-        normalizationError
-      );
-    }
-
-    return {
-      success: true,
-      contract: data,
-    };
-  } catch (error) {
-    console.error(
-      "updateContract() Error:",
-      error
-    );
-
-    return {
-      success: false,
-      error:
-        error.message ||
-        "Failed to update contract",
-    };
-  }
-}
-
-/**
- * -----------------------------------------
- * EXPORTS
- * -----------------------------------------
- */
-
-module.exports = {
-  createContract,
-  getAllContracts,
-  getContractById,
-  updateContract,
-  deleteContract,
-};
