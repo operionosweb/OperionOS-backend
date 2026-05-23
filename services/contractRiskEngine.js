@@ -94,13 +94,18 @@ export async function analyzeContractRisk(
 
     return {
       contract_risk_score: 0,
+
       executive_summary: {
         overall_assessment:
           "Risk analysis failed",
+
         key_concerns: [],
+
         recommended_actions: []
       },
+
       risks: [],
+
       critical_flags: [
         "analysis_failed"
       ]
@@ -298,7 +303,7 @@ function localRiskEngine(
     );
 
   // ==================================================
-  // LIABILITY
+  // CLAUSE ANALYSIS
   // ==================================================
 
   clauses.forEach((clause) => {
@@ -326,8 +331,10 @@ function localRiskEngine(
       risks.push({
         category:
           "liability",
+
         severity:
           "HIGH",
+
         issue:
           "Liability exposure detected"
       });
@@ -358,8 +365,10 @@ function localRiskEngine(
       risks.push({
         category:
           "indemnity",
+
         severity:
           "HIGH",
+
         issue:
           "Broad indemnification obligations"
       });
@@ -382,8 +391,10 @@ function localRiskEngine(
       risks.push({
         category:
           "termination",
+
         severity:
           "MEDIUM",
+
         issue:
           "Termination clause risk detected"
       });
@@ -471,7 +482,7 @@ function localRiskEngine(
   }
 
   // ==================================================
-  // SCORE CAP
+  // CAP SCORE
   // ==================================================
 
   if (
@@ -549,21 +560,15 @@ function buildAssessment(score) {
 
   if (score >= 70) {
 
-    return `
-High contractual risk exposure detected.
-`;
+    return "High contractual risk exposure detected.";
   }
 
   if (score >= 40) {
 
-    return `
-Moderate contractual risk exposure detected.
-`;
+    return "Moderate contractual risk exposure detected.";
   }
 
-  return `
-Low contractual risk exposure detected.
-`;
+  return "Low contractual risk exposure detected.";
 }
 
 function buildConcerns(
@@ -616,4 +621,68 @@ function buildRecommendations(
   ) {
 
     recommendations.push(
-      "Define
+      "Define minimum insurance coverage limits"
+    );
+  }
+
+  if (
+    missing.includes(
+      "force_majeure"
+    )
+  ) {
+
+    recommendations.push(
+      "Add force majeure protections"
+    );
+  }
+
+  if (
+    missing.includes(
+      "governing_law"
+    )
+  ) {
+
+    recommendations.push(
+      "Define governing law and jurisdiction"
+    );
+  }
+
+  return recommendations;
+}
+
+function buildFinancialExposure(
+  flags
+) {
+
+  if (
+    flags.includes(
+      "uncapped_liability"
+    )
+  ) {
+
+    return "Potential uncapped financial exposure identified.";
+  }
+
+  return "No major financial exposure identified.";
+}
+
+function buildComplianceExposure(
+  risks
+) {
+
+  const compliance =
+    risks.filter(
+      (r) =>
+        r.category ===
+        "compliance"
+    );
+
+  if (
+    compliance.length > 0
+  ) {
+
+    return "Compliance obligations and regulatory exposure identified.";
+  }
+
+  return "No major compliance exposure identified.";
+        }
