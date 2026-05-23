@@ -1,90 +1,138 @@
 import OpenAI from "openai";
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY,
 });
+
+// ======================================================
+// AI CLAUSE EXTRACTION ENGINE
+// ======================================================
 
 export async function extractClauses(contractText) {
   try {
-    // =========================================
-    // LIMIT HUGE CONTRACTS
-    // =========================================
-
-    const trimmedText = contractText.slice(0, 15000);
 
     // =========================================
-    // GPT LEGAL ANALYSIS
+    // LIMIT INPUT SIZE
     // =========================================
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
-      temperature: 0.1,
+    const trimmedText =
+      contractText.slice(0, 12000);
 
-      messages: [
-        {
-          role: "system",
-          content: `
-You are an elite legal AI system.
+    // =========================================
+    // OPENAI REQUEST
+    // =========================================
 
-Analyze contracts and extract:
+    const completion =
+      await openai.chat.completions.create({
 
-1. Clauses
-2. Clause types
-3. Legal risks
-4. Obligations
-5. Liability exposure
+        model: "gpt-4.1-mini",
+
+        temperature: 0.1,
+
+        messages: [
+
+          {
+            role: "system",
+
+            content: `
+You are an elite legal AI contract analysis engine.
+
+Analyze the contract and extract important legal clauses.
 
 Return ONLY valid JSON.
 
-Format:
+JSON FORMAT:
 
 {
   "clauses": [
     {
-      "clause_title": "",
-      "clause_type": "",
-      "risk_level": "",
-      "summary": "",
-      "clause_text": ""
+      "clause_title": "string",
+      "clause_type": "string",
+      "risk_level": "LOW | MEDIUM | HIGH | CRITICAL",
+      "summary": "short summary",
+      "clause_text": "original clause text"
     }
   ]
 }
 
-Risk levels:
-LOW
-MEDIUM
-HIGH
-CRITICAL
+Important:
+- Return minimum 5 clauses if found
+- Focus on legal importance
+- NEVER return markdown
+- NEVER explain
+- ONLY return valid JSON
 `
-        },
+          },
 
-        {
-          role: "user",
-          content: trimmedText
+          {
+            role: "user",
+
+            content: trimmedText
+          }
+        ],
+
+        response_format: {
+          type: "json_object"
         }
-      ],
-
-      response_format: {
-        type: "json_object"
-      }
-    });
+      });
 
     // =========================================
-    // PARSE GPT RESPONSE
+    // RAW RESPONSE
     // =========================================
 
-    const content =
-      completion.choices[0].message.content;
+    const raw =
+      completion.choices?.[0]?.message?.content;
 
-    const parsed = JSON.parse(content);
+    console.log(
+      "===== GPT RAW RESPONSE ====="
+    );
 
-    return parsed.clauses || [];
+    console.log(raw);
+
+    // =========================================
+    // VALIDATE RESPONSE
+    // =========================================
+
+    if (!raw) {
+      console.error(
+        "GPT RETURNED EMPTY RESPONSE"
+      );
+
+      return [];
+    }
+
+    // =========================================
+    // PARSE JSON
+    // =========================================
+
+    const parsed =
+      JSON.parse(raw);
+
+    // =========================================
+    // VALIDATE CLAUSES
+    // =========================================
+
+    if (
+      !parsed.clauses ||
+      !Array.isArray(parsed.clauses)
+    ) {
+
+      console.error(
+        "INVALID CLAUSE STRUCTURE"
+      );
+
+      return [];
+    }
+
+    return parsed.clauses;
 
   } catch (err) {
+
     console.error(
-      "AI CLAUSE EXTRACTION FAILED:",
-      err
+      "AI CLAUSE EXTRACTION FAILED:"
     );
+
+    console.error(err);
 
     return [];
   }
