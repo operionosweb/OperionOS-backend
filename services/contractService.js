@@ -6,12 +6,18 @@ const supabase = createClient(
 );
 
 // ======================================================
-// SAFE CONTRACT SAVER (SCHEMA ALIGNED)
+// SAFE CONTRACT SAVER (PRODUCTION SAFE)
 // ======================================================
 
 export async function saveContractToDB(extraction) {
   try {
-    const contractData = extraction.contract || extraction;
+
+    const contractData =
+      extraction.contract || extraction;
+
+    // ======================================================
+    // NORMALIZE DATA
+    // ======================================================
 
     const filename =
       contractData.filename ||
@@ -23,95 +29,173 @@ export async function saveContractToDB(extraction) {
       contractData.extracted_text ||
       "";
 
-    const clauses = contractData.clauses || [];
-    const obligations = contractData.obligations || [];
+    const clauses =
+      contractData.clauses || [];
 
-    const clausesDetected = clauses.length;
-    const obligationsDetected = obligations.length;
+    const obligations =
+      contractData.obligations || [];
+
+    const clausesDetected =
+      clauses.length;
+
+    const obligationsDetected =
+      obligations.length;
 
     // ======================================================
-    // INSERT CONTRACT (FULL SCHEMA SAFE)
+    // INSERT CONTRACT
     // ======================================================
-    const { data: contractRow, error: contractError } = await supabase
-      .from("contracts")
-      .insert({
-        filename,
-        source_file: filename,
-        contract_name: filename,
-        name: filename,
 
-        contract_type: "uploaded",
+    const { data: contractRow, error: contractError } =
+      await supabase
+        .from("contracts")
+        .insert({
+          filename,
 
-        extracted_text: extractedText,
+          source_file: filename,
 
-        clauses_detected: clausesDetected,
-        obligations_detected: obligationsDetected,
+          contract_name: filename,
 
-        created_at: new Date().toISOString(),
-        updates_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
+          name: filename,
+
+          contract_type: "uploaded",
+
+          extracted_text: extractedText,
+
+          clauses_detected:
+            clausesDetected,
+
+          obligations_detected:
+            obligationsDetected,
+
+          created_at:
+            new Date().toISOString(),
+
+          updated_at:
+            new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+    // ======================================================
+    // HANDLE CONTRACT INSERT ERROR
+    // ======================================================
 
     if (contractError) {
-      console.error("❌ CONTRACT INSERT ERROR:", contractError);
+
+      console.error(
+        "❌ CONTRACT INSERT ERROR:",
+        contractError
+      );
+
       throw contractError;
     }
 
-    const contractId = contractRow.id;
+    const contractId =
+      contractRow.id;
 
     // ======================================================
-    // CLAUSES (ONLY IF YOU HAVE CLAUSE TABLE)
+    // INSERT CLAUSES
     // ======================================================
+
     if (clauses.length > 0) {
-      const clauseRows = clauses.map((c, index) => ({
-        contract_id: contractId,
-        clause_number: c.clause_number || index + 1,
-        clause_title: c.clause_title || null,
-        clause_text: c.clause_text || "",
-        clause_type: c.clause_type || "general",
-      }));
 
-      const { error: clauseError } = await supabase
-        .from("clauses")
-        .insert(clauseRows);
+      const clauseRows =
+        clauses.map((c, index) => ({
+          contract_id: contractId,
+
+          clause_number:
+            c.clause_number ||
+            index + 1,
+
+          clause_title:
+            c.clause_title || null,
+
+          clause_text:
+            c.clause_text || "",
+
+          clause_type:
+            c.clause_type || "general",
+        }));
+
+      const { error: clauseError } =
+        await supabase
+          .from("clauses")
+          .insert(clauseRows);
 
       if (clauseError) {
-        console.error("❌ CLAUSES INSERT ERROR:", clauseError);
+
+        console.error(
+          "❌ CLAUSES INSERT ERROR:",
+          clauseError
+        );
+
         throw clauseError;
       }
     }
 
     // ======================================================
-    // OBLIGATIONS
+    // INSERT OBLIGATIONS
     // ======================================================
-    if (obligations.length > 0) {
-      const obligationRows = obligations.map((o) => ({
-        contract_id: contractId,
-        clause_id: o.clause_id || null,
-        obligation_text: o.obligation_text || "",
-        responsible_party: o.responsible_party || "unknown",
-        obligation_type: o.obligation_type || "general",
-      }));
 
-      const { error: obligationError } = await supabase
-        .from("obligations")
-        .insert(obligationRows);
+    if (obligations.length > 0) {
+
+      const obligationRows =
+        obligations.map((o) => ({
+          contract_id:
+            contractId,
+
+          clause_id:
+            o.clause_id || null,
+
+          obligation_text:
+            o.obligation_text || "",
+
+          responsible_party:
+            o.responsible_party || "unknown",
+
+          obligation_type:
+            o.obligation_type || "general",
+        }));
+
+      const { error: obligationError } =
+        await supabase
+          .from("obligations")
+          .insert(obligationRows);
 
       if (obligationError) {
-        console.error("❌ OBLIGATIONS INSERT ERROR:", obligationError);
+
+        console.error(
+          "❌ OBLIGATIONS INSERT ERROR:",
+          obligationError
+        );
+
         throw obligationError;
       }
     }
 
+    // ======================================================
+    // SUCCESS
+    // ======================================================
+
     return {
       success: true,
-      contract_id: contractId,
-      clauses_saved: clausesDetected,
-      obligations_saved: obligationsDetected,
+
+      contract_id:
+        contractId,
+
+      clauses_saved:
+        clausesDetected,
+
+      obligations_saved:
+        obligationsDetected,
     };
+
   } catch (err) {
-    console.error("🔥 SAVE CONTRACT FAILED:", err);
+
+    console.error(
+      "🔥 SAVE CONTRACT FAILED:",
+      err
+    );
 
     return {
       success: false,
