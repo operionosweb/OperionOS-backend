@@ -13,6 +13,9 @@ from "../services/obligationParser.js";
 import { analyzeContractRisk }
 from "../services/contractRiskEngine.js";
 
+import { benchmarkContract }
+from "../services/benchmarkEngine.js";
+
 import { saveContractToDB }
 from "../services/contractService.js";
 
@@ -127,6 +130,16 @@ router.post(
         );
 
       // ==================================================
+      // BENCHMARK ENGINE
+      // ==================================================
+
+      const benchmark =
+        benchmarkContract(
+          clauses,
+          obligations
+        );
+
+      // ==================================================
       // EXECUTIVE METRICS
       // ==================================================
 
@@ -134,7 +147,8 @@ router.post(
         buildExecutiveMetrics(
           clauses,
           obligations,
-          risk
+          risk,
+          benchmark
         );
 
       // ==================================================
@@ -154,6 +168,8 @@ router.post(
         obligations,
 
         risk,
+
+        benchmark,
 
         executive_metrics:
           executiveMetrics
@@ -182,7 +198,7 @@ router.post(
             req.file.originalname,
 
           extractedTextPreview:
-            extractedText.slice(0, 1000),
+            extractedText.slice(0, 1500),
 
           clausesDetected:
             clauses.length,
@@ -195,6 +211,8 @@ router.post(
           obligations,
 
           risk,
+
+          benchmark,
 
           executive_metrics:
             executiveMetrics
@@ -228,7 +246,8 @@ router.post(
 function buildExecutiveMetrics(
   clauses,
   obligations,
-  risk
+  risk,
+  benchmark
 ) {
 
   const highRiskClauses =
@@ -236,7 +255,7 @@ function buildExecutiveMetrics(
       (c) =>
         (
           c.risk_level || ""
-        ).toLowerCase() === "high"
+        ).toUpperCase() === "HIGH"
     );
 
   const mediumRiskClauses =
@@ -244,7 +263,7 @@ function buildExecutiveMetrics(
       (c) =>
         (
           c.risk_level || ""
-        ).toLowerCase() === "medium"
+        ).toUpperCase() === "MEDIUM"
     );
 
   const highPriorityObligations =
@@ -252,7 +271,7 @@ function buildExecutiveMetrics(
       (o) =>
         (
           o.priority || ""
-        ).toLowerCase() === "high"
+        ).toUpperCase() === "HIGH"
     );
 
   const contractHealthScore =
@@ -265,14 +284,14 @@ function buildExecutiveMetrics(
     );
 
   let executiveStatus =
-    "Healthy";
+    "HEALTHY";
 
   if (
     contractHealthScore < 70
   ) {
 
     executiveStatus =
-      "Monitor";
+      "MONITOR";
   }
 
   if (
@@ -280,11 +299,11 @@ function buildExecutiveMetrics(
   ) {
 
     executiveStatus =
-      "Critical";
+      "CRITICAL";
   }
 
   let financialExposure =
-    "Low";
+    "LOW";
 
   if (
     risk.critical_flags?.includes(
@@ -293,25 +312,25 @@ function buildExecutiveMetrics(
   ) {
 
     financialExposure =
-      "Critical";
+      "CRITICAL";
   }
   else if (
     risk.contract_risk_score > 60
   ) {
 
     financialExposure =
-      "High";
+      "HIGH";
   }
 
   let operationalBurden =
-    "Low";
+    "LOW";
 
   if (
     obligations.length > 10
   ) {
 
     operationalBurden =
-      "Medium";
+      "MEDIUM";
   }
 
   if (
@@ -319,7 +338,7 @@ function buildExecutiveMetrics(
   ) {
 
     operationalBurden =
-      "High";
+      "HIGH";
   }
 
   return {
@@ -335,6 +354,12 @@ function buildExecutiveMetrics(
 
     operational_burden:
       operationalBurden,
+
+    benchmark_score:
+      benchmark.benchmark_score,
+
+    contract_maturity:
+      benchmark.contract_maturity,
 
     clause_metrics: {
 
@@ -369,7 +394,7 @@ function buildExecutiveMetrics(
         "No recommendation",
 
       missing_protection_count:
-        risk.missing_protections
+        benchmark.missing_protections
           ?.length || 0
     }
   };
