@@ -14,29 +14,23 @@ const openai = new OpenAI({
 // ======================================================
 
 export async function extractClauses(contractText) {
-
   try {
-
     // ======================================================
     // CLEAN INPUT
     // ======================================================
 
-    const cleanedText =
-      contractText
-        .replace(/\r/g, "")
-        .replace(/\t/g, " ")
-        .replace(/\n{3,}/g, "\n\n")
-        .slice(0, 30000);
+    const cleanedText = contractText
+      .replace(/\r/g, "")
+      .replace(/\t/g, " ")
+      .replace(/\n{3,}/g, "\n\n")
+      .slice(0, 30000);
 
     // ======================================================
     // 1. TRY MISTRAL
     // ======================================================
 
     try {
-
-      console.log(
-        "===== TRYING MISTRAL ====="
-      );
+      console.log("===== TRYING MISTRAL =====");
 
       const mistralClauses =
         await extractWithMistral(cleanedText);
@@ -45,19 +39,12 @@ export async function extractClauses(contractText) {
         mistralClauses &&
         mistralClauses.length > 0
       ) {
-
-        console.log(
-          "✅ MISTRAL SUCCESS"
-        );
+        console.log("✅ MISTRAL SUCCESS");
 
         return mistralClauses;
       }
-
     } catch (err) {
-
-      console.error(
-        "❌ MISTRAL FAILED"
-      );
+      console.error("❌ MISTRAL FAILED");
 
       console.error(err.message);
     }
@@ -67,10 +54,7 @@ export async function extractClauses(contractText) {
     // ======================================================
 
     try {
-
-      console.log(
-        "===== TRYING OPENAI ====="
-      );
+      console.log("===== TRYING OPENAI =====");
 
       const openAIClauses =
         await extractWithOpenAI(cleanedText);
@@ -79,25 +63,18 @@ export async function extractClauses(contractText) {
         openAIClauses &&
         openAIClauses.length > 0
       ) {
-
-        console.log(
-          "✅ OPENAI SUCCESS"
-        );
+        console.log("✅ OPENAI SUCCESS");
 
         return openAIClauses;
       }
-
     } catch (err) {
-
-      console.error(
-        "❌ OPENAI FAILED"
-      );
+      console.error("❌ OPENAI FAILED");
 
       console.error(err.message);
     }
 
     // ======================================================
-    // 3. LOCAL ARTICLE SEGMENTATION
+    // 3. LOCAL ARTICLE EXTRACTION
     // ======================================================
 
     console.log(
@@ -107,7 +84,6 @@ export async function extractClauses(contractText) {
     return extractArticles(cleanedText);
 
   } catch (err) {
-
     console.error(
       "❌ CLAUSE ENGINE FAILURE"
     );
@@ -131,7 +107,6 @@ async function extractWithMistral(text) {
         model: "mistral-small-latest",
 
         messages: [
-
           {
             role: "system",
 
@@ -174,7 +149,7 @@ FORMAT:
       {
         headers: {
           Authorization:
-            \`Bearer ${process.env.MISTRAL_API_KEY}\`,
+            `Bearer ${process.env.MISTRAL_API_KEY}`,
           "Content-Type":
             "application/json"
         }
@@ -184,9 +159,7 @@ FORMAT:
   const raw =
     response.data.choices?.[0]?.message?.content;
 
-  console.log(
-    "===== MISTRAL RAW ====="
-  );
+  console.log("===== MISTRAL RAW =====");
 
   console.log(raw);
 
@@ -210,7 +183,6 @@ async function extractWithOpenAI(text) {
       temperature: 0.1,
 
       messages: [
-
         {
           role: "system",
 
@@ -251,9 +223,7 @@ FORMAT:
   const raw =
     completion.choices?.[0]?.message?.content;
 
-  console.log(
-    "===== OPENAI RAW ====="
-  );
+  console.log("===== OPENAI RAW =====");
 
   console.log(raw);
 
@@ -317,7 +287,6 @@ function extractArticles(text) {
     if (
       lower.includes("termination")
     ) {
-
       clauseType =
         "termination";
 
@@ -328,7 +297,6 @@ function extractArticles(text) {
     else if (
       lower.includes("liability")
     ) {
-
       clauseType =
         "liability";
 
@@ -339,7 +307,6 @@ function extractArticles(text) {
     else if (
       lower.includes("payment")
     ) {
-
       clauseType =
         "payment";
 
@@ -350,7 +317,6 @@ function extractArticles(text) {
     else if (
       lower.includes("insurance")
     ) {
-
       clauseType =
         "insurance";
 
@@ -361,7 +327,6 @@ function extractArticles(text) {
     else if (
       lower.includes("maintenance")
     ) {
-
       clauseType =
         "maintenance";
 
@@ -373,7 +338,6 @@ function extractArticles(text) {
       lower.includes("compliance") ||
       lower.includes("regulation")
     ) {
-
       clauseType =
         "compliance";
 
@@ -384,7 +348,6 @@ function extractArticles(text) {
     else if (
       lower.includes("confidential")
     ) {
-
       clauseType =
         "confidentiality";
 
@@ -409,12 +372,10 @@ function extractArticles(text) {
         riskLevel,
 
       summary:
-        article
-          .slice(0, 300),
+        article.slice(0, 300),
 
       clause_text:
-        article
-          .slice(0, 5000)
+        article.slice(0, 5000)
     });
   });
 
