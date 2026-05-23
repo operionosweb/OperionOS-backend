@@ -15,86 +15,107 @@ const openai = new OpenAI({
 
 export async function extractClauses(contractText) {
 
-  // =========================================
-  // LIMIT INPUT SIZE
-  // =========================================
-
-  const trimmedText =
-    contractText.slice(0, 15000);
-
-  // =========================================
-  // 1. TRY MISTRAL FIRST
-  // =========================================
-
   try {
 
-    console.log("===== TRYING MISTRAL =====");
+    // ======================================================
+    // CLEAN INPUT
+    // ======================================================
 
-    const mistralResult =
-      await extractWithMistral(trimmedText);
+    const cleanedText =
+      contractText
+        .replace(/\r/g, "")
+        .replace(/\t/g, " ")
+        .replace(/\n{3,}/g, "\n\n")
+        .slice(0, 30000);
 
-    if (
-      mistralResult &&
-      mistralResult.length > 0
-    ) {
+    // ======================================================
+    // 1. TRY MISTRAL
+    // ======================================================
+
+    try {
 
       console.log(
-        "✅ MISTRAL SUCCESS"
+        "===== TRYING MISTRAL ====="
       );
 
-      return mistralResult;
+      const mistralClauses =
+        await extractWithMistral(cleanedText);
+
+      if (
+        mistralClauses &&
+        mistralClauses.length > 0
+      ) {
+
+        console.log(
+          "✅ MISTRAL SUCCESS"
+        );
+
+        return mistralClauses;
+      }
+
+    } catch (err) {
+
+      console.error(
+        "❌ MISTRAL FAILED"
+      );
+
+      console.error(err.message);
     }
+
+    // ======================================================
+    // 2. TRY OPENAI
+    // ======================================================
+
+    try {
+
+      console.log(
+        "===== TRYING OPENAI ====="
+      );
+
+      const openAIClauses =
+        await extractWithOpenAI(cleanedText);
+
+      if (
+        openAIClauses &&
+        openAIClauses.length > 0
+      ) {
+
+        console.log(
+          "✅ OPENAI SUCCESS"
+        );
+
+        return openAIClauses;
+      }
+
+    } catch (err) {
+
+      console.error(
+        "❌ OPENAI FAILED"
+      );
+
+      console.error(err.message);
+    }
+
+    // ======================================================
+    // 3. LOCAL ARTICLE SEGMENTATION
+    // ======================================================
+
+    console.log(
+      "===== USING LOCAL ARTICLE EXTRACTION ====="
+    );
+
+    return extractArticles(cleanedText);
 
   } catch (err) {
 
     console.error(
-      "❌ MISTRAL FAILED:"
+      "❌ CLAUSE ENGINE FAILURE"
     );
 
-    console.error(err.message);
+    console.error(err);
+
+    return [];
   }
-
-  // =========================================
-  // 2. FALLBACK TO OPENAI
-  // =========================================
-
-  try {
-
-    console.log("===== TRYING OPENAI =====");
-
-    const openAIResult =
-      await extractWithOpenAI(trimmedText);
-
-    if (
-      openAIResult &&
-      openAIResult.length > 0
-    ) {
-
-      console.log(
-        "✅ OPENAI SUCCESS"
-      );
-
-      return openAIResult;
-    }
-
-  } catch (err) {
-
-    console.error(
-      "❌ OPENAI FAILED:"
-    );
-
-    console.error(err.message);
-  }
-
-  // =========================================
-  // 3. LOCAL FALLBACK
-  // =========================================
-
-  console.log(
-    "===== USING LOCAL PARSER ====="
-  );
-
-  return localClauseParser(trimmedText);
 }
 
 // ======================================================
@@ -110,12 +131,14 @@ async function extractWithMistral(text) {
         model: "mistral-small-latest",
 
         messages: [
+
           {
             role: "system",
+
             content: `
 You are a legal AI engine.
 
-Extract important contract clauses.
+Extract ALL contract clauses.
 
 Return ONLY valid JSON.
 
@@ -151,7 +174,7 @@ FORMAT:
       {
         headers: {
           Authorization:
-            `Bearer ${process.env.MISTRAL_API_KEY}`,
+            \`Bearer ${process.env.MISTRAL_API_KEY}\`,
           "Content-Type":
             "application/json"
         }
@@ -194,7 +217,7 @@ async function extractWithOpenAI(text) {
           content: `
 You are a legal AI engine.
 
-Extract important contract clauses.
+Extract ALL contract clauses.
 
 Return ONLY valid JSON.
 
@@ -241,77 +264,158 @@ FORMAT:
 }
 
 // ======================================================
-// LOCAL FALLBACK PARSER
+// LOCAL ARTICLE EXTRACTION
 // ======================================================
 
-function localClauseParser(text) {
+function extractArticles(text) {
 
   const clauses = [];
 
-  const patterns = [
+  // ======================================================
+  // MATCH ARTICLES
+  // ======================================================
 
-    {
-      type: "termination",
-      regex:
-        /termination|terminate/gi
-    },
+  const articleRegex =
+    /(ARTICLE\s+\d+[\s\S]*?)(?=ARTICLE\s+\d+|$)/gi;
 
-    {
-      type: "liability",
-      regex:
-        /liability|liable/gi
-    },
+  const matches =
+    [...text.matchAll(articleRegex)];
 
-    {
-      type: "payment",
-      regex:
-        /payment|fees|invoice/gi
-    },
+  // ======================================================
+  // PROCESS ARTICLES
+  // ======================================================
 
-    {
-      type: "insurance",
-      regex:
-        /insurance/gi
-    },
+  matches.forEach((match, index) => {
 
-    {
-      type: "confidentiality",
-      regex:
-        /confidential/gi
-    },
+    const article =
+      match[0].trim();
 
-    {
-      type: "governing_law",
-      regex:
-        /governing law|jurisdiction/gi
+    if (
+      article.length < 100
+    ) {
+      return;
     }
-  ];
 
-  patterns.forEach((p) => {
+    const firstLine =
+      article
+        .split("\n")[0]
+        .slice(0, 150);
 
-    const found =
-      text.match(p.regex);
+    const lower =
+      article.toLowerCase();
 
-    if (found) {
+    let clauseType =
+      "general";
 
-      clauses.push({
+    let riskLevel =
+      "LOW";
 
-        clause_title:
-          p.type.toUpperCase(),
+    // ======================================================
+    // CLAUSE TYPE DETECTION
+    // ======================================================
 
-        clause_type:
-          p.type,
+    if (
+      lower.includes("termination")
+    ) {
 
-        risk_level:
-          "MEDIUM",
+      clauseType =
+        "termination";
 
-        summary:
-          `${p.type} clause detected`,
-
-        clause_text:
-          found[0]
-      });
+      riskLevel =
+        "HIGH";
     }
+
+    else if (
+      lower.includes("liability")
+    ) {
+
+      clauseType =
+        "liability";
+
+      riskLevel =
+        "HIGH";
+    }
+
+    else if (
+      lower.includes("payment")
+    ) {
+
+      clauseType =
+        "payment";
+
+      riskLevel =
+        "HIGH";
+    }
+
+    else if (
+      lower.includes("insurance")
+    ) {
+
+      clauseType =
+        "insurance";
+
+      riskLevel =
+        "HIGH";
+    }
+
+    else if (
+      lower.includes("maintenance")
+    ) {
+
+      clauseType =
+        "maintenance";
+
+      riskLevel =
+        "MEDIUM";
+    }
+
+    else if (
+      lower.includes("compliance") ||
+      lower.includes("regulation")
+    ) {
+
+      clauseType =
+        "compliance";
+
+      riskLevel =
+        "HIGH";
+    }
+
+    else if (
+      lower.includes("confidential")
+    ) {
+
+      clauseType =
+        "confidentiality";
+
+      riskLevel =
+        "HIGH";
+    }
+
+    // ======================================================
+    // BUILD CLAUSE
+    // ======================================================
+
+    clauses.push({
+
+      clause_title:
+        firstLine ||
+        `Article ${index + 1}`,
+
+      clause_type:
+        clauseType,
+
+      risk_level:
+        riskLevel,
+
+      summary:
+        article
+          .slice(0, 300),
+
+      clause_text:
+        article
+          .slice(0, 5000)
+    });
   });
 
   return clauses;
