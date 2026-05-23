@@ -1,403 +1,224 @@
+// routes/contractRoutes.js
+
 import express from "express";
-import fs from "fs";
-import pdf from "pdf-parse";
-
-import { upload } from "../services/uploadService.js";
-
-import { extractClauses }
-from "../services/clauseParser.js";
-
-import { extractObligations }
-from "../services/obligationParser.js";
-
-import { analyzeContractRisk }
-from "../services/contractRiskEngine.js";
-
-import { benchmarkContract }
-from "../services/benchmarkEngine.js";
-
-import { saveContractToDB }
-from "../services/contractService.js";
 
 const router = express.Router();
 
-// ======================================================
-// CONTRACT UPLOAD PIPELINE
-// ======================================================
+/**
+ * Services
+ */
+import {
+  createContract,
+  getAllContracts,
+  getContractById,
+  updateContract,
+  deleteContract,
+} from "../services/contractService.js";
 
+/**
+ * -----------------------------------------
+ * POST /contracts
+ * Create new contract
+ * -----------------------------------------
+ */
 router.post(
-  "/upload",
-  upload.single("file"),
+  "/",
   async (req, res) => {
-
     try {
+      const result =
+        await createContract(
+          req.body
+        );
 
-      // ==================================================
-      // VALIDATION
-      // ==================================================
-
-      if (!req.file) {
-
+      if (!result.success) {
         return res.status(400).json({
           success: false,
-          error: "No file uploaded"
+          error: result.error,
         });
       }
 
-      // ==================================================
-      // LOAD FILE BUFFER
-      // ==================================================
-
-      const fileBuffer =
-        fs.readFileSync(
-          req.file.path
-        );
-
-      // ==================================================
-      // PDF TEXT EXTRACTION
-      // ==================================================
-
-      let extractedText = "";
-
-      try {
-
-        const parsed =
-          await pdf(fileBuffer);
-
-        extractedText =
-          parsed.text || "";
-
-      } catch (pdfError) {
-
-        console.error(
-          "PDF PARSE ERROR:",
-          pdfError
-        );
-
-        return res.status(500).json({
-
-          success: false,
-
-          error:
-            "Failed to parse PDF"
-        });
-      }
-
-      // ==================================================
-      // SAFETY VALIDATION
-      // ==================================================
-
-      if (
-        !extractedText ||
-        extractedText.length < 100
-      ) {
-
-        return res.status(400).json({
-
-          success: false,
-
-          error:
-            "No readable text found in PDF"
-        });
-      }
-
-      // ==================================================
-      // CLAUSE EXTRACTION
-      // ==================================================
-
-      const clauses =
-        await extractClauses(
-          extractedText
-        );
-
-      // ==================================================
-      // OBLIGATION EXTRACTION
-      // ==================================================
-
-      const obligations =
-        await extractObligations(
-          clauses
-        );
-
-      // ==================================================
-      // RISK ENGINE
-      // ==================================================
-
-      const risk =
-        await analyzeContractRisk(
-          clauses,
-          obligations
-        );
-
-      // ==================================================
-      // BENCHMARK ENGINE
-      // ==================================================
-
-      const benchmark =
-        benchmarkContract(
-          clauses,
-          obligations
-        );
-
-      // ==================================================
-      // EXECUTIVE METRICS
-      // ==================================================
-
-      const executiveMetrics =
-        buildExecutiveMetrics(
-          clauses,
-          obligations,
-          risk,
-          benchmark
-        );
-
-      // ==================================================
-      // FINAL PAYLOAD
-      // ==================================================
-
-      const finalPayload = {
-
-        filename:
-          req.file.originalname,
-
-        extracted_text:
-          extractedText,
-
-        clauses,
-
-        obligations,
-
-        risk,
-
-        benchmark,
-
-        executive_metrics:
-          executiveMetrics
-      };
-
-      // ==================================================
-      // DATABASE SAVE
-      // ==================================================
-
-      const database =
-        await saveContractToDB(
-          finalPayload
-        );
-
-      // ==================================================
-      // RESPONSE
-      // ==================================================
-
-      return res.json({
-
+      return res.status(201).json({
         success: true,
-
-        extraction: {
-
-          filename:
-            req.file.originalname,
-
-          extractedTextPreview:
-            extractedText.slice(0, 1500),
-
-          clausesDetected:
-            clauses.length,
-
-          obligationsDetected:
-            obligations.length,
-
-          clauses,
-
-          obligations,
-
-          risk,
-
-          benchmark,
-
-          executive_metrics:
-            executiveMetrics
-        },
-
-        database
+        contract:
+          result.contract,
       });
-
-    } catch (err) {
-
+    } catch (error) {
       console.error(
-        "UPLOAD PIPELINE ERROR:",
-        err
+        "Create Contract Route Error:",
+        error
       );
 
       return res.status(500).json({
-
         success: false,
-
         error:
-          err.message
+          error.message ||
+          "Failed to create contract",
       });
     }
   }
 );
 
-// ======================================================
-// EXECUTIVE METRICS ENGINE
-// ======================================================
+/**
+ * -----------------------------------------
+ * GET /contracts
+ * Get all contracts
+ * -----------------------------------------
+ */
+router.get(
+  "/",
+  async (req, res) => {
+    try {
+      const contracts =
+        await getAllContracts();
 
-function buildExecutiveMetrics(
-  clauses,
-  obligations,
-  risk,
-  benchmark
-) {
+      return res.status(200).json({
+        success: true,
+        contracts,
+      });
+    } catch (error) {
+      console.error(
+        "Get Contracts Route Error:",
+        error
+      );
 
-  const highRiskClauses =
-    clauses.filter(
-      (c) =>
-        (
-          c.risk_level || ""
-        ).toUpperCase() === "HIGH"
-    );
-
-  const mediumRiskClauses =
-    clauses.filter(
-      (c) =>
-        (
-          c.risk_level || ""
-        ).toUpperCase() === "MEDIUM"
-    );
-
-  const highPriorityObligations =
-    obligations.filter(
-      (o) =>
-        (
-          o.priority || ""
-        ).toUpperCase() === "HIGH"
-    );
-
-  const contractHealthScore =
-    Math.max(
-      0,
-      100 -
-      (
-        risk.contract_risk_score || 0
-      )
-    );
-
-  let executiveStatus =
-    "HEALTHY";
-
-  if (
-    contractHealthScore < 70
-  ) {
-
-    executiveStatus =
-      "MONITOR";
-  }
-
-  if (
-    contractHealthScore < 40
-  ) {
-
-    executiveStatus =
-      "CRITICAL";
-  }
-
-  let financialExposure =
-    "LOW";
-
-  if (
-    risk.critical_flags?.includes(
-      "uncapped_liability"
-    )
-  ) {
-
-    financialExposure =
-      "CRITICAL";
-  }
-  else if (
-    risk.contract_risk_score > 60
-  ) {
-
-    financialExposure =
-      "HIGH";
-  }
-
-  let operationalBurden =
-    "LOW";
-
-  if (
-    obligations.length > 10
-  ) {
-
-    operationalBurden =
-      "MEDIUM";
-  }
-
-  if (
-    obligations.length > 20
-  ) {
-
-    operationalBurden =
-      "HIGH";
-  }
-
-  return {
-
-    contract_health_score:
-      contractHealthScore,
-
-    executive_status:
-      executiveStatus,
-
-    financial_exposure_level:
-      financialExposure,
-
-    operational_burden:
-      operationalBurden,
-
-    benchmark_score:
-      benchmark.benchmark_score,
-
-    contract_maturity:
-      benchmark.contract_maturity,
-
-    clause_metrics: {
-
-      total_clauses:
-        clauses.length,
-
-      high_risk_clauses:
-        highRiskClauses.length,
-
-      medium_risk_clauses:
-        mediumRiskClauses.length
-    },
-
-    obligation_metrics: {
-
-      total_obligations:
-        obligations.length,
-
-      high_priority_obligations:
-        highPriorityObligations.length
-    },
-
-    executive_snapshot: {
-
-      primary_risk:
-        risk.risks?.[0]?.issue ||
-        "No major risk detected",
-
-      top_recommendation:
-        risk.executive_summary
-          ?.recommended_actions?.[0] ||
-        "No recommendation",
-
-      missing_protection_count:
-        benchmark.missing_protections
-          ?.length || 0
+      return res.status(500).json({
+        success: false,
+        error:
+          error.message ||
+          "Failed to fetch contracts",
+      });
     }
-  };
-}
+  }
+);
+
+/**
+ * -----------------------------------------
+ * GET /contracts/:id
+ * Get contract by ID
+ * -----------------------------------------
+ */
+router.get(
+  "/:id",
+  async (req, res) => {
+    try {
+      const contract =
+        await getContractById(
+          req.params.id
+        );
+
+      if (!contract) {
+        return res.status(404).json({
+          success: false,
+          error:
+            "Contract not found",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        contract,
+      });
+    } catch (error) {
+      console.error(
+        "Get Contract Route Error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        error:
+          error.message ||
+          "Failed to fetch contract",
+      });
+    }
+  }
+);
+
+/**
+ * -----------------------------------------
+ * PUT /contracts/:id
+ * Update contract
+ * -----------------------------------------
+ */
+router.put(
+  "/:id",
+  async (req, res) => {
+    try {
+      const result =
+        await updateContract(
+          req.params.id,
+          req.body
+        );
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          error: result.error,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        contract:
+          result.contract,
+      });
+    } catch (error) {
+      console.error(
+        "Update Contract Route Error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        error:
+          error.message ||
+          "Failed to update contract",
+      });
+    }
+  }
+);
+
+/**
+ * -----------------------------------------
+ * DELETE /contracts/:id
+ * Delete contract
+ * -----------------------------------------
+ */
+router.delete(
+  "/:id",
+  async (req, res) => {
+    try {
+      const result =
+        await deleteContract(
+          req.params.id
+        );
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          error: result.error,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "Contract deleted successfully",
+      });
+    } catch (error) {
+      console.error(
+        "Delete Contract Route Error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        error:
+          error.message ||
+          "Failed to delete contract",
+      });
+    }
+  }
+);
 
 export default router;
