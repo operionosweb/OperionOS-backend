@@ -10,7 +10,7 @@ const openai = new OpenAI({
 });
 
 // ======================================================
-// MAIN RISK ENGINE
+// MAIN ENGINE
 // ======================================================
 
 export async function analyzeContractRisk(
@@ -43,7 +43,7 @@ export async function analyzeContractRisk(
     } catch (err) {
 
       console.error(
-        "MISTRAL RISK ENGINE ERROR:",
+        "MISTRAL RISK ERROR:",
         err.message
       );
     }
@@ -71,7 +71,7 @@ export async function analyzeContractRisk(
     } catch (err) {
 
       console.error(
-        "OPENAI RISK ENGINE ERROR:",
+        "OPENAI RISK ERROR:",
         err.message
       );
     }
@@ -94,8 +94,12 @@ export async function analyzeContractRisk(
 
     return {
       contract_risk_score: 0,
-      executive_summary:
-        "Risk analysis failed",
+      executive_summary: {
+        overall_assessment:
+          "Risk analysis failed",
+        key_concerns: [],
+        recommended_actions: []
+      },
       risks: [],
       critical_flags: [
         "analysis_failed"
@@ -105,7 +109,7 @@ export async function analyzeContractRisk(
 }
 
 // ======================================================
-// MISTRAL ANALYSIS
+// MISTRAL
 // ======================================================
 
 async function analyzeWithMistral(
@@ -125,25 +129,31 @@ async function analyzeWithMistral(
             role: "system",
 
             content: `
-You are an enterprise legal AI risk engine.
+You are an enterprise aviation and maritime legal AI system.
 
 Analyze:
 - liability exposure
-- insurance gaps
-- termination risks
-- compliance issues
-- indemnification exposure
-- operational obligations
+- indemnification
+- insurance exposure
+- operational burden
+- compliance risks
 - missing protections
+- financial exposure
+- termination risks
 
-Return ONLY JSON.
+Return ONLY valid JSON.
 
 {
   "contract_risk_score": 0,
-  "executive_summary": "",
+  "executive_summary": {
+    "overall_assessment": "",
+    "key_concerns": [],
+    "recommended_actions": []
+  },
   "financial_exposure": "",
   "compliance_exposure": "",
   "operational_risk": "",
+  "missing_protections": [],
   "risks": [],
   "critical_flags": []
 }
@@ -153,10 +163,11 @@ Return ONLY JSON.
           {
             role: "user",
 
-            content: JSON.stringify({
-              clauses,
-              obligations
-            })
+            content:
+              JSON.stringify({
+                clauses,
+                obligations
+              })
           }
         ],
 
@@ -187,7 +198,7 @@ Return ONLY JSON.
 }
 
 // ======================================================
-// OPENAI ANALYSIS
+// OPENAI
 // ======================================================
 
 async function analyzeWithOpenAI(
@@ -208,25 +219,31 @@ async function analyzeWithOpenAI(
           role: "system",
 
           content: `
-You are an enterprise legal AI risk engine.
+You are an enterprise aviation and maritime legal AI system.
 
 Analyze:
 - liability exposure
-- insurance gaps
-- termination risks
-- compliance issues
-- indemnification exposure
-- operational obligations
+- indemnification
+- insurance exposure
+- operational burden
+- compliance risks
 - missing protections
+- financial exposure
+- termination risks
 
-Return ONLY JSON.
+Return ONLY valid JSON.
 
 {
   "contract_risk_score": 0,
-  "executive_summary": "",
+  "executive_summary": {
+    "overall_assessment": "",
+    "key_concerns": [],
+    "recommended_actions": []
+  },
   "financial_exposure": "",
   "compliance_exposure": "",
   "operational_risk": "",
+  "missing_protections": [],
   "risks": [],
   "critical_flags": []
 }
@@ -236,10 +253,11 @@ Return ONLY JSON.
         {
           role: "user",
 
-          content: JSON.stringify({
-            clauses,
-            obligations
-          })
+          content:
+            JSON.stringify({
+              clauses,
+              obligations
+            })
         }
       ],
 
@@ -270,8 +288,17 @@ function localRiskEngine(
 
   const criticalFlags = [];
 
+  const missingProtections = [];
+
+  const clauseTypes =
+    clauses.map((c) =>
+      (
+        c.clause_type || ""
+      ).toLowerCase()
+    );
+
   // ==================================================
-  // CLAUSE ANALYSIS
+  // LIABILITY
   // ==================================================
 
   clauses.forEach((clause) => {
@@ -297,22 +324,23 @@ function localRiskEngine(
       score += 20;
 
       risks.push({
-        type: "liability",
-        severity: "HIGH",
-        description:
+        category:
+          "liability",
+        severity:
+          "HIGH",
+        issue:
           "Liability exposure detected"
       });
 
       if (
-        text.includes("unlimited") ||
-        text.includes("unlimited liability")
+        text.includes("unlimited")
       ) {
+
+        score += 25;
 
         criticalFlags.push(
           "uncapped_liability"
         );
-
-        score += 25;
       }
     }
 
@@ -328,11 +356,17 @@ function localRiskEngine(
       score += 15;
 
       risks.push({
-        type: "indemnity",
-        severity: "HIGH",
-        description:
-          "Indemnification exposure detected"
+        category:
+          "indemnity",
+        severity:
+          "HIGH",
+        issue:
+          "Broad indemnification obligations"
       });
+
+      criticalFlags.push(
+        "broad_indemnification"
+      );
     }
 
     // ==============================================
@@ -346,10 +380,12 @@ function localRiskEngine(
       score += 10;
 
       risks.push({
-        type: "termination",
-        severity: "MEDIUM",
-        description:
-          "Termination clause risk"
+        category:
+          "termination",
+        severity:
+          "MEDIUM",
+        issue:
+          "Termination clause risk detected"
       });
     }
 
@@ -366,36 +402,61 @@ function localRiskEngine(
         !text.includes("million")
       ) {
 
+        score += 20;
+
         criticalFlags.push(
           "missing_insurance_limit"
         );
-
-        score += 20;
       }
-    }
-
-    // ==============================================
-    // COMPLIANCE
-    // ==============================================
-
-    if (
-      type.includes("compliance")
-    ) {
-
-      score += 10;
-
-      risks.push({
-        type: "compliance",
-        severity: "MEDIUM",
-        description:
-          "Compliance obligations detected"
-      });
     }
 
   });
 
   // ==================================================
-  // OBLIGATION LOAD
+  // MISSING PROTECTIONS
+  // ==================================================
+
+  if (
+    !clauseTypes.some((t) =>
+      t.includes("force majeure")
+    )
+  ) {
+
+    missingProtections.push(
+      "force_majeure"
+    );
+
+    score += 10;
+  }
+
+  if (
+    !clauseTypes.some((t) =>
+      t.includes("governing")
+    )
+  ) {
+
+    missingProtections.push(
+      "governing_law"
+    );
+
+    score += 10;
+  }
+
+  if (
+    !clauseTypes.some((t) =>
+      t.includes("insurance")
+    )
+  ) {
+
+    missingProtections.push(
+      "insurance_clause"
+    );
+
+    score += 15;
+  }
+
+  // ==================================================
+  // OPERATIONAL BURDEN
   // ==================================================
 
   if (
@@ -410,7 +471,7 @@ function localRiskEngine(
   }
 
   // ==================================================
-  // CAP SCORE
+  // SCORE CAP
   // ==================================================
 
   if (
@@ -421,7 +482,30 @@ function localRiskEngine(
   }
 
   // ==================================================
-  // BUILD RESULT
+  // EXECUTIVE SUMMARY
+  // ==================================================
+
+  const executiveSummary = {
+
+    overall_assessment:
+      buildAssessment(score),
+
+    key_concerns:
+      buildConcerns(
+        risks,
+        criticalFlags,
+        missingProtections
+      ),
+
+    recommended_actions:
+      buildRecommendations(
+        criticalFlags,
+        missingProtections
+      )
+  };
+
+  // ==================================================
+  // FINAL RESULT
   // ==================================================
 
   return {
@@ -430,11 +514,7 @@ function localRiskEngine(
       score,
 
     executive_summary:
-      buildExecutiveSummary(
-        score,
-        risks,
-        criticalFlags
-      ),
+      executiveSummary,
 
     financial_exposure:
       buildFinancialExposure(
@@ -451,6 +531,9 @@ function localRiskEngine(
         ? "High operational obligation volume detected"
         : "Operational obligation load within acceptable range",
 
+    missing_protections:
+      missingProtections,
+
     risks,
 
     critical_flags:
@@ -459,43 +542,61 @@ function localRiskEngine(
 }
 
 // ======================================================
-// EXECUTIVE SUMMARY
+// HELPERS
 // ======================================================
 
-function buildExecutiveSummary(
-  score,
-  risks,
-  flags
-) {
-
-  let level =
-    "LOW";
+function buildAssessment(score) {
 
   if (score >= 70) {
-    level = "HIGH";
-  } else if (score >= 40) {
-    level = "MEDIUM";
+
+    return `
+High contractual risk exposure detected.
+`;
+  }
+
+  if (score >= 40) {
+
+    return `
+Moderate contractual risk exposure detected.
+`;
   }
 
   return `
-Contract risk level: ${level}.
-
-Detected ${risks.length} material risk indicators.
-
-Critical flags:
-${flags.length > 0
-  ? flags.join(", ")
-  : "none"}.
+Low contractual risk exposure detected.
 `;
 }
 
-// ======================================================
-// FINANCIAL EXPOSURE
-// ======================================================
-
-function buildFinancialExposure(
-  flags
+function buildConcerns(
+  risks,
+  flags,
+  missing
 ) {
+
+  const concerns = [];
+
+  risks.forEach((r) => {
+    concerns.push(r.issue);
+  });
+
+  flags.forEach((f) => {
+    concerns.push(f);
+  });
+
+  missing.forEach((m) => {
+    concerns.push(
+      `Missing protection: ${m}`
+    );
+  });
+
+  return concerns.slice(0, 10);
+}
+
+function buildRecommendations(
+  flags,
+  missing
+) {
+
+  const recommendations = [];
 
   if (
     flags.includes(
@@ -503,40 +604,16 @@ function buildFinancialExposure(
     )
   ) {
 
-    return `
-Potential uncapped financial liability exposure detected.
-`;
-  }
-
-  return `
-No major financial exposure indicators detected.
-`;
-}
-
-// ======================================================
-// COMPLIANCE EXPOSURE
-// ======================================================
-
-function buildComplianceExposure(
-  risks
-) {
-
-  const compliance =
-    risks.filter(
-      (r) =>
-        r.type === "compliance"
+    recommendations.push(
+      "Negotiate liability caps"
     );
+  }
 
   if (
-    compliance.length > 0
+    flags.includes(
+      "missing_insurance_limit"
+    )
   ) {
 
-    return `
-Compliance obligations and regulatory exposure identified.
-`;
-  }
-
-  return `
-No major compliance exposure identified.
-`;
-}
+    recommendations.push(
+      "Define
