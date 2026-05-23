@@ -14,7 +14,17 @@ const openai = new OpenAI({
 // ======================================================
 
 export async function extractObligations(clauses) {
+
   try {
+
+    // ==================================================
+    // NORMALIZE TYPES FIRST
+    // ==================================================
+
+    const normalizedClauses =
+      normalizeClauseTypes(
+        clauses
+      );
 
     // ==================================================
     // MISTRAL FIRST
@@ -24,7 +34,7 @@ export async function extractObligations(clauses) {
 
       const mistral =
         await extractWithMistral(
-          clauses
+          normalizedClauses
         );
 
       if (
@@ -51,7 +61,7 @@ export async function extractObligations(clauses) {
 
       const openAI =
         await extractWithOpenAI(
-          clauses
+          normalizedClauses
         );
 
       if (
@@ -75,7 +85,7 @@ export async function extractObligations(clauses) {
     // ==================================================
 
     return localObligationEngine(
-      clauses
+      normalizedClauses
     );
 
   } catch (err) {
@@ -87,6 +97,97 @@ export async function extractObligations(clauses) {
 
     return [];
   }
+}
+
+// ======================================================
+// NORMALIZATION ENGINE
+// ======================================================
+
+function normalizeClauseTypes(
+  clauses
+) {
+
+  return clauses.map((clause) => {
+
+    const raw =
+      (
+        clause.clause_type ||
+        ""
+      ).toLowerCase();
+
+    let normalized =
+      "general";
+
+    // ==========================================
+    // PAYMENT
+    // ==========================================
+
+    if (
+      raw.includes("payment") ||
+      raw.includes("rent") ||
+      raw.includes("fee")
+    ) {
+
+      normalized =
+        "payment";
+    }
+
+    // ==========================================
+    // INSURANCE
+    // ==========================================
+
+    else if (
+      raw.includes("insurance")
+    ) {
+
+      normalized =
+        "insurance";
+    }
+
+    // ==========================================
+    // LIABILITY
+    // ==========================================
+
+    else if (
+      raw.includes("liability") ||
+      raw.includes("indemn")
+    ) {
+
+      normalized =
+        "liability";
+    }
+
+    // ==========================================
+    // COMPLIANCE
+    // ==========================================
+
+    else if (
+      raw.includes("compliance") ||
+      raw.includes("regulation")
+    ) {
+
+      normalized =
+        "compliance";
+    }
+
+    // ==========================================
+    // TERMINATION
+    // ==========================================
+
+    else if (
+      raw.includes("termination") ||
+      raw.includes("default")
+    ) {
+
+      normalized =
+        "termination";
+    }
+
+    return {
+      ...clause,
+      clause_type: normalized
+    };
+  });
 }
 
 // ======================================================
@@ -109,7 +210,7 @@ async function extractWithMistral(
             role: "system",
 
             content: `
-Extract all contractual obligations.
+Extract contractual obligations.
 
 Return ONLY JSON.
 
@@ -177,7 +278,7 @@ async function extractWithOpenAI(
           role: "system",
 
           content: `
-Extract all contractual obligations.
+Extract contractual obligations.
 
 Return ONLY JSON.
 
@@ -211,7 +312,7 @@ Return ONLY JSON.
 }
 
 // ======================================================
-// LOCAL ENGINE
+// LOCAL FALLBACK ENGINE
 // ======================================================
 
 function localObligationEngine(
@@ -230,13 +331,9 @@ function localObligationEngine(
         clause.clause_text || ""
       ).toLowerCase();
 
-    const title =
-      clause.clause_title ||
-      "Unknown";
-
-    // ==============================================
+    // ==========================================
     // PAYMENT
-    // ==============================================
+    // ==========================================
 
     if (
       type === "payment"
@@ -245,7 +342,7 @@ function localObligationEngine(
       obligations.push({
 
         clause_title:
-          title,
+          clause.clause_title,
 
         obligation_type:
           "payment",
@@ -267,9 +364,9 @@ function localObligationEngine(
       });
     }
 
-    // ==============================================
+    // ==========================================
     // INSURANCE
-    // ==============================================
+    // ==========================================
 
     if (
       type === "insurance"
@@ -278,7 +375,7 @@ function localObligationEngine(
       obligations.push({
 
         clause_title:
-          title,
+          clause.clause_title,
 
         obligation_type:
           "insurance",
@@ -300,9 +397,9 @@ function localObligationEngine(
       });
     }
 
-    // ==============================================
+    // ==========================================
     // COMPLIANCE
-    // ==============================================
+    // ==========================================
 
     if (
       type === "compliance"
@@ -311,7 +408,7 @@ function localObligationEngine(
       obligations.push({
 
         clause_title:
-          title,
+          clause.clause_title,
 
         obligation_type:
           "compliance",
@@ -387,4 +484,4 @@ function detectDeadline(text) {
   }
 
   return null;
-    }
+}
