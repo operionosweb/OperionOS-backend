@@ -1,5 +1,16 @@
+import OpenAI from "openai";
+import axios from "axios";
+
 // ======================================================
-// CONTRACT RISK ENGINE
+// OPENAI
+// ======================================================
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// ======================================================
+// MAIN RISK ENGINE
 // ======================================================
 
 export async function analyzeContractRisk(
@@ -9,275 +20,523 @@ export async function analyzeContractRisk(
 
   try {
 
-    let totalRiskScore = 0;
+    // ==================================================
+    // MISTRAL FIRST
+    // ==================================================
 
-    const risks = [];
+    try {
 
-    const criticalFlags = [];
-
-    // ======================================================
-    // CLAUSE RISK ANALYSIS
-    // ======================================================
-
-    for (const clause of clauses) {
-
-      const clauseText =
-        (clause.clause_text || "").toLowerCase();
-
-      const clauseTitle =
-        clause.clause_title || "Unknown Clause";
-
-      const clauseType =
-        clause.clause_type || "general";
-
-      // ======================================================
-      // TERMINATION RISK
-      // ======================================================
+      const mistral =
+        await analyzeWithMistral(
+          clauses,
+          obligations
+        );
 
       if (
-        clauseType === "termination"
+        mistral &&
+        mistral.contract_risk_score !== undefined
       ) {
 
-        totalRiskScore += 20;
-
-        risks.push({
-          category: "termination",
-          severity: "HIGH",
-          clause: clauseTitle,
-          issue:
-            "Termination rights detected"
-        });
-
-        if (
-          clauseText.includes("immediate")
-        ) {
-
-          totalRiskScore += 15;
-
-          criticalFlags.push(
-            "immediate_termination"
-          );
-        }
+        return mistral;
       }
 
-      // ======================================================
-      // LIABILITY RISK
-      // ======================================================
+    } catch (err) {
 
-      if (
-        clauseType === "liability"
-      ) {
-
-        totalRiskScore += 15;
-
-        risks.push({
-          category: "liability",
-          severity: "HIGH",
-          clause: clauseTitle,
-          issue:
-            "Liability exposure detected"
-        });
-
-        if (
-          clauseText.includes("unlimited")
-        ) {
-
-          totalRiskScore += 25;
-
-          criticalFlags.push(
-            "unlimited_liability"
-          );
-        }
-      }
-
-      // ======================================================
-      // PAYMENT RISK
-      // ======================================================
-
-      if (
-        clauseType === "payment"
-      ) {
-
-        totalRiskScore += 10;
-
-        risks.push({
-          category: "payment",
-          severity: "MEDIUM",
-          clause: clauseTitle,
-          issue:
-            "Payment obligations detected"
-        });
-
-        if (
-          clauseText.includes("penalty") ||
-          clauseText.includes("interest")
-        ) {
-
-          totalRiskScore += 10;
-
-          criticalFlags.push(
-            "payment_penalties"
-          );
-        }
-      }
-
-      // ======================================================
-      // INSURANCE RISK
-      // ======================================================
-
-      if (
-        clauseType === "insurance"
-      ) {
-
-        totalRiskScore += 8;
-
-        risks.push({
-          category: "insurance",
-          severity: "MEDIUM",
-          clause: clauseTitle,
-          issue:
-            "Insurance obligations detected"
-        });
-      }
-
-      // ======================================================
-      // COMPLIANCE RISK
-      // ======================================================
-
-      if (
-        clauseType === "compliance"
-      ) {
-
-        totalRiskScore += 18;
-
-        risks.push({
-          category: "compliance",
-          severity: "HIGH",
-          clause: clauseTitle,
-          issue:
-            "Regulatory compliance obligations detected"
-        });
-
-        if (
-          clauseText.includes("faa") ||
-          clauseText.includes("easa") ||
-          clauseText.includes("icao")
-        ) {
-
-          totalRiskScore += 12;
-
-          criticalFlags.push(
-            "aviation_regulatory_exposure"
-          );
-        }
-      }
-
-      // ======================================================
-      // CONFIDENTIALITY RISK
-      // ======================================================
-
-      if (
-        clauseType === "confidentiality"
-      ) {
-
-        totalRiskScore += 7;
-
-        risks.push({
-          category: "confidentiality",
-          severity: "MEDIUM",
-          clause: clauseTitle,
-          issue:
-            "Confidentiality obligations detected"
-        });
-      }
-    }
-
-    // ======================================================
-    // OBLIGATION LOAD ANALYSIS
-    // ======================================================
-
-    if (
-      obligations.length > 15
-    ) {
-
-      totalRiskScore += 10;
-
-      criticalFlags.push(
-        "high_operational_burden"
+      console.error(
+        "MISTRAL RISK ENGINE ERROR:",
+        err.message
       );
     }
 
-    // ======================================================
-    // SCORE NORMALIZATION
-    // ======================================================
+    // ==================================================
+    // OPENAI SECOND
+    // ==================================================
 
-    if (
-      totalRiskScore > 100
-    ) {
+    try {
 
-      totalRiskScore = 100;
+      const openAI =
+        await analyzeWithOpenAI(
+          clauses,
+          obligations
+        );
+
+      if (
+        openAI &&
+        openAI.contract_risk_score !== undefined
+      ) {
+
+        return openAI;
+      }
+
+    } catch (err) {
+
+      console.error(
+        "OPENAI RISK ENGINE ERROR:",
+        err.message
+      );
     }
 
-    // ======================================================
-    // RISK SUMMARY
-    // ======================================================
+    // ==================================================
+    // LOCAL FALLBACK
+    // ==================================================
 
-    let riskSummary =
-      "Low contract risk profile";
-
-    if (
-      totalRiskScore >= 70
-    ) {
-
-      riskSummary =
-        "High contractual and operational risk exposure";
-    }
-
-    else if (
-      totalRiskScore >= 40
-    ) {
-
-      riskSummary =
-        "Moderate contractual risk exposure";
-    }
-
-    // ======================================================
-    // FINAL RESPONSE
-    // ======================================================
-
-    return {
-
-      contract_risk_score:
-        totalRiskScore,
-
-      risk_summary:
-        riskSummary,
-
-      risks,
-
-      critical_flags:
-        criticalFlags
-    };
+    return localRiskEngine(
+      clauses,
+      obligations
+    );
 
   } catch (err) {
 
     console.error(
-      "RISK ENGINE ERROR:",
+      "RISK ENGINE FAILURE:",
       err
     );
 
     return {
-
       contract_risk_score: 0,
-
-      risk_summary:
+      executive_summary:
         "Risk analysis failed",
-
       risks: [],
-
       critical_flags: [
         "analysis_failed"
       ]
     };
   }
+}
+
+// ======================================================
+// MISTRAL ANALYSIS
+// ======================================================
+
+async function analyzeWithMistral(
+  clauses,
+  obligations
+) {
+
+  const response =
+    await axios.post(
+      "https://api.mistral.ai/v1/chat/completions",
+      {
+        model:
+          "mistral-small-latest",
+
+        messages: [
+          {
+            role: "system",
+
+            content: `
+You are an enterprise legal AI risk engine.
+
+Analyze:
+- liability exposure
+- insurance gaps
+- termination risks
+- compliance issues
+- indemnification exposure
+- operational obligations
+- missing protections
+
+Return ONLY JSON.
+
+{
+  "contract_risk_score": 0,
+  "executive_summary": "",
+  "financial_exposure": "",
+  "compliance_exposure": "",
+  "operational_risk": "",
+  "risks": [],
+  "critical_flags": []
+}
+`
+          },
+
+          {
+            role: "user",
+
+            content: JSON.stringify({
+              clauses,
+              obligations
+            })
+          }
+        ],
+
+        temperature: 0.1,
+
+        response_format: {
+          type: "json_object"
+        }
+      },
+
+      {
+        headers: {
+          Authorization:
+            `Bearer ${process.env.MISTRAL_API_KEY}`,
+
+          "Content-Type":
+            "application/json"
+        }
+      }
+    );
+
+  const raw =
+    response.data
+      .choices?.[0]
+      ?.message?.content;
+
+  return JSON.parse(raw);
+}
+
+// ======================================================
+// OPENAI ANALYSIS
+// ======================================================
+
+async function analyzeWithOpenAI(
+  clauses,
+  obligations
+) {
+
+  const completion =
+    await openai.chat.completions.create({
+
+      model:
+        "gpt-4.1-mini",
+
+      temperature: 0.1,
+
+      messages: [
+        {
+          role: "system",
+
+          content: `
+You are an enterprise legal AI risk engine.
+
+Analyze:
+- liability exposure
+- insurance gaps
+- termination risks
+- compliance issues
+- indemnification exposure
+- operational obligations
+- missing protections
+
+Return ONLY JSON.
+
+{
+  "contract_risk_score": 0,
+  "executive_summary": "",
+  "financial_exposure": "",
+  "compliance_exposure": "",
+  "operational_risk": "",
+  "risks": [],
+  "critical_flags": []
+}
+`
+        },
+
+        {
+          role: "user",
+
+          content: JSON.stringify({
+            clauses,
+            obligations
+          })
+        }
+      ],
+
+      response_format: {
+        type: "json_object"
+      }
+    });
+
+  const raw =
+    completion.choices?.[0]
+      ?.message?.content;
+
+  return JSON.parse(raw);
+}
+
+// ======================================================
+// LOCAL FALLBACK ENGINE
+// ======================================================
+
+function localRiskEngine(
+  clauses,
+  obligations
+) {
+
+  let score = 0;
+
+  const risks = [];
+
+  const criticalFlags = [];
+
+  // ==================================================
+  // CLAUSE ANALYSIS
+  // ==================================================
+
+  clauses.forEach((clause) => {
+
+    const type =
+      (
+        clause.clause_type || ""
+      ).toLowerCase();
+
+    const text =
+      (
+        clause.clause_text || ""
+      ).toLowerCase();
+
+    // ==============================================
+    // LIABILITY
+    // ==============================================
+
+    if (
+      type.includes("liability")
+    ) {
+
+      score += 20;
+
+      risks.push({
+        type: "liability",
+        severity: "HIGH",
+        description:
+          "Liability exposure detected"
+      });
+
+      if (
+        text.includes("unlimited") ||
+        text.includes("unlimited liability")
+      ) {
+
+        criticalFlags.push(
+          "uncapped_liability"
+        );
+
+        score += 25;
+      }
+    }
+
+    // ==============================================
+    // INDEMNITY
+    // ==============================================
+
+    if (
+      text.includes("indemnify") ||
+      text.includes("indemnification")
+    ) {
+
+      score += 15;
+
+      risks.push({
+        type: "indemnity",
+        severity: "HIGH",
+        description:
+          "Indemnification exposure detected"
+      });
+    }
+
+    // ==============================================
+    // TERMINATION
+    // ==============================================
+
+    if (
+      type.includes("termination")
+    ) {
+
+      score += 10;
+
+      risks.push({
+        type: "termination",
+        severity: "MEDIUM",
+        description:
+          "Termination clause risk"
+      });
+    }
+
+    // ==============================================
+    // INSURANCE
+    // ==============================================
+
+    if (
+      type.includes("insurance")
+    ) {
+
+      if (
+        !text.includes("$") &&
+        !text.includes("million")
+      ) {
+
+        criticalFlags.push(
+          "missing_insurance_limit"
+        );
+
+        score += 20;
+      }
+    }
+
+    // ==============================================
+    // COMPLIANCE
+    // ==============================================
+
+    if (
+      type.includes("compliance")
+    ) {
+
+      score += 10;
+
+      risks.push({
+        type: "compliance",
+        severity: "MEDIUM",
+        description:
+          "Compliance obligations detected"
+      });
+    }
+
+  });
+
+  // ==================================================
+  // OBLIGATION LOAD
+  // ==================================================
+
+  if (
+    obligations.length > 15
+  ) {
+
+    score += 10;
+
+    criticalFlags.push(
+      "high_operational_burden"
+    );
+  }
+
+  // ==================================================
+  // CAP SCORE
+  // ==================================================
+
+  if (
+    score > 100
+  ) {
+
+    score = 100;
+  }
+
+  // ==================================================
+  // BUILD RESULT
+  // ==================================================
+
+  return {
+
+    contract_risk_score:
+      score,
+
+    executive_summary:
+      buildExecutiveSummary(
+        score,
+        risks,
+        criticalFlags
+      ),
+
+    financial_exposure:
+      buildFinancialExposure(
+        criticalFlags
+      ),
+
+    compliance_exposure:
+      buildComplianceExposure(
+        risks
+      ),
+
+    operational_risk:
+      obligations.length > 15
+        ? "High operational obligation volume detected"
+        : "Operational obligation load within acceptable range",
+
+    risks,
+
+    critical_flags:
+      criticalFlags
+  };
+}
+
+// ======================================================
+// EXECUTIVE SUMMARY
+// ======================================================
+
+function buildExecutiveSummary(
+  score,
+  risks,
+  flags
+) {
+
+  let level =
+    "LOW";
+
+  if (score >= 70) {
+    level = "HIGH";
+  } else if (score >= 40) {
+    level = "MEDIUM";
+  }
+
+  return `
+Contract risk level: ${level}.
+
+Detected ${risks.length} material risk indicators.
+
+Critical flags:
+${flags.length > 0
+  ? flags.join(", ")
+  : "none"}.
+`;
+}
+
+// ======================================================
+// FINANCIAL EXPOSURE
+// ======================================================
+
+function buildFinancialExposure(
+  flags
+) {
+
+  if (
+    flags.includes(
+      "uncapped_liability"
+    )
+  ) {
+
+    return `
+Potential uncapped financial liability exposure detected.
+`;
+  }
+
+  return `
+No major financial exposure indicators detected.
+`;
+}
+
+// ======================================================
+// COMPLIANCE EXPOSURE
+// ======================================================
+
+function buildComplianceExposure(
+  risks
+) {
+
+  const compliance =
+    risks.filter(
+      (r) =>
+        r.type === "compliance"
+    );
+
+  if (
+    compliance.length > 0
+  ) {
+
+    return `
+Compliance obligations and regulatory exposure identified.
+`;
+  }
+
+  return `
+No major compliance exposure identified.
+`;
 }
