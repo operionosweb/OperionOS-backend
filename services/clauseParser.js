@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import axios from "axios";
 
 // ======================================================
-// OPENAI CLIENT
+// OPENAI
 // ======================================================
 
 const openai = new OpenAI({
@@ -10,132 +10,145 @@ const openai = new OpenAI({
 });
 
 // ======================================================
-// MAIN EXPORT
+// MAIN EXTRACTOR
 // ======================================================
 
-export async function extractClauses(contractText) {
+export async function extractClauses(
+  text
+) {
+
   try {
-    // ======================================================
-    // CLEAN INPUT
-    // ======================================================
 
-    const cleanedText = contractText
-      .replace(/\r/g, "")
-      .replace(/\t/g, " ")
-      .replace(/\n{3,}/g, "\n\n")
-      .slice(0, 30000);
+    // ==================================================
+    // VALIDATION
+    // ==================================================
 
-    // ======================================================
-    // 1. TRY MISTRAL
-    // ======================================================
+    if (
+      !text ||
+      text.length < 100
+    ) {
 
-    try {
-      console.log("===== TRYING MISTRAL =====");
-
-      const mistralClauses =
-        await extractWithMistral(cleanedText);
-
-      if (
-        mistralClauses &&
-        mistralClauses.length > 0
-      ) {
-        console.log("✅ MISTRAL SUCCESS");
-
-        return mistralClauses;
-      }
-    } catch (err) {
-      console.error("❌ MISTRAL FAILED");
-
-      console.error(err.message);
+      return [];
     }
 
-    // ======================================================
-    // 2. TRY OPENAI
-    // ======================================================
+    // ==================================================
+    // MISTRAL FIRST
+    // ==================================================
 
     try {
-      console.log("===== TRYING OPENAI =====");
 
-      const openAIClauses =
-        await extractWithOpenAI(cleanedText);
+      const mistral =
+        await extractWithMistral(
+          text
+        );
 
       if (
-        openAIClauses &&
-        openAIClauses.length > 0
+        Array.isArray(mistral) &&
+        mistral.length > 0
       ) {
-        console.log("✅ OPENAI SUCCESS");
 
-        return openAIClauses;
+        return mistral;
       }
-    } catch (err) {
-      console.error("❌ OPENAI FAILED");
 
-      console.error(err.message);
+    } catch (err) {
+
+      console.error(
+        "MISTRAL CLAUSE ERROR:",
+        err.message
+      );
     }
 
-    // ======================================================
-    // 3. LOCAL ARTICLE EXTRACTION
-    // ======================================================
+    // ==================================================
+    // OPENAI SECOND
+    // ==================================================
 
-    console.log(
-      "===== USING LOCAL ARTICLE EXTRACTION ====="
+    try {
+
+      const openAI =
+        await extractWithOpenAI(
+          text
+        );
+
+      if (
+        Array.isArray(openAI) &&
+        openAI.length > 0
+      ) {
+
+        return openAI;
+      }
+
+    } catch (err) {
+
+      console.error(
+        "OPENAI CLAUSE ERROR:",
+        err.message
+      );
+    }
+
+    // ==================================================
+    // LOCAL FALLBACK
+    // ==================================================
+
+    return localClauseExtractor(
+      text
     );
-
-    return extractArticles(cleanedText);
 
   } catch (err) {
+
     console.error(
-      "❌ CLAUSE ENGINE FAILURE"
+      "CLAUSE EXTRACTION FAILURE:",
+      err
     );
 
-    console.error(err);
-
-    return [];
+    return localClauseExtractor(
+      text
+    );
   }
 }
 
 // ======================================================
-// MISTRAL EXTRACTION
+// MISTRAL
 // ======================================================
 
-async function extractWithMistral(text) {
+async function extractWithMistral(
+  text
+) {
 
   const response =
     await axios.post(
       "https://api.mistral.ai/v1/chat/completions",
       {
-        model: "mistral-small-latest",
+        model:
+          "mistral-small-latest",
 
         messages: [
           {
             role: "system",
 
             content: `
-You are a legal AI engine.
+You are an enterprise legal AI system.
 
-Extract ALL contract clauses.
+Extract all major contract clauses.
 
-Return ONLY valid JSON.
+Return ONLY valid JSON array.
 
-FORMAT:
-
-{
-  "clauses": [
-    {
-      "clause_title": "",
-      "clause_type": "",
-      "risk_level": "",
-      "summary": "",
-      "clause_text": ""
-    }
-  ]
-}
+[
+  {
+    "clause_title": "",
+    "clause_type": "",
+    "risk_level": "",
+    "summary": "",
+    "clause_text": ""
+  }
+]
 `
           },
 
           {
             role: "user",
-            content: text
+
+            content:
+              text.slice(0, 25000)
           }
         ],
 
@@ -150,6 +163,7 @@ FORMAT:
         headers: {
           Authorization:
             `Bearer ${process.env.MISTRAL_API_KEY}`,
+
           "Content-Type":
             "application/json"
         }
@@ -157,28 +171,43 @@ FORMAT:
     );
 
   const raw =
-    response.data.choices?.[0]?.message?.content;
-
-  console.log("===== MISTRAL RAW =====");
-
-  console.log(raw);
+    response.data
+      .choices?.[0]
+      ?.message?.content;
 
   const parsed =
     JSON.parse(raw);
 
-  return parsed.clauses || [];
+  if (
+    Array.isArray(parsed)
+  ) {
+
+    return parsed;
+  }
+
+  if (
+    parsed.clauses
+  ) {
+
+    return parsed.clauses;
+  }
+
+  return [];
 }
 
 // ======================================================
-// OPENAI EXTRACTION
+// OPENAI
 // ======================================================
 
-async function extractWithOpenAI(text) {
+async function extractWithOpenAI(
+  text
+) {
 
   const completion =
     await openai.chat.completions.create({
 
-      model: "gpt-4.1-mini",
+      model:
+        "gpt-4.1-mini",
 
       temperature: 0.1,
 
@@ -187,31 +216,29 @@ async function extractWithOpenAI(text) {
           role: "system",
 
           content: `
-You are a legal AI engine.
+You are an enterprise legal AI system.
 
-Extract ALL contract clauses.
+Extract all major contract clauses.
 
-Return ONLY valid JSON.
+Return ONLY valid JSON array.
 
-FORMAT:
-
-{
-  "clauses": [
-    {
-      "clause_title": "",
-      "clause_type": "",
-      "risk_level": "",
-      "summary": "",
-      "clause_text": ""
-    }
-  ]
-}
+[
+  {
+    "clause_title": "",
+    "clause_type": "",
+    "risk_level": "",
+    "summary": "",
+    "clause_text": ""
+  }
+]
 `
         },
 
         {
           role: "user",
-          content: text
+
+          content:
+            text.slice(0, 25000)
         }
       ],
 
@@ -221,163 +248,183 @@ FORMAT:
     });
 
   const raw =
-    completion.choices?.[0]?.message?.content;
-
-  console.log("===== OPENAI RAW =====");
-
-  console.log(raw);
+    completion.choices?.[0]
+      ?.message?.content;
 
   const parsed =
     JSON.parse(raw);
 
-  return parsed.clauses || [];
+  if (
+    Array.isArray(parsed)
+  ) {
+
+    return parsed;
+  }
+
+  if (
+    parsed.clauses
+  ) {
+
+    return parsed.clauses;
+  }
+
+  return [];
 }
 
 // ======================================================
-// LOCAL ARTICLE EXTRACTION
+// LOCAL FALLBACK EXTRACTOR
 // ======================================================
 
-function extractArticles(text) {
+function localClauseExtractor(
+  text
+) {
 
   const clauses = [];
 
-  // ======================================================
-  // MATCH ARTICLES
-  // ======================================================
+  const patterns = [
 
-  const articleRegex =
-    /(ARTICLE\s+\d+[\s\S]*?)(?=ARTICLE\s+\d+|$)/gi;
+    {
+      keyword: "termination",
+      title: "Termination",
+      type: "Termination"
+    },
 
-  const matches =
-    [...text.matchAll(articleRegex)];
+    {
+      keyword: "liability",
+      title: "Liability",
+      type: "Liability"
+    },
 
-  // ======================================================
-  // PROCESS ARTICLES
-  // ======================================================
+    {
+      keyword: "insurance",
+      title: "Insurance",
+      type: "Insurance"
+    },
 
-  matches.forEach((match, index) => {
+    {
+      keyword: "payment",
+      title: "Payment",
+      type: "Financial"
+    },
 
-    const article =
-      match[0].trim();
+    {
+      keyword: "indemn",
+      title: "Indemnification",
+      type: "Indemnity"
+    },
+
+    {
+      keyword: "confidential",
+      title: "Confidentiality",
+      type: "Confidentiality"
+    },
+
+    {
+      keyword: "force majeure",
+      title: "Force Majeure",
+      type: "Force Majeure"
+    },
+
+    {
+      keyword: "governing law",
+      title: "Governing Law",
+      type: "Legal"
+    }
+  ];
+
+  patterns.forEach((pattern) => {
 
     if (
-      article.length < 100
+      text.toLowerCase()
+        .includes(pattern.keyword)
     ) {
-      return;
+
+      clauses.push({
+
+        clause_title:
+          pattern.title,
+
+        clause_type:
+          pattern.type,
+
+        risk_level:
+          "Medium",
+
+        summary:
+          `${pattern.title} clause detected.`,
+
+        clause_text:
+          extractSnippet(
+            text,
+            pattern.keyword
+          )
+      });
     }
+  });
 
-    const firstLine =
-      article
-        .split("\n")[0]
-        .slice(0, 150);
+  // ==================================================
+  // LAST RESORT
+  // ==================================================
 
-    const lower =
-      article.toLowerCase();
-
-    let clauseType =
-      "general";
-
-    let riskLevel =
-      "LOW";
-
-    // ======================================================
-    // CLAUSE TYPE DETECTION
-    // ======================================================
-
-    if (
-      lower.includes("termination")
-    ) {
-      clauseType =
-        "termination";
-
-      riskLevel =
-        "HIGH";
-    }
-
-    else if (
-      lower.includes("liability")
-    ) {
-      clauseType =
-        "liability";
-
-      riskLevel =
-        "HIGH";
-    }
-
-    else if (
-      lower.includes("payment")
-    ) {
-      clauseType =
-        "payment";
-
-      riskLevel =
-        "HIGH";
-    }
-
-    else if (
-      lower.includes("insurance")
-    ) {
-      clauseType =
-        "insurance";
-
-      riskLevel =
-        "HIGH";
-    }
-
-    else if (
-      lower.includes("maintenance")
-    ) {
-      clauseType =
-        "maintenance";
-
-      riskLevel =
-        "MEDIUM";
-    }
-
-    else if (
-      lower.includes("compliance") ||
-      lower.includes("regulation")
-    ) {
-      clauseType =
-        "compliance";
-
-      riskLevel =
-        "HIGH";
-    }
-
-    else if (
-      lower.includes("confidential")
-    ) {
-      clauseType =
-        "confidentiality";
-
-      riskLevel =
-        "HIGH";
-    }
-
-    // ======================================================
-    // BUILD CLAUSE
-    // ======================================================
+  if (
+    clauses.length === 0
+  ) {
 
     clauses.push({
 
       clause_title:
-        firstLine ||
-        `Article ${index + 1}`,
+        "General Contract Terms",
 
       clause_type:
-        clauseType,
+        "General",
 
       risk_level:
-        riskLevel,
+        "Medium",
 
       summary:
-        article.slice(0, 300),
+        "General contractual language detected.",
 
       clause_text:
-        article.slice(0, 5000)
+        text.slice(0, 1000)
     });
-  });
+  }
 
   return clauses;
+}
+
+// ======================================================
+// TEXT SNIPPET
+// ======================================================
+
+function extractSnippet(
+  text,
+  keyword
+) {
+
+  const lower =
+    text.toLowerCase();
+
+  const index =
+    lower.indexOf(keyword);
+
+  if (
+    index === -1
+  ) {
+
+    return text.slice(0, 500);
+  }
+
+  const start =
+    Math.max(0, index - 200);
+
+  const end =
+    Math.min(
+      text.length,
+      index + 500
+    );
+
+  return text.slice(
+    start,
+    end
+  );
 }
