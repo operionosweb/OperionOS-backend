@@ -1,115 +1,188 @@
-import OpenAI from "openai";
-import axios from "axios";
-
 // ======================================================
-// OPENAI CLIENT
+// OBLIGATION EXTRACTION ENGINE
 // ======================================================
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-// ======================================================
-// MAIN EXPORT
-// ======================================================
-
-export async function extractClauses(contractText) {
+export async function extractObligations(clauses) {
 
   try {
 
-    // =========================================
-    // CLEAN + LIMIT INPUT
-    // =========================================
+    const obligations = [];
 
-    const cleanedText =
-      contractText
-        .replace(/\r/g, "")
-        .replace(/\t/g, " ")
-        .replace(/\n{3,}/g, "\n\n")
-        .slice(0, 25000);
+    // ======================================================
+    // LOOP THROUGH CLAUSES
+    // ======================================================
 
-    // =========================================
-    // 1. TRY MISTRAL AI
-    // =========================================
+    for (const clause of clauses) {
 
-    try {
+      const clauseText =
+        (clause.clause_text || "").toLowerCase();
 
-      console.log(
-        "===== TRYING MISTRAL SEGMENTATION ====="
-      );
+      const clauseTitle =
+        clause.clause_title || "Unknown Clause";
 
-      const mistralClauses =
-        await extractWithMistral(cleanedText);
+      // ======================================================
+      // PAYMENT OBLIGATIONS
+      // ======================================================
 
       if (
-        mistralClauses &&
-        mistralClauses.length > 0
+        clauseText.includes("pay") ||
+        clauseText.includes("payment") ||
+        clauseText.includes("fees") ||
+        clauseText.includes("invoice")
       ) {
 
-        console.log(
-          "✅ MISTRAL SEGMENTATION SUCCESS"
-        );
+        obligations.push({
 
-        return mistralClauses;
+          clause_title: clauseTitle,
+
+          obligation_type: "payment",
+
+          responsible_party:
+            detectResponsibleParty(clauseText),
+
+          obligation_text:
+            "Financial payment obligation detected",
+
+          priority: "HIGH",
+
+          deadline:
+            extractDeadline(clauseText),
+
+          risk_level: "HIGH"
+        });
       }
 
-    } catch (err) {
-
-      console.error(
-        "❌ MISTRAL SEGMENTATION FAILED"
-      );
-
-      console.error(err.message);
-    }
-
-    // =========================================
-    // 2. TRY OPENAI
-    // =========================================
-
-    try {
-
-      console.log(
-        "===== TRYING OPENAI SEGMENTATION ====="
-      );
-
-      const openAIClauses =
-        await extractWithOpenAI(cleanedText);
+      // ======================================================
+      // NOTICE OBLIGATIONS
+      // ======================================================
 
       if (
-        openAIClauses &&
-        openAIClauses.length > 0
+        clauseText.includes("notice") ||
+        clauseText.includes("notify") ||
+        clauseText.includes("written notice")
       ) {
 
-        console.log(
-          "✅ OPENAI SEGMENTATION SUCCESS"
-        );
+        obligations.push({
 
-        return openAIClauses;
+          clause_title: clauseTitle,
+
+          obligation_type: "notice",
+
+          responsible_party:
+            detectResponsibleParty(clauseText),
+
+          obligation_text:
+            "Notice obligation detected",
+
+          priority: "MEDIUM",
+
+          deadline:
+            extractDeadline(clauseText),
+
+          risk_level: "MEDIUM"
+        });
       }
 
-    } catch (err) {
+      // ======================================================
+      // INSURANCE OBLIGATIONS
+      // ======================================================
 
-      console.error(
-        "❌ OPENAI SEGMENTATION FAILED"
-      );
+      if (
+        clauseText.includes("insurance") ||
+        clauseText.includes("insured")
+      ) {
 
-      console.error(err.message);
+        obligations.push({
+
+          clause_title: clauseTitle,
+
+          obligation_type: "insurance",
+
+          responsible_party:
+            detectResponsibleParty(clauseText),
+
+          obligation_text:
+            "Insurance obligation detected",
+
+          priority: "HIGH",
+
+          deadline: null,
+
+          risk_level: "HIGH"
+        });
+      }
+
+      // ======================================================
+      // MAINTENANCE OBLIGATIONS
+      // ======================================================
+
+      if (
+        clauseText.includes("maintain") ||
+        clauseText.includes("maintenance") ||
+        clauseText.includes("repair")
+      ) {
+
+        obligations.push({
+
+          clause_title: clauseTitle,
+
+          obligation_type: "maintenance",
+
+          responsible_party:
+            detectResponsibleParty(clauseText),
+
+          obligation_text:
+            "Maintenance obligation detected",
+
+          priority: "MEDIUM",
+
+          deadline: null,
+
+          risk_level: "MEDIUM"
+        });
+      }
+
+      // ======================================================
+      // COMPLIANCE OBLIGATIONS
+      // ======================================================
+
+      if (
+        clauseText.includes("compliance") ||
+        clauseText.includes("regulation") ||
+        clauseText.includes("law")
+      ) {
+
+        obligations.push({
+
+          clause_title: clauseTitle,
+
+          obligation_type: "compliance",
+
+          responsible_party:
+            detectResponsibleParty(clauseText),
+
+          obligation_text:
+            "Compliance obligation detected",
+
+          priority: "HIGH",
+
+          deadline: null,
+
+          risk_level: "HIGH"
+        });
+      }
     }
 
-    // =========================================
-    // 3. LOCAL SEGMENTATION FALLBACK
-    // =========================================
+    // ======================================================
+    // RETURN RESULTS
+    // ======================================================
 
-    console.log(
-      "===== USING LOCAL SEGMENTATION ====="
-    );
-
-    return segmentContractLocally(cleanedText);
+    return obligations;
 
   } catch (err) {
 
     console.error(
-      "❌ CLAUSE ENGINE FAILED"
+      "❌ OBLIGATION ENGINE FAILED"
     );
 
     console.error(err);
@@ -119,66 +192,41 @@ export async function extractClauses(contractText) {
 }
 
 // ======================================================
-// MISTRAL AI SEGMENTATION
+// RESPONSIBLE PARTY DETECTION
 // ======================================================
 
-async function extractWithMistral(text) {
+function detectResponsibleParty(text) {
 
-  const response =
-    await axios.post(
-      "https://api.mistral.ai/v1/chat/completions",
-      {
-        model: "mistral-small-latest",
+  if (text.includes("lessor")) {
+    return "Lessor";
+  }
 
-        messages: [
+  if (text.includes("club")) {
+    return "Club";
+  }
 
-          {
-            role: "system",
+  if (text.includes("party")) {
+    return "Both Parties";
+  }
 
-            content: `
-You are a legal AI contract analysis engine.
-
-Extract ALL contract clauses.
-
-Each clause must include:
-- clause_title
-- clause_type
-- risk_level
-- summary
-- clause_text
-
-Return ONLY valid JSON.
-
-FORMAT:
-
-{
-  "clauses": [
-    {
-      "clause_title": "",
-      "clause_type": "",
-      "risk_level": "",
-      "summary": "",
-      "clause_text": ""
-    }
-  ]
+  return "Unknown";
 }
-`
-          },
 
-          {
-            role: "user",
-            content: text
-          }
-        ],
+// ======================================================
+// DEADLINE EXTRACTION
+// ======================================================
 
-        temperature: 0.1,
+function extractDeadline(text) {
 
-        response_format: {
-          type: "json_object"
-        }
-      },
+  const regex =
+    /(\d+)\s+days/gi;
 
-      {
-        headers: {
-          Authorization:
-            `Bearer ${process
+  const match =
+    text.match(regex);
+
+  if (match && match.length > 0) {
+    return match[0];
+  }
+
+  return null;
+}
