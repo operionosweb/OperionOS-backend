@@ -1,205 +1,435 @@
-import { createClient } from "@supabase/supabase-js";
+// services/contractService.js
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+/**
+ * OPERION OS
+ * Contract Service
+ *
+ * Responsibilities:
+ * - Contract ingestion
+ * - Contract persistence
+ * - AI analysis orchestration
+ * - Portfolio normalization trigger
+ */
 
-// ======================================================
-// SAFE CONTRACT SAVER (PRODUCTION SAFE)
-// ======================================================
+/**
+ * Supabase
+ */
+const supabase = require("../config/supabase");
 
-export async function saveContractToDB(extraction) {
+/**
+ * AI Services
+ */
+const {
+  parseClauses,
+} = require("./clauseParser");
+
+const {
+  parseObligations,
+} = require("./obligationParser");
+
+const {
+  calculateContractRisk,
+} = require("./contractRiskEngine");
+
+const {
+  benchmarkContract,
+} = require("./benchmarkEngine");
+
+/**
+ * Normalization
+ */
+const {
+  normalizePortfolio,
+} = require("./normalizationService");
+
+/**
+ * -----------------------------------------
+ * CREATE CONTRACT
+ * -----------------------------------------
+ */
+async function createContract(
+  contractPayload = {}
+) {
   try {
+    /**
+     * Basic validation
+     */
+    if (
+      !contractPayload?.raw_text
+    ) {
+      throw new Error(
+        "Contract raw_text is required"
+      );
+    }
 
-    const contractData =
-      extraction.contract || extraction;
-
-    // ======================================================
-    // NORMALIZE DATA
-    // ======================================================
-
-    const filename =
-      contractData.filename ||
-      contractData.source_file ||
-      "unknown.pdf";
-
-    const extractedText =
-      contractData.contract?.extracted_text ||
-      contractData.extracted_text ||
-      "";
-
+    /**
+     * -------------------------------------
+     * STEP 1 — CLAUSE ANALYSIS
+     * -------------------------------------
+     */
     const clauses =
-      contractData.clauses || [];
-
-    const obligations =
-      contractData.obligations || [];
-
-    const clausesDetected =
-      clauses.length;
-
-    const obligationsDetected =
-      obligations.length;
-
-    // ======================================================
-    // INSERT CONTRACT
-    // ======================================================
-
-    const { data: contractRow, error: contractError } =
-      await supabase
-        .from("contracts")
-        .insert({
-          filename,
-
-          source_file: filename,
-
-          contract_name: filename,
-
-          name: filename,
-
-          contract_type: "uploaded",
-
-          extracted_text: extractedText,
-
-          clauses_detected:
-            clausesDetected,
-
-          obligations_detected:
-            obligationsDetected,
-
-          created_at:
-            new Date().toISOString(),
-
-          updated_at:
-            new Date().toISOString(),
-        })
-        .select()
-        .single();
-
-    // ======================================================
-    // HANDLE CONTRACT INSERT ERROR
-    // ======================================================
-
-    if (contractError) {
-
-      console.error(
-        "❌ CONTRACT INSERT ERROR:",
-        contractError
+      await parseClauses(
+        contractPayload.raw_text
       );
 
-      throw contractError;
+    /**
+     * -------------------------------------
+     * STEP 2 — OBLIGATION ANALYSIS
+     * -------------------------------------
+     */
+    const obligations =
+      await parseObligations(
+        contractPayload.raw_text
+      );
+
+    /**
+     * -------------------------------------
+     * STEP 3 — RISK ANALYSIS
+     * -------------------------------------
+     */
+    const riskAnalysis =
+      await calculateContractRisk({
+        raw_text:
+          contractPayload.raw_text,
+
+        clauses,
+        obligations,
+      });
+
+    /**
+     * -------------------------------------
+     * STEP 4 — BENCHMARKING
+     * -------------------------------------
+     */
+    const benchmark =
+      await benchmarkContract({
+        clauses,
+        obligations,
+      });
+
+    /**
+     * -------------------------------------
+     * STEP 5 — BUILD CONTRACT OBJECT
+     * -------------------------------------
+     */
+    const contractData = {
+      name:
+        contractPayload?.name ||
+        "Unnamed Contract",
+
+      supplier_name:
+        contractPayload?.supplier_name ||
+        contractPayload?.vendor_name ||
+        "Unknown Supplier",
+
+      raw_text:
+        contractPayload.raw_text,
+
+      clauses,
+
+      obligations,
+
+      benchmark,
+
+      risk_score:
+        riskAnalysis
+          ?.overall_risk_score || 0,
+
+      risk_analysis:
+        riskAnalysis,
+
+      value:
+        contractPayload?.value ||
+        contractPayload?.contract_value ||
+        0,
+
+      expiry_date:
+        contractPayload?.expiry_date ||
+        null,
+
+      metadata:
+        contractPayload?.metadata ||
+        {},
+
+      created_at:
+        new Date().toISOString(),
+    };
+
+    /**
+     * -------------------------------------
+     * STEP 6 — SAVE CONTRACT
+     * -------------------------------------
+     */
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("contracts")
+      .insert(contractData)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
     }
 
-    const contractId =
-      contractRow.id;
+    /**
+     * -------------------------------------
+     * STEP 7 — TRIGGER NORMALIZATION
+     * -------------------------------------
+     */
+    try {
+      console.log(
+        "Starting portfolio normalization..."
+      );
 
-    // ======================================================
-    // INSERT CLAUSES
-    // ======================================================
+      await normalizePortfolio();
 
-    if (clauses.length > 0) {
-
-      const clauseRows =
-        clauses.map((c, index) => ({
-          contract_id: contractId,
-
-          clause_number:
-            c.clause_number ||
-            index + 1,
-
-          clause_title:
-            c.clause_title || null,
-
-          clause_text:
-            c.clause_text || "",
-
-          clause_type:
-            c.clause_type || "general",
-        }));
-
-      const { error: clauseError } =
-        await supabase
-          .from("clauses")
-          .insert(clauseRows);
-
-      if (clauseError) {
-
-        console.error(
-          "❌ CLAUSES INSERT ERROR:",
-          clauseError
-        );
-
-        throw clauseError;
-      }
+      console.log(
+        "Portfolio normalization completed."
+      );
+    } catch (
+      normalizationError
+    ) {
+      console.error(
+        "Normalization Error:",
+        normalizationError
+      );
     }
 
-    // ======================================================
-    // INSERT OBLIGATIONS
-    // ======================================================
-
-    if (obligations.length > 0) {
-
-      const obligationRows =
-        obligations.map((o) => ({
-          contract_id:
-            contractId,
-
-          clause_id:
-            o.clause_id || null,
-
-          obligation_text:
-            o.obligation_text || "",
-
-          responsible_party:
-            o.responsible_party || "unknown",
-
-          obligation_type:
-            o.obligation_type || "general",
-        }));
-
-      const { error: obligationError } =
-        await supabase
-          .from("obligations")
-          .insert(obligationRows);
-
-      if (obligationError) {
-
-        console.error(
-          "❌ OBLIGATIONS INSERT ERROR:",
-          obligationError
-        );
-
-        throw obligationError;
-      }
-    }
-
-    // ======================================================
-    // SUCCESS
-    // ======================================================
-
+    /**
+     * -------------------------------------
+     * RETURN RESULT
+     * -------------------------------------
+     */
     return {
       success: true,
 
-      contract_id:
-        contractId,
-
-      clauses_saved:
-        clausesDetected,
-
-      obligations_saved:
-        obligationsDetected,
+      contract: data,
     };
-
-  } catch (err) {
-
+  } catch (error) {
     console.error(
-      "🔥 SAVE CONTRACT FAILED:",
-      err
+      "createContract() Error:",
+      error
     );
 
     return {
       success: false,
-      error: err.message,
+
+      error:
+        error.message ||
+        "Failed to create contract",
     };
   }
 }
+
+/**
+ * -----------------------------------------
+ * GET ALL CONTRACTS
+ * -----------------------------------------
+ */
+async function getAllContracts() {
+  try {
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("contracts")
+      .select("*")
+      .order(
+        "created_at",
+        {
+          ascending: false,
+        }
+      );
+
+    if (error) {
+      throw error;
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error(
+      "getAllContracts() Error:",
+      error
+    );
+
+    return [];
+  }
+}
+
+/**
+ * -----------------------------------------
+ * GET CONTRACT BY ID
+ * -----------------------------------------
+ */
+async function getContractById(
+  contractId
+) {
+  try {
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("contracts")
+      .select("*")
+      .eq("id", contractId)
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error(
+      "getContractById() Error:",
+      error
+    );
+
+    return null;
+  }
+}
+
+/**
+ * -----------------------------------------
+ * DELETE CONTRACT
+ * -----------------------------------------
+ */
+async function deleteContract(
+  contractId
+) {
+  try {
+    /**
+     * Delete normalized entities first
+     */
+    await supabase
+      .from("contract_clauses")
+      .delete()
+      .eq(
+        "contract_id",
+        contractId
+      );
+
+    await supabase
+      .from(
+        "contract_obligations"
+      )
+      .delete()
+      .eq(
+        "contract_id",
+        contractId
+      );
+
+    await supabase
+      .from(
+        "contract_risk_scores"
+      )
+      .delete()
+      .eq(
+        "contract_id",
+        contractId
+      );
+
+    /**
+     * Delete contract
+     */
+    const {
+      error,
+    } = await supabase
+      .from("contracts")
+      .delete()
+      .eq("id", contractId);
+
+    if (error) {
+      throw error;
+    }
+
+    return {
+      success: true,
+    };
+  } catch (error) {
+    console.error(
+      "deleteContract() Error:",
+      error
+    );
+
+    return {
+      success: false,
+      error:
+        error.message ||
+        "Failed to delete contract",
+    };
+  }
+}
+
+/**
+ * -----------------------------------------
+ * UPDATE CONTRACT
+ * -----------------------------------------
+ */
+async function updateContract(
+  contractId,
+  updates = {}
+) {
+  try {
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("contracts")
+      .update(updates)
+      .eq("id", contractId)
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    /**
+     * Re-normalize portfolio
+     */
+    try {
+      await normalizePortfolio();
+    } catch (
+      normalizationError
+    ) {
+      console.error(
+        "Normalization Error:",
+        normalizationError
+      );
+    }
+
+    return {
+      success: true,
+      contract: data,
+    };
+  } catch (error) {
+    console.error(
+      "updateContract() Error:",
+      error
+    );
+
+    return {
+      success: false,
+      error:
+        error.message ||
+        "Failed to update contract",
+    };
+  }
+}
+
+/**
+ * -----------------------------------------
+ * EXPORTS
+ * -----------------------------------------
+ */
+
+module.exports = {
+  createContract,
+  getAllContracts,
+  getContractById,
+  updateContract,
+  deleteContract,
+};
