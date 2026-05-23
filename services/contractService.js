@@ -1,364 +1,182 @@
-// services/contractRiskEngine.js
+// services/contractService.js
+
+import supabase from "../config/supabase.js";
 
 /**
- * OPERION OS
- * Contract Risk Engine
- *
- * Responsibilities:
- * - Contract risk scoring
- * - Financial exposure analysis
- * - Compliance risk analysis
- * - Operational burden scoring
- * - Liability intelligence
+ * TEMP MINIMAL STABLE VERSION
+ * Used to restore deployment stability
  */
 
-/**
- * -----------------------------------------
- * MAIN RISK ENGINE
- * -----------------------------------------
- */
-export async function calculateContractRisk(
-  contract = {}
+export async function createContract(
+  contractPayload = {}
 ) {
   try {
-    const clauses =
-      contract?.clauses || [];
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("contracts")
+      .insert({
+        name:
+          contractPayload.name ||
+          "Unnamed Contract",
 
-    const obligations =
-      contract?.obligations ||
-      [];
+        supplier_name:
+          contractPayload.supplier_name ||
+          "Unknown Supplier",
 
-    /**
-     * Risk categories
-     */
-    const financialRisk =
-      calculateFinancialRisk(
-        clauses
-      );
+        raw_text:
+          contractPayload.raw_text ||
+          "",
 
-    const complianceRisk =
-      calculateComplianceRisk(
-        clauses
-      );
+        created_at:
+          new Date().toISOString(),
+      })
+      .select()
+      .single();
 
-    const operationalRisk =
-      calculateOperationalRisk(
-        obligations
-      );
-
-    const liabilityRisk =
-      calculateLiabilityRisk(
-        clauses
-      );
-
-    /**
-     * Weighted overall score
-     */
-    const overallRiskScore =
-      Math.round(
-        financialRisk * 0.3 +
-          complianceRisk * 0.25 +
-          operationalRisk *
-            0.2 +
-          liabilityRisk * 0.25
-      );
-
-    /**
-     * Risk level
-     */
-    const riskLevel =
-      determineRiskLevel(
-        overallRiskScore
-      );
+    if (error) {
+      throw error;
+    }
 
     return {
       success: true,
-
-      overall_risk_score:
-        overallRiskScore,
-
-      risk_level: riskLevel,
-
-      financial_risk:
-        financialRisk,
-
-      compliance_risk:
-        complianceRisk,
-
-      operational_risk:
-        operationalRisk,
-
-      liability_risk:
-        liabilityRisk,
-
-      critical_issues:
-        identifyCriticalIssues(
-          clauses
-        ),
+      contract: data,
     };
   } catch (error) {
     console.error(
-      "calculateContractRisk() Error:",
+      "createContract Error:",
       error
     );
 
     return {
       success: false,
-      error:
-        error.message ||
-        "Risk analysis failed",
+      error: error.message,
     };
   }
 }
 
-/**
- * -----------------------------------------
- * FINANCIAL RISK
- * -----------------------------------------
- */
-function calculateFinancialRisk(
-  clauses = []
-) {
-  let score = 20;
+export async function getAllContracts() {
+  try {
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("contracts")
+      .select("*")
+      .order(
+        "created_at",
+        {
+          ascending: false,
+        }
+      );
 
-  for (const clause of clauses) {
-    const text = (
-      clause?.clause_text || ""
-    ).toLowerCase();
-
-    if (
-      text.includes(
-        "uncapped liability"
-      )
-    ) {
-      score += 40;
+    if (error) {
+      throw error;
     }
 
-    if (
-      text.includes(
-        "unlimited liability"
-      )
-    ) {
-      score += 40;
-    }
+    return data || [];
+  } catch (error) {
+    console.error(
+      "getAllContracts Error:",
+      error
+    );
 
-    if (
-      text.includes(
-        "liquidated damages"
-      )
-    ) {
-      score += 20;
-    }
-
-    if (
-      text.includes(
-        "penalty"
-      )
-    ) {
-      score += 15;
-    }
+    return [];
   }
-
-  return Math.min(
-    100,
-    score
-  );
 }
 
-/**
- * -----------------------------------------
- * COMPLIANCE RISK
- * -----------------------------------------
- */
-function calculateComplianceRisk(
-  clauses = []
+export async function getContractById(
+  id
 ) {
-  let score = 10;
+  try {
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("contracts")
+      .select("*")
+      .eq("id", id)
+      .single();
 
-  for (const clause of clauses) {
-    const text = (
-      clause?.clause_text || ""
-    ).toLowerCase();
-
-    if (
-      text.includes("gdpr")
-    ) {
-      score += 10;
+    if (error) {
+      throw error;
     }
 
-    if (
-      text.includes("faa")
-    ) {
-      score += 15;
-    }
+    return data;
+  } catch (error) {
+    console.error(
+      "getContractById Error:",
+      error
+    );
 
-    if (
-      text.includes("easa")
-    ) {
-      score += 15;
-    }
-
-    if (
-      text.includes("imo")
-    ) {
-      score += 15;
-    }
-
-    if (
-      text.includes(
-        "non-compliance"
-      )
-    ) {
-      score += 20;
-    }
+    return null;
   }
-
-  return Math.min(
-    100,
-    score
-  );
 }
 
-/**
- * -----------------------------------------
- * OPERATIONAL RISK
- * -----------------------------------------
- */
-function calculateOperationalRisk(
-  obligations = []
+export async function updateContract(
+  id,
+  updates = {}
 ) {
-  const score =
-    obligations.length * 5;
+  try {
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("contracts")
+      .update(updates)
+      .eq("id", id)
+      .select()
+      .single();
 
-  return Math.min(
-    100,
-    score
-  );
+    if (error) {
+      throw error;
+    }
+
+    return {
+      success: true,
+      contract: data,
+    };
+  } catch (error) {
+    console.error(
+      "updateContract Error:",
+      error
+    );
+
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
 }
 
-/**
- * -----------------------------------------
- * LIABILITY RISK
- * -----------------------------------------
- */
-function calculateLiabilityRisk(
-  clauses = []
+export async function deleteContract(
+  id
 ) {
-  let score = 15;
+  try {
+    const {
+      error,
+    } = await supabase
+      .from("contracts")
+      .delete()
+      .eq("id", id);
 
-  for (const clause of clauses) {
-    const text = (
-      clause?.clause_text || ""
-    ).toLowerCase();
-
-    if (
-      text.includes(
-        "indemnify"
-      )
-    ) {
-      score += 15;
+    if (error) {
+      throw error;
     }
 
-    if (
-      text.includes(
-        "hold harmless"
-      )
-    ) {
-      score += 15;
-    }
+    return {
+      success: true,
+    };
+  } catch (error) {
+    console.error(
+      "deleteContract Error:",
+      error
+    );
 
-    if (
-      text.includes(
-        "unlimited liability"
-      )
-    ) {
-      score += 40;
-    }
+    return {
+      success: false,
+      error: error.message,
+    };
   }
-
-  return Math.min(
-    100,
-    score
-  );
-}
-
-/**
- * -----------------------------------------
- * RISK LEVEL
- * -----------------------------------------
- */
-function determineRiskLevel(
-  score
-) {
-  if (score >= 80) {
-    return "Critical";
-  }
-
-  if (score >= 60) {
-    return "High";
-  }
-
-  if (score >= 40) {
-    return "Medium";
-  }
-
-  return "Low";
-}
-
-/**
- * -----------------------------------------
- * CRITICAL ISSUES
- * -----------------------------------------
- */
-function identifyCriticalIssues(
-  clauses = []
-) {
-  const issues = [];
-
-  for (const clause of clauses) {
-    const text = (
-      clause?.clause_text || ""
-    ).toLowerCase();
-
-    if (
-      text.includes(
-        "uncapped liability"
-      )
-    ) {
-      issues.push({
-        issue:
-          "Uncapped liability detected",
-
-        severity: "Critical",
-      });
-    }
-
-    if (
-      text.includes(
-        "unlimited liability"
-      )
-    ) {
-      issues.push({
-        issue:
-          "Unlimited liability exposure",
-
-        severity: "Critical",
-      });
-    }
-
-    if (
-      text.includes(
-        "no insurance"
-      )
-    ) {
-      issues.push({
-        issue:
-          "Missing insurance protections",
-
-        severity: "High",
-      });
-    }
-  }
-
-  return issues;
 }
