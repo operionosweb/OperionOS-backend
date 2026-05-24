@@ -2,66 +2,120 @@
 
 import supabase from "../config/supabase.js";
 
+import {
+  analyzeContractText,
+} from "./aiExtractionService.js";
+
 /**
  * -----------------------------------------
  * CREATE CONTRACT
  * -----------------------------------------
  */
-
 export async function createContract(
   contractPayload = {}
 ) {
   try {
+    /**
+     * Basic validation
+     */
+    if (
+      !contractPayload?.raw_text
+    ) {
+      return {
+        success: false,
+        error:
+          "raw_text is required",
+      };
+    }
+
+    /**
+     * -----------------------------------------
+     * CACHE PROTECTION
+     * Prevent duplicate AI processing
+     * -----------------------------------------
+     */
+    const existing =
+      await supabase
+        .from("contracts")
+        .select("*")
+        .eq(
+          "raw_text",
+          contractPayload.raw_text
+        )
+        .maybeSingle();
+
+    if (existing.data) {
+      console.log(
+        "Cached contract detected"
+      );
+
+      return {
+        success: true,
+        cached: true,
+        contract:
+          existing.data,
+      };
+    }
+
+    /**
+     * -----------------------------------------
+     * AI EXTRACTION
+     * -----------------------------------------
+     */
+    const analysis =
+      await analyzeContractText(
+        contractPayload.raw_text
+      );
+
+    /**
+     * -----------------------------------------
+     * BUILD CONTRACT RECORD
+     * -----------------------------------------
+     */
     const insertPayload = {
       name:
         contractPayload.name ||
         "Unnamed Contract",
 
       supplier_name:
-        contractPayload.supplier_name ||
+        analysis?.supplier_name ||
+        contractPayload
+          ?.supplier_name ||
         "Unknown Supplier",
 
-      raw_text:
-        contractPayload.raw_text ||
-        "",
-
       contract_type:
-        contractPayload.contract_type ||
+        analysis?.contract_type ||
         "General Contract",
 
       summary:
-        contractPayload.summary ||
-        "",
+        analysis?.summary || "",
 
-      risk_score:
-        Number(
-          contractPayload.risk_score || 0
-        ),
-
-      value:
-        Number(
-          contractPayload.value || 0
-        ),
-
-      start_date:
-        contractPayload.start_date ||
-        null,
-
-      expiry_date:
-        contractPayload.expiry_date ||
-        null,
+      raw_text:
+        contractPayload.raw_text,
 
       clauses:
-        contractPayload.clauses || [],
+        analysis?.clauses || [],
 
       obligations:
-        contractPayload.obligations ||
+        analysis?.obligations ||
         [],
+
+      risk_score:
+        analysis?.risk_score || 0,
+
+      contract_value:
+        analysis?.contract_value ||
+        0,
 
       created_at:
         new Date().toISOString(),
     };
 
+    /**
+     * -----------------------------------------
+     * INSERT CONTRACT
+     * -----------------------------------------
+     */
     const {
       data,
       error,
@@ -77,6 +131,7 @@ export async function createContract(
 
     return {
       success: true,
+      cached: false,
       contract: data,
     };
   } catch (error) {
@@ -87,7 +142,9 @@ export async function createContract(
 
     return {
       success: false,
-      error: error.message,
+      error:
+        error?.message ||
+        "Failed to create contract",
     };
   }
 }
@@ -97,7 +154,6 @@ export async function createContract(
  * GET ALL CONTRACTS
  * -----------------------------------------
  */
-
 export async function getAllContracts() {
   try {
     const {
@@ -133,7 +189,6 @@ export async function getAllContracts() {
  * GET CONTRACT BY ID
  * -----------------------------------------
  */
-
 export async function getContractById(
   id
 ) {
@@ -167,7 +222,6 @@ export async function getContractById(
  * UPDATE CONTRACT
  * -----------------------------------------
  */
-
 export async function updateContract(
   id,
   updates = {}
@@ -199,7 +253,8 @@ export async function updateContract(
 
     return {
       success: false,
-      error: error.message,
+      error:
+        error.message,
     };
   }
 }
@@ -209,7 +264,6 @@ export async function updateContract(
  * DELETE CONTRACT
  * -----------------------------------------
  */
-
 export async function deleteContract(
   id
 ) {
@@ -236,7 +290,8 @@ export async function deleteContract(
 
     return {
       success: false,
-      error: error.message,
+      error:
+        error.message,
     };
   }
 }
