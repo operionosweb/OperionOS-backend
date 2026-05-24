@@ -56,9 +56,10 @@ router.get(
 /**
  * -----------------------------------------
  * POST /contracts
- * Create new contract manually
+ * Create contract manually
  * -----------------------------------------
  */
+
 router.post(
   "/",
   async (req, res) => {
@@ -99,9 +100,10 @@ router.post(
 /**
  * -----------------------------------------
  * POST /contracts/upload
- * Upload + AI Analyze Contract
+ * Upload + Analyze Contract
  * -----------------------------------------
  */
+
 router.post(
   "/upload",
   upload.single("file"),
@@ -110,6 +112,7 @@ router.post(
       /**
        * Validate file
        */
+
       if (!req.file) {
         return res.status(400).json({
           success: false,
@@ -148,8 +151,9 @@ router.post(
       }
 
       /**
-       * Validate extracted text
+       * Validate text
        */
+
       if (
         !extractedText ||
         extractedText.length < 100
@@ -173,6 +177,14 @@ router.post(
         );
 
       /**
+       * Actual extracted analysis
+       */
+
+      const analysis =
+        intelligence?.analysis ||
+        {};
+
+      /**
        * -----------------------------------------
        * SAVE CONTRACT
        * -----------------------------------------
@@ -184,42 +196,42 @@ router.post(
             req.file.originalname,
 
           supplier_name:
-            intelligence?.supplier_name ||
+            analysis?.supplier_name ||
             "Unknown Supplier",
 
           raw_text:
             extractedText,
 
           contract_type:
-            intelligence?.contract_type ||
+            analysis?.contract_type ||
             "General Contract",
 
           risk_score:
-            intelligence?.risk_score ||
+            analysis?.risk_score ||
             0,
 
           clauses:
-            intelligence?.clauses ||
+            analysis?.clauses ||
             [],
 
           obligations:
-            intelligence?.obligations ||
+            analysis?.obligations ||
             [],
 
           summary:
-            intelligence?.summary ||
+            analysis?.summary ||
             "",
 
           value:
-            intelligence?.contract_value ||
+            analysis?.contract_value ||
             0,
 
           start_date:
-            intelligence?.start_date ||
+            analysis?.start_date ||
             null,
 
           expiry_date:
-            intelligence?.expiry_date ||
+            analysis?.expiry_date ||
             null,
         });
 
@@ -235,14 +247,25 @@ router.post(
         filename:
           req.file.originalname,
 
+        cached:
+          intelligence?.cached ||
+          false,
+
+        cache_source:
+          intelligence?.cache_source ||
+          null,
+
+        document_hash:
+          intelligence?.document_hash ||
+          null,
+
         extracted_text_preview:
           extractedText.substring(
             0,
             1000
           ),
 
-        analysis:
-          intelligence,
+        analysis,
 
         contract:
           result.contract,
@@ -266,9 +289,9 @@ router.post(
 /**
  * -----------------------------------------
  * GET /contracts
- * Get all contracts
  * -----------------------------------------
  */
+
 router.get(
   "/",
   async (req, res) => {
@@ -299,9 +322,9 @@ router.get(
 /**
  * -----------------------------------------
  * GET /contracts/:id
- * Get contract by ID
  * -----------------------------------------
  */
+
 router.get(
   "/:id",
   async (req, res) => {
@@ -342,9 +365,9 @@ router.get(
 /**
  * -----------------------------------------
  * PUT /contracts/:id
- * Update contract
  * -----------------------------------------
  */
+
 router.put(
   "/:id",
   async (req, res) => {
@@ -386,9 +409,9 @@ router.put(
 /**
  * -----------------------------------------
  * DELETE /contracts/:id
- * Delete contract
  * -----------------------------------------
  */
+
 router.delete(
   "/:id",
   async (req, res) => {
