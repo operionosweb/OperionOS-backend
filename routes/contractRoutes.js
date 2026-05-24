@@ -74,6 +74,7 @@ router.get(
 /**
  * -----------------------------------------
  * POST /contracts
+ * Create contract manually
  * -----------------------------------------
  */
 
@@ -168,7 +169,7 @@ router.post(
       }
 
       /**
-       * Validate text
+       * Validate extracted text
        */
 
       if (
@@ -184,7 +185,7 @@ router.post(
 
       /**
        * -----------------------------------------
-       * GENERATE HASH
+       * GENERATE DOCUMENT HASH
        * -----------------------------------------
        */
 
@@ -272,6 +273,7 @@ router.post(
 
       const analysis =
         intelligence?.analysis ||
+        intelligence ||
         {};
 
       /**
@@ -395,6 +397,7 @@ router.post(
 /**
  * -----------------------------------------
  * GET /contracts
+ * Get all contracts
  * -----------------------------------------
  */
 
@@ -403,4 +406,159 @@ router.get(
   async (req, res) => {
     try {
       const contracts =
-        await getAll
+        await getAllContracts();
+
+      return res.status(200).json({
+        success: true,
+        contracts,
+      });
+    } catch (error) {
+      console.error(
+        "Get Contracts Route Error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        error:
+          error.message ||
+          "Failed to fetch contracts",
+      });
+    }
+  }
+);
+
+/**
+ * -----------------------------------------
+ * GET /contracts/:id
+ * Get contract by ID
+ * -----------------------------------------
+ */
+
+router.get(
+  "/:id",
+  async (req, res) => {
+    try {
+      const contract =
+        await getContractById(
+          req.params.id
+        );
+
+      if (!contract) {
+        return res.status(404).json({
+          success: false,
+          error:
+            "Contract not found",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        contract,
+      });
+    } catch (error) {
+      console.error(
+        "Get Contract Route Error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        error:
+          error.message ||
+          "Failed to fetch contract",
+      });
+    }
+  }
+);
+
+/**
+ * -----------------------------------------
+ * PUT /contracts/:id
+ * Update contract
+ * -----------------------------------------
+ */
+
+router.put(
+  "/:id",
+  async (req, res) => {
+    try {
+      const result =
+        await updateContract(
+          req.params.id,
+          req.body
+        );
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          error: result.error,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        contract:
+          result.contract,
+      });
+    } catch (error) {
+      console.error(
+        "Update Contract Route Error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        error:
+          error.message ||
+          "Failed to update contract",
+      });
+    }
+  }
+);
+
+/**
+ * -----------------------------------------
+ * DELETE /contracts/:id
+ * Delete contract
+ * -----------------------------------------
+ */
+
+router.delete(
+  "/:id",
+  async (req, res) => {
+    try {
+      const result =
+        await deleteContract(
+          req.params.id
+        );
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          error: result.error,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "Contract deleted successfully",
+      });
+    } catch (error) {
+      console.error(
+        "Delete Contract Route Error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        error:
+          error.message ||
+          "Failed to delete contract",
+      });
+    }
+  }
+);
+
+export default router;
