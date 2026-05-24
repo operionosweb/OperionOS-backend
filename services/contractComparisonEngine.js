@@ -33,7 +33,7 @@ const HIGH_RISK_TERMS = [
   "non-cancellable",
 ];
 
-function compareContracts(contractA = {}, contractB = {}) {
+export function compareContracts(contractA = {}, contractB = {}) {
   try {
     const clausesA = normalizeClauseCollection(
       contractA?.clauses || []
@@ -147,7 +147,7 @@ function compareContracts(contractA = {}, contractB = {}) {
 /**
  * Portfolio-wide abnormal clause detection
  */
-function findAbnormalClauses(contracts = []) {
+export function findAbnormalClauses(contracts = []) {
   try {
     const abnormalities = [];
 
@@ -285,7 +285,7 @@ function findAbnormalClauses(contracts = []) {
 /**
  * Portfolio deviation scoring
  */
-function calculateDeviationScore(
+export function calculateDeviationScore(
   contract = {},
   portfolio = []
 ) {
@@ -379,7 +379,7 @@ function calculateDeviationScore(
 /**
  * Benchmark clause prevalence across portfolio
  */
-function benchmarkClauseStructures(
+export function benchmarkClauseStructures(
   contracts = []
 ) {
   try {
@@ -406,9 +406,6 @@ function benchmarkClauseStructures(
     let cumulativeRisk = 0;
     let cumulativeBurden = 0;
 
-    /**
-     * Initialize prevalence
-     */
     for (const clause of STANDARD_CLAUSES) {
       benchmark.clause_prevalence[clause] = 0;
     }
@@ -426,9 +423,6 @@ function benchmarkClauseStructures(
           contract?.clauses || []
         );
 
-      /**
-       * Clause prevalence
-       */
       for (const standardClause of STANDARD_CLAUSES) {
         if (
           containsClause(
@@ -442,16 +436,10 @@ function benchmarkClauseStructures(
         }
       }
 
-      /**
-       * Uncapped liability
-       */
       if (hasUncappedLiability(clauses)) {
         uncappedCount++;
       }
 
-      /**
-       * Missing insurance
-       */
       if (
         !containsClause(
           clauses,
@@ -462,9 +450,6 @@ function benchmarkClauseStructures(
       }
     }
 
-    /**
-     * Convert prevalence to percentages
-     */
     for (const clause in benchmark.clause_prevalence) {
       benchmark.clause_prevalence[
         clause
@@ -514,7 +499,7 @@ function benchmarkClauseStructures(
 /**
  * Detect portfolio outlier liability contracts
  */
-function detectOutlierLiabilityTerms(
+export function detectOutlierLiabilityTerms(
   contracts = []
 ) {
   try {
@@ -615,9 +600,6 @@ function normalizeClauseCollection(
 function normalizeClauseType(type = "") {
   const value = type.toLowerCase().trim();
 
-  /**
-   * Liability
-   */
   if (
     value.includes("liability") ||
     value.includes("liability cap")
@@ -625,36 +607,24 @@ function normalizeClauseType(type = "") {
     return "limitation_of_liability";
   }
 
-  /**
-   * Insurance
-   */
   if (
     value.includes("insurance")
   ) {
     return "insurance";
   }
 
-  /**
-   * Indemnity
-   */
   if (
     value.includes("indemn")
   ) {
     return "indemnity";
   }
 
-  /**
-   * Confidentiality
-   */
   if (
     value.includes("confidential")
   ) {
     return "confidentiality";
   }
 
-  /**
-   * Compliance
-   */
   if (
     value.includes("compliance") ||
     value.includes("gdpr") ||
@@ -665,9 +635,6 @@ function normalizeClauseType(type = "") {
     return "compliance";
   }
 
-  /**
-   * Termination
-   */
   if (
     value.includes("termination") ||
     value.includes("terminate")
@@ -675,18 +642,12 @@ function normalizeClauseType(type = "") {
     return "termination";
   }
 
-  /**
-   * Force majeure
-   */
   if (
     value.includes("force majeure")
   ) {
     return "force_majeure";
   }
 
-  /**
-   * Governing law
-   */
   if (
     value.includes("governing law") ||
     value.includes("jurisdiction")
@@ -877,11 +838,3 @@ function emptyBenchmarkResponse() {
     average_operational_burden: 0,
   };
 }
-
-module.exports = {
-  compareContracts,
-  findAbnormalClauses,
-  calculateDeviationScore,
-  benchmarkClauseStructures,
-  detectOutlierLiabilityTerms,
-};
