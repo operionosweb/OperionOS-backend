@@ -30,31 +30,44 @@ export async function createContract(
 
     /**
      * -----------------------------------------
-     * CACHE PROTECTION
-     * Prevent duplicate AI processing
+     * HASH-BASED DUPLICATE DETECTION
      * -----------------------------------------
      */
-    const existing =
-      await supabase
+
+    if (
+      contractPayload?.document_hash
+    ) {
+      const {
+        data: existingContract,
+      } = await supabase
         .from("contracts")
         .select("*")
         .eq(
-          "raw_text",
-          contractPayload.raw_text
+          "document_hash",
+          contractPayload.document_hash
         )
+        .limit(1)
         .maybeSingle();
 
-    if (existing.data) {
-      console.log(
-        "Cached contract detected"
-      );
+      /**
+       * Skip duplicate save
+       */
+      if (
+        existingContract &&
+        !contractPayload.force_save
+      ) {
+        console.log(
+          "Duplicate contract detected"
+        );
 
-      return {
-        success: true,
-        cached: true,
-        contract:
-          existing.data,
-      };
+        return {
+          success: true,
+          duplicate_detected: true,
+          cached: true,
+          contract:
+            existingContract,
+        };
+      }
     }
 
     /**
@@ -62,16 +75,30 @@ export async function createContract(
      * AI EXTRACTION
      * -----------------------------------------
      */
-    const analysis =
-      await analyzeContractText(
-        contractPayload.raw_text
-      );
+
+    let analysis = {};
+
+    /**
+     * Use existing analysis if already provided
+     */
+    if (
+      contractPayload.analysis
+    ) {
+      analysis =
+        contractPayload.analysis;
+    } else {
+      analysis =
+        await analyzeContractText(
+          contractPayload.raw_text
+        );
+    }
 
     /**
      * -----------------------------------------
      * BUILD CONTRACT RECORD
      * -----------------------------------------
      */
+
     const insertPayload = {
       name:
         contractPayload.name ||
@@ -92,6 +119,18 @@ export async function createContract(
 
       raw_text:
         contractPayload.raw_text,
+
+      document_hash:
+        contractPayload.document_hash ||
+        null,
+
+      duplicate_of:
+        contractPayload.duplicate_of ||
+        null,
+
+      is_duplicate:
+        contractPayload.is_duplicate ||
+        false,
 
       clauses:
         analysis?.clauses || [],
@@ -116,6 +155,7 @@ export async function createContract(
      * INSERT CONTRACT
      * -----------------------------------------
      */
+
     const {
       data,
       error,
@@ -132,6 +172,7 @@ export async function createContract(
     return {
       success: true,
       cached: false,
+      duplicate_detected: false,
       contract: data,
     };
   } catch (error) {
@@ -154,6 +195,7 @@ export async function createContract(
  * GET ALL CONTRACTS
  * -----------------------------------------
  */
+
 export async function getAllContracts() {
   try {
     const {
@@ -189,6 +231,7 @@ export async function getAllContracts() {
  * GET CONTRACT BY ID
  * -----------------------------------------
  */
+
 export async function getContractById(
   id
 ) {
@@ -222,6 +265,7 @@ export async function getContractById(
  * UPDATE CONTRACT
  * -----------------------------------------
  */
+
 export async function updateContract(
   id,
   updates = {}
@@ -264,6 +308,7 @@ export async function updateContract(
  * DELETE CONTRACT
  * -----------------------------------------
  */
+
 export async function deleteContract(
   id
 ) {
