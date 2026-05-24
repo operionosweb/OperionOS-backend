@@ -11,33 +11,30 @@
  * - Enterprise legal Q&A
  * - Executive response generation
  *
- * Architecture:
- * User Query
- *    ↓
- * Intent Detection
- *    ↓
- * Engine Routing
- *    ↓
- * Structured Retrieval
- *    ↓
- * Executive Summary Generation
+ * ESM VERSION
  */
 
 /**
- * Services
+ * Portfolio Intelligence
  */
-const {
+import {
   calculatePortfolioRisk,
-} = require("./portfolioRiskEngine");
+} from "./portfolioRiskEngine.js";
 
-const {
+/**
+ * Contract Benchmark Intelligence
+ */
+import {
   findAbnormalClauses,
   benchmarkClauseStructures,
   detectOutlierLiabilityTerms,
   calculateDeviationScore,
-} = require("./contractComparisonEngine");
+} from "./contractComparisonEngine.js";
 
-const {
+/**
+ * Search Engine
+ */
+import {
   searchClauses,
   searchByClauseType,
   searchByRiskLevel,
@@ -46,18 +43,21 @@ const {
   searchSuppliers,
   searchHighRiskTerms,
   searchComplianceClauses,
-} = require("./searchEngine");
+} from "./searchEngine.js";
 
-const {
+/**
+ * Contract Service
+ */
+import {
   getAllContracts,
-} = require("./contractService");
+} from "./contractService.js";
 
 /**
  * -----------------------------------------
  * MAIN ENTRY POINT
  * -----------------------------------------
  */
-async function processLegalQuery(
+export async function processLegalQuery(
   query = ""
 ) {
   try {
@@ -121,7 +121,9 @@ async function processLegalQuery(
  * INTENT DETECTION
  * -----------------------------------------
  */
-function detectIntent(query = "") {
+export function detectIntent(
+  query = ""
+) {
   const normalized =
     normalizeText(query);
 
@@ -255,11 +257,14 @@ function detectIntent(query = "") {
  * ROUTE INTENT
  * -----------------------------------------
  */
-async function routeIntent(
+export async function routeIntent(
   intent,
   query,
   contracts
 ) {
+  const normalizedQuery =
+    normalizeText(query);
+
   switch (intent) {
     /**
      * Portfolio analytics
@@ -292,7 +297,7 @@ async function routeIntent(
      */
     case "missing_protections": {
       if (
-        query.includes(
+        normalizedQuery.includes(
           "insurance"
         )
       ) {
@@ -303,7 +308,7 @@ async function routeIntent(
       }
 
       if (
-        query.includes(
+        normalizedQuery.includes(
           "indemnity"
         )
       ) {
@@ -324,9 +329,9 @@ async function routeIntent(
      */
     case "compliance": {
       if (
-        query
-          .toLowerCase()
-          .includes("gdpr")
+        normalizedQuery.includes(
+          "gdpr"
+        )
       ) {
         return searchComplianceClauses(
           "gdpr",
@@ -335,9 +340,9 @@ async function routeIntent(
       }
 
       if (
-        query
-          .toLowerCase()
-          .includes("faa")
+        normalizedQuery.includes(
+          "faa"
+        )
       ) {
         return searchComplianceClauses(
           "faa",
@@ -346,9 +351,9 @@ async function routeIntent(
       }
 
       if (
-        query
-          .toLowerCase()
-          .includes("easa")
+        normalizedQuery.includes(
+          "easa"
+        )
       ) {
         return searchComplianceClauses(
           "easa",
@@ -357,9 +362,9 @@ async function routeIntent(
       }
 
       if (
-        query
-          .toLowerCase()
-          .includes("imo")
+        normalizedQuery.includes(
+          "imo"
+        )
       ) {
         return searchComplianceClauses(
           "imo",
@@ -374,7 +379,7 @@ async function routeIntent(
     }
 
     /**
-     * High risk
+     * High Risk
      */
     case "high_risk":
       return {
@@ -439,7 +444,7 @@ async function routeIntent(
       );
 
     /**
-     * Generic search
+     * Generic Search
      */
     case "search":
     default:
@@ -455,7 +460,7 @@ async function routeIntent(
  * EXECUTIVE SUMMARY GENERATION
  * -----------------------------------------
  */
-function generateExecutiveSummary(
+export function generateExecutiveSummary(
   intent,
   results,
   query
@@ -621,11 +626,4 @@ function normalizeText(
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
-}
-
-module.exports = {
-  processLegalQuery,
-  detectIntent,
-  routeIntent,
-  generateExecutiveSummary,
-};
+          }
