@@ -12,6 +12,8 @@
  * - Expiration intelligence
  * - Compliance retrieval
  * - Future semantic/vector search compatibility
+ *
+ * ESM VERSION
  */
 
 const SEARCHABLE_COMPLIANCE_TERMS = [
@@ -39,7 +41,7 @@ const HIGH_RISK_TERMS = [
  * CLAUSE SEARCH
  * -----------------------------------------
  */
-function searchClauses(
+export function searchClauses(
   query = "",
   contracts = []
 ) {
@@ -147,7 +149,7 @@ function searchClauses(
  * SEARCH BY CLAUSE TYPE
  * -----------------------------------------
  */
-function searchByClauseType(
+export function searchByClauseType(
   type = "",
   contracts = []
 ) {
@@ -225,7 +227,7 @@ function searchByClauseType(
  * SEARCH BY RISK LEVEL
  * -----------------------------------------
  */
-function searchByRiskLevel(
+export function searchByRiskLevel(
   level = "High",
   contracts = []
 ) {
@@ -294,7 +296,7 @@ function searchByRiskLevel(
  * SEARCH MISSING PROTECTIONS
  * -----------------------------------------
  */
-function searchMissingProtections(
+export function searchMissingProtections(
   protection = "",
   contracts = []
 ) {
@@ -365,7 +367,7 @@ function searchMissingProtections(
  * SEARCH UPCOMING EXPIRATIONS
  * -----------------------------------------
  */
-function searchUpcomingExpirations(
+export function searchUpcomingExpirations(
   contracts = [],
   days = 90
 ) {
@@ -450,7 +452,7 @@ function searchUpcomingExpirations(
  * SEARCH SUPPLIERS
  * -----------------------------------------
  */
-function searchSuppliers(
+export function searchSuppliers(
   query = "",
   contracts = []
 ) {
@@ -549,7 +551,7 @@ function searchSuppliers(
  * SEARCH HIGH-RISK TERMS
  * -----------------------------------------
  */
-function searchHighRiskTerms(
+export function searchHighRiskTerms(
   contracts = []
 ) {
   try {
@@ -627,7 +629,7 @@ function searchHighRiskTerms(
  * SEARCH COMPLIANCE CLAUSES
  * -----------------------------------------
  */
-function searchComplianceClauses(
+export function searchComplianceClauses(
   framework = "",
   contracts = []
 ) {
@@ -863,15 +865,4 @@ function generateContractTags(
   }
 
   return [...new Set(tags)];
-}
-
-module.exports = {
-  searchClauses,
-  searchByClauseType,
-  searchByRiskLevel,
-  searchMissingProtections,
-  searchUpcomingExpirations,
-  searchSuppliers,
-  searchHighRiskTerms,
-  searchComplianceClauses,
-};
+      }
