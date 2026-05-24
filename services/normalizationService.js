@@ -22,25 +22,25 @@
 /**
  * Supabase
  */
-const supabase = require("../config/supabase");
+import supabase from "../config/supabase.js";
 
 /**
  * Services
  */
-const {
+import {
   getAllContracts,
-} = require("./contractService");
+} from "./contractService.js";
 
-const {
+import {
   calculateDeviationScore,
-} = require("./contractComparisonEngine");
+} from "./contractComparisonEngine.js";
 
 /**
  * -----------------------------------------
  * MAIN NORMALIZATION PIPELINE
  * -----------------------------------------
  */
-async function normalizePortfolio() {
+export async function normalizePortfolio() {
   try {
     const contracts =
       await getAllContracts();
@@ -136,7 +136,7 @@ async function normalizePortfolio() {
  * SUPPLIER SYNC
  * -----------------------------------------
  */
-async function syncSupplier(
+export async function syncSupplier(
   contract,
   allContracts
 ) {
@@ -258,7 +258,7 @@ async function syncSupplier(
  * CLAUSE SYNC
  * -----------------------------------------
  */
-async function syncClauses(
+export async function syncClauses(
   contract,
   supplierId
 ) {
@@ -332,7 +332,7 @@ async function syncClauses(
  * OBLIGATION SYNC
  * -----------------------------------------
  */
-async function syncObligations(
+export async function syncObligations(
   contract,
   supplierId
 ) {
@@ -415,7 +415,7 @@ async function syncObligations(
  * RISK SCORE SYNC
  * -----------------------------------------
  */
-async function syncRiskScores(
+export async function syncRiskScores(
   contract,
   portfolio
 ) {
@@ -568,9 +568,6 @@ function generateSemanticTags(
     clause?.clause_text || ""
   ).toLowerCase();
 
-  /**
-   * Compliance
-   */
   if (
     text.includes("gdpr")
   ) {
@@ -595,9 +592,6 @@ function generateSemanticTags(
     tags.push("imo");
   }
 
-  /**
-   * Risk tags
-   */
   if (
     text.includes(
       "unlimited liability"
@@ -698,17 +692,3 @@ function extractSupplierRisk(
     contract?.risk_score || 0
   );
 }
-
-/**
- * -----------------------------------------
- * EXPORTS
- * -----------------------------------------
- */
-
-module.exports = {
-  normalizePortfolio,
-  syncSupplier,
-  syncClauses,
-  syncObligations,
-  syncRiskScores,
-};
