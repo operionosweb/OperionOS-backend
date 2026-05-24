@@ -1,8 +1,8 @@
 // routes/contractRoutes.js
 
 import express from "express";
-
-const router = express.Router();
+import multer from "multer";
+import pdfParse from "pdf-parse";
 
 /**
  * Services
@@ -15,10 +15,48 @@ import {
   deleteContract,
 } from "../services/contractService.js";
 
+import {
+  extractContractIntelligence,
+} from "../services/aiExtractionService.js";
+
+const router = express.Router();
+
+/**
+ * -----------------------------------------
+ * MULTER CONFIG
+ * -----------------------------------------
+ */
+
+const storage = multer.memoryStorage();
+
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 20 * 1024 * 1024,
+  },
+});
+
+/**
+ * -----------------------------------------
+ * HEALTH CHECK
+ * -----------------------------------------
+ */
+
+router.get(
+  "/health",
+  async (req, res) => {
+    return res.status(200).json({
+      success: true,
+      message:
+        "Contract routes operational",
+    });
+  }
+);
+
 /**
  * -----------------------------------------
  * POST /contracts
- * Create new contract
+ * Create new contract manually
  * -----------------------------------------
  */
 router.post(
@@ -53,6 +91,173 @@ router.post(
         error:
           error.message ||
           "Failed to create contract",
+      });
+    }
+  }
+);
+
+/**
+ * -----------------------------------------
+ * POST /contracts/upload
+ * Upload + AI Analyze Contract
+ * -----------------------------------------
+ */
+router.post(
+  "/upload",
+  upload.single("file"),
+  async (req, res) => {
+    try {
+      /**
+       * Validate file
+       */
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          error:
+            "No file uploaded",
+        });
+      }
+
+      /**
+       * -----------------------------------------
+       * EXTRACT PDF TEXT
+       * -----------------------------------------
+       */
+
+      let extractedText = "";
+
+      try {
+        const pdfData =
+          await pdfParse(
+            req.file.buffer
+          );
+
+        extractedText =
+          pdfData.text || "";
+      } catch (pdfError) {
+        console.error(
+          "PDF Parse Error:",
+          pdfError
+        );
+
+        return res.status(500).json({
+          success: false,
+          error:
+            "Failed to extract PDF text",
+        });
+      }
+
+      /**
+       * Validate extracted text
+       */
+      if (
+        !extractedText ||
+        extractedText.length < 100
+      ) {
+        return res.status(400).json({
+          success: false,
+          error:
+            "Document contains insufficient readable text",
+        });
+      }
+
+      /**
+       * -----------------------------------------
+       * AI EXTRACTION
+       * -----------------------------------------
+       */
+
+      const intelligence =
+        await extractContractIntelligence(
+          extractedText
+        );
+
+      /**
+       * -----------------------------------------
+       * SAVE CONTRACT
+       * -----------------------------------------
+       */
+
+      const result =
+        await createContract({
+          name:
+            req.file.originalname,
+
+          supplier_name:
+            intelligence?.supplier_name ||
+            "Unknown Supplier",
+
+          raw_text:
+            extractedText,
+
+          contract_type:
+            intelligence?.contract_type ||
+            "General Contract",
+
+          risk_score:
+            intelligence?.risk_score ||
+            0,
+
+          clauses:
+            intelligence?.clauses ||
+            [],
+
+          obligations:
+            intelligence?.obligations ||
+            [],
+
+          summary:
+            intelligence?.summary ||
+            "",
+
+          value:
+            intelligence?.contract_value ||
+            0,
+
+          start_date:
+            intelligence?.start_date ||
+            null,
+
+          expiry_date:
+            intelligence?.expiry_date ||
+            null,
+        });
+
+      /**
+       * -----------------------------------------
+       * RESPONSE
+       * -----------------------------------------
+       */
+
+      return res.status(201).json({
+        success: true,
+
+        filename:
+          req.file.originalname,
+
+        extracted_text_preview:
+          extractedText.substring(
+            0,
+            1000
+          ),
+
+        analysis:
+          intelligence,
+
+        contract:
+          result.contract,
+      });
+    } catch (error) {
+      console.error(
+        "Upload Route Error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        error:
+          error.message ||
+          "Failed to upload and analyze contract",
       });
     }
   }
