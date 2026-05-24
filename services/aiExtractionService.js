@@ -2,53 +2,87 @@
 
 import OpenAI from "openai";
 
-/**
- * -----------------------------------------
- * OPENAI CLIENT
- * -----------------------------------------
- */
+import { chunkContractText }
+from "./chunkingService.js";
 
+/**
+ * OpenAI Client
+ */
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey:
+    process.env.OPENAI_API_KEY,
 });
 
 /**
  * -----------------------------------------
- * MAIN AI EXTRACTION
+ * MAIN CONTRACT EXTRACTION
  * -----------------------------------------
  */
-
 export async function extractContractIntelligence(
-  contractText = ""
+  text = ""
 ) {
   try {
-    if (!contractText) {
-      throw new Error(
-        "Contract text is required"
-      );
+    if (!text) {
+      return emptyResponse();
     }
 
     /**
-     * Limit text size
+     * Chunk contract
      */
-    const truncatedText =
-      contractText.substring(
-        0,
-        15000
-      );
+    const chunks =
+      chunkContractText(text);
+
+    console.log(
+      `Processing ${chunks.length} chunks`
+    );
 
     /**
-     * -----------------------------------------
-     * OPENAI PROMPT
-     * -----------------------------------------
+     * Aggregated results
      */
+    const extractedClauses = [];
+    const extractedObligations = [];
 
-    const prompt = `
-You are OPERION OS AI Legal Intelligence Engine.
+    let cumulativeRisk = 0;
 
-Analyze this contract and return STRICT JSON only.
+    let detectedSupplier =
+      "Unknown Supplier";
 
-Return this structure:
+    let detectedType =
+      "General Contract";
+
+    /**
+     * Process chunks sequentially
+     */
+    for (const chunk of chunks) {
+      const completion =
+        await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+
+          response_format: {
+            type: "json_object",
+          },
+
+          messages: [
+            {
+              role: "system",
+
+              content: `
+You are an enterprise legal AI specialized in aviation contracts.
+
+Analyze the provided contract section.
+
+Extract:
+- contract_type
+- supplier_name
+- summary
+- risk_score
+- contract_value
+- clauses
+- obligations
+
+Return ONLY valid JSON.
+
+JSON structure:
 
 {
   "contract_type": "",
@@ -56,125 +90,138 @@ Return this structure:
   "summary": "",
   "risk_score": 0,
   "contract_value": 0,
-  "start_date": "",
-  "expiry_date": "",
-  "clauses": [
-    {
-      "clause_title": "",
-      "clause_type": "",
-      "risk_level": "",
-      "summary": "",
-      "clause_text": ""
-    }
-  ],
-  "obligations": [
-    {
-      "title": "",
-      "description": "",
-      "severity": "",
-      "deadline": "",
-      "status": "Pending"
-    }
-  ]
+  "clauses": [],
+  "obligations": []
 }
+              `,
+            },
 
-Contract:
+            {
+              role: "user",
+              content: chunk,
+            },
+          ],
 
-${truncatedText}
-`;
+          temperature: 0.1,
+        });
+
+      const content =
+        completion?.choices?.[0]
+          ?.message?.content || "{}";
+
+      let parsed = {};
+
+      try {
+        parsed =
+          JSON.parse(content);
+      } catch (jsonError) {
+        console.error(
+          "Chunk JSON Parse Error:",
+          jsonError
+        );
+
+        continue;
+      }
+
+      /**
+       * Merge clauses
+       */
+      if (
+        Array.isArray(
+          parsed?.clauses
+        )
+      ) {
+        extractedClauses.push(
+          ...parsed.clauses
+        );
+      }
+
+      /**
+       * Merge obligations
+       */
+      if (
+        Array.isArray(
+          parsed?.obligations
+        )
+      ) {
+        extractedObligations.push(
+          ...parsed.obligations
+        );
+      }
+
+      /**
+       * Risk aggregation
+       */
+      cumulativeRisk +=
+        Number(
+          parsed?.risk_score || 0
+        );
+
+      /**
+       * Supplier detection
+       */
+      if (
+        parsed?.supplier_name &&
+        detectedSupplier ===
+          "Unknown Supplier"
+      ) {
+        detectedSupplier =
+          parsed.supplier_name;
+      }
+
+      /**
+       * Contract type detection
+       */
+      if (
+        parsed?.contract_type &&
+        detectedType ===
+          "General Contract"
+      ) {
+        detectedType =
+          parsed.contract_type;
+      }
+    }
 
     /**
-     * -----------------------------------------
-     * OPENAI CALL
-     * -----------------------------------------
+     * Final response
      */
-
-    const response =
-      await openai.chat.completions.create({
-        model: "gpt-4.1-mini",
-
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are an enterprise legal AI system.",
-          },
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-
-        temperature: 0.2,
-
-        response_format: {
-          type: "json_object",
-        },
-      });
-
-    /**
-     * -----------------------------------------
-     * PARSE RESPONSE
-     * -----------------------------------------
-     */
-
-    const content =
-      response.choices?.[0]?.message
-        ?.content || "{}";
-
-    const parsed =
-      JSON.parse(content);
-
-    /**
-     * -----------------------------------------
-     * NORMALIZE OUTPUT
-     * -----------------------------------------
-     */
-
     return {
       contract_type:
-        parsed.contract_type ||
-        "General Contract",
+        detectedType,
 
       supplier_name:
-        parsed.supplier_name ||
-        "Unknown Supplier",
+        detectedSupplier,
 
       summary:
-        parsed.summary || "",
+        `AI analysis completed across ${chunks.length} chunks.`,
 
       risk_score:
-        Number(
-          parsed.risk_score || 0
+        Math.min(
+          100,
+          Math.round(
+            cumulativeRisk /
+              Math.max(
+                chunks.length,
+                1
+              )
+          )
         ),
 
-      contract_value:
-        Number(
-          parsed.contract_value ||
-            0
+      contract_value: 0,
+
+      clauses:
+        deduplicateClauses(
+          extractedClauses
         ),
 
-      start_date:
-        parsed.start_date || null,
-
-      expiry_date:
-        parsed.expiry_date || null,
-
-      clauses: Array.isArray(
-        parsed.clauses
-      )
-        ? parsed.clauses
-        : [],
-
-      obligations: Array.isArray(
-        parsed.obligations
-      )
-        ? parsed.obligations
-        : [],
+      obligations:
+        deduplicateObligations(
+          extractedObligations
+        ),
     };
   } catch (error) {
     console.error(
-      "AI Extraction Error:",
+      "extractContractIntelligence() Error:",
       error
     );
 
@@ -197,7 +244,93 @@ ${truncatedText}
       obligations: [],
 
       extraction_error:
-        error.message,
+        error?.message ||
+        "Unknown extraction error",
     };
   }
+}
+
+/**
+ * -----------------------------------------
+ * HELPERS
+ * -----------------------------------------
+ */
+
+function deduplicateClauses(
+  clauses = []
+) {
+  const seen = new Set();
+
+  return clauses.filter(
+    (clause) => {
+      const key = JSON.stringify(
+        clause
+      );
+
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+
+      return true;
+    }
+  );
+}
+
+function deduplicateObligations(
+  obligations = []
+) {
+  const seen = new Set();
+
+  return obligations.filter(
+    (obligation) => {
+      const key = JSON.stringify(
+        obligation
+      );
+
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+
+      return true;
+    }
+  );
+}
+
+function emptyResponse() {
+  return {
+    contract_type:
+      "General Contract",
+
+    supplier_name:
+      "Unknown Supplier",
+
+    summary:
+      "No contract text provided",
+
+    risk_score: 0,
+
+    contract_value: 0,
+
+    clauses: [],
+
+    obligations: [],
+  };
+}
+
+/**
+ * -----------------------------------------
+ * EXPORTS
+ * -----------------------------------------
+ */
+
+export async function analyzeContractText(
+  text = ""
+) {
+  return extractContractIntelligence(
+    text
+  );
 }
