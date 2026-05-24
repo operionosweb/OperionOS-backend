@@ -47,6 +47,7 @@ function calculatePortfolioRisk(contracts = []) {
     };
 
     const supplierExposureMap = {};
+
     const protectionGaps = {
       insurance: 0,
       indemnity: 0,
@@ -60,7 +61,9 @@ function calculatePortfolioRisk(contracts = []) {
     const maturityTerms = [];
 
     for (const contract of contracts) {
-      const contractRisk = normalizeRiskScore(contract?.risk_score);
+      const contractRisk = normalizeRiskScore(
+        contract?.risk_score
+      );
 
       cumulativeRiskScore += contractRisk;
 
@@ -68,58 +71,92 @@ function calculatePortfolioRisk(contracts = []) {
         criticalContracts++;
       }
 
-      incrementRiskDistribution(riskDistribution, contractRisk);
+      incrementRiskDistribution(
+        riskDistribution,
+        contractRisk
+      );
 
-      analyzeSupplierExposure(contract, supplierExposureMap);
+      analyzeSupplierExposure(
+        contract,
+        supplierExposureMap
+      );
 
-      analyzeProtectionGaps(contract, protectionGaps);
+      analyzeProtectionGaps(
+        contract,
+        protectionGaps
+      );
 
       buildHeatmap(contract, heatmap);
 
-      analyzeContractMaturity(contract, maturityTerms);
+      analyzeContractMaturity(
+        contract,
+        maturityTerms
+      );
     }
 
     const portfolioRiskScore = Math.round(
       cumulativeRiskScore / totalContracts
     );
 
-    const supplierExposure = buildSupplierExposureRanking(
-      supplierExposureMap
-    );
+    const supplierExposure =
+      buildSupplierExposureRanking(
+        supplierExposureMap
+      );
 
     const operationalBurdenScore =
       calculateOperationalBurden(contracts);
 
     const maturityAnalysis =
-      generateMaturityAnalysis(maturityTerms);
+      generateMaturityAnalysis(
+        maturityTerms
+      );
 
-    const highRiskVendors = supplierExposure
-      .filter((vendor) => vendor.exposure_score >= 75)
-      .slice(0, 10);
+    const highRiskVendors =
+      supplierExposure
+        .filter(
+          (vendor) =>
+            vendor.exposure_score >= 75
+        )
+        .slice(0, 10);
 
     return {
-      portfolio_risk_score: portfolioRiskScore,
+      success: true,
 
-      total_contracts: totalContracts,
+      portfolio_risk_score:
+        portfolioRiskScore,
 
-      critical_contracts: criticalContracts,
+      total_contracts:
+        totalContracts,
 
-      risk_distribution: riskDistribution,
+      critical_contracts:
+        criticalContracts,
 
-      supplier_exposure: supplierExposure,
+      risk_distribution:
+        riskDistribution,
 
-      operational_burden_score: operationalBurdenScore,
+      supplier_exposure:
+        supplierExposure,
 
-      missing_protections_summary: protectionGaps,
+      operational_burden_score:
+        operationalBurdenScore,
 
-      high_risk_vendors: highRiskVendors,
+      missing_protections_summary:
+        protectionGaps,
 
-      portfolio_heatmap: heatmap,
+      high_risk_vendors:
+        highRiskVendors,
 
-      maturity_analysis: maturityAnalysis,
+      portfolio_heatmap:
+        heatmap,
+
+      maturity_analysis:
+        maturityAnalysis,
     };
   } catch (error) {
-    console.error("Portfolio Risk Engine Error:", error);
+    console.error(
+      "Portfolio Risk Engine Error:",
+      error
+    );
 
     return {
       success: false,
@@ -131,7 +168,10 @@ function calculatePortfolioRisk(contracts = []) {
 /**
  * Supplier Exposure Intelligence
  */
-function analyzeSupplierExposure(contract, exposureMap) {
+function analyzeSupplierExposure(
+  contract,
+  exposureMap
+) {
   const supplierName =
     contract?.supplier_name ||
     contract?.vendor_name ||
@@ -150,19 +190,27 @@ function analyzeSupplierExposure(contract, exposureMap) {
     };
   }
 
-  const supplier = exposureMap[supplierName];
+  const supplier =
+    exposureMap[supplierName];
 
   supplier.contracts += 1;
 
-  const riskScore = normalizeRiskScore(contract?.risk_score);
+  const riskScore =
+    normalizeRiskScore(
+      contract?.risk_score
+    );
 
-  supplier.cumulative_risk += riskScore;
+  supplier.cumulative_risk +=
+    riskScore;
 
-  supplier.total_liability += extractLiabilityAmount(contract);
+  supplier.total_liability +=
+    extractLiabilityAmount(contract);
 
-  supplier.operational_burden += extractOperationalBurden(contract);
+  supplier.operational_burden +=
+    extractOperationalBurden(contract);
 
-  const clauses = contract?.clauses || [];
+  const clauses =
+    contract?.clauses || [];
 
   if (isMissingInsurance(clauses)) {
     supplier.missing_insurance_contracts += 1;
@@ -176,34 +224,71 @@ function analyzeSupplierExposure(contract, exposureMap) {
 /**
  * Protection Gap Analysis
  */
-function analyzeProtectionGaps(contract, gaps) {
-  const clauses = contract?.clauses || [];
+function analyzeProtectionGaps(
+  contract,
+  gaps
+) {
+  const clauses =
+    contract?.clauses || [];
 
-  const clauseTypes = clauses.map((c) =>
-    normalizeClauseType(c?.clause_type)
-  );
+  const clauseTypes =
+    clauses.map((c) =>
+      normalizeClauseType(
+        c?.clause_type
+      )
+    );
 
-  if (!containsClause(clauseTypes, "insurance")) {
+  if (
+    !containsClause(
+      clauseTypes,
+      "insurance"
+    )
+  ) {
     gaps.insurance++;
   }
 
-  if (!containsClause(clauseTypes, "indemnity")) {
+  if (
+    !containsClause(
+      clauseTypes,
+      "indemnity"
+    )
+  ) {
     gaps.indemnity++;
   }
 
-  if (!containsClause(clauseTypes, "limitation_of_liability")) {
+  if (
+    !containsClause(
+      clauseTypes,
+      "limitation_of_liability"
+    )
+  ) {
     gaps.limitation_of_liability++;
   }
 
-  if (!containsClause(clauseTypes, "termination")) {
+  if (
+    !containsClause(
+      clauseTypes,
+      "termination"
+    )
+  ) {
     gaps.termination++;
   }
 
-  if (!containsClause(clauseTypes, "confidentiality")) {
+  if (
+    !containsClause(
+      clauseTypes,
+      "confidentiality"
+    )
+  ) {
     gaps.confidentiality++;
   }
 
-  if (!containsClause(clauseTypes, "compliance")) {
+  if (
+    !containsClause(
+      clauseTypes,
+      "compliance"
+    )
+  ) {
     gaps.compliance++;
   }
 }
@@ -211,58 +296,100 @@ function analyzeProtectionGaps(contract, gaps) {
 /**
  * Heatmap Builder
  */
-function buildHeatmap(contract, heatmap) {
+function buildHeatmap(
+  contract,
+  heatmap
+) {
   heatmap.push({
-    contract_id: contract?.id || null,
-    contract_name: contract?.name || "Unnamed Contract",
+    contract_id:
+      contract?.id || null,
+
+    contract_name:
+      contract?.name ||
+      "Unnamed Contract",
+
     supplier:
       contract?.supplier_name ||
       contract?.vendor_name ||
       "Unknown",
 
-    risk_score: normalizeRiskScore(contract?.risk_score),
+    risk_score:
+      normalizeRiskScore(
+        contract?.risk_score
+      ),
 
-    risk_level: determineRiskLevel(
-      normalizeRiskScore(contract?.risk_score)
-    ),
+    risk_level:
+      determineRiskLevel(
+        normalizeRiskScore(
+          contract?.risk_score
+        )
+      ),
 
-    operational_burden: extractOperationalBurden(contract),
+    operational_burden:
+      extractOperationalBurden(
+        contract
+      ),
 
-    compliance_risk: extractComplianceRisk(contract),
+    compliance_risk:
+      extractComplianceRisk(
+        contract
+      ),
 
-    financial_exposure: extractLiabilityAmount(contract),
+    financial_exposure:
+      extractLiabilityAmount(
+        contract
+      ),
   });
 }
 
 /**
  * Maturity Analytics
  */
-function analyzeContractMaturity(contract, maturityTerms) {
-  const startDate = contract?.start_date;
-  const expiryDate = contract?.expiry_date;
+function analyzeContractMaturity(
+  contract,
+  maturityTerms
+) {
+  const startDate =
+    contract?.start_date;
+
+  const expiryDate =
+    contract?.expiry_date;
 
   if (!startDate || !expiryDate) {
     return;
   }
 
-  const start = new Date(startDate);
-  const end = new Date(expiryDate);
+  const start =
+    new Date(startDate);
+
+  const end =
+    new Date(expiryDate);
 
   const months =
-    (end.getFullYear() - start.getFullYear()) * 12 +
-    (end.getMonth() - start.getMonth());
+    (end.getFullYear() -
+      start.getFullYear()) *
+      12 +
+    (end.getMonth() -
+      start.getMonth());
 
   maturityTerms.push({
-    contract_id: contract?.id,
-    duration_months: months,
-    expiry_date: expiryDate,
+    contract_id:
+      contract?.id,
+
+    duration_months:
+      months,
+
+    expiry_date:
+      expiryDate,
   });
 }
 
 /**
  * Generate Maturity Summary
  */
-function generateMaturityAnalysis(maturityTerms) {
+function generateMaturityAnalysis(
+  maturityTerms
+) {
   if (!maturityTerms.length) {
     return {
       average_term_months: 0,
@@ -270,35 +397,52 @@ function generateMaturityAnalysis(maturityTerms) {
     };
   }
 
-  const totalMonths = maturityTerms.reduce(
-    (sum, item) => sum + item.duration_months,
-    0
-  );
+  const totalMonths =
+    maturityTerms.reduce(
+      (sum, item) =>
+        sum + item.duration_months,
+      0
+    );
 
   const now = new Date();
 
-  const ninetyDaysFromNow = new Date();
-  ninetyDaysFromNow.setDate(now.getDate() + 90);
+  const ninetyDaysFromNow =
+    new Date();
 
-  const expiringSoon = maturityTerms.filter((item) => {
-    const expiry = new Date(item.expiry_date);
+  ninetyDaysFromNow.setDate(
+    now.getDate() + 90
+  );
 
-    return expiry <= ninetyDaysFromNow;
-  });
+  const expiringSoon =
+    maturityTerms.filter((item) => {
+      const expiry = new Date(
+        item.expiry_date
+      );
+
+      return (
+        expiry <=
+        ninetyDaysFromNow
+      );
+    });
 
   return {
-    average_term_months: Math.round(
-      totalMonths / maturityTerms.length
-    ),
+    average_term_months:
+      Math.round(
+        totalMonths /
+          maturityTerms.length
+      ),
 
-    expiring_within_90_days: expiringSoon.length,
+    expiring_within_90_days:
+      expiringSoon.length,
   };
 }
 
 /**
  * Operational Burden Intelligence
  */
-function calculateOperationalBurden(contracts = []) {
+function calculateOperationalBurden(
+  contracts = []
+) {
   if (!contracts.length) {
     return 0;
   }
@@ -306,35 +450,50 @@ function calculateOperationalBurden(contracts = []) {
   let totalBurden = 0;
 
   for (const contract of contracts) {
-    totalBurden += extractOperationalBurden(contract);
+    totalBurden +=
+      extractOperationalBurden(
+        contract
+      );
   }
 
-  return Math.round(totalBurden / contracts.length);
+  return Math.round(
+    totalBurden / contracts.length
+  );
 }
 
 /**
  * Supplier Exposure Ranking
  */
-function buildSupplierExposureRanking(exposureMap) {
+function buildSupplierExposureRanking(
+  exposureMap
+) {
   return Object.values(exposureMap)
     .map((supplier) => {
-      const exposureScore = Math.min(
-        100,
-        Math.round(
-          supplier.cumulative_risk / supplier.contracts +
-            supplier.uncapped_liability_contracts * 10 +
-            supplier.missing_insurance_contracts * 5
-        )
-      );
+      const exposureScore =
+        Math.min(
+          100,
+          Math.round(
+            supplier.cumulative_risk /
+              supplier.contracts +
+              supplier.uncapped_liability_contracts *
+                10 +
+              supplier.missing_insurance_contracts *
+                5
+          )
+        );
 
       return {
-        supplier: supplier.supplier,
+        supplier:
+          supplier.supplier,
 
-        contracts: supplier.contracts,
+        contracts:
+          supplier.contracts,
 
-        exposure_score: exposureScore,
+        exposure_score:
+          exposureScore,
 
-        total_liability: supplier.total_liability,
+        total_liability:
+          supplier.total_liability,
 
         operational_burden:
           supplier.operational_burden,
@@ -346,24 +505,36 @@ function buildSupplierExposureRanking(exposureMap) {
           supplier.uncapped_liability_contracts,
       };
     })
-    .sort((a, b) => b.exposure_score - a.exposure_score);
+    .sort(
+      (a, b) =>
+        b.exposure_score -
+        a.exposure_score
+    );
 }
 
 /**
  * Helpers
  */
 
-function normalizeRiskScore(score) {
+function normalizeRiskScore(
+  score
+) {
   const parsed = Number(score);
 
   if (isNaN(parsed)) {
     return 0;
   }
 
-  return Math.max(0, Math.min(100, parsed));
+  return Math.max(
+    0,
+    Math.min(100, parsed)
+  );
 }
 
-function incrementRiskDistribution(distribution, score) {
+function incrementRiskDistribution(
+  distribution,
+  score
+) {
   if (score < 25) {
     distribution.low++;
   } else if (score < 50) {
@@ -375,47 +546,80 @@ function incrementRiskDistribution(distribution, score) {
   }
 }
 
-function determineRiskLevel(score) {
-  if (score < 25) return "Low";
-  if (score < 50) return "Medium";
-  if (score < 75) return "High";
+function determineRiskLevel(
+  score
+) {
+  if (score < 25) {
+    return "Low";
+  }
+
+  if (score < 50) {
+    return "Medium";
+  }
+
+  if (score < 75) {
+    return "High";
+  }
 
   return "Critical";
 }
 
-function normalizeClauseType(type = "") {
+function normalizeClauseType(
+  type = ""
+) {
   return type
     .toLowerCase()
     .replace(/\s+/g, "_")
     .trim();
 }
 
-function containsClause(clauseTypes, target) {
-  return clauseTypes.includes(target);
+function containsClause(
+  clauseTypes,
+  target
+) {
+  return clauseTypes.includes(
+    target
+  );
 }
 
-function extractLiabilityAmount(contract) {
-  if (!contract) return 0;
+function extractLiabilityAmount(
+  contract
+) {
+  if (!contract) {
+    return 0;
+  }
 
   if (contract?.value) {
-    return Number(contract.value) || 0;
+    return (
+      Number(contract.value) || 0
+    );
   }
 
   if (contract?.contract_value) {
-    return Number(contract.contract_value) || 0;
+    return (
+      Number(
+        contract.contract_value
+      ) || 0
+    );
   }
 
   return 0;
 }
 
-function extractOperationalBurden(contract) {
-  const obligations = contract?.obligations || [];
+function extractOperationalBurden(
+  contract
+) {
+  const obligations =
+    contract?.obligations || [];
 
-  if (!Array.isArray(obligations)) {
+  if (
+    !Array.isArray(obligations)
+  ) {
     return 0;
   }
 
-  let burden = obligations.length * 5;
+  let burden =
+    obligations.length * 5;
 
   for (const obligation of obligations) {
     const severity =
@@ -423,21 +627,28 @@ function extractOperationalBurden(contract) {
       obligation?.risk_level ||
       "Low";
 
-    burden += DEFAULT_RISK_WEIGHTS[severity] || 1;
+    burden +=
+      DEFAULT_RISK_WEIGHTS[
+        severity
+      ] || 1;
   }
 
   return Math.min(100, burden);
 }
 
-function extractComplianceRisk(contract) {
-  const clauses = contract?.clauses || [];
+function extractComplianceRisk(
+  contract
+) {
+  const clauses =
+    contract?.clauses || [];
 
   let score = 0;
 
   for (const clause of clauses) {
-    const type = normalizeClauseType(
-      clause?.clause_type
-    );
+    const type =
+      normalizeClauseType(
+        clause?.clause_type
+      );
 
     if (
       type.includes("gdpr") ||
@@ -453,32 +664,49 @@ function extractComplianceRisk(contract) {
   return Math.min(100, score);
 }
 
-function isMissingInsurance(clauses = []) {
-  return !clauses.some((clause) =>
-    normalizeClauseType(clause?.clause_type).includes(
-      "insurance"
-    )
+function isMissingInsurance(
+  clauses = []
+) {
+  return !clauses.some(
+    (clause) =>
+      normalizeClauseType(
+        clause?.clause_type
+      ).includes(
+        "insurance"
+      )
   );
 }
 
-function hasUncappedLiability(clauses = []) {
-  return clauses.some((clause) => {
-    const text = (
-      clause?.clause_text || ""
-    ).toLowerCase();
+function hasUncappedLiability(
+  clauses = []
+) {
+  return clauses.some(
+    (clause) => {
+      const text = (
+        clause?.clause_text || ""
+      ).toLowerCase();
 
-    return (
-      text.includes("unlimited liability") ||
-      text.includes("uncapped liability") ||
-      text.includes("without limitation")
-    );
-  });
+      return (
+        text.includes(
+          "unlimited liability"
+        ) ||
+        text.includes(
+          "uncapped liability"
+        ) ||
+        text.includes(
+          "without limitation"
+        )
+      );
+    }
+  );
 }
 
 function emptyPortfolioResponse() {
   return {
     portfolio_risk_score: 0,
+
     total_contracts: 0,
+
     critical_contracts: 0,
 
     risk_distribution: {
@@ -512,7 +740,7 @@ function emptyPortfolioResponse() {
   };
 }
 
-module.exports = {
+export {
   calculatePortfolioRisk,
   calculateOperationalBurden,
   generateMaturityAnalysis,
