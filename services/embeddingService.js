@@ -1,229 +1,29 @@
-// services/contractService.js
+ // services/embeddingService.js
 
-import supabase from "../config/supabase.js";
-import { analyzeContractText } from "./aiExtractionService.js";
-import { generateEmbedding } from "./embeddingService.js";
-import crypto from "crypto";
+import OpenAI from "openai";
 
-/**
- * -----------------------------------------
- * HASH GENERATOR
- * -----------------------------------------
- */
-
-function generateHash(text = "") {
-  return crypto.createHash("sha256").update(text).digest("hex");
-}
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 /**
  * -----------------------------------------
- * CREATE CONTRACT (SAFE + ENTERPRISE)
+ * GENERATE EMBEDDING
  * -----------------------------------------
  */
 
-export async function createContract(contractPayload = {}) {
+export async function generateEmbedding(text = "") {
   try {
-    if (!contractPayload?.raw_text) {
-      return {
-        success: false,
-        error: "raw_text is required",
-      };
-    }
+    if (!text) return null;
 
-    const rawText = contractPayload.raw_text;
+    const response = await openai.embeddings.create({
+      model: "text-embedding-3-small",
+      input: text,
+    });
 
-    /**
-     * -----------------------------------------
-     * STEP 1: DOCUMENT HASH (SOURCE OF TRUTH)
-     * -----------------------------------------
-     */
-    const documentHash = generateHash(rawText);
-
-    /**
-     * -----------------------------------------
-     * STEP 2: DUPLICATE CHECK (DB ENFORCED)
-     * -----------------------------------------
-     */
-    const { data: existingContract, error: fetchError } = await supabase
-      .from("contracts")
-      .select("*")
-      .eq("document_hash", documentHash)
-      .maybeSingle();
-
-    if (fetchError) {
-      console.error("Duplicate check error:", fetchError);
-    }
-
-    const forceSave = contractPayload.force_save === "true";
-
-    if (existingContract && !forceSave) {
-      return {
-        success: true,
-        duplicate_detected: true,
-        duplicate_of: existingContract.id,
-        action_required: "Set force_save=true to override",
-        existing_contract: existingContract,
-      };
-    }
-
-    /**
-     * -----------------------------------------
-     * STEP 3: AI ANALYSIS
-     * -----------------------------------------
-     */
-    const analysis =
-      contractPayload.analysis ||
-      (await analyzeContractText(rawText));
-
-    /**
-     * -----------------------------------------
-     * STEP 4: INSERT CONTRACT
-     * -----------------------------------------
-     */
-    const insertPayload = {
-      name: contractPayload.name || "Unnamed Contract",
-      supplier_name: analysis?.supplier_name || "Unknown Supplier",
-      raw_text: rawText,
-      document_hash: documentHash,
-      duplicate_of: existingContract?.id || null,
-      is_duplicate: !!existingContract,
-      contract_type: analysis?.contract_type || "General Contract",
-      summary: analysis?.summary || "",
-      clauses: analysis?.clauses || [],
-      obligations: analysis?.obligations || [],
-      risk_score: analysis?.risk_score || 0,
-      contract_value: analysis?.contract_value || 0,
-      start_date: analysis?.start_date || null,
-      expiry_date: analysis?.expiry_date || null,
-      created_at: new Date().toISOString(),
-    };
-
-    const { data, error } = await supabase
-      .from("contracts")
-      .insert(insertPayload)
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    /**
-     * -----------------------------------------
-     * STEP 5: EMBEDDING GENERATION (ASYNC, NON-BLOCKING)
-     * -----------------------------------------
-     * SAFE MODE: this NEVER affects API response
-     */
-    (async () => {
-      try {
-        const embeddingText = `
-          ${analysis?.summary || ""}
-          ${rawText.slice(0, 8000)}
-        `;
-
-        const embedding = await generateEmbedding(embeddingText);
-
-        if (embedding) {
-          await supabase
-            .from("contracts")
-            .update({
-              embedding: embedding,
-            })
-            .eq("id", data.id);
-        }
-      } catch (err) {
-        console.error("Embedding generation failed:", err);
-      }
-    })();
-
-    /**
-     * -----------------------------------------
-     * RESPONSE
-     * -----------------------------------------
-     */
-    return {
-      success: true,
-      duplicate_detected: !!existingContract,
-      duplicate_of: existingContract?.id || null,
-      contract: data,
-    };
+    return response?.data?.[0]?.embedding || null;
   } catch (error) {
-    console.error("createContract Error:", error);
-
-    return {
-      success: false,
-      error: error.message || "Failed to create contract",
-    };
+    console.error("Embedding Error:", error);
+    return null;
   }
-}
-
-/**
- * -----------------------------------------
- * GET ALL CONTRACTS
- * -----------------------------------------
- */
-
-export async function getAllContracts() {
-  const { data, error } = await supabase
-    .from("contracts")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  if (error) return [];
-  return data || [];
-}
-
-/**
- * -----------------------------------------
- * GET CONTRACT BY ID
- * -----------------------------------------
- */
-
-export async function getContractById(id) {
-  const { data, error } = await supabase
-    .from("contracts")
-    .select("*")
-    .eq("id", id)
-    .single();
-
-  if (error) return null;
-  return data;
-}
-
-/**
- * -----------------------------------------
- * UPDATE CONTRACT
- * -----------------------------------------
- */
-
-export async function updateContract(id, updates = {}) {
-  const { data, error } = await supabase
-    .from("contracts")
-    .update(updates)
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) {
-    return { success: false, error: error.message };
-  }
-
-  return { success: true, contract: data };
-}
-
-/**
- * -----------------------------------------
- * DELETE CONTRACT
- * -----------------------------------------
- */
-
-export async function deleteContract(id) {
-  const { error } = await supabase
-    .from("contracts")
-    .delete()
-    .eq("id", id);
-
-  if (error) {
-    return { success: false, error: error.message };
-  }
-
-  return { success: true };
 }
