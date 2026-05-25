@@ -10,15 +10,17 @@ import crypto from "crypto";
  * HASH GENERATOR
  * -----------------------------------------
  */
+
 function generateHash(text = "") {
   return crypto.createHash("sha256").update(text).digest("hex");
 }
 
 /**
  * -----------------------------------------
- * CREATE CONTRACT (HYBRID INTELLIGENCE PIPELINE)
+ * CREATE CONTRACT (SAFE + ENTERPRISE)
  * -----------------------------------------
  */
+
 export async function createContract(contractPayload = {}) {
   try {
     if (!contractPayload?.raw_text) {
@@ -32,16 +34,25 @@ export async function createContract(contractPayload = {}) {
 
     /**
      * -----------------------------------------
-     * STEP 1: HASH (EXACT MATCH)
+     * STEP 1: DOCUMENT HASH (SOURCE OF TRUTH)
      * -----------------------------------------
      */
     const documentHash = generateHash(rawText);
 
-    const { data: existingContract } = await supabase
+    /**
+     * -----------------------------------------
+     * STEP 2: DUPLICATE CHECK (DB ENFORCED)
+     * -----------------------------------------
+     */
+    const { data: existingContract, error: fetchError } = await supabase
       .from("contracts")
       .select("*")
       .eq("document_hash", documentHash)
       .maybeSingle();
+
+    if (fetchError) {
+      console.error("Duplicate check error:", fetchError);
+    }
 
     const forceSave = contractPayload.force_save === "true";
 
@@ -49,49 +60,20 @@ export async function createContract(contractPayload = {}) {
       return {
         success: true,
         duplicate_detected: true,
-        duplicate_type: "exact",
         duplicate_of: existingContract.id,
+        action_required: "Set force_save=true to override",
         existing_contract: existingContract,
       };
     }
 
     /**
      * -----------------------------------------
-     * STEP 2: AI ANALYSIS
+     * STEP 3: AI ANALYSIS
      * -----------------------------------------
      */
     const analysis =
       contractPayload.analysis ||
       (await analyzeContractText(rawText));
-
-    /**
-     * -----------------------------------------
-     * STEP 3: EMBEDDING GENERATION
-     * -----------------------------------------
-     */
-    const embedding = await generateEmbedding(rawText);
-
-    let semanticDuplicate = null;
-
-    if (embedding) {
-      const { data } = await supabase.rpc("match_contracts", {
-        query_embedding: embedding,
-        match_threshold: 0.90,
-        match_count: 1,
-      });
-
-      semanticDuplicate = data?.[0] || null;
-    }
-
-    if (semanticDuplicate && !forceSave) {
-      return {
-        success: true,
-        duplicate_detected: true,
-        duplicate_type: "semantic",
-        duplicate_of: semanticDuplicate.id,
-        similarity: semanticDuplicate.similarity,
-      };
-    }
 
     /**
      * -----------------------------------------
@@ -102,13 +84,9 @@ export async function createContract(contractPayload = {}) {
       name: contractPayload.name || "Unnamed Contract",
       supplier_name: analysis?.supplier_name || "Unknown Supplier",
       raw_text: rawText,
-
       document_hash: documentHash,
-      embedding: embedding,
-
-      duplicate_of: existingContract?.id || semanticDuplicate?.id || null,
-      is_duplicate: !!existingContract || !!semanticDuplicate,
-
+      duplicate_of: existingContract?.id || null,
+      is_duplicate: !!existingContract,
       contract_type: analysis?.contract_type || "General Contract",
       summary: analysis?.summary || "",
       clauses: analysis?.clauses || [],
@@ -117,7 +95,6 @@ export async function createContract(contractPayload = {}) {
       contract_value: analysis?.contract_value || 0,
       start_date: analysis?.start_date || null,
       expiry_date: analysis?.expiry_date || null,
-
       created_at: new Date().toISOString(),
     };
 
@@ -129,9 +106,43 @@ export async function createContract(contractPayload = {}) {
 
     if (error) throw error;
 
+    /**
+     * -----------------------------------------
+     * STEP 5: EMBEDDING GENERATION (ASYNC, NON-BLOCKING)
+     * -----------------------------------------
+     * SAFE MODE: this NEVER affects API response
+     */
+    (async () => {
+      try {
+        const embeddingText = `
+          ${analysis?.summary || ""}
+          ${rawText.slice(0, 8000)}
+        `;
+
+        const embedding = await generateEmbedding(embeddingText);
+
+        if (embedding) {
+          await supabase
+            .from("contracts")
+            .update({
+              embedding: embedding,
+            })
+            .eq("id", data.id);
+        }
+      } catch (err) {
+        console.error("Embedding generation failed:", err);
+      }
+    })();
+
+    /**
+     * -----------------------------------------
+     * RESPONSE
+     * -----------------------------------------
+     */
     return {
       success: true,
-      duplicate_detected: false,
+      duplicate_detected: !!existingContract,
+      duplicate_of: existingContract?.id || null,
       contract: data,
     };
   } catch (error) {
@@ -149,6 +160,7 @@ export async function createContract(contractPayload = {}) {
  * GET ALL CONTRACTS
  * -----------------------------------------
  */
+
 export async function getAllContracts() {
   const { data, error } = await supabase
     .from("contracts")
@@ -164,6 +176,7 @@ export async function getAllContracts() {
  * GET CONTRACT BY ID
  * -----------------------------------------
  */
+
 export async function getContractById(id) {
   const { data, error } = await supabase
     .from("contracts")
@@ -180,6 +193,7 @@ export async function getContractById(id) {
  * UPDATE CONTRACT
  * -----------------------------------------
  */
+
 export async function updateContract(id, updates = {}) {
   const { data, error } = await supabase
     .from("contracts")
@@ -200,6 +214,7 @@ export async function updateContract(id, updates = {}) {
  * DELETE CONTRACT
  * -----------------------------------------
  */
+
 export async function deleteContract(id) {
   const { error } = await supabase
     .from("contracts")
