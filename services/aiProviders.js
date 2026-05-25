@@ -1,200 +1,75 @@
 // services/aiProviders.js
 
-import OpenAI from "openai";
-import crypto from "crypto";
+import axios from "axios";
+
+/**
+ * =========================================
+ * EU-FIRST AI ROUTING ENGINE
+ * Mistral → Aleph Alpha → OpenAI → Fallback
+ * =========================================
+ */
 
 /**
  * -----------------------------------------
- * ENV KEYS (SAFE OPTIONAL LOADING)
+ * ENV SAFETY CHECKS
  * -----------------------------------------
  */
 
-const OPENAI_KEY = process.env.OPENAI_API_KEY;
 const MISTRAL_KEY = process.env.MISTRAL_API_KEY;
-const ALEPH_ALPHA_KEY = process.env.ALEPH_ALPHA_API_KEY;
+const ALEPH_KEY = process.env.ALEPH_ALPHA_API_KEY;
+const OPENAI_KEY = process.env.OPENAI_API_KEY;
 
 /**
  * -----------------------------------------
- * CLIENTS (ONLY INIT IF KEY EXISTS)
+ * SIMPLE TIMEOUT WRAPPER
  * -----------------------------------------
  */
 
-const openaiClient = OPENAI_KEY
-  ? new OpenAI({ apiKey: OPENAI_KEY })
-  : null;
-
-/**
- * -----------------------------------------
- * SIMPLE HASH (for cache keys later if needed)
- * -----------------------------------------
- */
-
-function hashText(text = "") {
-  return crypto
-    .createHash("sha256")
-    .update(text)
-    .digest("hex");
+function withTimeout(promise, ms = 20000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Timeout")), ms)
+    ),
+  ]);
 }
 
 /**
  * -----------------------------------------
- * 🧠 LOCAL FALLBACK (ALWAYS WORKS)
+ * SAFE JSON PARSER (AI RESILIENCE)
  * -----------------------------------------
  */
 
-function localFallbackAnalysis(text = "") {
-  const lower = text.toLowerCase();
-
-  let riskScore = 15;
-
-  const riskKeywords = [
-    "termination",
-    "liability",
-    "indemnify",
-    "penalty",
-    "breach",
-    "default",
-    "without limitation",
-    "exclusive",
-  ];
-
-  for (const k of riskKeywords) {
-    if (lower.includes(k)) riskScore += 6;
+function safeParseJSON(text) {
+  try {
+    if (typeof text === "object") return text;
+    return JSON.parse(text);
+  } catch {
+    return null;
   }
-
-  return {
-    contract_type: lower.includes("lease")
-      ? "Lease Agreement"
-      : "General Contract",
-
-    supplier_name: "Unknown Supplier",
-
-    summary:
-      "Fallback local analysis used (no AI provider available).",
-
-    risk_score: Math.min(100, riskScore),
-
-    contract_value: 0,
-
-    clauses: [],
-    obligations: [],
-  };
 }
 
 /**
- * -----------------------------------------
- * 🇪🇺 MISTRAL (PRIMARY EU PROVIDER)
- * -----------------------------------------
- * NOTE: Placeholder safe implementation
- * (You will plug real endpoint later)
- * -----------------------------------------
+ * =========================================
+ * 1. MISTRAL (EU PRIORITY #1)
+ * =========================================
  */
 
 async function callMistral(text) {
-  if (!MISTRAL_KEY) return null;
+  if (!MISTRAL_KEY) {
+    throw new Error("Mistral key missing");
+  }
 
-  try {
-    const response = await fetch(
+  const response = await withTimeout(
+    axios.post(
       "https://api.mistral.ai/v1/chat/completions",
       {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${MISTRAL_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "mistral-small",
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are a legal contract analysis engine. Return JSON only.",
-            },
-            {
-              role: "user",
-              content: text,
-            },
-          ],
-          temperature: 0.2,
-        }),
-      }
-    );
-
-    if (!response.ok) return null;
-
-    const data = await response.json();
-
-    const content =
-      data?.choices?.[0]?.message?.content;
-
-    if (!content) return null;
-
-    return safeParseJSON(content);
-  } catch (err) {
-    return null;
-  }
-}
-
-/**
- * -----------------------------------------
- * 🇪🇺 ALEPH ALPHA (OPTIONAL EU PROVIDER)
- * -----------------------------------------
- * SAFE: will NEVER break pipeline
- * -----------------------------------------
- */
-
-async function callAlephAlpha(text) {
-  if (!ALEPH_ALPHA_KEY) return null;
-
-  try {
-    const response = await fetch(
-      "https://api.aleph-alpha.com/complete",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${ALEPH_ALPHA_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "luminous-base",
-          prompt: `Analyze this contract:\n\n${text}`,
-          max_tokens: 800,
-        }),
-      }
-    );
-
-    if (!response.ok) return null;
-
-    const data = await response.json();
-
-    const textOut = data?.completions?.[0]?.completion;
-
-    if (!textOut) return null;
-
-    return safeParseJSON(textOut);
-  } catch (err) {
-    return null;
-  }
-}
-
-/**
- * -----------------------------------------
- * 🇺🇸 OPENAI FALLBACK
- * -----------------------------------------
- */
-
-async function callOpenAI(text) {
-  if (!openaiClient) return null;
-
-  try {
-    const response =
-      await openaiClient.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "mistral-large-latest",
         messages: [
           {
             role: "system",
             content:
-              "Return structured JSON contract analysis only.",
+              "You are a contract analysis engine. Return STRICT JSON only.",
           },
           {
             role: "user",
@@ -202,87 +77,202 @@ async function callOpenAI(text) {
           },
         ],
         temperature: 0.2,
-      });
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${MISTRAL_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    )
+  );
 
-    const content =
-      response?.choices?.[0]?.message?.content;
+  const content = response?.data?.choices?.[0]?.message?.content;
 
-    return safeParseJSON(content);
-  } catch (err) {
-    return null;
-  }
-}
-
-/**
- * -----------------------------------------
- * SAFE JSON PARSER
- * -----------------------------------------
- */
-
-function safeParseJSON(text) {
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    return null;
-  }
-}
-
-/**
- * -----------------------------------------
- * MAIN EU-FIRST ROUTER
- * -----------------------------------------
- */
-
-export async function analyzeWithProviders(rawText = "") {
-  if (!rawText) {
-    return {
-      success: false,
-      error: "No input text",
-    };
-  }
-
-  /**
-   * 1. 🇪🇺 MISTRAL FIRST
-   */
-  const mistral = await callMistral(rawText);
-  if (mistral) {
-    return {
-      success: true,
-      provider: "mistral",
-      analysis: mistral,
-    };
-  }
-
-  /**
-   * 2. 🇪🇺 ALEPH ALPHA (OPTIONAL)
-   */
-  const aleph = await callAlephAlpha(rawText);
-  if (aleph) {
-    return {
-      success: true,
-      provider: "aleph_alpha",
-      analysis: aleph,
-    };
-  }
-
-  /**
-   * 3. 🇺🇸 OPENAI FALLBACK
-   */
-  const openai = await callOpenAI(rawText);
-  if (openai) {
-    return {
-      success: true,
-      provider: "openai",
-      analysis: openai,
-    };
-  }
-
-  /**
-   * 4. 🧱 LOCAL FALLBACK (GUARANTEED)
-   */
   return {
-    success: true,
-    provider: "local_fallback",
-    analysis: localFallbackAnalysis(rawText),
+    provider: "mistral",
+    analysis: safeParseJSON(content) || {},
   };
+}
+
+/**
+ * =========================================
+ * 2. ALEPH ALPHA (EU #2)
+ * NOTE: KEY MAY NOT EXIST YET → SAFE HANDLING
+ * =========================================
+ */
+
+async function callAlephAlpha(text) {
+  if (!ALEPH_KEY) {
+    throw new Error("Aleph Alpha key missing");
+  }
+
+  const response = await withTimeout(
+    axios.post(
+      "https://api.aleph-alpha.com/complete",
+      {
+        model: "luminous-base",
+        prompt: `
+Analyze this contract and return STRICT JSON:
+
+${text}
+
+JSON format:
+{
+  "contract_type": "",
+  "supplier_name": "",
+  "summary": "",
+  "risk_score": 0,
+  "clauses": [],
+  "obligations": []
+}
+        `,
+        maximum_tokens: 800,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${ALEPH_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    )
+  );
+
+  const textResponse = response?.data?.completion;
+
+  return {
+    provider: "aleph_alpha",
+    analysis: safeParseJSON(textResponse) || {},
+  };
+}
+
+/**
+ * =========================================
+ * 3. OPENAI (GLOBAL FALLBACK)
+ * =========================================
+ */
+
+async function callOpenAI(text) {
+  if (!OPENAI_KEY) {
+    throw new Error("OpenAI key missing");
+  }
+
+  const response = await withTimeout(
+    axios.post(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "Return ONLY valid JSON for contract analysis.",
+          },
+          {
+            role: "user",
+            content: text,
+          },
+        ],
+        temperature: 0.2,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${OPENAI_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    )
+  );
+
+  const content = response?.data?.choices?.[0]?.message?.content;
+
+  return {
+    provider: "openai",
+    analysis: safeParseJSON(content) || {},
+  };
+}
+
+/**
+ * =========================================
+ * 4. SAFE FALLBACK (NO AI)
+ * =========================================
+ */
+
+function fallbackAnalysis() {
+  return {
+    provider: "fallback",
+    analysis: {
+      contract_type: "General Contract",
+      supplier_name: "Unknown",
+      summary: "AI unavailable - fallback mode active.",
+      risk_score: 0,
+      contract_value: 0,
+      clauses: [],
+      obligations: [],
+    },
+  };
+}
+
+/**
+ * =========================================
+ * MAIN EU-FIRST ROUTER
+ * =========================================
+ */
+
+export async function analyzeWithProviders(text) {
+  /**
+   * -----------------------------------------
+   * STEP 1: MISTRAL (EU PRIMARY)
+   * -----------------------------------------
+   */
+
+  try {
+    const mistral = await callMistral(text);
+
+    if (mistral?.analysis && Object.keys(mistral.analysis).length > 0) {
+      return mistral;
+    }
+  } catch (err) {
+    console.warn("Mistral failed:", err.message);
+  }
+
+  /**
+   * -----------------------------------------
+   * STEP 2: ALEPH ALPHA (EU FALLBACK)
+   * -----------------------------------------
+   */
+
+  try {
+    const aleph = await callAlephAlpha(text);
+
+    if (aleph?.analysis && Object.keys(aleph.analysis).length > 0) {
+      return aleph;
+    }
+  } catch (err) {
+    console.warn("Aleph Alpha failed:", err.message);
+  }
+
+  /**
+   * -----------------------------------------
+   * STEP 3: OPENAI (GLOBAL FALLBACK)
+   * -----------------------------------------
+   */
+
+  try {
+    const openai = await callOpenAI(text);
+
+    if (openai?.analysis && Object.keys(openai.analysis).length > 0) {
+      return openai;
+    }
+  } catch (err) {
+    console.warn("OpenAI failed:", err.message);
+  }
+
+  /**
+   * -----------------------------------------
+   * STEP 4: SAFE FALLBACK
+   * -----------------------------------------
+   */
+
+  return fallbackAnalysis();
 }
