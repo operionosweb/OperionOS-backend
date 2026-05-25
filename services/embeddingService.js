@@ -1,4 +1,4 @@
- // services/embeddingService.js
+// services/embeddingService.js
 
 import OpenAI from "openai";
 
@@ -8,10 +8,9 @@ const openai = new OpenAI({
 
 /**
  * -----------------------------------------
- * GENERATE EMBEDDING
+ * GENERATE EMBEDDING (EU-FIRST READY ARCH)
  * -----------------------------------------
  */
-
 export async function generateEmbedding(text = "") {
   try {
     if (!text) return null;
