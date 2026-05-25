@@ -9,20 +9,20 @@ const router = express.Router();
 
 /**
  * -----------------------------------------
- * MULTER (memory only)
+ * MULTER (memory only - EU SAFE)
  * -----------------------------------------
  */
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 25 * 1024 * 1024, // 25MB
+    fileSize: 25 * 1024 * 1024,
   },
 });
 
 /**
  * -----------------------------------------
- * UPLOAD FILE (Uploadcare)
+ * UPLOAD FILE (UPLOADCARE ONLY)
  * -----------------------------------------
  */
 
@@ -37,9 +37,6 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 
     const file = req.file;
 
-    /**
-     * FIXED CALL SIGNATURE
-     */
     const uploadResult = await uploadFile({
       buffer: file.buffer,
       filename: file.originalname,
