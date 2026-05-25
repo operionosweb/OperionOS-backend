@@ -5,8 +5,9 @@ import multer from "multer";
 import pdfParse from "pdf-parse";
 
 /**
- * Services
+ * SERVICES
  */
+
 import {
   createContract,
   getAllContracts,
@@ -19,9 +20,10 @@ const router = express.Router();
 
 /**
  * -----------------------------------------
- * MULTER CONFIG
+ * MULTER CONFIG (STABLE UPLOAD HANDLING)
  * -----------------------------------------
  */
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -34,18 +36,21 @@ const upload = multer({
  * HEALTH CHECK
  * -----------------------------------------
  */
-router.get("/health", (req, res) => {
-  res.status(200).json({
+
+router.get("/health", async (req, res) => {
+  return res.status(200).json({
     success: true,
-    message: "Contract routes operational",
+    service: "contract-routes",
+    status: "operational",
   });
 });
 
 /**
  * -----------------------------------------
- * CREATE CONTRACT (MANUAL)
+ * CREATE CONTRACT (MANUAL JSON)
  * -----------------------------------------
  */
+
 router.post("/", async (req, res) => {
   try {
     const result = await createContract(req.body);
@@ -60,24 +65,30 @@ router.post("/", async (req, res) => {
     return res.status(201).json({
       success: true,
       contract: result.contract,
+      duplicate_detected: result.duplicate_detected || false,
+      duplicate_of: result.duplicate_of || null,
     });
   } catch (error) {
     console.error("Create Contract Route Error:", error);
 
     return res.status(500).json({
       success: false,
-      error: error.message || "Failed to create contract",
+      error: error.message || "Internal server error",
     });
   }
 });
 
 /**
  * -----------------------------------------
- * UPLOAD CONTRACT (PDF)
+ * UPLOAD CONTRACT (PDF PIPELINE ONLY)
  * -----------------------------------------
  */
+
 router.post("/upload", upload.single("file"), async (req, res) => {
   try {
+    /**
+     * VALIDATE FILE
+     */
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -86,9 +97,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     }
 
     /**
-     * -----------------------------------------
-     * PDF EXTRACTION
-     * -----------------------------------------
+     * EXTRACT PDF TEXT
      */
     let extractedText = "";
 
@@ -104,18 +113,18 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       });
     }
 
+    /**
+     * VALIDATE TEXT QUALITY
+     */
     if (!extractedText || extractedText.length < 100) {
       return res.status(400).json({
         success: false,
-        error: "Document contains insufficient readable text",
+        error: "Document text too short or unreadable",
       });
     }
 
     /**
-     * -----------------------------------------
-     * CALL SERVICE LAYER ONLY
-     * (no AI / hash / duplicate logic here anymore)
-     * -----------------------------------------
+     * CREATE CONTRACT (ALL AI + LOGIC HANDLED IN SERVICE LAYER)
      */
     const result = await createContract({
       name: req.file.originalname,
@@ -123,23 +132,27 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     });
 
     if (!result.success) {
-      return res.status(400).json({
+      return res.status(500).json({
         success: false,
-        error: result.error,
+        error: result.error || "Contract creation failed",
       });
     }
 
     /**
-     * -----------------------------------------
-     * RESPONSE
-     * -----------------------------------------
+     * RESPONSE (CLEAN + CONSISTENT)
      */
     return res.status(201).json({
       success: true,
+
       filename: req.file.originalname,
-      duplicate_detected: result.duplicate_detected,
-      duplicate_of: result.duplicate_of || null,
+
       contract: result.contract,
+
+      duplicate_detected: result.duplicate_detected || false,
+
+      duplicate_of: result.duplicate_of || null,
+
+      analysis_provider: result.analysis_provider || null,
     });
   } catch (error) {
     console.error("Upload Route Error:", error);
@@ -156,6 +169,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
  * GET ALL CONTRACTS
  * -----------------------------------------
  */
+
 router.get("/", async (req, res) => {
   try {
     const contracts = await getAllContracts();
@@ -179,6 +193,7 @@ router.get("/", async (req, res) => {
  * GET CONTRACT BY ID
  * -----------------------------------------
  */
+
 router.get("/:id", async (req, res) => {
   try {
     const contract = await getContractById(req.params.id);
@@ -209,6 +224,7 @@ router.get("/:id", async (req, res) => {
  * UPDATE CONTRACT
  * -----------------------------------------
  */
+
 router.put("/:id", async (req, res) => {
   try {
     const result = await updateContract(req.params.id, req.body);
@@ -239,6 +255,7 @@ router.put("/:id", async (req, res) => {
  * DELETE CONTRACT
  * -----------------------------------------
  */
+
 router.delete("/:id", async (req, res) => {
   try {
     const result = await deleteContract(req.params.id);
