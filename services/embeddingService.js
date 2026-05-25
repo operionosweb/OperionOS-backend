@@ -1,75 +1,214 @@
-// services/embeddingService.js
+// services/contractService.js
 
-import OpenAI from "openai";
-
-/**
- * -----------------------------------------
- * PROVIDER CONFIG (EU-FIRST READY)
- * -----------------------------------------
- */
-
-/**
- * Future EU providers can be added here:
- * - Mistral (France)
- * - Aleph Alpha (Germany)
- * - HuggingFace Inference (EU region)
- */
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+import supabase from "../config/supabase.js";
+import { analyzeContractText } from "./aiExtractionService.js";
+import { generateEmbedding } from "./embeddingService.js";
+import crypto from "crypto";
 
 /**
  * -----------------------------------------
- * EU-FIRST EMBEDDING ROUTER
+ * HASH GENERATOR
  * -----------------------------------------
  */
-
-async function generateOpenAIEmbedding(text) {
-  const response = await openai.embeddings.create({
-    model: "text-embedding-3-small",
-    input: text,
-  });
-
-  return response?.data?.[0]?.embedding || null;
+function generateHash(text = "") {
+  return crypto.createHash("sha256").update(text).digest("hex");
 }
 
 /**
  * -----------------------------------------
- * MAIN EXPORT (SMART ROUTER)
+ * CREATE CONTRACT (HYBRID INTELLIGENCE PIPELINE)
  * -----------------------------------------
  */
-
-export async function generateEmbedding(text = "") {
+export async function createContract(contractPayload = {}) {
   try {
-    if (!text) return null;
+    if (!contractPayload?.raw_text) {
+      return {
+        success: false,
+        error: "raw_text is required",
+      };
+    }
+
+    const rawText = contractPayload.raw_text;
 
     /**
      * -----------------------------------------
-     * STEP 1: EU PROVIDERS (PLACEHOLDER HOOK)
+     * STEP 1: HASH (EXACT MATCH)
      * -----------------------------------------
-     *
-     * In production you can plug:
-     * - Mistral embeddings (via API)
-     * - Aleph Alpha embeddings
-     * - Local models (bge-large, etc.)
      */
+    const documentHash = generateHash(rawText);
 
-    const EU_PROVIDER_ENABLED = false;
+    const { data: existingContract } = await supabase
+      .from("contracts")
+      .select("*")
+      .eq("document_hash", documentHash)
+      .maybeSingle();
 
-    if (EU_PROVIDER_ENABLED) {
-      // Future EU embedding logic goes here
-      // return await generateEUEembedding(text);
+    const forceSave = contractPayload.force_save === "true";
+
+    if (existingContract && !forceSave) {
+      return {
+        success: true,
+        duplicate_detected: true,
+        duplicate_type: "exact",
+        duplicate_of: existingContract.id,
+        existing_contract: existingContract,
+      };
     }
 
     /**
      * -----------------------------------------
-     * STEP 2: FALLBACK (OPENAI - US)
+     * STEP 2: AI ANALYSIS
      * -----------------------------------------
      */
-    return await generateOpenAIEmbedding(text);
+    const analysis =
+      contractPayload.analysis ||
+      (await analyzeContractText(rawText));
+
+    /**
+     * -----------------------------------------
+     * STEP 3: EMBEDDING GENERATION
+     * -----------------------------------------
+     */
+    const embedding = await generateEmbedding(rawText);
+
+    let semanticDuplicate = null;
+
+    if (embedding) {
+      const { data } = await supabase.rpc("match_contracts", {
+        query_embedding: embedding,
+        match_threshold: 0.90,
+        match_count: 1,
+      });
+
+      semanticDuplicate = data?.[0] || null;
+    }
+
+    if (semanticDuplicate && !forceSave) {
+      return {
+        success: true,
+        duplicate_detected: true,
+        duplicate_type: "semantic",
+        duplicate_of: semanticDuplicate.id,
+        similarity: semanticDuplicate.similarity,
+      };
+    }
+
+    /**
+     * -----------------------------------------
+     * STEP 4: INSERT CONTRACT
+     * -----------------------------------------
+     */
+    const insertPayload = {
+      name: contractPayload.name || "Unnamed Contract",
+      supplier_name: analysis?.supplier_name || "Unknown Supplier",
+      raw_text: rawText,
+
+      document_hash: documentHash,
+      embedding: embedding,
+
+      duplicate_of: existingContract?.id || semanticDuplicate?.id || null,
+      is_duplicate: !!existingContract || !!semanticDuplicate,
+
+      contract_type: analysis?.contract_type || "General Contract",
+      summary: analysis?.summary || "",
+      clauses: analysis?.clauses || [],
+      obligations: analysis?.obligations || [],
+      risk_score: analysis?.risk_score || 0,
+      contract_value: analysis?.contract_value || 0,
+      start_date: analysis?.start_date || null,
+      expiry_date: analysis?.expiry_date || null,
+
+      created_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase
+      .from("contracts")
+      .insert(insertPayload)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return {
+      success: true,
+      duplicate_detected: false,
+      contract: data,
+    };
   } catch (error) {
-    console.error("Embedding Error:", error);
-    return null;
+    console.error("createContract Error:", error);
+
+    return {
+      success: false,
+      error: error.message || "Failed to create contract",
+    };
   }
+}
+
+/**
+ * -----------------------------------------
+ * GET ALL CONTRACTS
+ * -----------------------------------------
+ */
+export async function getAllContracts() {
+  const { data, error } = await supabase
+    .from("contracts")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) return [];
+  return data || [];
+}
+
+/**
+ * -----------------------------------------
+ * GET CONTRACT BY ID
+ * -----------------------------------------
+ */
+export async function getContractById(id) {
+  const { data, error } = await supabase
+    .from("contracts")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error) return null;
+  return data;
+}
+
+/**
+ * -----------------------------------------
+ * UPDATE CONTRACT
+ * -----------------------------------------
+ */
+export async function updateContract(id, updates = {}) {
+  const { data, error } = await supabase
+    .from("contracts")
+    .update(updates)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  return { success: true, contract: data };
+}
+
+/**
+ * -----------------------------------------
+ * DELETE CONTRACT
+ * -----------------------------------------
+ */
+export async function deleteContract(id) {
+  const { error } = await supabase
+    .from("contracts")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  return { success: true };
 }
