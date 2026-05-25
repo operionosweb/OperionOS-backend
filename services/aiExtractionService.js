@@ -4,8 +4,15 @@ import crypto from "crypto";
 import { analyzeWithProviders } from "./aiProviders.js";
 
 /**
+ * =========================================
+ * EU-FIRST CONTRACT INTELLIGENCE ENGINE
+ * PRODUCTION HARDENED
+ * =========================================
+ */
+
+/**
  * -----------------------------------------
- * IN-MEMORY CACHE
+ * IN-MEMORY CACHE (SAFE FOR SINGLE INSTANCE)
  * -----------------------------------------
  */
 
@@ -18,15 +25,12 @@ const extractionCache = new Map();
  */
 
 function generateHash(text = "") {
-  return crypto
-    .createHash("sha256")
-    .update(text)
-    .digest("hex");
+  return crypto.createHash("sha256").update(text).digest("hex");
 }
 
 /**
  * -----------------------------------------
- * SMART CHUNKING (unchanged but stable)
+ * SMART CHUNKING (STABLE + SAFE)
  * -----------------------------------------
  */
 
@@ -47,36 +51,50 @@ function chunkText(text = "", chunkSize = 4000) {
     }
   }
 
-  if (currentChunk) {
-    chunks.push(currentChunk);
-  }
+  if (currentChunk) chunks.push(currentChunk);
 
   return chunks;
 }
 
 /**
  * -----------------------------------------
- * POST-PROCESS NORMALIZATION
- * -----------------------------------------
- * Ensures all providers return consistent structure
+ * SAFE AI NORMALIZER (CRITICAL PRODUCTION LAYER)
+ * Prevents crashes from malformed provider output
  * -----------------------------------------
  */
 
-function normalizeAIOutput(providerResult, chunksLength) {
+function normalizeAIOutput(providerResult, chunksLength = 0) {
   const analysis = providerResult?.analysis || {};
 
   return {
-    contract_type: analysis.contract_type || "General Contract",
-    supplier_name: analysis.supplier_name || "Unknown Supplier",
-    summary:
-      analysis.summary ||
-      "Contract analyzed using EU-first AI pipeline.",
-    risk_score: analysis.risk_score || 0,
-    contract_value: analysis.contract_value || 0,
-    chunks_processed: chunksLength || 0,
+    contract_type: typeof analysis.contract_type === "string"
+      ? analysis.contract_type
+      : "General Contract",
+
+    supplier_name: typeof analysis.supplier_name === "string"
+      ? analysis.supplier_name
+      : "Unknown Supplier",
+
+    summary: typeof analysis.summary === "string"
+      ? analysis.summary
+      : "Contract analyzed using EU-first AI pipeline.",
+
+    risk_score:
+      typeof analysis.risk_score === "number"
+        ? Math.min(100, Math.max(0, analysis.risk_score))
+        : 0,
+
+    contract_value:
+      typeof analysis.contract_value === "number"
+        ? analysis.contract_value
+        : 0,
+
+    chunks_processed: chunksLength,
+
     clauses: Array.isArray(analysis.clauses)
       ? analysis.clauses
       : [],
+
     obligations: Array.isArray(analysis.obligations)
       ? analysis.obligations
       : [],
@@ -85,22 +103,48 @@ function normalizeAIOutput(providerResult, chunksLength) {
 
 /**
  * -----------------------------------------
- * MAIN ANALYSIS ENGINE (EU-FIRST AI PIPELINE)
+ * PROVIDER FAILURE GUARD
+ * Ensures system NEVER crashes if AI fails
+ * -----------------------------------------
+ */
+
+function safeProviderResult(result) {
+  if (!result || typeof result !== "object") {
+    return {
+      provider: "fallback_safe_mode",
+      analysis: {
+        contract_type: "General Contract",
+        supplier_name: "Unknown Supplier",
+        summary: "AI provider failed safely - fallback activated.",
+        risk_score: 0,
+        contract_value: 0,
+        clauses: [],
+        obligations: [],
+      },
+    };
+  }
+
+  return result;
+}
+
+/**
+ * -----------------------------------------
+ * MAIN ANALYSIS ENGINE (EU-FIRST PIPELINE)
  * -----------------------------------------
  */
 
 export async function analyzeContractText(rawText = "") {
   try {
-    if (!rawText) {
+    if (!rawText || typeof rawText !== "string") {
       return {
         success: false,
-        error: "No text provided",
+        error: "No valid text provided",
       };
     }
 
     /**
      * -----------------------------------------
-     * HASH
+     * HASH (DEDUPLICATION CORE)
      * -----------------------------------------
      */
 
@@ -132,25 +176,53 @@ export async function analyzeContractText(rawText = "") {
 
     const chunks = chunkText(rawText);
 
-    console.log(`Document chunked into ${chunks.length} chunks`);
+    console.log(`📄 Document chunked into ${chunks.length} chunks`);
 
     /**
      * -----------------------------------------
-     * AI PIPELINE (EU-FIRST)
+     * EU-FIRST AI PIPELINE
      * -----------------------------------------
-     * All intelligence now comes from aiProviders.js
+     * Mistral → Aleph Alpha → OpenAI → fallback
+     * (handled inside aiProviders.js)
      * -----------------------------------------
      */
 
-    const aiResult = await analyzeWithProviders(rawText);
+    let aiResult;
+
+    try {
+      aiResult = await analyzeWithProviders(rawText);
+    } catch (err) {
+      console.error("❌ AI pipeline failure:", err);
+
+      aiResult = {
+        provider: "hard_fallback",
+        analysis: {
+          contract_type: "General Contract",
+          supplier_name: "Unknown Supplier",
+          summary: "AI pipeline failed safely. Fallback analysis used.",
+          risk_score: 0,
+          contract_value: 0,
+          clauses: [],
+          obligations: [],
+        },
+      };
+    }
 
     /**
      * -----------------------------------------
-     * FALLBACK SAFETY CHECK
+     * SAFETY WRAP
      * -----------------------------------------
      */
 
-    const normalized = normalizeAIOutput(aiResult, chunks.length);
+    const safeResult = safeProviderResult(aiResult);
+
+    /**
+     * -----------------------------------------
+     * NORMALIZATION LAYER
+     * -----------------------------------------
+     */
+
+    const normalized = normalizeAIOutput(safeResult, chunks.length);
 
     /**
      * -----------------------------------------
@@ -174,14 +246,16 @@ export async function analyzeContractText(rawText = "") {
       cache_source: null,
       document_hash: documentHash,
       analysis: normalized,
-      provider_used: aiResult?.provider || "unknown",
+      provider_used: safeResult?.provider || "unknown",
+      eu_pipeline: "mistral→aleph_alpha→openai→fallback",
     };
   } catch (error) {
-    console.error("analyzeContractText Error:", error);
+    console.error("❌ analyzeContractText fatal error:", error);
 
     return {
       success: false,
       error: error.message || "Analysis failed",
+      provider_used: "system_error",
     };
   }
 }
