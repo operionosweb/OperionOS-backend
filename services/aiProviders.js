@@ -3,198 +3,93 @@
 /**
  * =========================================
  * OPERION OS - AI PROVIDERS LAYER
- * EU-FIRST MULTI-MODEL ABSTRACTION
+ * EU-FIRST MULTI-MODEL ROUTING ENGINE
+ * =========================================
+ *
+ * PRIORITY:
+ * 1. Mistral (EU-first)
+ * 2. Aleph Alpha (EU sovereign)
+ * 3. OpenAI fallback
+ *
+ * FEATURES:
+ * - Failover chain
+ * - Provider health tracking
+ * - Timeout protection
+ * - Structured normalization
+ * - Cost-aware architecture ready
+ * - Future provider expansion ready
  * =========================================
  */
 
 import OpenAI from "openai";
 import axios from "axios";
 
-/**
- * -----------------------------------------
- * ENV SETUP
- * -----------------------------------------
- */
+/* ======================================================
+   OPENAI CLIENT
+====================================================== */
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-/**
- * -----------------------------------------
- * SAFE NORMALIZED OUTPUT FORMAT
- * -----------------------------------------
- */
+/* ======================================================
+   PROVIDER HEALTH MEMORY
+====================================================== */
 
-function normalizeOutput(provider, raw) {
-  try {
-    return {
-      provider,
-      analysis: {
-        contract_type:
-          raw?.contract_type || raw?.type || "General Contract",
+const providerHealth = {
+  mistral: {
+    healthy: true,
+    last_failure: null,
+  },
 
-        supplier_name:
-          raw?.supplier_name || raw?.vendor || "Unknown",
+  aleph_alpha: {
+    healthy: true,
+    last_failure: null,
+  },
 
-        summary:
-          raw?.summary ||
-          raw?.message ||
-          "AI analysis completed via EU-first routing layer.",
+  openai: {
+    healthy: true,
+    last_failure: null,
+  },
+};
 
-        risk_score: raw?.risk_score ?? 0,
+/* ======================================================
+   PROVIDER FAILURE TRACKING
+====================================================== */
 
-        contract_value: raw?.contract_value ?? 0,
-
-        clauses: Array.isArray(raw?.clauses)
-          ? raw.clauses
-          : [],
-
-        obligations: Array.isArray(raw?.obligations)
-          ? raw.obligations
-          : [],
-      },
-    };
-  } catch (e) {
-    return {
-      provider,
-      analysis: {
-        contract_type: "General Contract",
-        supplier_name: "Unknown",
-        summary: "Normalization failed",
-        risk_score: 0,
-        contract_value: 0,
-        clauses: [],
-        obligations: [],
-      },
-    };
-  }
-}
-
-/**
- * -----------------------------------------
- * MISTRAL (EU PRIMARY)
- * -----------------------------------------
- * NOTE: requires MISTRAL_API_KEY
- * -----------------------------------------
- */
-
-async function callMistral(text) {
-  if (!process.env.MISTRAL_API_KEY) {
-    throw new Error("MISTRAL_API_KEY missing");
-  }
-
-  const response = await axios.post(
-    "https://api.mistral.ai/v1/chat/completions",
-    {
-      model: "mistral-large-latest",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a contract analysis engine. Return structured JSON only.",
-        },
-        {
-          role: "user",
-          content: text,
-        },
-      ],
-      temperature: 0.2,
+function markProviderFailure(provider, error) {
+  providerHealth[provider] = {
+    healthy: false,
+    last_failure: {
+      timestamp: new Date().toISOString(),
+      error: error?.message || "Unknown failure",
     },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      timeout: 20000,
-    }
-  );
-
-  const content = response?.data?.choices?.[0]?.message?.content;
-
-  return normalizeOutput("mistral", safeJsonParse(content));
+  };
 }
 
-/**
- * -----------------------------------------
- * ALEPH ALPHA (EU SOVEREIGN LAYER)
- * -----------------------------------------
- * NOTE: API format may vary depending on plan
- * -----------------------------------------
- */
-
-async function callAlephAlpha(text) {
-  if (!process.env.ALEPH_ALPHA_API_KEY) {
-    throw new Error("ALEPH_ALPHA_API_KEY missing");
-  }
-
-  const response = await axios.post(
-    "https://api.aleph-alpha.com/complete",
-    {
-      model: "luminous-base",
-      prompt: `
-Analyze this contract and return structured JSON:
-${text}
-      `,
-      maximum_tokens: 800,
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.ALEPH_ALPHA_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      timeout: 20000,
-    }
-  );
-
-  const textResult = response?.data?.completions?.[0]?.completion;
-
-  return normalizeOutput("aleph_alpha", safeJsonParse(textResult));
+function markProviderHealthy(provider) {
+  providerHealth[provider] = {
+    healthy: true,
+    last_failure: null,
+  };
 }
 
-/**
- * -----------------------------------------
- * OPENAI FALLBACK (GLOBAL)
- * -----------------------------------------
- */
+/* ======================================================
+   EXPORTABLE HEALTH STATUS
+====================================================== */
 
-async function callOpenAI(text) {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY missing");
-  }
-
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      {
-        role: "system",
-        content:
-          "Return ONLY valid JSON with contract_type, supplier_name, summary, risk_score, contract_value, clauses, obligations.",
-      },
-      {
-        role: "user",
-        content: text,
-      },
-    ],
-    temperature: 0.2,
-  });
-
-  const content = response?.choices?.[0]?.message?.content;
-
-  return normalizeOutput("openai", safeJsonParse(content));
+export function getProviderHealth() {
+  return providerHealth;
 }
 
-/**
- * -----------------------------------------
- * SAFE JSON PARSER (critical for LLM safety)
- * -----------------------------------------
- */
+/* ======================================================
+   SAFE JSON PARSER
+====================================================== */
 
 function safeJsonParse(str) {
   try {
     if (!str) return {};
 
-    // remove markdown fences if present
     const cleaned = str
       .replace(/```json/g, "")
       .replace(/```/g, "")
@@ -208,60 +103,329 @@ function safeJsonParse(str) {
   }
 }
 
-/**
- * -----------------------------------------
- * MAIN ROUTER ENTRY (USED BY aiRoutingEngine)
- * -----------------------------------------
- */
+/* ======================================================
+   NORMALIZED OUTPUT FORMAT
+====================================================== */
 
-export async function analyzeWithProviders(text, providerHint = null) {
+function normalizeOutput(provider, raw) {
   try {
-    /**
-     * -----------------------------------------
-     * IF ROUTER SPECIFIES PROVIDER DIRECTLY
-     * -----------------------------------------
-     */
-
-    if (providerHint === "mistral") {
-      return await callMistral(text);
-    }
-
-    if (providerHint === "aleph_alpha") {
-      return await callAlephAlpha(text);
-    }
-
-    if (providerHint === "openai") {
-      return await callOpenAI(text);
-    }
-
-    /**
-     * -----------------------------------------
-     * DEFAULT (DIRECT FALLBACK CHAIN)
-     * -----------------------------------------
-     */
-
-    try {
-      return await callMistral(text);
-    } catch (e1) {
-      console.warn("Mistral failed:", e1.message);
-
-      try {
-        return await callAlephAlpha(text);
-      } catch (e2) {
-        console.warn("Aleph Alpha failed:", e2.message);
-
-        return await callOpenAI(text);
-      }
-    }
-  } catch (error) {
-    console.error("AI Providers Fatal Error:", error);
-
     return {
-      provider: "error",
+      provider,
+
+      analysis: {
+        contract_type:
+          raw?.contract_type ||
+          raw?.type ||
+          "General Contract",
+
+        supplier_name:
+          raw?.supplier_name ||
+          raw?.vendor ||
+          "Unknown",
+
+        summary:
+          raw?.summary ||
+          raw?.message ||
+          "AI analysis completed.",
+
+        risk_score:
+          typeof raw?.risk_score === "number"
+            ? raw.risk_score
+            : 0,
+
+        contract_value:
+          typeof raw?.contract_value === "number"
+            ? raw.contract_value
+            : 0,
+
+        clauses: Array.isArray(raw?.clauses)
+          ? raw.clauses
+          : [],
+
+        obligations: Array.isArray(raw?.obligations)
+          ? raw.obligations
+          : [],
+      },
+    };
+  } catch (e) {
+    return {
+      provider,
+
       analysis: {
         contract_type: "General Contract",
         supplier_name: "Unknown",
-        summary: "All AI providers failed",
+        summary: "Normalization failed",
+        risk_score: 0,
+        contract_value: 0,
+        clauses: [],
+        obligations: [],
+      },
+    };
+  }
+}
+
+/* ======================================================
+   SYSTEM PROMPT
+====================================================== */
+
+const SYSTEM_PROMPT = `
+You are an enterprise contract intelligence engine.
+
+Return ONLY valid JSON.
+
+Required JSON schema:
+
+{
+  "contract_type": "string",
+  "supplier_name": "string",
+  "summary": "string",
+  "risk_score": number,
+  "contract_value": number,
+  "clauses": [],
+  "obligations": []
+}
+`;
+
+/* ======================================================
+   MISTRAL (EU PRIMARY)
+====================================================== */
+
+async function callMistral(text) {
+  if (!process.env.MISTRAL_API_KEY) {
+    throw new Error("MISTRAL_API_KEY missing");
+  }
+
+  const response = await axios.post(
+    "https://api.mistral.ai/v1/chat/completions",
+    {
+      model: "mistral-large-latest",
+
+      messages: [
+        {
+          role: "system",
+          content: SYSTEM_PROMPT,
+        },
+        {
+          role: "user",
+          content: text,
+        },
+      ],
+
+      temperature: 0.1,
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+
+      timeout: 25000,
+    }
+  );
+
+  const content =
+    response?.data?.choices?.[0]?.message?.content;
+
+  markProviderHealthy("mistral");
+
+  return normalizeOutput(
+    "mistral",
+    safeJsonParse(content)
+  );
+}
+
+/* ======================================================
+   ALEPH ALPHA (EU SOVEREIGN)
+====================================================== */
+
+async function callAlephAlpha(text) {
+  if (!process.env.ALEPH_ALPHA_API_KEY) {
+    throw new Error("ALEPH_ALPHA_API_KEY missing");
+  }
+
+  const response = await axios.post(
+    "https://api.aleph-alpha.com/complete",
+    {
+      model: "luminous-base",
+
+      prompt: `
+${SYSTEM_PROMPT}
+
+Contract:
+${text}
+      `,
+
+      maximum_tokens: 800,
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.ALEPH_ALPHA_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+
+      timeout: 25000,
+    }
+  );
+
+  const content =
+    response?.data?.completions?.[0]?.completion;
+
+  markProviderHealthy("aleph_alpha");
+
+  return normalizeOutput(
+    "aleph_alpha",
+    safeJsonParse(content)
+  );
+}
+
+/* ======================================================
+   OPENAI FALLBACK
+====================================================== */
+
+async function callOpenAI(text) {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY missing");
+  }
+
+  const response =
+    await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+
+      messages: [
+        {
+          role: "system",
+          content: SYSTEM_PROMPT,
+        },
+        {
+          role: "user",
+          content: text,
+        },
+      ],
+
+      temperature: 0.1,
+    });
+
+  const content =
+    response?.choices?.[0]?.message?.content;
+
+  markProviderHealthy("openai");
+
+  return normalizeOutput(
+    "openai",
+    safeJsonParse(content)
+  );
+}
+
+/* ======================================================
+   PROVIDER EXECUTOR
+====================================================== */
+
+async function executeProvider(provider, text) {
+  switch (provider) {
+    case "mistral":
+      return await callMistral(text);
+
+    case "aleph_alpha":
+      return await callAlephAlpha(text);
+
+    case "openai":
+      return await callOpenAI(text);
+
+    default:
+      throw new Error(`Unknown provider: ${provider}`);
+  }
+}
+
+/* ======================================================
+   EU-FIRST PROVIDER ORDER
+====================================================== */
+
+function getProviderPriority() {
+  return [
+    "mistral",
+    "aleph_alpha",
+    "openai",
+  ];
+}
+
+/* ======================================================
+   MAIN ROUTER
+====================================================== */
+
+export async function analyzeWithProviders(
+  text,
+  providerHint = null
+) {
+  try {
+    /**
+     * -----------------------------------------
+     * DIRECT PROVIDER REQUEST
+     * -----------------------------------------
+     */
+
+    if (providerHint) {
+      return await executeProvider(
+        providerHint,
+        text
+      );
+    }
+
+    /**
+     * -----------------------------------------
+     * EU-FIRST FAILOVER CHAIN
+     * -----------------------------------------
+     */
+
+    const providers = getProviderPriority();
+
+    for (const provider of providers) {
+      try {
+        console.log(
+          `🧠 Attempting provider: ${provider}`
+        );
+
+        const result =
+          await executeProvider(provider, text);
+
+        console.log(
+          `✅ Provider success: ${provider}`
+        );
+
+        return result;
+      } catch (error) {
+        console.warn(
+          `❌ Provider failed: ${provider}`,
+          error.message
+        );
+
+        markProviderFailure(provider, error);
+      }
+    }
+
+    /**
+     * -----------------------------------------
+     * TOTAL FAILURE
+     * -----------------------------------------
+     */
+
+    throw new Error(
+      "All AI providers failed"
+    );
+  } catch (error) {
+    console.error(
+      "AI Routing Fatal Error:",
+      error
+    );
+
+    return {
+      provider: "error",
+
+      analysis: {
+        contract_type: "General Contract",
+        supplier_name: "Unknown",
+        summary:
+          "All AI providers failed",
+
         risk_score: 0,
         contract_value: 0,
         clauses: [],
