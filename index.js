@@ -40,7 +40,8 @@ app.use(express.urlencoded({
 }));
 
 /* ======================================================
-   SAFE FILE SYSTEM INIT (Render-compatible)
+   RENDER SAFE FILESYSTEM INIT
+   (ONLY LOCAL FALLBACK - NOT REQUIRED FOR UPLOADCARE)
 ====================================================== */
 
 const __filename = fileURLToPath(import.meta.url);
@@ -67,6 +68,7 @@ app.get("/", (req, res) => {
   res.json({
     status: "alive",
     service: "OperionOS Backend",
+    storage: "uploadcare-eu-first",
     timestamp: new Date().toISOString()
   });
 });
@@ -106,7 +108,7 @@ app.use((err, req, res, next) => {
 });
 
 /* ======================================================
-   SAFE SERVER START (Render hardened)
+   SAFE SERVER START (RENDER HARDENED)
 ====================================================== */
 
 const PORT = process.env.PORT;
@@ -119,10 +121,11 @@ if (!PORT) {
 const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 OperionOS running on port ${PORT}`);
   console.log(`🟢 Environment: ${process.env.NODE_ENV || "development"}`);
+  console.log(`🇪🇺 Storage layer: Uploadcare (EU-first abstraction)`);
 });
 
 /* ======================================================
-   GRACEFUL SHUTDOWN (important for Render restarts)
+   GRACEFUL SHUTDOWN (Render stability)
 ====================================================== */
 
 process.on("SIGTERM", () => {
