@@ -6,7 +6,7 @@ import crypto from "crypto";
 
 /**
  * -----------------------------------------
- * HASH
+ * HASH GENERATOR
  * -----------------------------------------
  */
 function generateHash(text = "") {
@@ -15,7 +15,7 @@ function generateHash(text = "") {
 
 /**
  * -----------------------------------------
- * CREATE CONTRACT (REQUIRED EXPORT)
+ * CREATE CONTRACT (UPSERT SAFE PIPELINE)
  * -----------------------------------------
  */
 export async function createContract(contractPayload = {}) {
@@ -30,22 +30,38 @@ export async function createContract(contractPayload = {}) {
     const rawText = contractPayload.raw_text;
 
     /**
-     * Optional analysis reuse
+     * -----------------------------------------
+     * STEP 1: HASH (SOURCE OF TRUTH KEY)
+     * -----------------------------------------
+     */
+    const documentHash = generateHash(rawText);
+
+    const forceSave = contractPayload.force_save === "true";
+
+    /**
+     * -----------------------------------------
+     * STEP 2: AI ANALYSIS (optional reuse)
+     * -----------------------------------------
      */
     const analysis =
       contractPayload.analysis ||
       (await analyzeContractText(rawText));
 
-    const documentHash =
-      contractPayload.document_hash || generateHash(rawText);
-
+    /**
+     * -----------------------------------------
+     * STEP 3: BUILD PAYLOAD
+     * -----------------------------------------
+     */
     const insertPayload = {
       name: contractPayload.name || "Unnamed Contract",
       supplier_name: analysis?.supplier_name || "Unknown Supplier",
       raw_text: rawText,
+
       document_hash: documentHash,
-      duplicate_of: contractPayload.duplicate_of || null,
-      is_duplicate: contractPayload.is_duplicate || false,
+
+      duplicate_of: null, // resolved after upsert
+      is_duplicate: false,
+
       contract_type: analysis?.contract_type || "General Contract",
       summary: analysis?.summary || "",
       clauses: analysis?.clauses || [],
@@ -54,19 +70,37 @@ export async function createContract(contractPayload = {}) {
       contract_value: analysis?.contract_value || 0,
       start_date: analysis?.start_date || null,
       expiry_date: analysis?.expiry_date || null,
+
       created_at: new Date().toISOString(),
     };
 
+    /**
+     * -----------------------------------------
+     * STEP 4: UPSERT (ATOMIC OPERATION)
+     * -----------------------------------------
+     * Requires UNIQUE constraint on document_hash
+     */
     const { data, error } = await supabase
       .from("contracts")
-      .insert(insertPayload)
+      .upsert(insertPayload, {
+        onConflict: "document_hash",
+        ignoreDuplicates: false,
+      })
       .select()
       .single();
 
     if (error) throw error;
 
+    /**
+     * -----------------------------------------
+     * STEP 5: DUPLICATE DETECTION LOGIC (POST UPSERT SAFETY FLAG)
+     * -----------------------------------------
+     */
+    const duplicateDetected = data?.created_at !== insertPayload.created_at;
+
     return {
       success: true,
+      duplicate_detected: duplicateDetected,
       contract: data,
     };
   } catch (error) {
