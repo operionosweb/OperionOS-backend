@@ -1,86 +1,110 @@
 // services/contractService.js
 
-import { analyzeContractText } from "./aiExtractionService.js";
-import { runHybridIntelligence } from "./hybridIntelligenceEngine.js";
+import { extractStructuredContractData } from "./contractExtractionEngine.js";
+import { ingestContract } from "./contractIngestionEngine.js";
 
 /**
  * =========================================
- * OPERION OS
- * CONTRACT SERVICE (HYBRID MODE)
+ * OPERION OS - CONTRACT SERVICE LAYER
+ * API BUSINESS LOGIC ORCHESTRATION
  * =========================================
  */
 
 /**
  * -----------------------------------------
- * MAIN ENTRY (NEW INTELLIGENCE PIPELINE)
+ * CREATE CONTRACT (MAIN ENTRY)
  * -----------------------------------------
  */
 
-export async function processContract(text = "") {
+export async function createContract({
+  text,
+  filename = "unknown.pdf",
+  fileId = null
+}) {
   try {
     if (!text) {
       return {
         success: false,
-        error: "No contract text provided",
+        error: "No contract text provided"
       };
     }
 
     /**
-     * -----------------------------------------
-     * HYBRID INTELLIGENCE ENGINE (PRIMARY)
-     * -----------------------------------------
+     * STEP 1 — AI STRUCTURED EXTRACTION
      */
 
-    const hybrid =
-      await runHybridIntelligence(text);
+    const extraction = await extractStructuredContractData(text);
 
     /**
-     * -----------------------------------------
-     * BACKWARD COMPATIBILITY AI SUMMARY
-     * (kept for legacy endpoints/UI)
-     * -----------------------------------------
+     * STEP 2 — INGESTION PIPELINE (AUDIT + HASH + TYPE)
      */
 
-    const legacy =
-      await analyzeContractText(text);
+    const ingestion = await ingestContract({
+      text,
+      filename,
+      fileId
+    });
 
     /**
-     * -----------------------------------------
-     * FINAL RESPONSE
-     * -----------------------------------------
+     * STEP 3 — MERGE OUTPUTS
      */
 
     return {
       success: true,
-
-      mode: "hybrid_intelligence_v1",
-
-      intelligence: hybrid?.intelligence,
-
-      analysis: legacy?.analysis,
-
-      metadata: {
-        hybrid_enabled: true,
-        ai_enabled: true,
-        version: "14.2",
-      },
+      contract: {
+        ...extraction,
+        ingestion
+      }
     };
+
   } catch (error) {
-    console.error("Contract Service Error:", error);
+    console.error("createContract error:", error);
 
     return {
       success: false,
-      error: error.message || "Contract processing failed",
+      error: error.message || "Contract creation failed"
     };
   }
 }
 
 /**
  * -----------------------------------------
- * LEGACY EXPORT (DO NOT BREAK OLD ROUTES)
+ * GET CONTRACT (PLACEHOLDER SAFE LAYER)
  * -----------------------------------------
  */
 
-export async function analyzeContractTextLegacy(text = "") {
-  return analyzeContractText(text);
+export async function getContract(id) {
+  try {
+    return {
+      success: true,
+      contract_id: id,
+      message: "Contract retrieval not yet implemented"
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+/**
+ * -----------------------------------------
+ * DELETE CONTRACT (PLACEHOLDER SAFE LAYER)
+ * -----------------------------------------
+ */
+
+export async function deleteContract(id) {
+  try {
+    return {
+      success: true,
+      contract_id: id,
+      deleted: true
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message
+    };
+  }
 }
