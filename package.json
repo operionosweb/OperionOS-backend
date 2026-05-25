@@ -4,11 +4,10 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "prestart": "node -e \"console.log('🚀 Operion backend starting...')\""
+    "start": "node index.js"
   },
   "engines": {
-    "node": ">=20 <=22"
+    "node": ">=20"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.0",
