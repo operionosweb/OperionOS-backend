@@ -1,242 +1,241 @@
-// services/contractExtractionEngine.js
+// services/aiExtractionService.js
+
+import crypto from "crypto";
+import { analyzeWithProviders } from "./aiProviders.js";
 
 /**
  * =========================================
  * OPERION OS
- * ADVANCED CONTRACT EXTRACTION ENGINE
+ * AI EXTRACTION SERVICE
  * =========================================
  */
 
 /**
  * -----------------------------------------
- * SAFE REGEX MATCH
+ * SIMPLE MEMORY CACHE
  * -----------------------------------------
  */
 
-function matchFirst(text, regex) {
-  const match = text.match(regex);
+const extractionCache = new Map();
 
-  return match ? match[1]?.trim() : null;
+/**
+ * -----------------------------------------
+ * HASH GENERATOR
+ * -----------------------------------------
+ */
+
+function generateHash(text = "") {
+  return crypto
+    .createHash("sha256")
+    .update(text)
+    .digest("hex");
 }
 
 /**
  * -----------------------------------------
- * CLAUSE DETECTION
+ * TEXT CHUNKING
  * -----------------------------------------
  */
 
-function detectClauses(text = "") {
-  const clauses = [];
+function chunkText(text = "", chunkSize = 4000) {
+  if (!text) return [];
 
-  const clausePatterns = [
-    "termination",
-    "liability",
-    "indemnification",
-    "confidentiality",
-    "force majeure",
-    "governing law",
-    "payment terms",
-    "renewal",
-    "insurance",
-    "warranty",
-    "limitation of liability",
-    "penalty",
-    "breach",
-  ];
+  const paragraphs = text.split(/\n\s*\n/);
 
-  const lower = text.toLowerCase();
+  const chunks = [];
 
-  for (const clause of clausePatterns) {
-    if (lower.includes(clause)) {
-      clauses.push(clause);
-    }
-  }
+  let currentChunk = "";
 
-  return [...new Set(clauses)];
-}
-
-/**
- * -----------------------------------------
- * OBLIGATION EXTRACTION
- * -----------------------------------------
- */
-
-function extractObligations(text = "") {
-  const obligations = [];
-
-  const lines = text.split("\n");
-
-  for (const line of lines) {
-    const l = line.toLowerCase();
-
+  for (const paragraph of paragraphs) {
     if (
-      l.includes("shall") ||
-      l.includes("must") ||
-      l.includes("required to")
+      (currentChunk + paragraph).length >
+      chunkSize
     ) {
-      obligations.push(line.trim());
-    }
+      if (currentChunk) {
+        chunks.push(currentChunk);
+      }
 
-    if (obligations.length >= 25) break;
-  }
-
-  return obligations;
-}
-
-/**
- * -----------------------------------------
- * PAYMENT TERMS
- * -----------------------------------------
- */
-
-function detectPaymentTerms(text = "") {
-  const paymentRegex =
-    /payment.{0,50}?(\d{1,3}\s?days)/i;
-
-  return matchFirst(text, paymentRegex);
-}
-
-/**
- * -----------------------------------------
- * GOVERNING LAW
- * -----------------------------------------
- */
-
-function detectGoverningLaw(text = "") {
-  const governingLawRegex =
-    /governed by the laws of\s+([A-Za-z\s]+)/i;
-
-  return matchFirst(text, governingLawRegex);
-}
-
-/**
- * -----------------------------------------
- * AUTO RENEWAL DETECTION
- * -----------------------------------------
- */
-
-function detectAutoRenewal(text = "") {
-  const lower = text.toLowerCase();
-
-  return (
-    lower.includes("auto-renew") ||
-    lower.includes("automatic renewal") ||
-    lower.includes("automatically renew")
-  );
-}
-
-/**
- * -----------------------------------------
- * TERMINATION DETECTION
- * -----------------------------------------
- */
-
-function detectTermination(text = "") {
-  const lower = text.toLowerCase();
-
-  return (
-    lower.includes("termination") ||
-    lower.includes("terminate this agreement")
-  );
-}
-
-/**
- * -----------------------------------------
- * CONTRACT CATEGORY ENGINE
- * -----------------------------------------
- */
-
-function classifyContract(text = "") {
-  const lower = text.toLowerCase();
-
-  if (lower.includes("aircraft lease")) {
-    return "Aircraft Lease Agreement";
-  }
-
-  if (lower.includes("maintenance")) {
-    return "Maintenance Agreement";
-  }
-
-  if (lower.includes("service level")) {
-    return "Service Level Agreement";
-  }
-
-  if (lower.includes("nda")) {
-    return "Non-Disclosure Agreement";
-  }
-
-  if (lower.includes("procurement")) {
-    return "Procurement Contract";
-  }
-
-  return "General Contract";
-}
-
-/**
- * -----------------------------------------
- * RISK ENGINE
- * -----------------------------------------
- */
-
-function calculateRiskScore(text = "") {
-  const lower = text.toLowerCase();
-
-  let score = 10;
-
-  const highRiskSignals = [
-    "unlimited liability",
-    "without limitation",
-    "indemnify",
-    "penalty",
-    "liquidated damages",
-    "exclusive",
-    "non-cancellable",
-    "automatic renewal",
-    "termination fee",
-  ];
-
-  for (const signal of highRiskSignals) {
-    if (lower.includes(signal)) {
-      score += 10;
+      currentChunk = paragraph;
+    } else {
+      currentChunk += "\n\n" + paragraph;
     }
   }
 
-  return Math.min(score, 100);
+  if (currentChunk) {
+    chunks.push(currentChunk);
+  }
+
+  return chunks;
 }
 
 /**
  * -----------------------------------------
- * MAIN EXTRACTION ENGINE
+ * SAFE NORMALIZATION
  * -----------------------------------------
  */
 
-export async function extractStructuredContractData(
-  text = ""
+function normalizeAIOutput(
+  providerResult,
+  chunksLength = 0
+) {
+  const analysis =
+    providerResult?.analysis || {};
+
+  return {
+    contract_type:
+      analysis.contract_type ||
+      "General Contract",
+
+    supplier_name:
+      analysis.supplier_name ||
+      "Unknown Supplier",
+
+    summary:
+      analysis.summary ||
+      "Contract analyzed successfully.",
+
+    risk_score:
+      typeof analysis.risk_score === "number"
+        ? analysis.risk_score
+        : 0,
+
+    contract_value:
+      typeof analysis.contract_value ===
+      "number"
+        ? analysis.contract_value
+        : 0,
+
+    chunks_processed: chunksLength,
+
+    clauses: Array.isArray(analysis.clauses)
+      ? analysis.clauses
+      : [],
+
+    obligations: Array.isArray(
+      analysis.obligations
+    )
+      ? analysis.obligations
+      : [],
+  };
+}
+
+/**
+ * =========================================
+ * MAIN ANALYSIS ENGINE
+ * =========================================
+ */
+
+export async function analyzeContractText(
+  rawText = ""
 ) {
   try {
+    if (!rawText) {
+      return {
+        success: false,
+        error: "No text provided",
+      };
+    }
+
+    /**
+     * -----------------------------------------
+     * HASH
+     * -----------------------------------------
+     */
+
+    const documentHash =
+      generateHash(rawText);
+
+    /**
+     * -----------------------------------------
+     * CACHE HIT
+     * -----------------------------------------
+     */
+
+    if (
+      extractionCache.has(documentHash)
+    ) {
+      console.log(
+        "⚡ CACHE HIT:",
+        documentHash
+      );
+
+      return {
+        success: true,
+        cached: true,
+        cache_source: "memory_cache",
+        document_hash: documentHash,
+        analysis:
+          extractionCache.get(documentHash),
+      };
+    }
+
+    /**
+     * -----------------------------------------
+     * CHUNKING
+     * -----------------------------------------
+     */
+
+    const chunks = chunkText(rawText);
+
+    console.log(
+      `📄 Document chunked into ${chunks.length} chunks`
+    );
+
+    /**
+     * -----------------------------------------
+     * AI PROVIDER PIPELINE
+     * -----------------------------------------
+     */
+
+    const aiResult =
+      await analyzeWithProviders(rawText);
+
+    /**
+     * -----------------------------------------
+     * NORMALIZATION
+     * -----------------------------------------
+     */
+
+    const normalized =
+      normalizeAIOutput(
+        aiResult,
+        chunks.length
+      );
+
+    /**
+     * -----------------------------------------
+     * CACHE STORE
+     * -----------------------------------------
+     */
+
+    extractionCache.set(
+      documentHash,
+      normalized
+    );
+
+    console.log(
+      "✅ CACHE STORED:",
+      documentHash
+    );
+
+    /**
+     * -----------------------------------------
+     * RESPONSE
+     * -----------------------------------------
+     */
+
     return {
       success: true,
-
-      contract_type: classifyContract(text),
-
-      clauses: detectClauses(text),
-
-      obligations: extractObligations(text),
-
-      governing_law: detectGoverningLaw(text),
-
-      payment_terms: detectPaymentTerms(text),
-
-      auto_renewal: detectAutoRenewal(text),
-
-      termination_clause_detected:
-        detectTermination(text),
-
-      risk_score: calculateRiskScore(text),
+      cached: false,
+      cache_source: null,
+      document_hash: documentHash,
+      analysis: normalized,
+      provider_used:
+        aiResult?.provider || "unknown",
     };
   } catch (error) {
     console.error(
-      "contractExtractionEngine error:",
+      "❌ analyzeContractText Error:",
       error
     );
 
@@ -244,7 +243,19 @@ export async function extractStructuredContractData(
       success: false,
       error:
         error.message ||
-        "Structured extraction failed",
+        "Analysis failed",
     };
   }
+}
+
+/**
+ * =========================================
+ * BACKWARD COMPATIBILITY EXPORT
+ * =========================================
+ */
+
+export async function extractContractIntelligence(
+  rawText = ""
+) {
+  return analyzeContractText(rawText);
 }
