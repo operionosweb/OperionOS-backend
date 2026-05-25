@@ -1,25 +1,22 @@
-// services/storageService.js
-
-import uploadcare from "uploadcare-client";
+ // services/storageService.js
 
 /**
  * -----------------------------------------
- * UPLOADCARE CONFIG
+ * UPLOADCARE (EU-FRIENDLY STORAGE LAYER)
+ * BACKEND SAFE: uses REST API (NO SDK)
  * -----------------------------------------
  */
 
-const uploadClient = new uploadcare.Client({
-  publicKey: process.env.UPLOADCARE_PUBLIC_KEY,
-  secretKey: process.env.UPLOADCARE_SECRET_KEY, // server-side only
-});
+import axios from "axios";
+import FormData from "form-data";
 
 /**
  * -----------------------------------------
- * UPLOAD FILE (EU STORAGE LAYER)
+ * UPLOAD FILE
  * -----------------------------------------
  */
 
-export async function uploadFile(fileBuffer, filename = "file") {
+export async function uploadFile(fileBuffer, filename = "file.pdf") {
   try {
     if (!fileBuffer) {
       return {
@@ -28,18 +25,37 @@ export async function uploadFile(fileBuffer, filename = "file") {
       };
     }
 
-    const file = await uploadClient.uploadFile(fileBuffer, {
-      filename,
-      store: true,
-    });
+    const form = new FormData();
+    form.append("file", fileBuffer, filename);
+
+    const response = await axios.post(
+      "https://upload.uploadcare.com/base/",
+      form,
+      {
+        params: {
+          pub_key: process.env.UPLOADCARE_PUBLIC_KEY,
+          store: 1,
+        },
+        headers: form.getHeaders(),
+      }
+    );
+
+    const fileUUID = response?.data?.file;
+
+    if (!fileUUID) {
+      return {
+        success: false,
+        error: "Upload failed - no file UUID returned",
+      };
+    }
 
     return {
       success: true,
-      file_url: file.cdnUrl,
-      file_uuid: file.uuid,
+      file_uuid: fileUUID,
+      file_url: `https://ucarecdn.com/${fileUUID}/`,
     };
   } catch (error) {
-    console.error("Uploadcare Upload Error:", error);
+    console.error("Uploadcare Error:", error?.response?.data || error);
 
     return {
       success: false,
