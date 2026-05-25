@@ -3,13 +3,10 @@
 import express from "express";
 import multer from "multer";
 import pdfParse from "pdf-parse";
-import crypto from "crypto";
 
 /**
  * Services
  */
-import supabase from "../config/supabase.js";
-
 import {
   createContract,
   getAllContracts,
@@ -18,10 +15,6 @@ import {
   deleteContract,
 } from "../services/contractService.js";
 
-import {
-  extractContractIntelligence,
-} from "../services/aiExtractionService.js";
-
 const router = express.Router();
 
 /**
@@ -29,536 +22,246 @@ const router = express.Router();
  * MULTER CONFIG
  * -----------------------------------------
  */
-
-const storage = multer.memoryStorage();
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: {
-    fileSize: 20 * 1024 * 1024,
+    fileSize: 20 * 1024 * 1024, // 20MB
   },
 });
-
-/**
- * -----------------------------------------
- * HASH GENERATOR
- * -----------------------------------------
- */
-
-function generateHash(
-  text = ""
-) {
-  return crypto
-    .createHash("sha256")
-    .update(text)
-    .digest("hex");
-}
 
 /**
  * -----------------------------------------
  * HEALTH CHECK
  * -----------------------------------------
  */
+router.get("/health", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Contract routes operational",
+  });
+});
 
-router.get(
-  "/health",
-  async (req, res) => {
-    return res.status(200).json({
+/**
+ * -----------------------------------------
+ * CREATE CONTRACT (MANUAL)
+ * -----------------------------------------
+ */
+router.post("/", async (req, res) => {
+  try {
+    const result = await createContract(req.body);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error,
+      });
+    }
+
+    return res.status(201).json({
       success: true,
-      message:
-        "Contract routes operational",
+      contract: result.contract,
+    });
+  } catch (error) {
+    console.error("Create Contract Route Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to create contract",
     });
   }
-);
+});
 
 /**
  * -----------------------------------------
- * POST /contracts
- * Create contract manually
+ * UPLOAD CONTRACT (PDF)
  * -----------------------------------------
  */
-
-router.post(
-  "/",
-  async (req, res) => {
-    try {
-      const result =
-        await createContract(
-          req.body
-        );
-
-      if (!result.success) {
-        return res.status(400).json({
-          success: false,
-          error: result.error,
-        });
-      }
-
-      return res.status(201).json({
-        success: true,
-        contract:
-          result.contract,
+router.post("/upload", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: "No file uploaded",
       });
-    } catch (error) {
-      console.error(
-        "Create Contract Route Error:",
-        error
-      );
+    }
+
+    /**
+     * -----------------------------------------
+     * PDF EXTRACTION
+     * -----------------------------------------
+     */
+    let extractedText = "";
+
+    try {
+      const pdfData = await pdfParse(req.file.buffer);
+      extractedText = pdfData.text || "";
+    } catch (err) {
+      console.error("PDF Parse Error:", err);
 
       return res.status(500).json({
         success: false,
-        error:
-          error.message ||
-          "Failed to create contract",
+        error: "Failed to extract PDF text",
       });
     }
+
+    if (!extractedText || extractedText.length < 100) {
+      return res.status(400).json({
+        success: false,
+        error: "Document contains insufficient readable text",
+      });
+    }
+
+    /**
+     * -----------------------------------------
+     * CALL SERVICE LAYER ONLY
+     * (no AI / hash / duplicate logic here anymore)
+     * -----------------------------------------
+     */
+    const result = await createContract({
+      name: req.file.originalname,
+      raw_text: extractedText,
+    });
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error,
+      });
+    }
+
+    /**
+     * -----------------------------------------
+     * RESPONSE
+     * -----------------------------------------
+     */
+    return res.status(201).json({
+      success: true,
+      filename: req.file.originalname,
+      duplicate_detected: result.duplicate_detected,
+      duplicate_of: result.duplicate_of || null,
+      contract: result.contract,
+    });
+  } catch (error) {
+    console.error("Upload Route Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Upload failed",
+    });
   }
-);
+});
 
 /**
  * -----------------------------------------
- * POST /contracts/upload
- * Upload + Duplicate Detection
+ * GET ALL CONTRACTS
  * -----------------------------------------
  */
+router.get("/", async (req, res) => {
+  try {
+    const contracts = await getAllContracts();
 
-router.post(
-  "/upload",
-  upload.single("file"),
-  async (req, res) => {
-    try {
-      /**
-       * Validate file
-       */
+    return res.status(200).json({
+      success: true,
+      contracts,
+    });
+  } catch (error) {
+    console.error("Get Contracts Error:", error);
 
-      if (!req.file) {
-        return res.status(400).json({
-          success: false,
-          error:
-            "No file uploaded",
-        });
-      }
-
-      /**
-       * -----------------------------------------
-       * EXTRACT PDF TEXT
-       * -----------------------------------------
-       */
-
-      let extractedText = "";
-
-      try {
-        const pdfData =
-          await pdfParse(
-            req.file.buffer
-          );
-
-        extractedText =
-          pdfData.text || "";
-      } catch (pdfError) {
-        console.error(
-          "PDF Parse Error:",
-          pdfError
-        );
-
-        return res.status(500).json({
-          success: false,
-          error:
-            "Failed to extract PDF text",
-        });
-      }
-
-      /**
-       * Validate extracted text
-       */
-
-      if (
-        !extractedText ||
-        extractedText.length < 100
-      ) {
-        return res.status(400).json({
-          success: false,
-          error:
-            "Document contains insufficient readable text",
-        });
-      }
-
-      /**
-       * -----------------------------------------
-       * GENERATE DOCUMENT HASH
-       * -----------------------------------------
-       */
-
-      const documentHash =
-        generateHash(
-          extractedText
-        );
-
-      /**
-       * -----------------------------------------
-       * DUPLICATE DETECTION
-       * -----------------------------------------
-       */
-
-      const {
-        data: existingContract,
-      } = await supabase
-        .from("contracts")
-        .select("*")
-        .eq(
-          "document_hash",
-          documentHash
-        )
-        .limit(1)
-        .maybeSingle();
-
-      /**
-       * Allow override
-       */
-
-      const forceSave =
-        req.body.force_save ===
-        "true";
-
-      /**
-       * -----------------------------------------
-       * DUPLICATE FOUND
-       * -----------------------------------------
-       */
-
-      if (
-        existingContract &&
-        !forceSave
-      ) {
-        return res.status(200).json({
-          success: true,
-
-          duplicate_detected: true,
-
-          message:
-            "This contract already exists in the system.",
-
-          existing_contract: {
-            id:
-              existingContract.id,
-
-            name:
-              existingContract.name,
-
-            created_at:
-              existingContract.created_at,
-
-            supplier_name:
-              existingContract.supplier_name,
-
-            contract_type:
-              existingContract.contract_type,
-          },
-
-          action_required:
-            "Set force_save=true to store anyway.",
-        });
-      }
-
-      /**
-       * -----------------------------------------
-       * AI EXTRACTION
-       * -----------------------------------------
-       */
-
-      const intelligence =
-        await extractContractIntelligence(
-          extractedText
-        );
-
-      const analysis =
-        intelligence?.analysis ||
-        intelligence ||
-        {};
-
-      /**
-       * -----------------------------------------
-       * SAVE CONTRACT
-       * -----------------------------------------
-       */
-
-      const result =
-        await createContract({
-          name:
-            req.file.originalname,
-
-          supplier_name:
-            analysis?.supplier_name ||
-            "Unknown Supplier",
-
-          raw_text:
-            extractedText,
-
-          document_hash:
-            documentHash,
-
-          duplicate_of:
-            existingContract?.id ||
-            null,
-
-          is_duplicate:
-            !!existingContract,
-
-          contract_type:
-            analysis?.contract_type ||
-            "General Contract",
-
-          risk_score:
-            analysis?.risk_score ||
-            0,
-
-          clauses:
-            analysis?.clauses ||
-            [],
-
-          obligations:
-            analysis?.obligations ||
-            [],
-
-          summary:
-            analysis?.summary ||
-            "",
-
-          value:
-            analysis?.contract_value ||
-            0,
-
-          start_date:
-            analysis?.start_date ||
-            null,
-
-          expiry_date:
-            analysis?.expiry_date ||
-            null,
-        });
-
-      /**
-       * -----------------------------------------
-       * RESPONSE
-       * -----------------------------------------
-       */
-
-      return res.status(201).json({
-        success: true,
-
-        duplicate_detected:
-          !!existingContract,
-
-        duplicate_of:
-          existingContract?.id ||
-          null,
-
-        filename:
-          req.file.originalname,
-
-        cached:
-          intelligence?.cached ||
-          false,
-
-        cache_source:
-          intelligence?.cache_source ||
-          null,
-
-        document_hash:
-          documentHash,
-
-        extracted_text_preview:
-          extractedText.substring(
-            0,
-            1000
-          ),
-
-        analysis,
-
-        contract:
-          result.contract,
-      });
-    } catch (error) {
-      console.error(
-        "Upload Route Error:",
-        error
-      );
-
-      return res.status(500).json({
-        success: false,
-        error:
-          error.message ||
-          "Failed to upload and analyze contract",
-      });
-    }
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to fetch contracts",
+    });
   }
-);
+});
 
 /**
  * -----------------------------------------
- * GET /contracts
- * Get all contracts
+ * GET CONTRACT BY ID
  * -----------------------------------------
  */
+router.get("/:id", async (req, res) => {
+  try {
+    const contract = await getContractById(req.params.id);
 
-router.get(
-  "/",
-  async (req, res) => {
-    try {
-      const contracts =
-        await getAllContracts();
-
-      return res.status(200).json({
-        success: true,
-        contracts,
-      });
-    } catch (error) {
-      console.error(
-        "Get Contracts Route Error:",
-        error
-      );
-
-      return res.status(500).json({
+    if (!contract) {
+      return res.status(404).json({
         success: false,
-        error:
-          error.message ||
-          "Failed to fetch contracts",
+        error: "Contract not found",
       });
     }
+
+    return res.status(200).json({
+      success: true,
+      contract,
+    });
+  } catch (error) {
+    console.error("Get Contract Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to fetch contract",
+    });
   }
-);
+});
 
 /**
  * -----------------------------------------
- * GET /contracts/:id
- * Get contract by ID
+ * UPDATE CONTRACT
  * -----------------------------------------
  */
+router.put("/:id", async (req, res) => {
+  try {
+    const result = await updateContract(req.params.id, req.body);
 
-router.get(
-  "/:id",
-  async (req, res) => {
-    try {
-      const contract =
-        await getContractById(
-          req.params.id
-        );
-
-      if (!contract) {
-        return res.status(404).json({
-          success: false,
-          error:
-            "Contract not found",
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        contract,
-      });
-    } catch (error) {
-      console.error(
-        "Get Contract Route Error:",
-        error
-      );
-
-      return res.status(500).json({
+    if (!result.success) {
+      return res.status(400).json({
         success: false,
-        error:
-          error.message ||
-          "Failed to fetch contract",
+        error: result.error,
       });
     }
+
+    return res.status(200).json({
+      success: true,
+      contract: result.contract,
+    });
+  } catch (error) {
+    console.error("Update Contract Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Update failed",
+    });
   }
-);
+});
 
 /**
  * -----------------------------------------
- * PUT /contracts/:id
- * Update contract
+ * DELETE CONTRACT
  * -----------------------------------------
  */
+router.delete("/:id", async (req, res) => {
+  try {
+    const result = await deleteContract(req.params.id);
 
-router.put(
-  "/:id",
-  async (req, res) => {
-    try {
-      const result =
-        await updateContract(
-          req.params.id,
-          req.body
-        );
-
-      if (!result.success) {
-        return res.status(400).json({
-          success: false,
-          error: result.error,
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        contract:
-          result.contract,
-      });
-    } catch (error) {
-      console.error(
-        "Update Contract Route Error:",
-        error
-      );
-
-      return res.status(500).json({
+    if (!result.success) {
+      return res.status(400).json({
         success: false,
-        error:
-          error.message ||
-          "Failed to update contract",
+        error: result.error,
       });
     }
+
+    return res.status(200).json({
+      success: true,
+      message: "Contract deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete Contract Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Delete failed",
+    });
   }
-);
-
-/**
- * -----------------------------------------
- * DELETE /contracts/:id
- * Delete contract
- * -----------------------------------------
- */
-
-router.delete(
-  "/:id",
-  async (req, res) => {
-    try {
-      const result =
-        await deleteContract(
-          req.params.id
-        );
-
-      if (!result.success) {
-        return res.status(400).json({
-          success: false,
-          error: result.error,
-        });
-      }
-
-      return res.status(200).json({
-        success: true,
-        message:
-          "Contract deleted successfully",
-      });
-    } catch (error) {
-      console.error(
-        "Delete Contract Route Error:",
-        error
-      );
-
-      return res.status(500).json({
-        success: false,
-        error:
-          error.message ||
-          "Failed to delete contract",
-      });
-    }
-  }
-);
+});
 
 export default router;
