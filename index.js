@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 import healthRoutes from "./routes/healthRoutes.js";
 import contractRoutes from "./routes/contractRoutes.js";
 import blogRoutes from "./routes/blogRoutes.js";
+import authRoutes from "./routes/authRoutes.js";
 
 const app = express();
 
@@ -18,7 +19,6 @@ app.use(express.json({
 
 /* ======================================================
    FIX RENDER ENOENT ISSUE
-   AUTO-CREATE UPLOADS FOLDER
 ====================================================== */
 
 const __filename = fileURLToPath(import.meta.url);
@@ -62,8 +62,10 @@ app.use("/api/contracts", contractRoutes);
 
 app.use("/api/blog", blogRoutes);
 
+app.use("/api/auth", authRoutes);
+
 /* ======================================================
-   404 HANDLER
+   404
 ====================================================== */
 
 app.use((req, res) => {
