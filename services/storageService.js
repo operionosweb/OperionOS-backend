@@ -1,9 +1,9 @@
- // services/storageService.js
+// services/storageService.js
 
 /**
  * -----------------------------------------
- * UPLOADCARE (EU-FRIENDLY STORAGE LAYER)
- * BACKEND SAFE: uses REST API (NO SDK)
+ * UPLOADCARE (EU-FIRST STORAGE LAYER)
+ * PRODUCTION HARDENED (NO SDK)
  * -----------------------------------------
  */
 
@@ -12,31 +12,48 @@ import FormData from "form-data";
 
 /**
  * -----------------------------------------
- * UPLOAD FILE
+ * UPLOAD FILE TO UPLOADCARE
  * -----------------------------------------
  */
 
-export async function uploadFile(fileBuffer, filename = "file.pdf") {
+export async function uploadFile({
+  buffer,
+  filename = "file",
+  mimetype = "application/octet-stream",
+}) {
   try {
-    if (!fileBuffer) {
+    if (!buffer) {
       return {
         success: false,
-        error: "No file provided",
+        error: "No file buffer provided",
+      };
+    }
+
+    const publicKey = process.env.UPLOADCARE_PUBLIC_KEY;
+
+    if (!publicKey) {
+      return {
+        success: false,
+        error: "UPLOADCARE_PUBLIC_KEY missing in environment",
       };
     }
 
     const form = new FormData();
-    form.append("file", fileBuffer, filename);
+
+    form.append("file", buffer, {
+      filename,
+      contentType: mimetype,
+    });
+
+    form.append("UPLOADCARE_PUB_KEY", publicKey);
+    form.append("UPLOADCARE_STORE", "1");
 
     const response = await axios.post(
       "https://upload.uploadcare.com/base/",
       form,
       {
-        params: {
-          pub_key: process.env.UPLOADCARE_PUBLIC_KEY,
-          store: 1,
-        },
         headers: form.getHeaders(),
+        maxBodyLength: Infinity,
       }
     );
 
@@ -45,21 +62,28 @@ export async function uploadFile(fileBuffer, filename = "file.pdf") {
     if (!fileUUID) {
       return {
         success: false,
-        error: "Upload failed - no file UUID returned",
+        error: "Uploadcare did not return file UUID",
+        raw: response?.data,
       };
     }
 
     return {
       success: true,
-      file_uuid: fileUUID,
-      file_url: `https://ucarecdn.com/${fileUUID}/`,
+      file_id: fileUUID,
+      url: `https://ucarecdn.com/${fileUUID}/`,
     };
   } catch (error) {
-    console.error("Uploadcare Error:", error?.response?.data || error);
+    console.error(
+      "Uploadcare Error:",
+      error?.response?.data || error
+    );
 
     return {
       success: false,
-      error: error.message || "Upload failed",
+      error:
+        error?.response?.data?.detail ||
+        error.message ||
+        "Upload failed",
     };
   }
 }
