@@ -6,7 +6,7 @@ import crypto from "crypto";
 
 /**
  * -----------------------------------------
- * HASH
+ * HASH GENERATOR
  * -----------------------------------------
  */
 function generateHash(text = "") {
@@ -15,7 +15,7 @@ function generateHash(text = "") {
 
 /**
  * -----------------------------------------
- * CREATE CONTRACT
+ * CREATE CONTRACT (PRODUCTION SAFE)
  * -----------------------------------------
  */
 export async function createContract(contractPayload = {}) {
@@ -27,11 +27,24 @@ export async function createContract(contractPayload = {}) {
     const rawText = contractPayload.raw_text;
     const documentHash = generateHash(rawText);
 
-    const { data: existingContract } = await supabase
+    /**
+     * -----------------------------------------
+     * DUPLICATE CHECK (SAFE)
+     * -----------------------------------------
+     */
+    let existingContract = null;
+
+    const { data: existing, error: fetchError } = await supabase
       .from("contracts")
       .select("*")
       .eq("document_hash", documentHash)
       .maybeSingle();
+
+    if (fetchError) {
+      console.error("Duplicate check error:", fetchError);
+    }
+
+    existingContract = existing || null;
 
     const forceSave = contractPayload.force_save === "true";
 
@@ -45,10 +58,38 @@ export async function createContract(contractPayload = {}) {
       };
     }
 
-    const analysis =
-      contractPayload.analysis ||
-      (await analyzeContractText(rawText));
+    /**
+     * -----------------------------------------
+     * AI ANALYSIS (SAFE FALLBACK)
+     * -----------------------------------------
+     */
+    let analysis = null;
 
+    try {
+      analysis =
+        contractPayload.analysis ||
+        (await analyzeContractText(rawText));
+    } catch (aiError) {
+      console.error("AI analysis failed:", aiError);
+
+      analysis = {
+        supplier_name: "Unknown Supplier",
+        contract_type: "General Contract",
+        summary: "",
+        clauses: [],
+        obligations: [],
+        risk_score: 0,
+        contract_value: 0,
+        start_date: null,
+        expiry_date: null,
+      };
+    }
+
+    /**
+     * -----------------------------------------
+     * INSERT PAYLOAD
+     * -----------------------------------------
+     */
     const insertPayload = {
       name: contractPayload.name || "Unnamed Contract",
       supplier_name: analysis?.supplier_name || "Unknown Supplier",
@@ -73,7 +114,10 @@ export async function createContract(contractPayload = {}) {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error("Insert error:", error);
+      throw error;
+    }
 
     return {
       success: true,
@@ -82,72 +126,110 @@ export async function createContract(contractPayload = {}) {
       contract: data,
     };
   } catch (error) {
+    console.error("createContract fatal error:", error);
+
     return {
       success: false,
-      error: error.message,
+      error: error.message || "Failed to create contract",
     };
   }
 }
 
 /**
  * -----------------------------------------
- * READ OPS
+ * READ ALL CONTRACTS (SAFE)
  * -----------------------------------------
  */
-
 export async function getAllContracts() {
-  const { data } = await supabase
-    .from("contracts")
-    .select("*")
-    .order("created_at", { ascending: false });
+  try {
+    const { data, error } = await supabase
+      .from("contracts")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-  return data || [];
-}
+    if (error) {
+      console.error("getAllContracts error:", error);
+      return [];
+    }
 
-export async function getContractById(id) {
-  const { data } = await supabase
-    .from("contracts")
-    .select("*")
-    .eq("id", id)
-    .single();
-
-  return data || null;
+    return data || [];
+  } catch (error) {
+    console.error("getAllContracts fatal:", error);
+    return [];
+  }
 }
 
 /**
  * -----------------------------------------
- * UPDATE
+ * GET CONTRACT BY ID (SAFE)
+ * -----------------------------------------
+ */
+export async function getContractById(id) {
+  try {
+    const { data, error } = await supabase
+      .from("contracts")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error) {
+      console.error("getContractById error:", error);
+      return null;
+    }
+
+    return data || null;
+  } catch (error) {
+    console.error("getContractById fatal:", error);
+    return null;
+  }
+}
+
+/**
+ * -----------------------------------------
+ * UPDATE CONTRACT
  * -----------------------------------------
  */
 export async function updateContract(id, updates = {}) {
-  const { data, error } = await supabase
-    .from("contracts")
-    .update(updates)
-    .eq("id", id)
-    .select()
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from("contracts")
+      .update(updates)
+      .eq("id", id)
+      .select()
+      .single();
 
-  if (error) {
+    if (error) {
+      console.error("updateContract error:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, contract: data };
+  } catch (error) {
+    console.error("updateContract fatal:", error);
     return { success: false, error: error.message };
   }
-
-  return { success: true, contract: data };
 }
 
 /**
  * -----------------------------------------
- * DELETE
+ * DELETE CONTRACT
  * -----------------------------------------
  */
 export async function deleteContract(id) {
-  const { error } = await supabase
-    .from("contracts")
-    .delete()
-    .eq("id", id);
+  try {
+    const { error } = await supabase
+      .from("contracts")
+      .delete()
+      .eq("id", id);
 
-  if (error) {
+    if (error) {
+      console.error("deleteContract error:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("deleteContract fatal:", error);
     return { success: false, error: error.message };
   }
-
-  return { success: true };
 }
