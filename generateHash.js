@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 
-const password = "YOUR_ADMIN_PASSWORD";
+const password = "12345678";
 
 const hash = await bcrypt.hash(password, 10);
 
