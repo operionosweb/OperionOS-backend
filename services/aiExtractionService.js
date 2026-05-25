@@ -4,11 +4,12 @@ import crypto from "crypto";
 
 /**
  * -----------------------------------------
- * SIMPLE IN-MEMORY CACHE
+ * IN-MEMORY CACHE
  * -----------------------------------------
  */
 
-const extractionCache = new Map();
+const extractionCache =
+  new Map();
 
 /**
  * -----------------------------------------
@@ -16,7 +17,9 @@ const extractionCache = new Map();
  * -----------------------------------------
  */
 
-function generateHash(text = "") {
+function generateHash(
+  text = ""
+) {
   return crypto
     .createHash("sha256")
     .update(text)
@@ -25,7 +28,7 @@ function generateHash(text = "") {
 
 /**
  * -----------------------------------------
- * CHUNK TEXT
+ * SMART CHUNKING
  * -----------------------------------------
  */
 
@@ -33,15 +36,43 @@ function chunkText(
   text = "",
   chunkSize = 4000
 ) {
+  if (!text) {
+    return [];
+  }
+
+  /**
+   * Attempt paragraph-aware chunking
+   */
+
+  const paragraphs =
+    text.split(/\n\s*\n/);
+
   const chunks = [];
 
-  for (
-    let i = 0;
-    i < text.length;
-    i += chunkSize
-  ) {
+  let currentChunk = "";
+
+  for (const paragraph of paragraphs) {
+    if (
+      (
+        currentChunk +
+        paragraph
+      ).length > chunkSize
+    ) {
+      chunks.push(
+        currentChunk
+      );
+
+      currentChunk =
+        paragraph;
+    } else {
+      currentChunk +=
+        "\n\n" + paragraph;
+    }
+  }
+
+  if (currentChunk) {
     chunks.push(
-      text.slice(i, i + chunkSize)
+      currentChunk
     );
   }
 
@@ -50,7 +81,210 @@ function chunkText(
 
 /**
  * -----------------------------------------
- * MAIN EXTRACTION
+ * CONTRACT TYPE DETECTION
+ * -----------------------------------------
+ */
+
+function detectContractType(
+  text = ""
+) {
+  const lower =
+    text.toLowerCase();
+
+  if (
+    lower.includes(
+      "aircraft lease"
+    )
+  ) {
+    return "Aircraft Lease Agreement";
+  }
+
+  if (
+    lower.includes(
+      "maintenance agreement"
+    )
+  ) {
+    return "Maintenance Agreement";
+  }
+
+  if (
+    lower.includes(
+      "service level agreement"
+    )
+  ) {
+    return "Service Level Agreement";
+  }
+
+  if (
+    lower.includes(
+      "procurement"
+    )
+  ) {
+    return "Procurement Contract";
+  }
+
+  return "General Contract";
+}
+
+/**
+ * -----------------------------------------
+ * RISK DETECTION
+ * -----------------------------------------
+ */
+
+function calculateRiskScore(
+  text = ""
+) {
+  const lower =
+    text.toLowerCase();
+
+  let score = 15;
+
+  const riskKeywords = [
+    "unlimited liability",
+    "without limitation",
+    "penalty",
+    "termination",
+    "indemnify",
+    "exclusive",
+    "non-cancellable",
+    "liquidated damages",
+    "breach",
+    "default",
+  ];
+
+  for (const keyword of riskKeywords) {
+    if (
+      lower.includes(keyword)
+    ) {
+      score += 7;
+    }
+  }
+
+  return Math.min(100, score);
+}
+
+/**
+ * -----------------------------------------
+ * CLAUSE DETECTION
+ * -----------------------------------------
+ */
+
+function extractClauses(
+  chunks = []
+) {
+  const clauses = [];
+
+  const clausePatterns = [
+    {
+      type: "Insurance",
+      regex:
+        /insurance/gi,
+    },
+    {
+      type: "Termination",
+      regex:
+        /termination/gi,
+    },
+    {
+      type: "Indemnity",
+      regex:
+        /indemnity/gi,
+    },
+    {
+      type: "Confidentiality",
+      regex:
+        /confidentiality/gi,
+    },
+    {
+      type: "Compliance",
+      regex:
+        /compliance/gi,
+    },
+  ];
+
+  for (const chunk of chunks) {
+    for (const pattern of clausePatterns) {
+      if (
+        pattern.regex.test(
+          chunk
+        )
+      ) {
+        clauses.push({
+          clause_type:
+            pattern.type,
+
+          risk_level:
+            "Medium",
+
+          clause_text:
+            chunk.substring(
+              0,
+              500
+            ),
+        });
+      }
+    }
+  }
+
+  return clauses.slice(0, 25);
+}
+
+/**
+ * -----------------------------------------
+ * OBLIGATION DETECTION
+ * -----------------------------------------
+ */
+
+function extractObligations(
+  chunks = []
+) {
+  const obligations = [];
+
+  const obligationKeywords =
+    [
+      "shall",
+      "must",
+      "required to",
+      "obligation",
+      "responsible for",
+    ];
+
+  for (const chunk of chunks) {
+    const lower =
+      chunk.toLowerCase();
+
+    for (const keyword of obligationKeywords) {
+      if (
+        lower.includes(
+          keyword
+        )
+      ) {
+        obligations.push({
+          obligation:
+            chunk.substring(
+              0,
+              250
+            ),
+
+          severity:
+            "Medium",
+        });
+
+        break;
+      }
+    }
+  }
+
+  return obligations.slice(
+    0,
+    25
+  );
+}
+
+/**
+ * -----------------------------------------
+ * MAIN ANALYSIS ENGINE
  * -----------------------------------------
  */
 
@@ -61,15 +295,21 @@ export async function analyzeContractText(
     if (!rawText) {
       return {
         success: false,
-        error: "No text provided",
+        error:
+          "No text provided",
       };
     }
 
     /**
-     * Generate document hash
+     * -----------------------------------------
+     * HASH
+     * -----------------------------------------
      */
+
     const documentHash =
-      generateHash(rawText);
+      generateHash(
+        rawText
+      );
 
     /**
      * -----------------------------------------
@@ -83,7 +323,7 @@ export async function analyzeContractText(
       )
     ) {
       console.log(
-        "CACHE HIT:",
+        "⚡ CACHE HIT:",
         documentHash
       );
 
@@ -115,41 +355,66 @@ export async function analyzeContractText(
       chunkText(rawText);
 
     console.log(
-      `Document split into ${chunks.length} chunks`
+      `Document chunked into ${chunks.length} chunks`
     );
 
     /**
      * -----------------------------------------
-     * TEMP MOCK ANALYSIS
-     * Replace with GPT later
+     * ANALYSIS
+     * -----------------------------------------
+     */
+
+    const contractType =
+      detectContractType(
+        rawText
+      );
+
+    const riskScore =
+      calculateRiskScore(
+        rawText
+      );
+
+    const clauses =
+      extractClauses(
+        chunks
+      );
+
+    const obligations =
+      extractObligations(
+        chunks
+      );
+
+    /**
+     * -----------------------------------------
+     * FINAL ANALYSIS
      * -----------------------------------------
      */
 
     const analysis = {
       contract_type:
-        "Aircraft Lease Agreement",
+        contractType,
 
       supplier_name:
         "Unknown Supplier",
 
-      summary:
-        "Contract successfully analyzed using chunk pipeline.",
+      summary: `Contract analyzed successfully using semantic chunk pipeline.`,
 
-      risk_score: 42,
+      risk_score:
+        riskScore,
 
       contract_value: 0,
 
       chunks_processed:
         chunks.length,
 
-      clauses: [],
+      clauses,
 
-      obligations: [],
+      obligations,
     };
 
     /**
      * -----------------------------------------
-     * STORE CACHE
+     * CACHE STORE
      * -----------------------------------------
      */
 
@@ -159,9 +424,15 @@ export async function analyzeContractText(
     );
 
     console.log(
-      "CACHE STORED:",
+      "✅ CACHE STORED:",
       documentHash
     );
+
+    /**
+     * -----------------------------------------
+     * RESPONSE
+     * -----------------------------------------
+     */
 
     return {
       success: true,
@@ -183,6 +454,7 @@ export async function analyzeContractText(
 
     return {
       success: false,
+
       error:
         error.message ||
         "Analysis failed",
