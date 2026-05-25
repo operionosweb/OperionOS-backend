@@ -6,7 +6,7 @@ import { analyzeContractText } from "./aiExtractionService.js";
 /**
 
 * ---
-* CREATE CONTRACT
+* CREATE CONTRACT (PURE INSERT LAYER)
 * ---
 
 */
@@ -16,193 +16,82 @@ try {
 /**
 * Validate input
 */
+if (!contractPayload?.raw_text) {
+return {
+success: false,
+error: "raw_text is required",
+};
+}
 
 ```
-if (!contractPayload?.raw_text) {
-  return {
-    success: false,
-    error: "raw_text is required",
-  };
+const rawText = contractPayload.raw_text;
+
+/**
+ * -----------------------------------------
+ * ANALYSIS (optional precomputed)
+ * -----------------------------------------
+ */
+
+let analysis = contractPayload.analysis;
+
+if (!analysis) {
+  analysis = await analyzeContractText(rawText);
 }
 
 /**
  * -----------------------------------------
- * RAW TEXT
- * -----------------------------------------
- */
-
-const rawText =
-  contractPayload.raw_text;
-
-/**
- * -----------------------------------------
- * AI ANALYSIS
- * -----------------------------------------
- */
-
-let analysis = {};
-
-/**
- * If analysis already exists
- * from upload pipeline,
- * reuse it.
- */
-
-if (
-  contractPayload.analysis
-) {
-  analysis =
-    contractPayload.analysis;
-} else {
-  analysis =
-    await analyzeContractText(
-      rawText
-    );
-}
-
-/**
- * -----------------------------------------
- * INSERT PAYLOAD
+ * PURE INSERT PAYLOAD
+ * (NO DUPLICATE LOGIC HERE)
  * -----------------------------------------
  */
 
 const insertPayload = {
-  /**
-   * Core
-   */
-
-  name:
-    contractPayload.name ||
-    "Unnamed Contract",
+  name: contractPayload.name || "Unnamed Contract",
 
   supplier_name:
-    contractPayload
-      ?.supplier_name ||
-    analysis
-      ?.supplier_name ||
-    "Unknown Supplier",
+    analysis?.supplier_name || "Unknown Supplier",
 
   raw_text: rawText,
 
-  /**
-   * Duplicate Intelligence
-   */
+  document_hash: contractPayload.document_hash || null,
 
-  document_hash:
-    contractPayload.document_hash ||
-    null,
+  duplicate_of: contractPayload.duplicate_of || null,
 
-  duplicate_of:
-    contractPayload.duplicate_of ||
-    null,
-
-  is_duplicate:
-    contractPayload.is_duplicate ||
-    false,
-
-  /**
-   * Intelligence
-   */
+  is_duplicate: contractPayload.is_duplicate || false,
 
   contract_type:
-    contractPayload
-      ?.contract_type ||
-    analysis
-      ?.contract_type ||
-    "General Contract",
+    analysis?.contract_type || "General Contract",
 
-  summary:
-    contractPayload
-      ?.summary ||
-    analysis?.summary ||
-    "",
+  summary: analysis?.summary || "",
 
-  clauses:
-    contractPayload
-      ?.clauses ||
-    analysis?.clauses ||
-    [],
+  clauses: analysis?.clauses || [],
 
-  obligations:
-    contractPayload
-      ?.obligations ||
-    analysis?.obligations ||
-    [],
+  obligations: analysis?.obligations || [],
 
-  risk_score:
-    contractPayload
-      ?.risk_score ||
-    analysis?.risk_score ||
-    0,
+  risk_score: analysis?.risk_score || 0,
 
-  /**
-   * Commercial
-   */
+  contract_value: analysis?.contract_value || 0,
 
-  contract_value:
-    contractPayload
-      ?.contract_value ||
-    analysis
-      ?.contract_value ||
-    0,
+  start_date: analysis?.start_date || null,
 
-  value:
-    contractPayload
-      ?.value ||
-    analysis
-      ?.contract_value ||
-    0,
+  expiry_date: analysis?.expiry_date || null,
 
-  /**
-   * Dates
-   */
-
-  start_date:
-    contractPayload
-      ?.start_date ||
-    analysis
-      ?.start_date ||
-    null,
-
-  expiry_date:
-    contractPayload
-      ?.expiry_date ||
-    analysis
-      ?.expiry_date ||
-    null,
-
-  /**
-   * Metadata
-   */
-
-  created_at:
-    new Date().toISOString(),
+  created_at: new Date().toISOString(),
 };
 
 /**
  * -----------------------------------------
- * INSERT CONTRACT
+ * INSERT ONLY
  * -----------------------------------------
  */
 
-const {
-  data,
-  error,
-} = await supabase
+const { data, error } = await supabase
   .from("contracts")
   .insert(insertPayload)
   .select()
   .single();
 
-if (error) {
-  throw error;
-}
-
-/**
- * -----------------------------------------
- * RESPONSE
- * -----------------------------------------
- */
+if (error) throw error;
 
 return {
   success: true,
@@ -212,17 +101,12 @@ return {
 ```
 
 } catch (error) {
-console.error(
-"createContract Error:",
-error
-);
+console.error("createContract Error:", error);
 
 ```
 return {
   success: false,
-  error:
-    error.message ||
-    "Failed to create contract",
+  error: error.message || "Failed to create contract",
 };
 ```
 
@@ -239,34 +123,20 @@ return {
 
 export async function getAllContracts() {
 try {
-const {
-data,
-error,
-} = await supabase
+const { data, error } = await supabase
 .from("contracts")
 .select("*")
-.order("created_at", {
-ascending: false,
-});
+.order("created_at", { ascending: false });
 
 ```
-if (error) {
-  throw error;
-}
+if (error) throw error;
 
 return data || [];
 ```
 
 } catch (error) {
-console.error(
-"getAllContracts Error:",
-error
-);
-
-```
+console.error("getAllContracts Error:", error);
 return [];
-```
-
 }
 }
 
@@ -278,37 +148,23 @@ return [];
 
 */
 
-export async function getContractById(
-id
-) {
+export async function getContractById(id) {
 try {
-const {
-data,
-error,
-} = await supabase
+const { data, error } = await supabase
 .from("contracts")
 .select("*")
 .eq("id", id)
 .single();
 
 ```
-if (error) {
-  throw error;
-}
+if (error) throw error;
 
 return data;
 ```
 
 } catch (error) {
-console.error(
-"getContractById Error:",
-error
-);
-
-```
+console.error("getContractById Error:", error);
 return null;
-```
-
 }
 }
 
@@ -320,15 +176,9 @@ return null;
 
 */
 
-export async function updateContract(
-id,
-updates = {}
-) {
+export async function updateContract(id, updates = {}) {
 try {
-const {
-data,
-error,
-} = await supabase
+const { data, error } = await supabase
 .from("contracts")
 .update(updates)
 .eq("id", id)
@@ -336,9 +186,7 @@ error,
 .single();
 
 ```
-if (error) {
-  throw error;
-}
+if (error) throw error;
 
 return {
   success: true,
@@ -347,10 +195,7 @@ return {
 ```
 
 } catch (error) {
-console.error(
-"updateContract Error:",
-error
-);
+console.error("updateContract Error:", error);
 
 ```
 return {
@@ -370,20 +215,15 @@ return {
 
 */
 
-export async function deleteContract(
-id
-) {
+export async function deleteContract(id) {
 try {
-const { error } =
-await supabase
+const { error } = await supabase
 .from("contracts")
 .delete()
 .eq("id", id);
 
 ```
-if (error) {
-  throw error;
-}
+if (error) throw error;
 
 return {
   success: true,
@@ -391,10 +231,7 @@ return {
 ```
 
 } catch (error) {
-console.error(
-"deleteContract Error:",
-error
-);
+console.error("deleteContract Error:", error);
 
 ```
 return {
