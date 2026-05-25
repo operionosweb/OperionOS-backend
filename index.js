@@ -8,6 +8,7 @@ import healthRoutes from "./routes/healthRoutes.js";
 import contractRoutes from "./routes/contractRoutes.js";
 import blogRoutes from "./routes/blogRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
+import mediaRoutes from "./routes/mediaRoutes.js";
 
 const app = express();
 
@@ -63,6 +64,8 @@ app.use("/api/contracts", contractRoutes);
 app.use("/api/blog", blogRoutes);
 
 app.use("/api/auth", authRoutes);
+
+app.use("/api/media", mediaRoutes);
 
 /* ======================================================
    404
