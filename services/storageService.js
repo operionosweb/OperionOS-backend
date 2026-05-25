@@ -1,10 +1,11 @@
 // services/storageService.js
 
 /**
- * -----------------------------------------
- * UPLOADCARE (EU-FIRST STORAGE LAYER)
- * PRODUCTION HARDENED (NO SDK)
- * -----------------------------------------
+ * =========================================
+ * OPERION OS - STORAGE ABSTRACTION LAYER
+ * EU-FIRST DESIGN (UPLOADCARE PRIMARY)
+ * FUTURE-PROOF: S3 / MINIO / OTHER PROVIDERS
+ * =========================================
  */
 
 import axios from "axios";
@@ -12,8 +13,24 @@ import FormData from "form-data";
 
 /**
  * -----------------------------------------
- * UPLOAD FILE TO UPLOADCARE
+ * PROVIDER SELECTION (EU-FIRST ARCHITECTURE READY)
  * -----------------------------------------
+ */
+
+const STORAGE_PROVIDER = "uploadcare"; // future: env switch
+
+/**
+ * -----------------------------------------
+ * UPLOAD FILE (MAIN ENTRY POINT)
+ * -----------------------------------------
+ * Standardized contract across ALL providers:
+ * {
+ *   success: boolean,
+ *   file_id: string,
+ *   url: string,
+ *   provider: string,
+ *   raw?: any
+ * }
  */
 
 export async function uploadFile({
@@ -26,15 +43,47 @@ export async function uploadFile({
       return {
         success: false,
         error: "No file buffer provided",
+        provider: STORAGE_PROVIDER,
       };
     }
 
+    switch (STORAGE_PROVIDER) {
+      case "uploadcare":
+        return await uploadToUploadcare({ buffer, filename, mimetype });
+
+      default:
+        return {
+          success: false,
+          error: `Unsupported storage provider: ${STORAGE_PROVIDER}`,
+          provider: STORAGE_PROVIDER,
+        };
+    }
+  } catch (error) {
+    console.error("Storage Service Error:", error);
+
+    return {
+      success: false,
+      error: error.message || "Storage upload failed",
+      provider: STORAGE_PROVIDER,
+    };
+  }
+}
+
+/**
+ * -----------------------------------------
+ * UPLOADCARE IMPLEMENTATION (EU-FIRST)
+ * -----------------------------------------
+ */
+
+async function uploadToUploadcare({ buffer, filename, mimetype }) {
+  try {
     const publicKey = process.env.UPLOADCARE_PUBLIC_KEY;
 
     if (!publicKey) {
       return {
         success: false,
         error: "UPLOADCARE_PUBLIC_KEY missing in environment",
+        provider: "uploadcare",
       };
     }
 
@@ -54,6 +103,7 @@ export async function uploadFile({
       {
         headers: form.getHeaders(),
         maxBodyLength: Infinity,
+        timeout: 30000,
       }
     );
 
@@ -63,6 +113,7 @@ export async function uploadFile({
       return {
         success: false,
         error: "Uploadcare did not return file UUID",
+        provider: "uploadcare",
         raw: response?.data,
       };
     }
@@ -71,6 +122,7 @@ export async function uploadFile({
       success: true,
       file_id: fileUUID,
       url: `https://ucarecdn.com/${fileUUID}/`,
+      provider: "uploadcare",
     };
   } catch (error) {
     console.error(
@@ -84,6 +136,17 @@ export async function uploadFile({
         error?.response?.data?.detail ||
         error.message ||
         "Upload failed",
+      provider: "uploadcare",
     };
   }
 }
+
+/**
+ * -----------------------------------------
+ * FUTURE EXTENSION HOOKS (DO NOT USE YET)
+ * -----------------------------------------
+ * - S3 EU (Backblaze / Scaleway / OVH)
+ * - MinIO self-hosted EU cluster
+ * - Azure EU regions (optional enterprise)
+ * -----------------------------------------
+ */
