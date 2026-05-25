@@ -24,24 +24,29 @@ const app = express();
    SECURITY + PERFORMANCE BASELINE
 ====================================================== */
 
-app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));
+app.use(
+  cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 
-app.use(express.json({
-  limit: "50mb"
-}));
+app.use(
+  express.json({
+    limit: "50mb",
+  })
+);
 
-app.use(express.urlencoded({
-  extended: true,
-  limit: "50mb"
-}));
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "50mb",
+  })
+);
 
 /* ======================================================
-   RENDER SAFE FILESYSTEM INIT
-   (ONLY LOCAL FALLBACK - NOT REQUIRED FOR UPLOADCARE)
+   SAFE FILE SYSTEM INIT (Render-compatible)
 ====================================================== */
 
 const __filename = fileURLToPath(import.meta.url);
@@ -68,8 +73,53 @@ app.get("/", (req, res) => {
   res.json({
     status: "alive",
     service: "OperionOS Backend",
-    storage: "uploadcare-eu-first",
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+  });
+});
+
+/* ======================================================
+   🧠 PROVIDER HEALTH CHECK (EU-FIRST AI ROUTING LAYER)
+====================================================== */
+
+app.get("/api/providers/health", (req, res) => {
+  const providers = [
+    {
+      name: "openai",
+      status: process.env.OPENAI_API_KEY ? "configured" : "missing_key",
+      region: "global",
+    },
+    {
+      name: "anthropic",
+      status: process.env.ANTHROPIC_API_KEY ? "configured" : "missing_key",
+      region: "global",
+    },
+    {
+      name: "mistral",
+      status: process.env.MISTRAL_API_KEY ? "configured" : "missing_key",
+      region: "EU (France)",
+    },
+    {
+      name: "azure-openai",
+      status: process.env.AZURE_OPENAI_API_KEY ? "configured" : "missing_key",
+      region: "EU/Global",
+    },
+    {
+      name: "uploadcare",
+      status: process.env.UPLOADCARE_PUBLIC_KEY
+        ? "configured"
+        : "missing_key",
+      region: "EU-friendly storage",
+    },
+  ];
+
+  const healthy = providers.filter((p) => p.status === "configured").length;
+
+  res.json({
+    success: true,
+    total_providers: providers.length,
+    healthy_providers: healthy,
+    providers,
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -90,7 +140,7 @@ app.use("/api/media", mediaRoutes);
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    error: "Route not found"
+    error: "Route not found",
   });
 });
 
@@ -103,12 +153,12 @@ app.use((err, req, res, next) => {
 
   res.status(500).json({
     success: false,
-    error: "Internal server error"
+    error: "Internal server error",
   });
 });
 
 /* ======================================================
-   SAFE SERVER START (RENDER HARDENED)
+   SAFE SERVER START (Render hardened)
 ====================================================== */
 
 const PORT = process.env.PORT;
@@ -121,11 +171,10 @@ if (!PORT) {
 const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 OperionOS running on port ${PORT}`);
   console.log(`🟢 Environment: ${process.env.NODE_ENV || "development"}`);
-  console.log(`🇪🇺 Storage layer: Uploadcare (EU-first abstraction)`);
 });
 
 /* ======================================================
-   GRACEFUL SHUTDOWN (Render stability)
+   GRACEFUL SHUTDOWN (important for Render restarts)
 ====================================================== */
 
 process.on("SIGTERM", () => {
