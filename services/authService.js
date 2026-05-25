@@ -11,10 +11,12 @@ export async function adminLogin(req, res) {
 
   try {
 
-    const {
-      email,
-      password
-    } = req.body;
+    console.log("📥 Login request received");
+
+    const { email, password } = req.body;
+
+    console.log("EMAIL:", email);
+    console.log("PASSWORD:", password);
 
     if (!email || !password) {
 
@@ -35,6 +37,8 @@ export async function adminLogin(req, res) {
       [email]
     );
 
+    console.log("DB RESULT:", result.rows);
+
     if (!result.rows.length) {
 
       return res.status(401).json({
@@ -50,6 +54,8 @@ export async function adminLogin(req, res) {
       password,
       admin.password_hash
     );
+
+    console.log("PASSWORD VALID:", validPassword);
 
     if (!validPassword) {
 
@@ -84,7 +90,7 @@ export async function adminLogin(req, res) {
 
   } catch (err) {
 
-    console.error(err);
+    console.error("❌ LOGIN ERROR:", err);
 
     res.status(500).json({
       success: false,
