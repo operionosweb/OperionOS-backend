@@ -1,72 +1,77 @@
 import { uploadToUploadcare } from "./providers/uploadcareProvider.js";
-import { uploadToS3 } from "./providers/s3Provider.js";
 
 /**
- * EU-FIRST STORAGE ORCHESTRATOR
- * Order:
- * 1. Uploadcare (primary EU-friendly)
- * 2. S3 EU fallback
+ * =========================================
+ * EU-FIRST STORAGE LAYER (UPLOADCARE ONLY)
+ * =========================================
+ *
+ * Architecture principle:
+ * - No AWS dependency
+ * - No Cloudinary dependency
+ * - Provider abstraction kept for future EU vendors
+ * =========================================
  */
 
 export async function uploadFile({
   buffer,
-  filename,
-  mimeType
+  filename = "file.pdf",
+  mimeType = "application/octet-stream"
 }) {
   try {
     /**
      * -----------------------------------------
-     * 1. PRIMARY: UPLOADCARE
+     * VALIDATION
      * -----------------------------------------
      */
 
-    const uploadcareResult = await uploadToUploadcare({
+    if (!buffer) {
+      return {
+        success: false,
+        error: "Missing file buffer"
+      };
+    }
+
+    /**
+     * -----------------------------------------
+     * PRIMARY PROVIDER: UPLOADCARE
+     * -----------------------------------------
+     */
+
+    const result = await uploadToUploadcare({
       buffer,
       filename,
       mimeType
     });
 
-    if (uploadcareResult.success) {
-      return uploadcareResult;
-    }
-
-    console.warn("⚠️ Uploadcare failed, switching to S3 fallback");
-
-    /**
-     * -----------------------------------------
-     * 2. FALLBACK: S3 (EU REGION)
-     * -----------------------------------------
-     */
-
-    const s3Result = await uploadToS3({
-      buffer,
-      filename,
-      mimeType
-    });
-
-    if (s3Result.success) {
-      return s3Result;
+    if (result.success) {
+      return {
+        ...result,
+        storage: "uploadcare_primary"
+      };
     }
 
     /**
      * -----------------------------------------
-     * FINAL FAILURE
+     * NO FALLBACK (INTENTIONAL)
      * -----------------------------------------
+     *
+     * Reason:
+     * Uploadcare is already EU-friendly and production-grade.
+     * Avoid unnecessary multi-provider complexity.
      */
 
     return {
       success: false,
-      error: "All storage providers failed",
-      uploadcare_error: uploadcareResult.error,
-      s3_error: s3Result.error
+      error: result.error || "Upload failed (Uploadcare)",
+      storage: "uploadcare_failed"
     };
 
   } catch (error) {
-    console.error("StorageService fatal error:", error);
+    console.error("StorageService error:", error);
 
     return {
       success: false,
-      error: error.message || "Storage failure"
+      error: error.message || "Storage service failure"
     };
   }
 }
