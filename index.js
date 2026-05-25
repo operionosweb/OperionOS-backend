@@ -4,22 +4,43 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
+/* ======================================================
+   ROUTES
+====================================================== */
+
 import healthRoutes from "./routes/healthRoutes.js";
 import contractRoutes from "./routes/contractRoutes.js";
 import blogRoutes from "./routes/blogRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import mediaRoutes from "./routes/mediaRoutes.js";
 
+/* ======================================================
+   APP INIT
+====================================================== */
+
 const app = express();
 
-app.use(cors());
+/* ======================================================
+   SECURITY + PERFORMANCE BASELINE
+====================================================== */
+
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 
 app.use(express.json({
   limit: "50mb"
 }));
 
+app.use(express.urlencoded({
+  extended: true,
+  limit: "50mb"
+}));
+
 /* ======================================================
-   FIX RENDER ENOENT ISSUE
+   SAFE FILE SYSTEM INIT (Render-compatible)
 ====================================================== */
 
 const __filename = fileURLToPath(import.meta.url);
@@ -27,30 +48,27 @@ const __dirname = path.dirname(__filename);
 
 const uploadsDir = path.join(__dirname, "uploads");
 
-if (!fs.existsSync(uploadsDir)) {
-
-  fs.mkdirSync(uploadsDir, {
-    recursive: true
-  });
-
-  console.log("✅ uploads folder created");
-
-} else {
-
-  console.log("✅ uploads folder exists");
+try {
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    console.log("✅ uploads folder created");
+  } else {
+    console.log("✅ uploads folder exists");
+  }
+} catch (err) {
+  console.error("❌ Uploads folder init failed:", err);
 }
 
 /* ======================================================
-   ROOT
+   HEALTH CHECK (Render uses this)
 ====================================================== */
 
 app.get("/", (req, res) => {
-
   res.json({
     status: "alive",
-    service: "OperionOS Backend"
+    service: "OperionOS Backend",
+    timestamp: new Date().toISOString()
   });
-
 });
 
 /* ======================================================
@@ -58,26 +76,20 @@ app.get("/", (req, res) => {
 ====================================================== */
 
 app.use("/health", healthRoutes);
-
 app.use("/api/contracts", contractRoutes);
-
 app.use("/api/blog", blogRoutes);
-
 app.use("/api/auth", authRoutes);
-
 app.use("/api/media", mediaRoutes);
 
 /* ======================================================
-   404
+   404 HANDLER
 ====================================================== */
 
 app.use((req, res) => {
-
   res.status(404).json({
     success: false,
     error: "Route not found"
   });
-
 });
 
 /* ======================================================
@@ -85,24 +97,46 @@ app.use((req, res) => {
 ====================================================== */
 
 app.use((err, req, res, next) => {
-
   console.error("❌ Global error:", err);
 
   res.status(500).json({
     success: false,
     error: "Internal server error"
   });
-
 });
 
 /* ======================================================
-   START SERVER
+   SAFE SERVER START (Render hardened)
 ====================================================== */
 
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT;
 
-app.listen(PORT, "0.0.0.0", () => {
+if (!PORT) {
+  console.error("❌ PORT is missing. Render deployment invalid.");
+  process.exit(1);
+}
 
-  console.log(`🚀 Server running on port ${PORT}`);
+const server = app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 OperionOS running on port ${PORT}`);
+  console.log(`🟢 Environment: ${process.env.NODE_ENV || "development"}`);
+});
 
+/* ======================================================
+   GRACEFUL SHUTDOWN (important for Render restarts)
+====================================================== */
+
+process.on("SIGTERM", () => {
+  console.log("⚠️ SIGTERM received. Shutting down gracefully...");
+  server.close(() => {
+    console.log("✅ Server closed");
+    process.exit(0);
+  });
+});
+
+process.on("SIGINT", () => {
+  console.log("⚠️ SIGINT received. Shutting down gracefully...");
+  server.close(() => {
+    console.log("✅ Server closed");
+    process.exit(0);
+  });
 });
