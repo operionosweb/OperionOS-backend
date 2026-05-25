@@ -1,4 +1,4 @@
-// services/contractService.js
+ // services/contractService.js
 
 import supabase from "../config/supabase.js";
 import { analyzeContractText } from "./aiExtractionService.js";
@@ -18,7 +18,7 @@ function generateHash(text = "") {
 
 /**
  * -----------------------------------------
- * CREATE CONTRACT (EU-FIRST STORAGE ENABLED)
+ * CREATE CONTRACT
  * -----------------------------------------
  */
 
@@ -34,10 +34,7 @@ export async function createContract(contractPayload = {}) {
     const rawText = contractPayload.raw_text;
 
     /**
-     * -----------------------------------------
-     * STEP 1: STORAGE (UPLOADCARE)
-     * -----------------------------------------
-     * Optional: only runs if file is provided
+     * OPTIONAL FILE UPLOAD (UPLOADCARE)
      */
     let fileUpload = null;
 
@@ -49,26 +46,18 @@ export async function createContract(contractPayload = {}) {
     }
 
     /**
-     * -----------------------------------------
-     * STEP 2: DOCUMENT HASH
-     * -----------------------------------------
+     * HASH
      */
     const documentHash = generateHash(rawText);
 
     /**
-     * -----------------------------------------
-     * STEP 3: DUPLICATE CHECK
-     * -----------------------------------------
+     * DUPLICATE CHECK
      */
-    const { data: existingContract, error: fetchError } = await supabase
+    const { data: existingContract } = await supabase
       .from("contracts")
       .select("*")
       .eq("document_hash", documentHash)
       .maybeSingle();
-
-    if (fetchError) {
-      console.error("Duplicate check error:", fetchError);
-    }
 
     const forceSave = contractPayload.force_save === "true";
 
@@ -83,67 +72,47 @@ export async function createContract(contractPayload = {}) {
     }
 
     /**
-     * -----------------------------------------
-     * STEP 4: AI ANALYSIS
-     * -----------------------------------------
+     * AI ANALYSIS
      */
     const analysis =
       contractPayload.analysis ||
       (await analyzeContractText(rawText));
 
     /**
-     * -----------------------------------------
-     * STEP 5: INSERT CONTRACT
-     * -----------------------------------------
+     * INSERT
      */
-    const insertPayload = {
-      name: contractPayload.name || "Unnamed Contract",
-      supplier_name: analysis?.supplier_name || "Unknown Supplier",
-      raw_text: rawText,
-      document_hash: documentHash,
-      duplicate_of: existingContract?.id || null,
-      is_duplicate: !!existingContract,
-
-      contract_type: analysis?.contract_type || "General Contract",
-      summary: analysis?.summary || "",
-      clauses: analysis?.clauses || [],
-      obligations: analysis?.obligations || [],
-      risk_score: analysis?.risk_score || 0,
-      contract_value: analysis?.contract_value || 0,
-
-      start_date: analysis?.start_date || null,
-      expiry_date: analysis?.expiry_date || null,
-
-      /**
-       * -----------------------------------------
-       * EU STORAGE METADATA (UPLOADCARE)
-       * -----------------------------------------
-       */
-      file_url: fileUpload?.file_url || null,
-      file_uuid: fileUpload?.file_uuid || null,
-
-      created_at: new Date().toISOString(),
-    };
-
     const { data, error } = await supabase
       .from("contracts")
-      .insert(insertPayload)
+      .insert({
+        name: contractPayload.name || "Unnamed Contract",
+        supplier_name: analysis?.supplier_name || "Unknown Supplier",
+        raw_text: rawText,
+        document_hash: documentHash,
+        duplicate_of: existingContract?.id || null,
+        is_duplicate: !!existingContract,
+        contract_type: analysis?.contract_type || "General Contract",
+        summary: analysis?.summary || "",
+        clauses: analysis?.clauses || [],
+        obligations: analysis?.obligations || [],
+        risk_score: analysis?.risk_score || 0,
+        contract_value: analysis?.contract_value || 0,
+        start_date: analysis?.start_date || null,
+        expiry_date: analysis?.expiry_date || null,
+        file_url: fileUpload?.file_url || null,
+        file_uuid: fileUpload?.file_uuid || null,
+        created_at: new Date().toISOString(),
+      })
       .select()
       .single();
 
     if (error) throw error;
 
     /**
-     * -----------------------------------------
-     * STEP 6: EMBEDDINGS (ASYNC SAFE MODE)
-     * -----------------------------------------
+     * EMBEDDINGS (ASYNC SAFE)
      */
     (async () => {
       try {
-        const embeddingText = `
-          ${analysis?.summary || ""}
-          ${rawText.slice(0, 8000)}
-        `;
+        const embeddingText = `${analysis?.summary || ""}\n${rawText.slice(0, 8000)}`;
 
         const embedding = await generateEmbedding(embeddingText);
 
@@ -154,20 +123,14 @@ export async function createContract(contractPayload = {}) {
             .eq("id", data.id);
         }
       } catch (err) {
-        console.error("Embedding generation failed:", err);
+        console.error("Embedding error:", err);
       }
     })();
 
-    /**
-     * -----------------------------------------
-     * RESPONSE
-     * -----------------------------------------
-     */
     return {
       success: true,
       duplicate_detected: !!existingContract,
       duplicate_of: existingContract?.id || null,
-      file_uploaded: !!fileUpload,
       contract: data,
     };
   } catch (error) {
@@ -175,7 +138,78 @@ export async function createContract(contractPayload = {}) {
 
     return {
       success: false,
-      error: error.message || "Failed to create contract",
+      error: error.message,
     };
   }
+}
+
+/**
+ * -----------------------------------------
+ * GET ALL CONTRACTS
+ * -----------------------------------------
+ */
+
+export async function getAllContracts() {
+  const { data } = await supabase
+    .from("contracts")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  return data || [];
+}
+
+/**
+ * -----------------------------------------
+ * GET CONTRACT BY ID
+ * -----------------------------------------
+ */
+
+export async function getContractById(id) {
+  const { data } = await supabase
+    .from("contracts")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  return data || null;
+}
+
+/**
+ * -----------------------------------------
+ * UPDATE CONTRACT
+ * -----------------------------------------
+ */
+
+export async function updateContract(id, updates = {}) {
+  const { data, error } = await supabase
+    .from("contracts")
+    .update(updates)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  return { success: true, contract: data };
+}
+
+/**
+ * -----------------------------------------
+ * DELETE CONTRACT (FIXED EXPORT)
+ * -----------------------------------------
+ */
+
+export async function deleteContract(id) {
+  const { error } = await supabase
+    .from("contracts")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  return { success: true };
 }
