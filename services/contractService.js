@@ -1,165 +1,127 @@
 // services/contractService.js
 
 import supabase from "../config/supabase.js";
-
-import {
-  analyzeContractText,
-} from "./aiExtractionService.js";
+import { analyzeContractText } from "./aiExtractionService.js";
 
 /**
  * -----------------------------------------
- * CREATE CONTRACT
+ * UTIL: HASH (for stronger dedup than raw_text compare)
  * -----------------------------------------
  */
-export async function createContract(
-  contractPayload = {}
-) {
+import crypto from "crypto";
+
+function generateHash(text = "") {
+  return crypto
+    .createHash("sha256")
+    .update(text)
+    .digest("hex");
+}
+
+/**
+ * -----------------------------------------
+ * CREATE CONTRACT (CORE PIPELINE)
+ * -----------------------------------------
+ */
+export async function createContract(contractPayload = {}) {
   try {
     /**
-     * Basic validation
+     * Validate input
      */
-    if (
-      !contractPayload?.raw_text
-    ) {
+    if (!contractPayload?.raw_text) {
       return {
         success: false,
-        error:
-          "raw_text is required",
+        error: "raw_text is required",
+      };
+    }
+
+    const rawText = contractPayload.raw_text;
+
+    /**
+     * -----------------------------------------
+     * STEP 1: HASH (primary dedup key)
+     * -----------------------------------------
+     */
+    const documentHash = generateHash(rawText);
+
+    /**
+     * -----------------------------------------
+     * STEP 2: CHECK CACHE (by hash)
+     * -----------------------------------------
+     */
+    const { data: existingContract, error: fetchError } =
+      await supabase
+        .from("contracts")
+        .select("*")
+        .eq("document_hash", documentHash)
+        .maybeSingle();
+
+    if (fetchError) {
+      console.error("Supabase fetch error:", fetchError);
+    }
+
+    /**
+     * If found → return cached version immediately
+     */
+    if (existingContract) {
+      console.log("⚡ Cache hit: contract already exists");
+
+      return {
+        success: true,
+        cached: true,
+        contract: existingContract,
       };
     }
 
     /**
      * -----------------------------------------
-     * HASH-BASED DUPLICATE DETECTION
+     * STEP 3: AI ANALYSIS (only if not cached)
      * -----------------------------------------
      */
-
-    if (
-      contractPayload?.document_hash
-    ) {
-      const {
-        data: existingContract,
-      } = await supabase
-        .from("contracts")
-        .select("*")
-        .eq(
-          "document_hash",
-          contractPayload.document_hash
-        )
-        .limit(1)
-        .maybeSingle();
-
-      /**
-       * Skip duplicate save
-       */
-      if (
-        existingContract &&
-        !contractPayload.force_save
-      ) {
-        console.log(
-          "Duplicate contract detected"
-        );
-
-        return {
-          success: true,
-          duplicate_detected: true,
-          cached: true,
-          contract:
-            existingContract,
-        };
-      }
-    }
+    const analysis = await analyzeContractText(rawText);
 
     /**
      * -----------------------------------------
-     * AI EXTRACTION
+     * STEP 4: BUILD DB RECORD
      * -----------------------------------------
      */
-
-    let analysis = {};
-
-    /**
-     * Use existing analysis if already provided
-     */
-    if (
-      contractPayload.analysis
-    ) {
-      analysis =
-        contractPayload.analysis;
-    } else {
-      analysis =
-        await analyzeContractText(
-          contractPayload.raw_text
-        );
-    }
-
-    /**
-     * -----------------------------------------
-     * BUILD CONTRACT RECORD
-     * -----------------------------------------
-     */
-
     const insertPayload = {
-      name:
-        contractPayload.name ||
-        "Unnamed Contract",
+      name: contractPayload.name || "Unnamed Contract",
 
       supplier_name:
         analysis?.supplier_name ||
-        contractPayload
-          ?.supplier_name ||
+        contractPayload?.supplier_name ||
         "Unknown Supplier",
 
       contract_type:
-        analysis?.contract_type ||
-        "General Contract",
+        analysis?.contract_type || "General Contract",
 
-      summary:
-        analysis?.summary || "",
+      summary: analysis?.summary || "",
 
-      raw_text:
-        contractPayload.raw_text,
+      raw_text: rawText,
 
-      document_hash:
-        contractPayload.document_hash ||
-        null,
+      document_hash: documentHash,
 
-      duplicate_of:
-        contractPayload.duplicate_of ||
-        null,
+      clauses: analysis?.clauses || [],
 
-      is_duplicate:
-        contractPayload.is_duplicate ||
-        false,
+      obligations: analysis?.obligations || [],
 
-      clauses:
-        analysis?.clauses || [],
+      risk_score: analysis?.risk_score || 0,
 
-      obligations:
-        analysis?.obligations ||
-        [],
+      contract_value: analysis?.contract_value || 0,
 
-      risk_score:
-        analysis?.risk_score || 0,
+      start_date: analysis?.start_date || null,
 
-      contract_value:
-        analysis?.contract_value ||
-        0,
+      expiry_date: analysis?.expiry_date || null,
 
-      created_at:
-        new Date().toISOString(),
+      created_at: new Date().toISOString(),
     };
 
     /**
      * -----------------------------------------
-     * INSERT CONTRACT
+     * STEP 5: INSERT CONTRACT
      * -----------------------------------------
      */
-
-    const {
-      data,
-      error,
-    } = await supabase
+    const { data, error } = await supabase
       .from("contracts")
       .insert(insertPayload)
       .select()
@@ -169,23 +131,22 @@ export async function createContract(
       throw error;
     }
 
+    /**
+     * -----------------------------------------
+     * RESPONSE
+     * -----------------------------------------
+     */
     return {
       success: true,
       cached: false,
-      duplicate_detected: false,
       contract: data,
     };
   } catch (error) {
-    console.error(
-      "createContract Error:",
-      error
-    );
+    console.error("createContract Error:", error);
 
     return {
       success: false,
-      error:
-        error?.message ||
-        "Failed to create contract",
+      error: error.message || "Failed to create contract",
     };
   }
 }
@@ -195,33 +156,18 @@ export async function createContract(
  * GET ALL CONTRACTS
  * -----------------------------------------
  */
-
 export async function getAllContracts() {
   try {
-    const {
-      data,
-      error,
-    } = await supabase
+    const { data, error } = await supabase
       .from("contracts")
       .select("*")
-      .order(
-        "created_at",
-        {
-          ascending: false,
-        }
-      );
+      .order("created_at", { ascending: false });
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     return data || [];
   } catch (error) {
-    console.error(
-      "getAllContracts Error:",
-      error
-    );
-
+    console.error("getAllContracts Error:", error);
     return [];
   }
 }
@@ -231,31 +177,19 @@ export async function getAllContracts() {
  * GET CONTRACT BY ID
  * -----------------------------------------
  */
-
-export async function getContractById(
-  id
-) {
+export async function getContractById(id) {
   try {
-    const {
-      data,
-      error,
-    } = await supabase
+    const { data, error } = await supabase
       .from("contracts")
       .select("*")
       .eq("id", id)
       .single();
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     return data;
   } catch (error) {
-    console.error(
-      "getContractById Error:",
-      error
-    );
-
+    console.error("getContractById Error:", error);
     return null;
   }
 }
@@ -265,40 +199,27 @@ export async function getContractById(
  * UPDATE CONTRACT
  * -----------------------------------------
  */
-
-export async function updateContract(
-  id,
-  updates = {}
-) {
+export async function updateContract(id, updates = {}) {
   try {
-    const {
-      data,
-      error,
-    } = await supabase
+    const { data, error } = await supabase
       .from("contracts")
       .update(updates)
       .eq("id", id)
       .select()
       .single();
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     return {
       success: true,
       contract: data,
     };
   } catch (error) {
-    console.error(
-      "updateContract Error:",
-      error
-    );
+    console.error("updateContract Error:", error);
 
     return {
       success: false,
-      error:
-        error.message,
+      error: error.message,
     };
   }
 }
@@ -308,35 +229,24 @@ export async function updateContract(
  * DELETE CONTRACT
  * -----------------------------------------
  */
-
-export async function deleteContract(
-  id
-) {
+export async function deleteContract(id) {
   try {
-    const {
-      error,
-    } = await supabase
+    const { error } = await supabase
       .from("contracts")
       .delete()
       .eq("id", id);
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     return {
       success: true,
     };
   } catch (error) {
-    console.error(
-      "deleteContract Error:",
-      error
-    );
+    console.error("deleteContract Error:", error);
 
     return {
       success: false,
-      error:
-        error.message,
+      error: error.message,
     };
   }
 }
