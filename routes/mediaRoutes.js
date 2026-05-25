@@ -1,113 +1,92 @@
+// routes/mediaRoutes.js
+
 import express from "express";
 import multer from "multer";
-import { CloudinaryStorage } from "multer-storage-cloudinary";
-
-import cloudinary from "../config/cloudinary.js";
-
-import {
-  requireAdmin
-} from "../middleware/authMiddleware.js";
+import supabase from "../config/supabase.js";
+import { uploadFile } from "../services/storageService.js";
 
 const router = express.Router();
 
-/* =====================================================
-   CLOUDINARY STORAGE
-===================================================== */
-
-const storage = new CloudinaryStorage({
-  cloudinary,
-  params: async (req, file) => {
-
-    return {
-      folder: "operion-blog",
-      allowed_formats: [
-        "jpg",
-        "jpeg",
-        "png",
-        "webp"
-      ],
-      transformation: [
-        {
-          width: 2000,
-          crop: "limit",
-          quality: "auto",
-          fetch_format: "auto"
-        }
-      ]
-    };
-  }
-});
+/**
+ * -----------------------------------------
+ * MULTER (memory only - no cloud bindings)
+ * -----------------------------------------
+ */
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: {
-    fileSize: 10 * 1024 * 1024
-  }
+    fileSize: 25 * 1024 * 1024, // 25MB
+  },
 });
 
-/* =====================================================
-   IMAGE UPLOAD
-===================================================== */
+/**
+ * -----------------------------------------
+ * UPLOAD FILE (Uploadcare)
+ * -----------------------------------------
+ */
 
-router.post(
-  "/upload",
-  requireAdmin,
-  upload.single("image"),
-  async (req, res) => {
-
-    try {
-
-      return res.json({
-        success: true,
-        image: {
-          url: req.file.path,
-          public_id: req.file.filename
-        }
+router.post("/upload", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: "No file provided",
       });
+    }
 
-    } catch (err) {
+    const file = req.file;
 
-      console.error(err);
+    /**
+     * Upload via EU-first storage service (Uploadcare abstraction)
+     */
+    const uploadResult = await uploadFile({
+      buffer: file.buffer,
+      filename: file.originalname,
+      mimetype: file.mimetype,
+    });
 
+    if (!uploadResult.success) {
       return res.status(500).json({
         success: false,
-        error: "Upload failed"
+        error: uploadResult.error || "Upload failed",
       });
-
     }
-  }
-);
 
-/* =====================================================
-   IMAGE DELETE
-===================================================== */
+    /**
+     * Optional: store reference in Supabase
+     */
+    const { data, error } = await supabase
+      .from("uploads")
+      .insert({
+        filename: file.originalname,
+        url: uploadResult.url,
+        file_id: uploadResult.file_id,
+        created_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
 
-router.delete(
-  "/delete/:publicId",
-  requireAdmin,
-  async (req, res) => {
-
-    try {
-
-      const { publicId } = req.params;
-
-      await cloudinary.uploader.destroy(publicId);
-
-      return res.json({
-        success: true
-      });
-
-    } catch (err) {
-
-      console.error(err);
-
+    if (error) {
       return res.status(500).json({
         success: false,
-        error: "Delete failed"
+        error: error.message,
       });
-
     }
+
+    return res.status(200).json({
+      success: true,
+      file: data,
+      storage: "uploadcare",
+    });
+  } catch (error) {
+    console.error("Media upload error:", error);
+
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Upload failed",
+    });
   }
-);
+});
 
 export default router;
