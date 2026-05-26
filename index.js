@@ -29,20 +29,20 @@ const app = express();
 app.use(cors({
   origin: "*",
   methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"]
+  allowedHeaders: ["Content-Type", "Authorization"],
 }));
 
 app.use(express.json({
-  limit: "50mb"
+  limit: "50mb",
 }));
 
 app.use(express.urlencoded({
   extended: true,
-  limit: "50mb"
+  limit: "50mb",
 }));
 
 /* ======================================================
-   SAFE FILE SYSTEM INIT
+   SAFE FILE SYSTEM INIT (Render-compatible)
 ====================================================== */
 
 const __filename = fileURLToPath(import.meta.url);
@@ -51,44 +51,30 @@ const __dirname = path.dirname(__filename);
 const uploadsDir = path.join(__dirname, "uploads");
 
 try {
-
   if (!fs.existsSync(uploadsDir)) {
-
-    fs.mkdirSync(uploadsDir, {
-      recursive: true
-    });
-
+    fs.mkdirSync(uploadsDir, { recursive: true });
     console.log("✅ uploads folder created");
-
   } else {
-
     console.log("✅ uploads folder exists");
   }
-
 } catch (err) {
-
-  console.error(
-    "❌ Uploads folder init failed:",
-    err
-  );
+  console.error("❌ Uploads folder init failed:", err);
 }
 
 /* ======================================================
-   ROOT
+   ROOT HEALTH CHECK
 ====================================================== */
 
 app.get("/", (req, res) => {
-
   res.json({
     status: "alive",
     service: "OperionOS Backend",
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
-
 });
 
 /* ======================================================
-   ROUTES
+   API ROUTES
 ====================================================== */
 
 app.use("/health", healthRoutes);
@@ -110,12 +96,10 @@ app.use("/api/search", searchRoutes);
 ====================================================== */
 
 app.use((req, res) => {
-
   res.status(404).json({
     success: false,
-    error: "Route not found"
+    error: "Route not found",
   });
-
 });
 
 /* ======================================================
@@ -123,77 +107,43 @@ app.use((req, res) => {
 ====================================================== */
 
 app.use((err, req, res, next) => {
-
   console.error("❌ Global error:", err);
 
   res.status(500).json({
     success: false,
-    error: "Internal server error"
+    error: "Internal server error",
   });
-
 });
 
 /* ======================================================
    SERVER START
 ====================================================== */
 
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 10000;
 
-if (!PORT) {
-
-  console.error(
-    "❌ PORT missing"
-  );
-
-  process.exit(1);
-}
-
-const server = app.listen(
-  PORT,
-  "0.0.0.0",
-  () => {
-
-    console.log(
-      `🚀 OperionOS running on port ${PORT}`
-    );
-
-    console.log(
-      `🟢 Environment: ${
-        process.env.NODE_ENV ||
-        "development"
-      }`
-    );
-  }
-);
+const server = app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 OperionOS running on port ${PORT}`);
+  console.log(`🟢 Environment: ${process.env.NODE_ENV || "development"}`);
+});
 
 /* ======================================================
    GRACEFUL SHUTDOWN
 ====================================================== */
 
 process.on("SIGTERM", () => {
-
-  console.log(
-    "⚠️ SIGTERM received"
-  );
+  console.log("⚠️ SIGTERM received. Shutting down gracefully...");
 
   server.close(() => {
-
     console.log("✅ Server closed");
-
     process.exit(0);
   });
 });
 
 process.on("SIGINT", () => {
-
-  console.log(
-    "⚠️ SIGINT received"
-  );
+  console.log("⚠️ SIGINT received. Shutting down gracefully...");
 
   server.close(() => {
-
     console.log("✅ Server closed");
-
     process.exit(0);
   });
 });
