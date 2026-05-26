@@ -5,7 +5,7 @@ import supabase from "../config/supabase.js";
 
 /**
  * =========================================
- * OPENAI EMBEDDINGS CLIENT
+ * OPENAI CLIENT
  * =========================================
  */
 
@@ -15,12 +15,18 @@ const openai = new OpenAI({
 
 /**
  * =========================================
- * GENERATE EMBEDDING
+ * GENERATE EMBEDDING (DEBUG ENHANCED)
  * =========================================
  */
 
 export async function generateEmbedding(text = "") {
   try {
+    /**
+     * -----------------------------------------
+     * VALIDATION
+     * -----------------------------------------
+     */
+
     if (!text || typeof text !== "string") {
       return {
         success: false,
@@ -30,21 +36,59 @@ export async function generateEmbedding(text = "") {
 
     /**
      * -----------------------------------------
-     * OPENAI EMBEDDINGS
+     * DEBUG: CHECK ENV LOADED
      * -----------------------------------------
      */
 
-    const response = await openai.embeddings.create({
-      model: "text-embedding-3-small",
-      input: text.slice(0, 12000),
-    });
+    console.log(
+      "OPENAI KEY EXISTS:",
+      !!process.env.OPENAI_API_KEY
+    );
 
-    const embedding = response?.data?.[0]?.embedding;
+    console.log(
+      "Generating embedding for text length:",
+      text.length
+    );
+
+    /**
+     * -----------------------------------------
+     * OPENAI EMBEDDINGS CALL
+     * -----------------------------------------
+     */
+
+    const response =
+      await openai.embeddings.create({
+        model: "text-embedding-3-small",
+        input: text.slice(0, 8000),
+      });
+
+    console.log(
+      "OpenAI embedding response received"
+    );
+
+    const embedding =
+      response?.data?.[0]?.embedding;
+
+    /**
+     * -----------------------------------------
+     * VALIDATE RESPONSE
+     * -----------------------------------------
+     */
 
     if (!embedding) {
+      console.error(
+        "❌ Invalid OpenAI response:",
+        JSON.stringify(
+          response,
+          null,
+          2
+        )
+      );
+
       return {
         success: false,
-        error: "Embedding generation failed",
+        error:
+          "No embedding returned from OpenAI",
       };
     }
 
@@ -53,11 +97,21 @@ export async function generateEmbedding(text = "") {
       embedding,
     };
   } catch (error) {
-    console.error("generateEmbedding error:", error);
+    console.error(
+      "❌ OPENAI EMBEDDING ERROR:",
+      {
+        message: error.message,
+        status: error.status,
+        stack: error.stack,
+        response: error.response?.data,
+      }
+    );
 
     return {
       success: false,
-      error: error.message || "Embedding failed",
+      error:
+        error.message ||
+        "Embedding failed",
     };
   }
 }
@@ -95,18 +149,23 @@ export async function storeEmbedding({
       embedding_record: data,
     };
   } catch (error) {
-    console.error("storeEmbedding error:", error);
+    console.error(
+      "storeEmbedding error:",
+      error
+    );
 
     return {
       success: false,
-      error: error.message || "Embedding storage failed",
+      error:
+        error.message ||
+        "Embedding storage failed",
     };
   }
 }
 
 /**
  * =========================================
- * SEMANTIC SEARCH
+ * DIRECT VECTOR SEARCH (LEGACY)
  * =========================================
  */
 
@@ -115,13 +174,14 @@ export async function semanticSearch({
   matchCount = 5,
 }) {
   try {
-    const { data, error } = await supabase.rpc(
-      "match_contract_embeddings",
-      {
-        query_embedding: embedding,
-        match_count: matchCount,
-      }
-    );
+    const { data, error } =
+      await supabase.rpc(
+        "match_contract_embeddings",
+        {
+          query_embedding: embedding,
+          match_count: matchCount,
+        }
+      );
 
     if (error) {
       throw error;
@@ -132,11 +192,16 @@ export async function semanticSearch({
       matches: data || [],
     };
   } catch (error) {
-    console.error("semanticSearch error:", error);
+    console.error(
+      "semanticSearch error:",
+      error
+    );
 
     return {
       success: false,
-      error: error.message || "Semantic search failed",
+      error:
+        error.message ||
+        "Semantic search failed",
     };
   }
 }
