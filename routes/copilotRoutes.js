@@ -1,211 +1,212 @@
-// routes/copilotRoutes.js
+// routes/contractRoutes.js
 
-/**
- * OPERION OS
- * AI Legal Copilot Routes
- *
- * Responsibilities:
- * - Conversational legal intelligence
- * - Executive AI querying
- * - Portfolio intelligence access
- * - Enterprise legal analytics APIs
- */
+import express from "express";
+import multer from "multer";
+import pdfParse from "pdf-parse";
 
-const express = require("express");
+import {
+  createContract,
+  getAllContracts,
+  getContractById,
+  updateContract,
+  deleteContract,
+} from "../services/contractService.js";
+
+import { apiKeyMiddleware } from "../middleware/apiKeyMiddleware.js";
 
 const router = express.Router();
 
 /**
- * Services
+ * =========================================
+ * MULTER CONFIG
+ * =========================================
  */
-const {
-  processLegalQuery,
-} = require("../services/legalCopilot");
 
-const {
-  getAllContracts,
-} = require("../services/contractService");
-
-const {
-  calculatePortfolioRisk,
-} = require("../services/portfolioRiskEngine");
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 20 * 1024 * 1024, // 20MB
+  },
+});
 
 /**
- * -----------------------------------------
- * POST /copilot/query
- * Main AI copilot endpoint
- * -----------------------------------------
+ * =========================================
+ * HEALTH CHECK
+ * =========================================
  */
+
+router.get("/health", async (req, res) => {
+  return res.status(200).json({
+    success: true,
+    service: "contract-routes",
+    status: "operational",
+  });
+});
+
+/**
+ * =========================================
+ * UPLOAD CONTRACT (PROTECTED)
+ * =========================================
+ */
+
 router.post(
-  "/query",
+  "/upload",
+  apiKeyMiddleware,
+  upload.single("file"),
   async (req, res) => {
     try {
-      const { query } = req.body;
-
-      if (!query) {
+      if (!req.file) {
         return res.status(400).json({
           success: false,
-          error:
-            "Query is required",
+          error: "No file uploaded",
         });
       }
 
-      const response =
-        await processLegalQuery(
-          query
-        );
+      let extractedText = "";
 
-      return res.status(200).json({
-        success: true,
-        response,
+      try {
+        const pdfData = await pdfParse(req.file.buffer);
+        extractedText = pdfData.text || "";
+      } catch (err) {
+        console.error("PDF Parse Error:", err);
+
+        return res.status(500).json({
+          success: false,
+          error: "Failed to extract PDF text",
+        });
+      }
+
+      if (!extractedText || extractedText.length < 100) {
+        return res.status(400).json({
+          success: false,
+          error: "Document text too short or unreadable",
+        });
+      }
+
+      const result = await createContract({
+        text: extractedText,
+        filename: req.file.originalname,
       });
+
+      return res.status(201).json(result);
     } catch (error) {
-      console.error(
-        "Copilot Query Error:",
-        error
-      );
+      console.error("Upload Route Error:", error);
 
       return res.status(500).json({
         success: false,
-        error:
-          error.message ||
-          "Failed to process copilot query",
+        error: error.message || "Upload failed",
       });
     }
   }
 );
 
 /**
- * -----------------------------------------
- * POST /copilot/analyze
- * Analyze entire contract portfolio
- * -----------------------------------------
+ * =========================================
+ * CREATE CONTRACT (JSON) - PROTECTED
+ * =========================================
  */
-router.post(
-  "/analyze",
-  async (req, res) => {
-    try {
-      const contracts =
-        await getAllContracts();
 
-      const portfolioAnalysis =
-        calculatePortfolioRisk(
-          contracts
-        );
+router.post("/", apiKeyMiddleware, async (req, res) => {
+  try {
+    const result = await createContract(req.body);
 
-      return res.status(200).json({
-        success: true,
+    return res.status(201).json(result);
+  } catch (error) {
+    console.error("Create Contract Error:", error);
 
-        analysis:
-          portfolioAnalysis,
-      });
-    } catch (error) {
-      console.error(
-        "Copilot Analyze Error:",
-        error
-      );
-
-      return res.status(500).json({
-        success: false,
-        error:
-          error.message ||
-          "Failed to analyze portfolio",
-      });
-    }
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Internal server error",
+    });
   }
-);
+});
 
 /**
- * -----------------------------------------
- * GET /copilot/status
- * Health check endpoint
- * -----------------------------------------
+ * =========================================
+ * GET ALL CONTRACTS
+ * =========================================
  */
-router.get(
-  "/status",
-  async (req, res) => {
-    try {
-      return res.status(200).json({
-        success: true,
 
-        service:
-          "OPERION AI Legal Copilot",
+router.get("/", async (req, res) => {
+  try {
+    const result = await getAllContracts();
 
-        status: "online",
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Get Contracts Error:", error);
 
-        capabilities: [
-          "Portfolio Risk Intelligence",
-          "Supplier Risk Analytics",
-          "Cross-Contract Benchmarking",
-          "Semantic Clause Search",
-          "Compliance Intelligence",
-          "Executive Legal Analytics",
-          "Risk Heatmaps",
-          "Obligation Intelligence",
-        ],
-
-        version: "1.0.0",
-      });
-    } catch (error) {
-      console.error(
-        "Copilot Status Error:",
-        error
-      );
-
-      return res.status(500).json({
-        success: false,
-        error:
-          error.message ||
-          "Copilot status unavailable",
-      });
-    }
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to fetch contracts",
+    });
   }
-);
+});
 
 /**
- * -----------------------------------------
- * POST /copilot/suggest
- * Future recommendation engine
- * -----------------------------------------
+ * =========================================
+ * GET CONTRACT BY ID
+ * =========================================
  */
-router.post(
-  "/suggest",
-  async (req, res) => {
-    try {
-      const { contractId } =
-        req.body;
 
-      return res.status(200).json({
-        success: true,
+router.get("/:id", async (req, res) => {
+  try {
+    const result = await getContractById(req.params.id);
 
-        message:
-          "AI recommendation engine coming soon.",
-
-        future_capabilities: [
-          "Clause Rewrite Suggestions",
-          "Negotiation Recommendations",
-          "Risk Mitigation Strategies",
-          "AI Amendment Generation",
-          "Automated Redlining",
-        ],
-
-        contract_id:
-          contractId || null,
-      });
-    } catch (error) {
-      console.error(
-        "Copilot Suggest Error:",
-        error
-      );
-
-      return res.status(500).json({
-        success: false,
-        error:
-          error.message ||
-          "Failed to generate recommendations",
-      });
+    if (!result.success) {
+      return res.status(404).json(result);
     }
-  }
-);
 
-module.exports = router;
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Get Contract Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Failed to fetch contract",
+    });
+  }
+});
+
+/**
+ * =========================================
+ * UPDATE CONTRACT (PROTECTED)
+ * =========================================
+ */
+
+router.put("/:id", apiKeyMiddleware, async (req, res) => {
+  try {
+    const result = await updateContract(req.params.id, req.body);
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Update Contract Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Update failed",
+    });
+  }
+});
+
+/**
+ * =========================================
+ * DELETE CONTRACT (PROTECTED)
+ * =========================================
+ */
+
+router.delete("/:id", apiKeyMiddleware, async (req, res) => {
+  try {
+    const result = await deleteContract(req.params.id);
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Delete Contract Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Delete failed",
+    });
+  }
+});
+
+export default router;
