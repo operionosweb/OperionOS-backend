@@ -12,33 +12,9 @@ import {
   deleteContract,
 } from "../services/contractService.js";
 
+import { apiKeyMiddleware } from "../middleware/apiKeyMiddleware.js";
+
 const router = express.Router();
-
-/**
- * =========================================
- * INTERNAL API KEY MIDDLEWARE
- * =========================================
- */
-
-function apiKeyAuth(req, res, next) {
-  const apiKey = req.headers["x-api-key"];
-
-  if (!apiKey) {
-    return res.status(401).json({
-      success: false,
-      error: "Missing API key",
-    });
-  }
-
-  if (apiKey !== process.env.INTERNAL_API_KEY) {
-    return res.status(403).json({
-      success: false,
-      error: "Invalid API key",
-    });
-  }
-
-  next();
-}
 
 /**
  * =========================================
@@ -49,9 +25,21 @@ function apiKeyAuth(req, res, next) {
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 20 * 1024 * 1024, // 20MB
+    fileSize: 20 * 1024 * 1024,
   },
 });
+
+/**
+ * =========================================
+ * DEBUG MIDDLEWARE (TEMP - SAFE)
+ * =========================================
+ */
+
+function debugHeaders(req, res, next) {
+  console.log("🔥 REQUEST HEADERS:", req.headers);
+  console.log("🔥 API KEY HEADER:", req.headers["x-api-key"]);
+  next();
+}
 
 /**
  * =========================================
@@ -69,13 +57,14 @@ router.get("/health", async (req, res) => {
 
 /**
  * =========================================
- * UPLOAD CONTRACT (MUST BE FIRST BEFORE /:id)
+ * UPLOAD CONTRACT (PROTECTED)
  * =========================================
  */
 
 router.post(
   "/upload",
-  apiKeyAuth,
+  debugHeaders,
+  apiKeyMiddleware,
   upload.single("file"),
   async (req, res) => {
     try {
@@ -126,17 +115,13 @@ router.post(
 
 /**
  * =========================================
- * CREATE CONTRACT (JSON)
+ * CREATE CONTRACT (JSON) - PROTECTED
  * =========================================
  */
 
-router.post("/", apiKeyAuth, async (req, res) => {
+router.post("/", debugHeaders, apiKeyMiddleware, async (req, res) => {
   try {
     const result = await createContract(req.body);
-
-    if (!result.success) {
-      return res.status(400).json(result);
-    }
 
     return res.status(201).json(result);
   } catch (error) {
@@ -172,7 +157,7 @@ router.get("/", async (req, res) => {
 
 /**
  * =========================================
- * GET CONTRACT BY ID (MUST BE AFTER /upload)
+ * GET CONTRACT BY ID
  * =========================================
  */
 
@@ -197,11 +182,11 @@ router.get("/:id", async (req, res) => {
 
 /**
  * =========================================
- * UPDATE CONTRACT
+ * UPDATE CONTRACT (PROTECTED)
  * =========================================
  */
 
-router.put("/:id", apiKeyAuth, async (req, res) => {
+router.put("/:id", debugHeaders, apiKeyMiddleware, async (req, res) => {
   try {
     const result = await updateContract(req.params.id, req.body);
 
@@ -218,11 +203,11 @@ router.put("/:id", apiKeyAuth, async (req, res) => {
 
 /**
  * =========================================
- * DELETE CONTRACT
+ * DELETE CONTRACT (PROTECTED)
  * =========================================
  */
 
-router.delete("/:id", apiKeyAuth, async (req, res) => {
+router.delete("/:id", debugHeaders, apiKeyMiddleware, async (req, res) => {
   try {
     const result = await deleteContract(req.params.id);
 
