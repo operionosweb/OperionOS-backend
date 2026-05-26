@@ -7,6 +7,11 @@ import supabase from "../config/supabase.js";
 import { analyzeContractText } from "./aiExtractionService.js";
 import { ingestContract } from "./contractIngestionEngine.js";
 
+import {
+  generateEmbedding,
+  storeEmbedding,
+} from "./vectorMemoryService.js";
+
 /**
  * =========================================
  * HELPERS
@@ -31,6 +36,19 @@ export async function createContract({
   try {
     /**
      * -----------------------------------------
+     * VALIDATION
+     * -----------------------------------------
+     */
+
+    if (!text || typeof text !== "string") {
+      return {
+        success: false,
+        error: "Contract text is required",
+      };
+    }
+
+    /**
+     * -----------------------------------------
      * INGESTION ENGINE
      * -----------------------------------------
      */
@@ -41,17 +59,25 @@ export async function createContract({
       fileId,
     });
 
+    if (!ingestion.success) {
+      return ingestion;
+    }
+
     /**
      * -----------------------------------------
-     * AI INTELLIGENCE
+     * AI ANALYSIS
      * -----------------------------------------
      */
 
     const intelligence = await analyzeContractText(text);
 
+    if (!intelligence.success) {
+      return intelligence;
+    }
+
     /**
      * -----------------------------------------
-     * NORMALIZED DATA
+     * NORMALIZED CONTRACT
      * -----------------------------------------
      */
 
@@ -63,43 +89,42 @@ export async function createContract({
       file_id: fileId,
 
       contract_type:
-        intelligence?.analysis?.contract_type ||
-        ingestion?.contract_type ||
-        "General Contract",
+        intelligence.analysis.contract_type,
 
       supplier_name:
-        intelligence?.analysis?.supplier_name ||
-        "Unknown Supplier",
+        intelligence.analysis.supplier_name,
 
       summary:
-        intelligence?.analysis?.summary ||
-        "",
+        intelligence.analysis.summary,
 
       risk_score:
-        intelligence?.analysis?.risk_score || 0,
+        intelligence.analysis.risk_score,
 
       contract_value:
-        intelligence?.analysis?.contract_value || 0,
+        intelligence.analysis.contract_value,
 
       clauses:
-        intelligence?.analysis?.clauses || [],
+        intelligence.analysis.clauses,
 
       obligations:
-        intelligence?.analysis?.obligations || [],
+        intelligence.analysis.obligations,
 
       document_hash:
-        ingestion?.document_hash || null,
+        ingestion.document_hash,
 
       provider_used:
-        intelligence?.provider_used || "unknown",
+        intelligence.provider_used,
 
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at:
+        new Date().toISOString(),
+
+      updated_at:
+        new Date().toISOString(),
     };
 
     /**
      * -----------------------------------------
-     * SAVE TO SUPABASE
+     * STORE CONTRACT
      * -----------------------------------------
      */
 
@@ -110,13 +135,49 @@ export async function createContract({
       .single();
 
     if (error) {
-      console.error("Supabase insert error:", error);
-
-      return {
-        success: false,
-        error: error.message,
-      };
+      throw error;
     }
+
+    /**
+     * -----------------------------------------
+     * VECTOR MEMORY GENERATION
+     * -----------------------------------------
+     */
+
+    try {
+      const embeddingResult =
+        await generateEmbedding(text);
+
+      if (embeddingResult.success) {
+        await storeEmbedding({
+          contractId: data.id,
+          documentHash: data.document_hash,
+          embedding: embeddingResult.embedding,
+          metadata: {
+            filename: data.filename,
+            contract_type: data.contract_type,
+            supplier_name: data.supplier_name,
+            risk_score: data.risk_score,
+          },
+        });
+
+        console.log(
+          "🧠 Vector memory stored:",
+          data.id
+        );
+      }
+    } catch (embeddingError) {
+      console.error(
+        "Embedding pipeline error:",
+        embeddingError
+      );
+    }
+
+    /**
+     * -----------------------------------------
+     * RESPONSE
+     * -----------------------------------------
+     */
 
     return {
       success: true,
@@ -127,7 +188,9 @@ export async function createContract({
 
     return {
       success: false,
-      error: error.message || "Contract creation failed",
+      error:
+        error.message ||
+        "Contract creation failed",
     };
   }
 }
@@ -148,10 +211,7 @@ export async function getAllContracts() {
       });
 
     if (error) {
-      return {
-        success: false,
-        error: error.message,
-      };
+      throw error;
     }
 
     return {
@@ -164,7 +224,9 @@ export async function getAllContracts() {
 
     return {
       success: false,
-      error: error.message,
+      error:
+        error.message ||
+        "Failed to fetch contracts",
     };
   }
 }
@@ -183,11 +245,8 @@ export async function getContractById(id) {
       .eq("id", id)
       .single();
 
-    if (error || !data) {
-      return {
-        success: false,
-        error: "Contract not found",
-      };
+    if (error) {
+      throw error;
     }
 
     return {
@@ -199,7 +258,9 @@ export async function getContractById(id) {
 
     return {
       success: false,
-      error: error.message,
+      error:
+        error.message ||
+        "Contract not found",
     };
   }
 }
@@ -210,23 +271,25 @@ export async function getContractById(id) {
  * =========================================
  */
 
-export async function updateContract(id, updates = {}) {
+export async function updateContract(
+  id,
+  updates = {}
+) {
   try {
+    const payload = {
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+
     const { data, error } = await supabase
       .from("contracts")
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
+      .update(payload)
       .eq("id", id)
       .select()
       .single();
 
-    if (error || !data) {
-      return {
-        success: false,
-        error: "Contract update failed",
-      };
+    if (error) {
+      throw error;
     }
 
     return {
@@ -238,7 +301,9 @@ export async function updateContract(id, updates = {}) {
 
     return {
       success: false,
-      error: error.message,
+      error:
+        error.message ||
+        "Update failed",
     };
   }
 }
@@ -251,30 +316,27 @@ export async function updateContract(id, updates = {}) {
 
 export async function deleteContract(id) {
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("contracts")
       .delete()
-      .eq("id", id)
-      .select()
-      .single();
+      .eq("id", id);
 
-    if (error || !data) {
-      return {
-        success: false,
-        error: "Delete failed",
-      };
+    if (error) {
+      throw error;
     }
 
     return {
       success: true,
-      deleted: data,
+      deleted_id: id,
     };
   } catch (error) {
     console.error("deleteContract error:", error);
 
     return {
       success: false,
-      error: error.message,
+      error:
+        error.message ||
+        "Delete failed",
     };
   }
 }
