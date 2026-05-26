@@ -3,47 +3,46 @@
 import express from "express";
 
 import {
-  semanticSearch,
-} from "../services/semanticSearchService.js";
+  searchContracts,
+} from "../services/searchService.js";
 
 const router = express.Router();
 
 /**
  * =========================================
- * SEMANTIC SEARCH
+ * SEARCH CONTRACTS
  * =========================================
+ *
+ * GET /api/search?q=aircraft
+ * GET /api/search?q=lease&type=Aircraft Lease Agreement
+ * GET /api/search?minRisk=50
+ *
  */
 
-router.post("/", async (req, res) => {
+router.get("/", async (req, res) => {
   try {
     const {
-      query,
-      limit,
-    } = req.body;
+      q = "",
+      type = "",
+      provider = "",
+      minRisk = 0,
+    } = req.query;
 
-    const result =
-      await semanticSearch(
-        query,
-        limit || 5
-      );
+    const results = await searchContracts({
+      query: q,
+      type,
+      provider,
+      minRisk: Number(minRisk),
+    });
 
-    if (!result.success) {
-      return res.status(400).json(result);
-    }
-
-    return res.status(200).json(result);
+    return res.status(200).json(results);
 
   } catch (error) {
-    console.error(
-      "Search Route Error:",
-      error
-    );
+    console.error("Search Route Error:", error);
 
     return res.status(500).json({
       success: false,
-      error:
-        error.message ||
-        "Search failed",
+      error: error.message || "Search failed",
     });
   }
 });
