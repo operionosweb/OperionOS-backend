@@ -13,6 +13,8 @@ import contractRoutes from "./routes/contractRoutes.js";
 import blogRoutes from "./routes/blogRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import mediaRoutes from "./routes/mediaRoutes.js";
+import providerRoutes from "./routes/providerRoutes.js";
+import searchRoutes from "./routes/searchRoutes.js";
 
 /* ======================================================
    APP INIT
@@ -24,29 +26,23 @@ const app = express();
    SECURITY + PERFORMANCE BASELINE
 ====================================================== */
 
-app.use(
-  cors({
-    origin: "*",
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 
-app.use(
-  express.json({
-    limit: "50mb",
-  })
-);
+app.use(express.json({
+  limit: "50mb"
+}));
 
-app.use(
-  express.urlencoded({
-    extended: true,
-    limit: "50mb",
-  })
-);
+app.use(express.urlencoded({
+  extended: true,
+  limit: "50mb"
+}));
 
 /* ======================================================
-   SAFE FILE SYSTEM INIT (Render-compatible)
+   SAFE FILE SYSTEM INIT
 ====================================================== */
 
 const __filename = fileURLToPath(import.meta.url);
@@ -55,72 +51,40 @@ const __dirname = path.dirname(__filename);
 const uploadsDir = path.join(__dirname, "uploads");
 
 try {
+
   if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
+
+    fs.mkdirSync(uploadsDir, {
+      recursive: true
+    });
+
     console.log("✅ uploads folder created");
+
   } else {
+
     console.log("✅ uploads folder exists");
   }
+
 } catch (err) {
-  console.error("❌ Uploads folder init failed:", err);
+
+  console.error(
+    "❌ Uploads folder init failed:",
+    err
+  );
 }
 
 /* ======================================================
-   HEALTH CHECK (Render uses this)
+   ROOT
 ====================================================== */
 
 app.get("/", (req, res) => {
+
   res.json({
     status: "alive",
     service: "OperionOS Backend",
-    timestamp: new Date().toISOString(),
+    timestamp: new Date().toISOString()
   });
-});
 
-/* ======================================================
-   🧠 PROVIDER HEALTH CHECK (EU-FIRST AI ROUTING LAYER)
-====================================================== */
-
-app.get("/api/providers/health", (req, res) => {
-  const providers = [
-    {
-      name: "openai",
-      status: process.env.OPENAI_API_KEY ? "configured" : "missing_key",
-      region: "global",
-    },
-    {
-      name: "anthropic",
-      status: process.env.ANTHROPIC_API_KEY ? "configured" : "missing_key",
-      region: "global",
-    },
-    {
-      name: "mistral",
-      status: process.env.MISTRAL_API_KEY ? "configured" : "missing_key",
-      region: "EU (France)",
-    },
-    {
-      name: "azure-openai",
-      status: process.env.AZURE_OPENAI_API_KEY ? "configured" : "missing_key",
-      region: "EU/Global",
-    },
-    {
-      name: "uploadcare",
-      status: process.env.UPLOADCARE_PUBLIC_KEY
-        ? "configured"
-        : "missing_key",
-      region: "EU-friendly storage",
-    },
-  ];
-
-  const healthy = providers.filter((p) => p.status === "configured").length;
-
-  res.json({
-    success: true,
-    total_providers: providers.length,
-    healthy_providers: healthy,
-    providers,
-    timestamp: new Date().toISOString(),
-  });
 });
 
 /* ======================================================
@@ -128,20 +92,30 @@ app.get("/api/providers/health", (req, res) => {
 ====================================================== */
 
 app.use("/health", healthRoutes);
+
 app.use("/api/contracts", contractRoutes);
+
 app.use("/api/blog", blogRoutes);
+
 app.use("/api/auth", authRoutes);
+
 app.use("/api/media", mediaRoutes);
+
+app.use("/api/providers", providerRoutes);
+
+app.use("/api/search", searchRoutes);
 
 /* ======================================================
    404 HANDLER
 ====================================================== */
 
 app.use((req, res) => {
+
   res.status(404).json({
     success: false,
-    error: "Route not found",
+    error: "Route not found"
   });
+
 });
 
 /* ======================================================
@@ -149,46 +123,77 @@ app.use((req, res) => {
 ====================================================== */
 
 app.use((err, req, res, next) => {
+
   console.error("❌ Global error:", err);
 
   res.status(500).json({
     success: false,
-    error: "Internal server error",
+    error: "Internal server error"
   });
+
 });
 
 /* ======================================================
-   SAFE SERVER START (Render hardened)
+   SERVER START
 ====================================================== */
 
 const PORT = process.env.PORT;
 
 if (!PORT) {
-  console.error("❌ PORT is missing. Render deployment invalid.");
+
+  console.error(
+    "❌ PORT missing"
+  );
+
   process.exit(1);
 }
 
-const server = app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 OperionOS running on port ${PORT}`);
-  console.log(`🟢 Environment: ${process.env.NODE_ENV || "development"}`);
-});
+const server = app.listen(
+  PORT,
+  "0.0.0.0",
+  () => {
+
+    console.log(
+      `🚀 OperionOS running on port ${PORT}`
+    );
+
+    console.log(
+      `🟢 Environment: ${
+        process.env.NODE_ENV ||
+        "development"
+      }`
+    );
+  }
+);
 
 /* ======================================================
-   GRACEFUL SHUTDOWN (important for Render restarts)
+   GRACEFUL SHUTDOWN
 ====================================================== */
 
 process.on("SIGTERM", () => {
-  console.log("⚠️ SIGTERM received. Shutting down gracefully...");
+
+  console.log(
+    "⚠️ SIGTERM received"
+  );
+
   server.close(() => {
+
     console.log("✅ Server closed");
+
     process.exit(0);
   });
 });
 
 process.on("SIGINT", () => {
-  console.log("⚠️ SIGINT received. Shutting down gracefully...");
+
+  console.log(
+    "⚠️ SIGINT received"
+  );
+
   server.close(() => {
+
     console.log("✅ Server closed");
+
     process.exit(0);
   });
 });
