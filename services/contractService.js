@@ -1,110 +1,176 @@
 // services/contractService.js
 
-import { extractStructuredContractData } from "./contractExtractionEngine.js";
+import crypto from "crypto";
+
+import { analyzeContractText } from "./aiExtractionService.js";
 import { ingestContract } from "./contractIngestionEngine.js";
 
 /**
  * =========================================
- * OPERION OS - CONTRACT SERVICE LAYER
- * API BUSINESS LOGIC ORCHESTRATION
+ * IN-MEMORY STORE
+ * TEMPORARY DATABASE LAYER
  * =========================================
  */
 
+const contracts = [];
+
 /**
- * -----------------------------------------
- * CREATE CONTRACT (MAIN ENTRY)
- * -----------------------------------------
+ * =========================================
+ * HELPERS
+ * =========================================
+ */
+
+function generateId() {
+  return crypto.randomUUID();
+}
+
+/**
+ * =========================================
+ * CREATE CONTRACT
+ * =========================================
  */
 
 export async function createContract({
-  text,
   filename = "unknown.pdf",
-  fileId = null
+  text = "",
+  uploaded_by = "system",
 }) {
   try {
-    if (!text) {
-      return {
-        success: false,
-        error: "No contract text provided"
-      };
-    }
-
     /**
-     * STEP 1 — AI STRUCTURED EXTRACTION
-     */
-
-    const extraction = await extractStructuredContractData(text);
-
-    /**
-     * STEP 2 — INGESTION PIPELINE (AUDIT + HASH + TYPE)
+     * -----------------------------------------
+     * INGESTION LAYER
+     * -----------------------------------------
      */
 
     const ingestion = await ingestContract({
       text,
       filename,
-      fileId
     });
 
     /**
-     * STEP 3 — MERGE OUTPUTS
+     * -----------------------------------------
+     * AI ANALYSIS
+     * -----------------------------------------
      */
 
-    return {
-      success: true,
-      contract: {
-        ...extraction,
-        ingestion
-      }
+    const aiAnalysis = await analyzeContractText(text);
+
+    /**
+     * -----------------------------------------
+     * FINAL OBJECT
+     * -----------------------------------------
+     */
+
+    const contract = {
+      id: generateId(),
+
+      filename,
+
+      uploaded_by,
+
+      created_at: new Date().toISOString(),
+
+      ingestion,
+
+      analysis: aiAnalysis?.analysis || {},
+
+      provider_used:
+        aiAnalysis?.provider_used || "unknown",
+
+      document_hash:
+        ingestion?.document_hash || null,
     };
 
+    contracts.push(contract);
+
+    return {
+      success: true,
+      contract,
+    };
   } catch (error) {
-    console.error("createContract error:", error);
+    console.error("createContract Error:", error);
 
     return {
       success: false,
-      error: error.message || "Contract creation failed"
+      error: error.message || "Failed to create contract",
     };
   }
 }
 
 /**
- * -----------------------------------------
- * GET CONTRACT (PLACEHOLDER SAFE LAYER)
- * -----------------------------------------
+ * =========================================
+ * GET ALL CONTRACTS
+ * =========================================
  */
 
-export async function getContract(id) {
+export async function getAllContracts() {
+  return {
+    success: true,
+    total: contracts.length,
+    contracts,
+  };
+}
+
+/**
+ * =========================================
+ * GET CONTRACT BY ID
+ * =========================================
+ */
+
+export async function getContractById(id) {
   try {
+    const contract = contracts.find((c) => c.id === id);
+
+    if (!contract) {
+      return {
+        success: false,
+        error: "Contract not found",
+      };
+    }
+
     return {
       success: true,
-      contract_id: id,
-      message: "Contract retrieval not yet implemented"
+      contract,
     };
   } catch (error) {
+    console.error("getContractById Error:", error);
+
     return {
       success: false,
-      error: error.message
+      error: error.message || "Failed to fetch contract",
     };
   }
 }
 
 /**
- * -----------------------------------------
- * DELETE CONTRACT (PLACEHOLDER SAFE LAYER)
- * -----------------------------------------
+ * =========================================
+ * DELETE CONTRACT
+ * =========================================
  */
 
 export async function deleteContract(id) {
   try {
+    const index = contracts.findIndex((c) => c.id === id);
+
+    if (index === -1) {
+      return {
+        success: false,
+        error: "Contract not found",
+      };
+    }
+
+    contracts.splice(index, 1);
+
     return {
       success: true,
-      contract_id: id,
-      deleted: true
+      deleted_id: id,
     };
   } catch (error) {
+    console.error("deleteContract Error:", error);
+
     return {
       success: false,
-      error: error.message
+      error: error.message || "Failed to delete contract",
     };
   }
 }
