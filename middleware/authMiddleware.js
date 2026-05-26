@@ -1,52 +1,75 @@
-import jwt from "jsonwebtoken";
+// middleware/apiKeyMiddleware.js
 
-/* =====================================================
-   REQUIRE ADMIN AUTH
-===================================================== */
-
-export function requireAdmin(req, res, next) {
-
+export function apiKeyMiddleware(req, res, next) {
   try {
+    /**
+     * -----------------------------------------
+     * READ API KEY FROM HEADERS
+     * -----------------------------------------
+     */
 
-    const authHeader = req.headers.authorization;
+    const apiKey =
+      req.headers["x-api-key"] ||
+      req.headers["X-API-KEY"] ||
+      req.headers["authorization"];
 
-    if (!authHeader) {
+    /**
+     * -----------------------------------------
+     * VALIDATION
+     * -----------------------------------------
+     */
 
-      return res.status(401).json({
+    const expectedKey = process.env.INTERNAL_API_KEY;
+
+    if (!expectedKey) {
+      console.error("❌ INTERNAL_API_KEY not set in environment");
+      return res.status(500).json({
         success: false,
-        error: "Authorization header missing"
+        error: "Server misconfiguration: missing INTERNAL_API_KEY",
       });
-
     }
 
-    const token = authHeader.split(" ")[1];
-
-    if (!token) {
-
+    if (!apiKey) {
       return res.status(401).json({
         success: false,
-        error: "Token missing"
+        error: "Missing API key",
       });
-
     }
 
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET
-    );
+    /**
+     * -----------------------------------------
+     * NORMALIZE KEY
+     * -----------------------------------------
+     */
 
-    req.admin = decoded;
+    const cleanKey = apiKey.replace("Bearer ", "").trim();
+
+    /**
+     * -----------------------------------------
+     * COMPARE KEYS
+     * -----------------------------------------
+     */
+
+    if (cleanKey !== expectedKey) {
+      return res.status(403).json({
+        success: false,
+        error: "Invalid API key",
+      });
+    }
+
+    /**
+     * -----------------------------------------
+     * OK → CONTINUE
+     * -----------------------------------------
+     */
 
     next();
+  } catch (error) {
+    console.error("API key middleware error:", error);
 
-  } catch (err) {
-
-    console.error(err);
-
-    return res.status(401).json({
+    return res.status(500).json({
       success: false,
-      error: "Unauthorized"
+      error: "Authentication middleware failure",
     });
-
   }
 }
