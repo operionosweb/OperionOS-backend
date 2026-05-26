@@ -1,28 +1,67 @@
 // services/contractIngestionEngine.js
 
 import crypto from "crypto";
-import { detectDocumentType } from "./sharedContractUtils.js";
 
 /**
  * =========================================
- * OPERION OS - CONTRACT INGESTION ENGINE
- * EU AUDIT + DEDUP + CLASSIFICATION LAYER
+ * OPERION OS
+ * CONTRACT INGESTION ENGINE
+ * STABLE VERSION (NO EXTERNAL DEPENDENCIES)
  * =========================================
  */
 
 /**
  * -----------------------------------------
- * HASH GENERATION (DEDUP CORE)
+ * HASH GENERATION
  * -----------------------------------------
  */
 
 function generateHash(text = "") {
-  return crypto.createHash("sha256").update(text).digest("hex");
+  return crypto
+    .createHash("sha256")
+    .update(text)
+    .digest("hex");
 }
 
 /**
  * -----------------------------------------
- * LIGHTWEIGHT RISK SCORING
+ * DOCUMENT TYPE DETECTION
+ * -----------------------------------------
+ */
+
+function detectDocumentType(text = "") {
+  const t = text.toLowerCase();
+
+  if (t.includes("aircraft lease")) {
+    return "Aircraft Lease Agreement";
+  }
+
+  if (t.includes("maintenance agreement")) {
+    return "Maintenance Agreement";
+  }
+
+  if (t.includes("service level")) {
+    return "Service Level Agreement";
+  }
+
+  if (t.includes("procurement")) {
+    return "Procurement Contract";
+  }
+
+  if (t.includes("purchase order")) {
+    return "Purchase Order";
+  }
+
+  if (t.includes("nda")) {
+    return "Non-Disclosure Agreement";
+  }
+
+  return "General Contract";
+}
+
+/**
+ * -----------------------------------------
+ * LIGHTWEIGHT RISK ENGINE
  * -----------------------------------------
  */
 
@@ -40,11 +79,15 @@ function preRiskScore(text = "") {
     "liquidated damages",
     "without limitation",
     "exclusive",
-    "non-cancellable"
+    "non-cancellable",
+    "automatic renewal",
+    "governing law"
   ];
 
-  for (const s of signals) {
-    if (t.includes(s)) score += 6;
+  for (const signal of signals) {
+    if (t.includes(signal)) {
+      score += 6;
+    }
   }
 
   return Math.min(100, score);
@@ -52,27 +95,39 @@ function preRiskScore(text = "") {
 
 /**
  * -----------------------------------------
- * AUDIT EVENT CREATION (EU COMPLIANCE)
+ * AUDIT EVENT
  * -----------------------------------------
  */
 
-function createAuditEvent({ filename, fileId, documentHash, type }) {
+function createAuditEvent({
+  filename,
+  fileId,
+  documentHash,
+  contractType
+}) {
   return {
     event_type: "contract_ingested",
+
     timestamp: new Date().toISOString(),
+
     filename,
+
     file_id: fileId,
+
     document_hash: documentHash,
-    detected_type: type,
+
+    detected_type: contractType,
+
     region: "EU",
+
     compliance: "GDPR_READY"
   };
 }
 
 /**
- * -----------------------------------------
+ * =========================================
  * MAIN INGESTION PIPELINE
- * -----------------------------------------
+ * =========================================
  */
 
 export async function ingestContract({
@@ -81,39 +136,82 @@ export async function ingestContract({
   fileId = null
 }) {
   try {
-    if (!text) {
+    if (!text || typeof text !== "string") {
       return {
         success: false,
-        error: "No contract text provided"
+        error: "No valid contract text provided"
       };
     }
 
+    /**
+     * -----------------------------------------
+     * HASH
+     * -----------------------------------------
+     */
+
     const documentHash = generateHash(text);
 
-    const contractType = detectDocumentType(text);
-    const riskScore = preRiskScore(text);
+    /**
+     * -----------------------------------------
+     * TYPE DETECTION
+     * -----------------------------------------
+     */
 
-    const auditEvent = createAuditEvent({
-      filename,
-      fileId,
-      documentHash,
-      type: contractType
-    });
+    const contractType =
+      detectDocumentType(text);
+
+    /**
+     * -----------------------------------------
+     * PRE-RISK ANALYSIS
+     * -----------------------------------------
+     */
+
+    const riskScore =
+      preRiskScore(text);
+
+    /**
+     * -----------------------------------------
+     * AUDIT EVENT
+     * -----------------------------------------
+     */
+
+    const auditEvent =
+      createAuditEvent({
+        filename,
+        fileId,
+        documentHash,
+        contractType
+      });
+
+    /**
+     * -----------------------------------------
+     * RESPONSE
+     * -----------------------------------------
+     */
 
     return {
       success: true,
+
       document_hash: documentHash,
+
       contract_type: contractType,
+
       pre_risk_score: riskScore,
+
       audit_event: auditEvent
     };
 
   } catch (error) {
-    console.error("Ingestion error:", error);
+    console.error(
+      "Contract ingestion error:",
+      error
+    );
 
     return {
       success: false,
-      error: error.message || "Ingestion failed"
+      error:
+        error.message ||
+        "Contract ingestion failed"
     };
   }
 }
