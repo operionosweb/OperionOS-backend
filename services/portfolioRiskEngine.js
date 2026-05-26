@@ -1,63 +1,105 @@
 // services/portfolioRiskEngine.js
 
+import supabase from "../config/supabase.js";
+
 /**
  * =========================================
  * OPERION OS
- * PORTFOLIO RISK INTELLIGENCE ENGINE
+ * PORTFOLIO RISK ENGINE
  * =========================================
  */
 
-/**
- * -----------------------------------------
- * CALCULATE PORTFOLIO METRICS
- * -----------------------------------------
- */
-
-export function analyzePortfolioRisk(contracts = []) {
+export async function calculatePortfolioRisk() {
   try {
     /**
      * -----------------------------------------
-     * BASIC TOTALS
+     * LOAD CONTRACTS
      * -----------------------------------------
      */
 
-    const totalContracts = contracts.length;
+    const { data, error } = await supabase
+      .from("contracts")
+      .select("*");
 
-    const averageRisk =
-      totalContracts === 0
-        ? 0
-        : Math.round(
-            contracts.reduce(
-              (sum, c) => sum + (c.risk_score || 0),
-              0
-            ) / totalContracts
-          );
+    if (error) {
+      throw error;
+    }
+
+    const contracts = data || [];
 
     /**
      * -----------------------------------------
-     * HIGH RISK CONTRACTS
+     * EMPTY PORTFOLIO
      * -----------------------------------------
      */
 
-    const highRiskContracts = contracts.filter(
-      (c) => (c.risk_score || 0) >= 70
-    );
+    if (contracts.length === 0) {
+      return {
+        total_contracts: 0,
+        average_risk_score: 0,
+        high_risk_contracts: 0,
+        medium_risk_contracts: 0,
+        low_risk_contracts: 0,
+        top_suppliers: [],
+        portfolio_health: "empty",
+      };
+    }
 
     /**
      * -----------------------------------------
-     * CONTRACT TYPES
+     * METRICS
      * -----------------------------------------
      */
 
-    const contractTypes = {};
+    let totalRisk = 0;
+
+    let highRisk = 0;
+    let mediumRisk = 0;
+    let lowRisk = 0;
+
+    const supplierMap = {};
 
     for (const contract of contracts) {
-      const type =
-        contract.contract_type || "Unknown";
+      const risk =
+        Number(contract.risk_score) || 0;
 
-      contractTypes[type] =
-        (contractTypes[type] || 0) + 1;
+      totalRisk += risk;
+
+      /**
+       * RISK BUCKETS
+       */
+
+      if (risk >= 70) {
+        highRisk++;
+      } else if (risk >= 40) {
+        mediumRisk++;
+      } else {
+        lowRisk++;
+      }
+
+      /**
+       * SUPPLIER AGGREGATION
+       */
+
+      const supplier =
+        contract.supplier_name ||
+        "Unknown Supplier";
+
+      if (!supplierMap[supplier]) {
+        supplierMap[supplier] = 0;
+      }
+
+      supplierMap[supplier]++;
     }
+
+    /**
+     * -----------------------------------------
+     * AVERAGES
+     * -----------------------------------------
+     */
+
+    const averageRisk =
+      totalRisk / contracts.length;
 
     /**
      * -----------------------------------------
@@ -65,61 +107,67 @@ export function analyzePortfolioRisk(contracts = []) {
      * -----------------------------------------
      */
 
-    const supplierMap = {};
-
-    for (const contract of contracts) {
-      const supplier =
-        contract.supplier_name || "Unknown";
-
-      supplierMap[supplier] =
-        (supplierMap[supplier] || 0) + 1;
-    }
-
-    /**
-     * -----------------------------------------
-     * TOP RISKY CONTRACTS
-     * -----------------------------------------
-     */
-
-    const topRisks = [...contracts]
-      .sort(
-        (a, b) =>
-          (b.risk_score || 0) -
-          (a.risk_score || 0)
-      )
+    const topSuppliers = Object.entries(
+      supplierMap
+    )
+      .map(([supplier, count]) => ({
+        supplier,
+        contracts: count,
+      }))
+      .sort((a, b) => b.contracts - a.contracts)
       .slice(0, 5);
 
     /**
      * -----------------------------------------
-     * RETURN
+     * HEALTH STATUS
+     * -----------------------------------------
+     */
+
+    let portfolioHealth = "healthy";
+
+    if (averageRisk >= 70) {
+      portfolioHealth = "critical";
+    } else if (averageRisk >= 50) {
+      portfolioHealth = "warning";
+    }
+
+    /**
+     * -----------------------------------------
+     * RESPONSE
      * -----------------------------------------
      */
 
     return {
-      success: true,
+      total_contracts: contracts.length,
 
-      total_contracts: totalContracts,
+      average_risk_score:
+        Math.round(averageRisk),
 
-      average_risk_score: averageRisk,
+      high_risk_contracts: highRisk,
 
-      high_risk_contracts: highRiskContracts.length,
+      medium_risk_contracts: mediumRisk,
 
-      contract_types: contractTypes,
+      low_risk_contracts: lowRisk,
 
-      supplier_distribution: supplierMap,
+      top_suppliers: topSuppliers,
 
-      top_risky_contracts: topRisks,
-
-      generated_at: new Date().toISOString(),
+      portfolio_health:
+        portfolioHealth,
     };
   } catch (error) {
     console.error(
-      "Portfolio Risk Engine Error:",
+      "calculatePortfolioRisk error:",
       error
     );
 
     return {
-      success: false,
+      total_contracts: 0,
+      average_risk_score: 0,
+      high_risk_contracts: 0,
+      medium_risk_contracts: 0,
+      low_risk_contracts: 0,
+      top_suppliers: [],
+      portfolio_health: "error",
       error:
         error.message ||
         "Portfolio analysis failed",
