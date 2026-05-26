@@ -4,10 +4,6 @@ import express from "express";
 import multer from "multer";
 import pdfParse from "pdf-parse";
 
-/**
- * SERVICES
- */
-
 import {
   createContract,
   getAllContracts,
@@ -20,13 +16,38 @@ const router = express.Router();
 
 /**
  * =========================================
+ * INTERNAL API KEY MIDDLEWARE
+ * =========================================
+ */
+
+function apiKeyAuth(req, res, next) {
+  const apiKey = req.headers["x-api-key"];
+
+  if (!apiKey) {
+    return res.status(401).json({
+      success: false,
+      error: "Missing API key",
+    });
+  }
+
+  if (apiKey !== process.env.INTERNAL_API_KEY) {
+    return res.status(403).json({
+      success: false,
+      error: "Invalid API key",
+    });
+  }
+
+  next();
+}
+
+/**
+ * =========================================
  * MULTER CONFIG
  * =========================================
  */
 
 const upload = multer({
   storage: multer.memoryStorage(),
-
   limits: {
     fileSize: 20 * 1024 * 1024, // 20MB
   },
@@ -43,139 +64,87 @@ router.get("/health", async (req, res) => {
     success: true,
     service: "contract-routes",
     status: "operational",
-    timestamp: new Date().toISOString(),
   });
 });
 
 /**
  * =========================================
- * CREATE CONTRACT (JSON BODY)
+ * UPLOAD CONTRACT (MUST BE FIRST BEFORE /:id)
  * =========================================
  */
 
-router.post("/", async (req, res) => {
-  try {
-    const { text, filename, fileId } = req.body;
+router.post(
+  "/upload",
+  apiKeyAuth,
+  upload.single("file"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          error: "No file uploaded",
+        });
+      }
 
-    if (!text || typeof text !== "string") {
-      return res.status(400).json({
+      let extractedText = "";
+
+      try {
+        const pdfData = await pdfParse(req.file.buffer);
+        extractedText = pdfData.text || "";
+      } catch (err) {
+        console.error("PDF Parse Error:", err);
+
+        return res.status(500).json({
+          success: false,
+          error: "Failed to extract PDF text",
+        });
+      }
+
+      if (!extractedText || extractedText.length < 100) {
+        return res.status(400).json({
+          success: false,
+          error: "Document text too short or unreadable",
+        });
+      }
+
+      const result = await createContract({
+        text: extractedText,
+        filename: req.file.originalname,
+      });
+
+      return res.status(201).json(result);
+    } catch (error) {
+      console.error("Upload Route Error:", error);
+
+      return res.status(500).json({
         success: false,
-        error: "Valid contract text is required",
+        error: error.message || "Upload failed",
       });
     }
+  }
+);
 
-    const result = await createContract({
-      text,
-      filename,
-      fileId,
-    });
+/**
+ * =========================================
+ * CREATE CONTRACT (JSON)
+ * =========================================
+ */
+
+router.post("/", apiKeyAuth, async (req, res) => {
+  try {
+    const result = await createContract(req.body);
 
     if (!result.success) {
-      return res.status(400).json({
-        success: false,
-        error: result.error,
-      });
+      return res.status(400).json(result);
     }
 
-    return res.status(201).json({
-      success: true,
-      contract: result.contract,
-    });
+    return res.status(201).json(result);
   } catch (error) {
-    console.error("Create Contract Route Error:", error);
+    console.error("Create Contract Error:", error);
 
     return res.status(500).json({
       success: false,
       error: error.message || "Internal server error",
-    });
-  }
-});
-
-/**
- * =========================================
- * PDF UPLOAD PIPELINE
- * =========================================
- */
-
-router.post("/upload", upload.single("file"), async (req, res) => {
-  try {
-    /**
-     * VALIDATE FILE
-     */
-
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        error: "No file uploaded",
-      });
-    }
-
-    /**
-     * EXTRACT PDF TEXT
-     */
-
-    let extractedText = "";
-
-    try {
-      const parsed = await pdfParse(req.file.buffer);
-
-      extractedText = parsed?.text || "";
-    } catch (error) {
-      console.error("PDF Parse Error:", error);
-
-      return res.status(500).json({
-        success: false,
-        error: "Failed to parse PDF",
-      });
-    }
-
-    /**
-     * VALIDATE EXTRACTION
-     */
-
-    if (!extractedText || extractedText.length < 100) {
-      return res.status(400).json({
-        success: false,
-        error: "PDF text extraction failed or insufficient text",
-      });
-    }
-
-    /**
-     * CREATE CONTRACT
-     */
-
-    const result = await createContract({
-      text: extractedText,
-      filename: req.file.originalname,
-      fileId: null,
-    });
-
-    if (!result.success) {
-      return res.status(500).json({
-        success: false,
-        error: result.error || "Contract processing failed",
-      });
-    }
-
-    /**
-     * SUCCESS RESPONSE
-     */
-
-    return res.status(201).json({
-      success: true,
-
-      filename: req.file.originalname,
-
-      extracted_characters: extractedText.length,
-
-      contract: result.contract,
-    });
-  } catch (error) {
-    console.error("Upload Contract Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      error: error.message || "Upload failed",
     });
   }
 });
@@ -190,13 +159,6 @@ router.get("/", async (req, res) => {
   try {
     const result = await getAllContracts();
 
-    if (!result.success) {
-      return res.status(500).json({
-        success: false,
-        error: result.error,
-      });
-    }
-
     return res.status(200).json(result);
   } catch (error) {
     console.error("Get Contracts Error:", error);
@@ -210,7 +172,7 @@ router.get("/", async (req, res) => {
 
 /**
  * =========================================
- * GET CONTRACT BY ID
+ * GET CONTRACT BY ID (MUST BE AFTER /upload)
  * =========================================
  */
 
@@ -219,10 +181,7 @@ router.get("/:id", async (req, res) => {
     const result = await getContractById(req.params.id);
 
     if (!result.success) {
-      return res.status(404).json({
-        success: false,
-        error: result.error,
-      });
+      return res.status(404).json(result);
     }
 
     return res.status(200).json(result);
@@ -242,19 +201,9 @@ router.get("/:id", async (req, res) => {
  * =========================================
  */
 
-router.put("/:id", async (req, res) => {
+router.put("/:id", apiKeyAuth, async (req, res) => {
   try {
-    const result = await updateContract(
-      req.params.id,
-      req.body
-    );
-
-    if (!result.success) {
-      return res.status(400).json({
-        success: false,
-        error: result.error,
-      });
-    }
+    const result = await updateContract(req.params.id, req.body);
 
     return res.status(200).json(result);
   } catch (error) {
@@ -273,21 +222,11 @@ router.put("/:id", async (req, res) => {
  * =========================================
  */
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", apiKeyAuth, async (req, res) => {
   try {
     const result = await deleteContract(req.params.id);
 
-    if (!result.success) {
-      return res.status(400).json({
-        success: false,
-        error: result.error,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      deleted: result.deleted,
-    });
+    return res.status(200).json(result);
   } catch (error) {
     console.error("Delete Contract Error:", error);
 
