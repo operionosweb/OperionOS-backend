@@ -2,16 +2,10 @@
 
 import crypto from "crypto";
 
+import supabase from "../config/supabase.js";
+
 import { analyzeContractText } from "./aiExtractionService.js";
 import { ingestContract } from "./contractIngestionEngine.js";
-
-/**
- * =========================================
- * IN-MEMORY CONTRACT STORE
- * =========================================
- */
-
-const contracts = [];
 
 /**
  * =========================================
@@ -37,7 +31,7 @@ export async function createContract({
   try {
     /**
      * -----------------------------------------
-     * INGESTION
+     * INGESTION ENGINE
      * -----------------------------------------
      */
 
@@ -49,7 +43,7 @@ export async function createContract({
 
     /**
      * -----------------------------------------
-     * AI ANALYSIS
+     * AI INTELLIGENCE
      * -----------------------------------------
      */
 
@@ -57,7 +51,7 @@ export async function createContract({
 
     /**
      * -----------------------------------------
-     * CONTRACT OBJECT
+     * NORMALIZED DATA
      * -----------------------------------------
      */
 
@@ -68,18 +62,65 @@ export async function createContract({
 
       file_id: fileId,
 
+      contract_type:
+        intelligence?.analysis?.contract_type ||
+        ingestion?.contract_type ||
+        "General Contract",
+
+      supplier_name:
+        intelligence?.analysis?.supplier_name ||
+        "Unknown Supplier",
+
+      summary:
+        intelligence?.analysis?.summary ||
+        "",
+
+      risk_score:
+        intelligence?.analysis?.risk_score || 0,
+
+      contract_value:
+        intelligence?.analysis?.contract_value || 0,
+
+      clauses:
+        intelligence?.analysis?.clauses || [],
+
+      obligations:
+        intelligence?.analysis?.obligations || [],
+
+      document_hash:
+        ingestion?.document_hash || null,
+
+      provider_used:
+        intelligence?.provider_used || "unknown",
+
       created_at: new Date().toISOString(),
-
-      ingestion,
-
-      intelligence,
+      updated_at: new Date().toISOString(),
     };
 
-    contracts.push(contract);
+    /**
+     * -----------------------------------------
+     * SAVE TO SUPABASE
+     * -----------------------------------------
+     */
+
+    const { data, error } = await supabase
+      .from("contracts")
+      .insert(contract)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Supabase insert error:", error);
+
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
 
     return {
       success: true,
-      contract,
+      contract: data,
     };
   } catch (error) {
     console.error("createContract error:", error);
@@ -98,11 +139,34 @@ export async function createContract({
  */
 
 export async function getAllContracts() {
-  return {
-    success: true,
-    total: contracts.length,
-    contracts,
-  };
+  try {
+    const { data, error } = await supabase
+      .from("contracts")
+      .select("*")
+      .order("created_at", {
+        ascending: false,
+      });
+
+    if (error) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    return {
+      success: true,
+      total: data.length,
+      contracts: data,
+    };
+  } catch (error) {
+    console.error("getAllContracts error:", error);
+
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
 }
 
 /**
@@ -112,19 +176,32 @@ export async function getAllContracts() {
  */
 
 export async function getContractById(id) {
-  const contract = contracts.find((c) => c.id === id);
+  try {
+    const { data, error } = await supabase
+      .from("contracts")
+      .select("*")
+      .eq("id", id)
+      .single();
 
-  if (!contract) {
+    if (error || !data) {
+      return {
+        success: false,
+        error: "Contract not found",
+      };
+    }
+
+    return {
+      success: true,
+      contract: data,
+    };
+  } catch (error) {
+    console.error("getContractById error:", error);
+
     return {
       success: false,
-      error: "Contract not found",
+      error: error.message,
     };
   }
-
-  return {
-    success: true,
-    contract,
-  };
 }
 
 /**
@@ -134,25 +211,36 @@ export async function getContractById(id) {
  */
 
 export async function updateContract(id, updates = {}) {
-  const index = contracts.findIndex((c) => c.id === id);
+  try {
+    const { data, error } = await supabase
+      .from("contracts")
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select()
+      .single();
 
-  if (index === -1) {
+    if (error || !data) {
+      return {
+        success: false,
+        error: "Contract update failed",
+      };
+    }
+
+    return {
+      success: true,
+      contract: data,
+    };
+  } catch (error) {
+    console.error("updateContract error:", error);
+
     return {
       success: false,
-      error: "Contract not found",
+      error: error.message,
     };
   }
-
-  contracts[index] = {
-    ...contracts[index],
-    ...updates,
-    updated_at: new Date().toISOString(),
-  };
-
-  return {
-    success: true,
-    contract: contracts[index],
-  };
 }
 
 /**
@@ -162,19 +250,31 @@ export async function updateContract(id, updates = {}) {
  */
 
 export async function deleteContract(id) {
-  const index = contracts.findIndex((c) => c.id === id);
+  try {
+    const { data, error } = await supabase
+      .from("contracts")
+      .delete()
+      .eq("id", id)
+      .select()
+      .single();
 
-  if (index === -1) {
+    if (error || !data) {
+      return {
+        success: false,
+        error: "Delete failed",
+      };
+    }
+
+    return {
+      success: true,
+      deleted: data,
+    };
+  } catch (error) {
+    console.error("deleteContract error:", error);
+
     return {
       success: false,
-      error: "Contract not found",
+      error: error.message,
     };
   }
-
-  const deleted = contracts.splice(index, 1);
-
-  return {
-    success: true,
-    deleted: deleted[0],
-  };
 }
