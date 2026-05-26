@@ -1,149 +1,107 @@
+// index.js
+
 import express from "express";
 import cors from "cors";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
+import dotenv from "dotenv";
 
-/* ======================================================
-   ROUTES
-====================================================== */
+/**
+ * ROUTES
+ */
 
-import healthRoutes from "./routes/healthRoutes.js";
 import contractRoutes from "./routes/contractRoutes.js";
-import blogRoutes from "./routes/blogRoutes.js";
-import authRoutes from "./routes/authRoutes.js";
-import mediaRoutes from "./routes/mediaRoutes.js";
 import providerRoutes from "./routes/providerRoutes.js";
 import searchRoutes from "./routes/searchRoutes.js";
+import portfolioRoutes from "./routes/portfolioRoutes.js";
 
-/* ======================================================
-   APP INIT
-====================================================== */
+dotenv.config();
 
 const app = express();
 
-/* ======================================================
-   SECURITY + PERFORMANCE BASELINE
-====================================================== */
+/**
+ * =========================================
+ * MIDDLEWARE
+ * =========================================
+ */
 
-app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-}));
+app.use(cors());
 
-app.use(express.json({
-  limit: "50mb",
-}));
+app.use(
+  express.json({
+    limit: "50mb",
+  })
+);
 
-app.use(express.urlencoded({
-  extended: true,
-  limit: "50mb",
-}));
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "50mb",
+  })
+);
 
-/* ======================================================
-   SAFE FILE SYSTEM INIT (Render-compatible)
-====================================================== */
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const uploadsDir = path.join(__dirname, "uploads");
-
-try {
-  if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-    console.log("✅ uploads folder created");
-  } else {
-    console.log("✅ uploads folder exists");
-  }
-} catch (err) {
-  console.error("❌ Uploads folder init failed:", err);
-}
-
-/* ======================================================
-   ROOT HEALTH CHECK
-====================================================== */
+/**
+ * =========================================
+ * ROOT
+ * =========================================
+ */
 
 app.get("/", (req, res) => {
-  res.json({
+  return res.status(200).json({
     status: "alive",
     service: "OperionOS Backend",
     timestamp: new Date().toISOString(),
   });
 });
 
-/* ======================================================
-   API ROUTES
-====================================================== */
+/**
+ * =========================================
+ * API ROUTES
+ * =========================================
+ */
 
-app.use("/health", healthRoutes);
+app.use(
+  "/api/contracts",
+  contractRoutes
+);
 
-app.use("/api/contracts", contractRoutes);
+app.use(
+  "/api/providers",
+  providerRoutes
+);
 
-app.use("/api/blog", blogRoutes);
+app.use(
+  "/api/search",
+  searchRoutes
+);
 
-app.use("/api/auth", authRoutes);
+app.use(
+  "/api/portfolio",
+  portfolioRoutes
+);
 
-app.use("/api/media", mediaRoutes);
-
-app.use("/api/providers", providerRoutes);
-
-app.use("/api/search", searchRoutes);
-
-/* ======================================================
-   404 HANDLER
-====================================================== */
+/**
+ * =========================================
+ * 404 HANDLER
+ * =========================================
+ */
 
 app.use((req, res) => {
-  res.status(404).json({
+  return res.status(404).json({
     success: false,
     error: "Route not found",
   });
 });
 
-/* ======================================================
-   GLOBAL ERROR HANDLER
-====================================================== */
+/**
+ * =========================================
+ * SERVER
+ * =========================================
+ */
 
-app.use((err, req, res, next) => {
-  console.error("❌ Global error:", err);
+const PORT =
+  process.env.PORT || 10000;
 
-  res.status(500).json({
-    success: false,
-    error: "Internal server error",
-  });
-});
-
-/* ======================================================
-   SERVER START
-====================================================== */
-
-const PORT = process.env.PORT || 10000;
-
-const server = app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 OperionOS running on port ${PORT}`);
-  console.log(`🟢 Environment: ${process.env.NODE_ENV || "development"}`);
-});
-
-/* ======================================================
-   GRACEFUL SHUTDOWN
-====================================================== */
-
-process.on("SIGTERM", () => {
-  console.log("⚠️ SIGTERM received. Shutting down gracefully...");
-
-  server.close(() => {
-    console.log("✅ Server closed");
-    process.exit(0);
-  });
-});
-
-process.on("SIGINT", () => {
-  console.log("⚠️ SIGINT received. Shutting down gracefully...");
-
-  server.close(() => {
-    console.log("✅ Server closed");
-    process.exit(0);
-  });
+app.listen(PORT, () => {
+  console.log(
+    `🚀 OperionOS running on port ${PORT}`
+  );
 });
