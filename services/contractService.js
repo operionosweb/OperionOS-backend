@@ -7,8 +7,7 @@ import { ingestContract } from "./contractIngestionEngine.js";
 
 /**
  * =========================================
- * IN-MEMORY STORE
- * TEMPORARY DATABASE LAYER
+ * IN-MEMORY CONTRACT STORE
  * =========================================
  */
 
@@ -31,20 +30,21 @@ function generateId() {
  */
 
 export async function createContract({
-  filename = "unknown.pdf",
-  text = "",
-  uploaded_by = "system",
+  text,
+  filename = "contract.pdf",
+  fileId = null,
 }) {
   try {
     /**
      * -----------------------------------------
-     * INGESTION LAYER
+     * INGESTION
      * -----------------------------------------
      */
 
     const ingestion = await ingestContract({
       text,
       filename,
+      fileId,
     });
 
     /**
@@ -53,11 +53,11 @@ export async function createContract({
      * -----------------------------------------
      */
 
-    const aiAnalysis = await analyzeContractText(text);
+    const intelligence = await analyzeContractText(text);
 
     /**
      * -----------------------------------------
-     * FINAL OBJECT
+     * CONTRACT OBJECT
      * -----------------------------------------
      */
 
@@ -66,19 +66,13 @@ export async function createContract({
 
       filename,
 
-      uploaded_by,
+      file_id: fileId,
 
       created_at: new Date().toISOString(),
 
       ingestion,
 
-      analysis: aiAnalysis?.analysis || {},
-
-      provider_used:
-        aiAnalysis?.provider_used || "unknown",
-
-      document_hash:
-        ingestion?.document_hash || null,
+      intelligence,
     };
 
     contracts.push(contract);
@@ -88,11 +82,11 @@ export async function createContract({
       contract,
     };
   } catch (error) {
-    console.error("createContract Error:", error);
+    console.error("createContract error:", error);
 
     return {
       success: false,
-      error: error.message || "Failed to create contract",
+      error: error.message || "Contract creation failed",
     };
   }
 }
@@ -118,28 +112,47 @@ export async function getAllContracts() {
  */
 
 export async function getContractById(id) {
-  try {
-    const contract = contracts.find((c) => c.id === id);
+  const contract = contracts.find((c) => c.id === id);
 
-    if (!contract) {
-      return {
-        success: false,
-        error: "Contract not found",
-      };
-    }
-
-    return {
-      success: true,
-      contract,
-    };
-  } catch (error) {
-    console.error("getContractById Error:", error);
-
+  if (!contract) {
     return {
       success: false,
-      error: error.message || "Failed to fetch contract",
+      error: "Contract not found",
     };
   }
+
+  return {
+    success: true,
+    contract,
+  };
+}
+
+/**
+ * =========================================
+ * UPDATE CONTRACT
+ * =========================================
+ */
+
+export async function updateContract(id, updates = {}) {
+  const index = contracts.findIndex((c) => c.id === id);
+
+  if (index === -1) {
+    return {
+      success: false,
+      error: "Contract not found",
+    };
+  }
+
+  contracts[index] = {
+    ...contracts[index],
+    ...updates,
+    updated_at: new Date().toISOString(),
+  };
+
+  return {
+    success: true,
+    contract: contracts[index],
+  };
 }
 
 /**
@@ -149,28 +162,19 @@ export async function getContractById(id) {
  */
 
 export async function deleteContract(id) {
-  try {
-    const index = contracts.findIndex((c) => c.id === id);
+  const index = contracts.findIndex((c) => c.id === id);
 
-    if (index === -1) {
-      return {
-        success: false,
-        error: "Contract not found",
-      };
-    }
-
-    contracts.splice(index, 1);
-
-    return {
-      success: true,
-      deleted_id: id,
-    };
-  } catch (error) {
-    console.error("deleteContract Error:", error);
-
+  if (index === -1) {
     return {
       success: false,
-      error: error.message || "Failed to delete contract",
+      error: "Contract not found",
     };
   }
+
+  const deleted = contracts.splice(index, 1);
+
+  return {
+    success: true,
+    deleted: deleted[0],
+  };
 }
