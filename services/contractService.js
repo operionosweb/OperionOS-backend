@@ -12,6 +12,10 @@ import {
   storeEmbedding,
 } from "./vectorMemoryService.js";
 
+import {
+  calculatePortfolioRisk,
+} from "./portfolioRiskEngine.js";
+
 /**
  * =========================================
  * HELPERS
@@ -69,7 +73,9 @@ export async function createContract({
      * -----------------------------------------
      */
 
-    const intelligence = await analyzeContractText(text);
+    const intelligence = await analyzeContractText(
+      text
+    );
 
     if (!intelligence.success) {
       return intelligence;
@@ -155,9 +161,12 @@ export async function createContract({
           embedding: embeddingResult.embedding,
           metadata: {
             filename: data.filename,
-            contract_type: data.contract_type,
-            supplier_name: data.supplier_name,
-            risk_score: data.risk_score,
+            contract_type:
+              data.contract_type,
+            supplier_name:
+              data.supplier_name,
+            risk_score:
+              data.risk_score,
           },
         });
 
@@ -175,6 +184,24 @@ export async function createContract({
 
     /**
      * -----------------------------------------
+     * PORTFOLIO ANALYTICS
+     * -----------------------------------------
+     */
+
+    let portfolioAnalytics = null;
+
+    try {
+      portfolioAnalytics =
+        await calculatePortfolioRisk();
+    } catch (portfolioError) {
+      console.error(
+        "Portfolio analytics error:",
+        portfolioError
+      );
+    }
+
+    /**
+     * -----------------------------------------
      * RESPONSE
      * -----------------------------------------
      */
@@ -182,6 +209,8 @@ export async function createContract({
     return {
       success: true,
       contract: data,
+      portfolio_analytics:
+        portfolioAnalytics,
     };
   } catch (error) {
     console.error("createContract error:", error);
@@ -337,6 +366,36 @@ export async function deleteContract(id) {
       error:
         error.message ||
         "Delete failed",
+    };
+  }
+}
+
+/**
+ * =========================================
+ * PORTFOLIO ANALYTICS
+ * =========================================
+ */
+
+export async function getPortfolioAnalytics() {
+  try {
+    const analytics =
+      await calculatePortfolioRisk();
+
+    return {
+      success: true,
+      analytics,
+    };
+  } catch (error) {
+    console.error(
+      "getPortfolioAnalytics error:",
+      error
+    );
+
+    return {
+      success: false,
+      error:
+        error.message ||
+        "Portfolio analytics failed",
     };
   }
 }
