@@ -1,5 +1,3 @@
-// services/vectorMemoryService.js
-
 import OpenAI from "openai";
 import supabase from "../config/supabase.js";
 
@@ -15,47 +13,56 @@ const openai = new OpenAI({
 
 /**
  * =========================================
- * GENERATE EMBEDDING (DEBUG MODE)
+ * DEBUG HELPERS
+ * =========================================
+ */
+
+function debugEnv() {
+  console.log("🔐 OPENAI_API_KEY exists:", !!process.env.OPENAI_API_KEY);
+
+  if (process.env.OPENAI_API_KEY) {
+    console.log(
+      "🔐 OPENAI_API_KEY prefix:",
+      process.env.OPENAI_API_KEY.slice(0, 7)
+    );
+  } else {
+    console.error("❌ OPENAI_API_KEY IS MISSING IN RENDER ENV");
+  }
+}
+
+/**
+ * =========================================
+ * GENERATE EMBEDDING (FIXED + DEBUG)
  * =========================================
  */
 
 export async function generateEmbedding(text = "") {
   try {
-    if (!text || typeof text !== "string") {
-      console.error("❌ Embedding input invalid:", text);
+    debugEnv();
 
+    if (!text || typeof text !== "string") {
       return {
         success: false,
         error: "Invalid text for embedding",
       };
     }
 
-    console.log("🧠 Generating embedding...");
-    console.log("🔑 API KEY exists:", !!process.env.OPENAI_API_KEY);
-    console.log("📏 Input length:", text.length);
+    console.log("🧠 Generating embedding for text length:", text.length);
+
+    /**
+     * CALL OPENAI
+     */
 
     const response = await openai.embeddings.create({
       model: "text-embedding-3-small",
       input: text.slice(0, 12000),
     });
 
-    if (!response) {
-      console.error("❌ No response from OpenAI");
-
+    if (!response?.data?.[0]?.embedding) {
+      console.error("❌ OpenAI returned empty embedding response");
       return {
         success: false,
-        error: "No response from OpenAI",
-      };
-    }
-
-    const embedding = response?.data?.[0]?.embedding;
-
-    if (!embedding) {
-      console.error("❌ Embedding missing in response:", response);
-
-      return {
-        success: false,
-        error: "Embedding missing from OpenAI response",
+        error: "Empty embedding response from OpenAI",
       };
     }
 
@@ -63,13 +70,11 @@ export async function generateEmbedding(text = "") {
 
     return {
       success: true,
-      embedding,
+      embedding: response.data[0].embedding,
     };
   } catch (error) {
-    console.error("🚨 OPENAI EMBEDDING ERROR:");
-    console.error("Message:", error.message);
-    console.error("Status:", error.status);
-    console.error("Error object:", error);
+    console.error("❌ generateEmbedding FULL ERROR:");
+    console.error(error);
 
     return {
       success: false,
@@ -102,9 +107,7 @@ export async function storeEmbedding({
       .select()
       .single();
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     return {
       success: true,
@@ -115,7 +118,7 @@ export async function storeEmbedding({
 
     return {
       success: false,
-      error: error.message || "Embedding storage failed",
+      error: error.message,
     };
   }
 }
