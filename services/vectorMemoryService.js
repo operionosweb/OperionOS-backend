@@ -1,3 +1,5 @@
+// services/vectorMemoryService.js
+
 import OpenAI from "openai";
 import supabase from "../config/supabase.js";
 
@@ -13,44 +15,36 @@ const openai = new OpenAI({
 
 /**
  * =========================================
- * DEBUG HELPERS
- * =========================================
- */
-
-function debugEnv() {
-  console.log("🔐 OPENAI_API_KEY exists:", !!process.env.OPENAI_API_KEY);
-
-  if (process.env.OPENAI_API_KEY) {
-    console.log(
-      "🔐 OPENAI_API_KEY prefix:",
-      process.env.OPENAI_API_KEY.slice(0, 7)
-    );
-  } else {
-    console.error("❌ OPENAI_API_KEY IS MISSING IN RENDER ENV");
-  }
-}
-
-/**
- * =========================================
- * GENERATE EMBEDDING (FIXED + DEBUG)
+ * GENERATE EMBEDDING (DEBUG SAFE)
  * =========================================
  */
 
 export async function generateEmbedding(text = "") {
   try {
-    debugEnv();
+    /**
+     * ENV DEBUG (CRITICAL FOR RENDER)
+     */
+    console.log("🔴 OPENAI_API_KEY exists:", !!process.env.OPENAI_API_KEY);
+
+    if (!process.env.OPENAI_API_KEY) {
+      return {
+        success: false,
+        error: "OPENAI_API_KEY missing in runtime environment",
+      };
+    }
 
     if (!text || typeof text !== "string") {
       return {
         success: false,
-        error: "Invalid text for embedding",
+        error: "Invalid text input for embedding",
       };
     }
 
-    console.log("🧠 Generating embedding for text length:", text.length);
+    console.log("🧠 Generating embedding...");
+    console.log("📏 Input length:", text.length);
 
     /**
-     * CALL OPENAI
+     * OPENAI REQUEST
      */
 
     const response = await openai.embeddings.create({
@@ -58,11 +52,18 @@ export async function generateEmbedding(text = "") {
       input: text.slice(0, 12000),
     });
 
-    if (!response?.data?.[0]?.embedding) {
-      console.error("❌ OpenAI returned empty embedding response");
+    /**
+     * VALIDATION
+     */
+
+    const embedding = response?.data?.[0]?.embedding;
+
+    if (!embedding) {
+      console.error("❌ Invalid OpenAI response:", response);
+
       return {
         success: false,
-        error: "Empty embedding response from OpenAI",
+        error: "Empty embedding returned from OpenAI",
       };
     }
 
@@ -70,15 +71,17 @@ export async function generateEmbedding(text = "") {
 
     return {
       success: true,
-      embedding: response.data[0].embedding,
+      embedding,
     };
   } catch (error) {
-    console.error("❌ generateEmbedding FULL ERROR:");
-    console.error(error);
+    console.error("🚨 OpenAI Embedding Error:");
+    console.error("Message:", error.message);
+    console.error("Status:", error.status);
+    console.error("Full error:", error);
 
     return {
       success: false,
-      error: error.message || "Embedding failed",
+      error: error.message || "Embedding generation failed",
     };
   }
 }
@@ -107,7 +110,9 @@ export async function storeEmbedding({
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
     return {
       success: true,
@@ -118,7 +123,44 @@ export async function storeEmbedding({
 
     return {
       success: false,
-      error: error.message,
+      error: error.message || "Embedding storage failed",
+    };
+  }
+}
+
+/**
+ * =========================================
+ * SEMANTIC SEARCH (RPC fallback)
+ * =========================================
+ */
+
+export async function semanticSearch({
+  embedding,
+  matchCount = 5,
+}) {
+  try {
+    const { data, error } = await supabase.rpc(
+      "match_contract_embeddings",
+      {
+        query_embedding: embedding,
+        match_count: matchCount,
+      }
+    );
+
+    if (error) {
+      throw error;
+    }
+
+    return {
+      success: true,
+      matches: data || [],
+    };
+  } catch (error) {
+    console.error("semanticSearch RPC error:", error);
+
+    return {
+      success: false,
+      error: error.message || "Semantic search failed",
     };
   }
 }
