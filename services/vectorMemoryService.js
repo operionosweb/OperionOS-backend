@@ -1,3 +1,5 @@
+// services/vectorMemoryService.js
+
 import OpenAI from "openai";
 import supabase from "../config/supabase.js";
 
@@ -13,13 +15,15 @@ const openai = new OpenAI({
 
 /**
  * =========================================
- * GENERATE EMBEDDING (DEBUG ENHANCED)
+ * GENERATE EMBEDDING (DEBUG MODE)
  * =========================================
  */
 
 export async function generateEmbedding(text = "") {
   try {
     if (!text || typeof text !== "string") {
+      console.error("❌ Embedding input invalid:", text);
+
       return {
         success: false,
         error: "Invalid text for embedding",
@@ -27,41 +31,49 @@ export async function generateEmbedding(text = "") {
     }
 
     console.log("🧠 Generating embedding...");
-    console.log("🔑 API Key exists:", !!process.env.OPENAI_API_KEY);
+    console.log("🔑 API KEY exists:", !!process.env.OPENAI_API_KEY);
+    console.log("📏 Input length:", text.length);
 
     const response = await openai.embeddings.create({
       model: "text-embedding-3-small",
-      input: text.slice(0, 8000),
+      input: text.slice(0, 12000),
     });
 
-    if (!response?.data?.[0]?.embedding) {
-      console.error("❌ No embedding returned:", response);
+    if (!response) {
+      console.error("❌ No response from OpenAI");
+
       return {
         success: false,
-        error: "No embedding returned from OpenAI",
-        debug: response,
+        error: "No response from OpenAI",
       };
     }
 
+    const embedding = response?.data?.[0]?.embedding;
+
+    if (!embedding) {
+      console.error("❌ Embedding missing in response:", response);
+
+      return {
+        success: false,
+        error: "Embedding missing from OpenAI response",
+      };
+    }
+
+    console.log("✅ Embedding generated successfully");
+
     return {
       success: true,
-      embedding: response.data[0].embedding,
+      embedding,
     };
   } catch (error) {
-    console.error("❌ generateEmbedding FULL ERROR:");
+    console.error("🚨 OPENAI EMBEDDING ERROR:");
     console.error("Message:", error.message);
     console.error("Status:", error.status);
-    console.error("Code:", error.code);
-    console.error("Response:", error.response?.data);
+    console.error("Error object:", error);
 
     return {
       success: false,
       error: error.message || "Embedding failed",
-      debug: {
-        status: error.status,
-        code: error.code,
-        response: error.response?.data,
-      },
     };
   }
 }
@@ -90,7 +102,9 @@ export async function storeEmbedding({
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      throw error;
+    }
 
     return {
       success: true,
@@ -101,7 +115,7 @@ export async function storeEmbedding({
 
     return {
       success: false,
-      error: error.message,
+      error: error.message || "Embedding storage failed",
     };
   }
 }
