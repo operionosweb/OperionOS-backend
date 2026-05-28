@@ -1,96 +1,80 @@
-// services/vectorMemoryService.js
-
 import OpenAI from "openai";
 import supabase from "../config/supabase.js";
-
-/**
- * =========================================
- * OPENAI CLIENT
- * =========================================
- */
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-/**
- * =========================================
- * GENERATE EMBEDDING (DEBUG SAFE)
- * =========================================
- */
-
 export async function generateEmbedding(text = "") {
   try {
-    /**
-     * ENV DEBUG (CRITICAL FOR RENDER)
-     */
-    console.log("🔴 OPENAI_API_KEY exists:", !!process.env.OPENAI_API_KEY);
+    console.log("====================================");
+    console.log("🔴 OPENAI DEBUG START");
+    console.log("API KEY EXISTS:", !!process.env.OPENAI_API_KEY);
+
+    if (process.env.OPENAI_API_KEY) {
+      console.log(
+        "KEY PREFIX:",
+        process.env.OPENAI_API_KEY.substring(0, 8)
+      );
+    }
 
     if (!process.env.OPENAI_API_KEY) {
       return {
         success: false,
-        error: "OPENAI_API_KEY missing in runtime environment",
+        error: "OPENAI_API_KEY missing in Render environment",
       };
     }
 
-    if (!text || typeof text !== "string") {
+    if (!text) {
       return {
         success: false,
-        error: "Invalid text input for embedding",
+        error: "Empty input text",
       };
     }
 
-    console.log("🧠 Generating embedding...");
-    console.log("📏 Input length:", text.length);
-
-    /**
-     * OPENAI REQUEST
-     */
+    console.log("TEXT LENGTH:", text.length);
 
     const response = await openai.embeddings.create({
       model: "text-embedding-3-small",
-      input: text.slice(0, 12000),
+      input: text.slice(0, 8000),
     });
 
-    /**
-     * VALIDATION
-     */
+    console.log("RAW OPENAI RESPONSE:", response);
 
     const embedding = response?.data?.[0]?.embedding;
 
     if (!embedding) {
-      console.error("❌ Invalid OpenAI response:", response);
+      console.error("❌ NO EMBEDDING IN RESPONSE");
+      console.error(response);
 
       return {
         success: false,
-        error: "Empty embedding returned from OpenAI",
+        error: "No embedding returned",
       };
     }
 
-    console.log("✅ Embedding generated successfully");
+    console.log("✅ EMBEDDING SUCCESS");
+    console.log("====================================");
 
     return {
       success: true,
       embedding,
     };
   } catch (error) {
-    console.error("🚨 OpenAI Embedding Error:");
-    console.error("Message:", error.message);
-    console.error("Status:", error.status);
-    console.error("Full error:", error);
+    console.log("====================================");
+    console.error("🚨 OPENAI FAILED FULL ERROR:");
+    console.error("MESSAGE:", error.message);
+    console.error("STATUS:", error.status);
+    console.error("CODE:", error.code);
+    console.error("TYPE:", error.type);
+    console.error("FULL ERROR:", error);
 
     return {
       success: false,
-      error: error.message || "Embedding generation failed",
+      error: error.message,
     };
   }
 }
-
-/**
- * =========================================
- * STORE EMBEDDING
- * =========================================
- */
 
 export async function storeEmbedding({
   contractId,
@@ -110,9 +94,7 @@ export async function storeEmbedding({
       .select()
       .single();
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     return {
       success: true,
@@ -123,44 +105,7 @@ export async function storeEmbedding({
 
     return {
       success: false,
-      error: error.message || "Embedding storage failed",
-    };
-  }
-}
-
-/**
- * =========================================
- * SEMANTIC SEARCH (RPC fallback)
- * =========================================
- */
-
-export async function semanticSearch({
-  embedding,
-  matchCount = 5,
-}) {
-  try {
-    const { data, error } = await supabase.rpc(
-      "match_contract_embeddings",
-      {
-        query_embedding: embedding,
-        match_count: matchCount,
-      }
-    );
-
-    if (error) {
-      throw error;
-    }
-
-    return {
-      success: true,
-      matches: data || [],
-    };
-  } catch (error) {
-    console.error("semanticSearch RPC error:", error);
-
-    return {
-      success: false,
-      error: error.message || "Semantic search failed",
+      error: error.message,
     };
   }
 }
