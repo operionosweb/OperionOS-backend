@@ -12,6 +12,7 @@ import contractRoutes from "./routes/contractRoutes.js";
 import providerRoutes from "./routes/providerRoutes.js";
 import searchRoutes from "./routes/searchRoutes.js";
 import portfolioRoutes from "./routes/portfolioRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
 
 dotenv.config();
 
@@ -37,6 +38,24 @@ app.use(
     limit: "50mb",
   })
 );
+
+/**
+ * =========================================
+ * AUTH TEST MIDDLEWARE
+ * =========================================
+ * TEMPORARY:
+ * This injects your Super Admin user
+ * until full JWT auth is connected.
+ */
+
+app.use((req, res, next) => {
+  req.user = {
+    id: "b8e9cfc7-4fdf-4046-b981-fb67e94f5cbb",
+    role: "super_admin",
+  };
+
+  next();
+});
 
 /**
  * =========================================
@@ -76,6 +95,17 @@ app.use(
 app.use(
   "/api/portfolio",
   portfolioRoutes
+);
+
+/**
+ * =========================================
+ * ADMIN ROUTES
+ * =========================================
+ */
+
+app.use(
+  "/api/admin",
+  adminRoutes
 );
 
 /**
