@@ -1,17 +1,27 @@
-const express = require('express');
+import express from "express";
+
 const router = express.Router();
 
-const requireSuperAdmin = require('../middleware/superAdminMiddleware');
-
 router.get(
-    '/dashboard',
-    requireSuperAdmin,
-    async (req, res) => {
-        res.json({
-            success: true,
-            message: 'Welcome Super Admin'
-        });
-    }
+  "/dashboard",
+  async (req, res) => {
+    return res.status(200).json({
+      success: true,
+      message: "Welcome Super Admin",
+      user: req.user,
+    });
+  }
 );
 
-module.exports = router;
+router.get(
+  "/health",
+  async (req, res) => {
+    return res.status(200).json({
+      success: true,
+      admin_system: "operational",
+      timestamp: new Date().toISOString(),
+    });
+  }
+);
+
+export default router;
