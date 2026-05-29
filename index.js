@@ -43,9 +43,11 @@ app.use(
  * =========================================
  * AUTH TEST MIDDLEWARE
  * =========================================
- * TEMPORARY:
+ * TEMPORARY ONLY
+ *
  * This injects your Super Admin user
- * until full JWT auth is connected.
+ * into every request until real
+ * Supabase JWT authentication is added.
  */
 
 app.use((req, res, next) => {
