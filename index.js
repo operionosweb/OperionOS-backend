@@ -13,6 +13,8 @@ import providerRoutes from "./routes/providerRoutes.js";
 import searchRoutes from "./routes/searchRoutes.js";
 import portfolioRoutes from "./routes/portfolioRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import blogRoutes from "./routes/blogRoutes.js";
+import mediaRoutes from "./routes/mediaRoutes.js";
 
 dotenv.config();
 
@@ -43,11 +45,7 @@ app.use(
  * =========================================
  * AUTH TEST MIDDLEWARE
  * =========================================
- * TEMPORARY ONLY
- *
- * This injects your Super Admin user
- * into every request until real
- * Supabase JWT authentication is added.
+ * TEMPORARY ONLY (DEV MODE)
  */
 
 app.use((req, res, next) => {
@@ -79,25 +77,19 @@ app.get("/", (req, res) => {
  * =========================================
  */
 
-app.use(
-  "/api/contracts",
-  contractRoutes
-);
+app.use("/api/contracts", contractRoutes);
+app.use("/api/providers", providerRoutes);
+app.use("/api/search", searchRoutes);
+app.use("/api/portfolio", portfolioRoutes);
 
-app.use(
-  "/api/providers",
-  providerRoutes
-);
+/**
+ * =========================================
+ * BLOG + MEDIA (FIXED - WAS MISSING)
+ * =========================================
+ */
 
-app.use(
-  "/api/search",
-  searchRoutes
-);
-
-app.use(
-  "/api/portfolio",
-  portfolioRoutes
-);
+app.use("/api/blog", blogRoutes);
+app.use("/api/media", mediaRoutes);
 
 /**
  * =========================================
@@ -105,10 +97,7 @@ app.use(
  * =========================================
  */
 
-app.use(
-  "/api/admin",
-  adminRoutes
-);
+app.use("/api/admin", adminRoutes);
 
 /**
  * =========================================
@@ -129,11 +118,8 @@ app.use((req, res) => {
  * =========================================
  */
 
-const PORT =
-  process.env.PORT || 10000;
+const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
-  console.log(
-    `🚀 OperionOS running on port ${PORT}`
-  );
+  console.log(`🚀 OperionOS running on port ${PORT}`);
 });
