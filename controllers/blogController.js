@@ -219,7 +219,7 @@ export async function deletePost(req, res) {
 
     return res.json({
       success: true,
-      message: "Post deleted",
+      data: true,
     });
   } catch (err) {
     return res.status(500).json({
