@@ -8,31 +8,17 @@ import {
 } from "../services/blogService.js";
 
 /* =====================================================
-   CREATE POST
+   CONTROLLER LAYER = PURE PASS-THROUGH
 ===================================================== */
-export const createBlogPost = createPost;
 
-/* =====================================================
-   GET ALL POSTS
-===================================================== */
-export const getBlogs = getAllPosts;
+export const createPostController = createPost;
 
-/* =====================================================
-   GET SINGLE POST
-===================================================== */
-export const getBlogBySlug = getPostBySlug;
+export const getAllPostsController = getAllPosts;
 
-/* =====================================================
-   UPDATE POST
-===================================================== */
-export const updateBlogPost = updatePost;
+export const getPostBySlugController = getPostBySlug;
 
-/* =====================================================
-   DELETE POST
-===================================================== */
-export const deleteBlogPost = deletePost;
+export const updatePostController = updatePost;
 
-/* =====================================================
-   PUBLISH POST
-===================================================== */
-export const publishBlogPost = publishPost;
+export const deletePostController = deletePost;
+
+export const publishPostController = publishPost;
