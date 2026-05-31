@@ -8,9 +8,9 @@ import { uploadFile } from "../services/storageService.js";
 const router = express.Router();
 
 /**
- * -----------------------------------------
- * MULTER (memory only)
- * -----------------------------------------
+ * =========================================
+ * MULTER (memory storage only)
+ * =========================================
  */
 
 const upload = multer({
@@ -21,9 +21,9 @@ const upload = multer({
 });
 
 /**
- * -----------------------------------------
- * UPLOAD FILE (UPLOADCARE ONLY)
- * -----------------------------------------
+ * =========================================
+ * UPLOAD FILE
+ * =========================================
  */
 
 router.post("/upload", upload.single("file"), async (req, res) => {
@@ -50,12 +50,19 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       });
     }
 
+    /**
+     * SAVE TO DATABASE
+     */
+
     const { data, error } = await supabase
       .from("uploads")
       .insert({
         filename: file.originalname,
         url: uploadResult.url,
         file_id: uploadResult.file_id,
+        mimetype: file.mimetype,
+        size: file.size,
+        provider: uploadResult.provider || "uploadcare",
         created_at: new Date().toISOString(),
       })
       .select()
@@ -71,7 +78,6 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     return res.status(200).json({
       success: true,
       file: data,
-      storage: "uploadcare",
     });
   } catch (error) {
     console.error("Media upload error:", error);
