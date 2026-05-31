@@ -1,44 +1,30 @@
 import express from "express";
 
 import {
-  createPost,
-  getAllPosts,
-  getPostBySlug,
-  updatePost,
-  deletePost,
-  publishPost,
+  createPostController,
+  getAllPostsController,
+  getPostBySlugController,
+  updatePostController,
+  deletePostController,
+  publishPostController,
 } from "../controllers/blogController.js";
 
 const router = express.Router();
 
 /* =====================================================
-   CREATE POST
+   BLOG ROUTES
 ===================================================== */
-router.post("/", createPost);
 
-/* =====================================================
-   GET ALL POSTS
-===================================================== */
-router.get("/", getAllPosts);
+router.post("/", createPostController);
 
-/* =====================================================
-   GET SINGLE POST
-===================================================== */
-router.get("/:slug", getPostBySlug);
+router.get("/", getAllPostsController);
 
-/* =====================================================
-   UPDATE POST
-===================================================== */
-router.put("/:id", updatePost);
+router.get("/:slug", getPostBySlugController);
 
-/* =====================================================
-   DELETE POST
-===================================================== */
-router.delete("/:id", deletePost);
+router.put("/:id", updatePostController);
 
-/* =====================================================
-   PUBLISH POST
-===================================================== */
-router.post("/:id/publish", publishPost);
+router.delete("/:id", deletePostController);
+
+router.post("/:id/publish", publishPostController);
 
 export default router;
