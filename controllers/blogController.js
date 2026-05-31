@@ -1,136 +1,38 @@
 import {
-  createBlogPost,
-  getAllBlogPosts,
-  getBlogPostBySlug,
-  updateBlogPost,
-  deleteBlogPost,
-  publishBlogPost,
+  createPost,
+  getAllPosts,
+  getPostBySlug,
+  updatePost,
+  deletePost,
+  publishPost,
 } from "../services/blogService.js";
 
 /* =====================================================
    CREATE POST
 ===================================================== */
-
-export async function createPost(req, res) {
-  try {
-    const post = await createBlogPost(req.body);
-
-    return res.json({
-      success: true,
-      post,
-    });
-  } catch (err) {
-    console.error(err);
-
-    return res.status(500).json({
-      success: false,
-      error: "Failed to create post",
-    });
-  }
-}
+export const createBlogPost = createPost;
 
 /* =====================================================
-   GET ALL
+   GET ALL POSTS
 ===================================================== */
-
-export async function getAllPosts(req, res) {
-  try {
-    const posts = await getAllBlogPosts();
-
-    return res.json({
-      success: true,
-      posts,
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      error: "Failed to fetch posts",
-    });
-  }
-}
+export const getBlogs = getAllPosts;
 
 /* =====================================================
-   GET BY SLUG
+   GET SINGLE POST
 ===================================================== */
-
-export async function getPostBySlug(req, res) {
-  try {
-    const post = await getBlogPostBySlug(req.params.slug);
-
-    if (!post) {
-      return res.status(404).json({
-        success: false,
-        error: "Post not found",
-      });
-    }
-
-    return res.json({
-      success: true,
-      post,
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      error: "Failed to fetch post",
-    });
-  }
-}
+export const getBlogBySlug = getPostBySlug;
 
 /* =====================================================
-   UPDATE
+   UPDATE POST
 ===================================================== */
-
-export async function updatePost(req, res) {
-  try {
-    const post = await updateBlogPost(req.params.id, req.body);
-
-    return res.json({
-      success: true,
-      post,
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      error: "Failed to update post",
-    });
-  }
-}
+export const updateBlogPost = updatePost;
 
 /* =====================================================
-   DELETE
+   DELETE POST
 ===================================================== */
-
-export async function deletePost(req, res) {
-  try {
-    await deleteBlogPost(req.params.id);
-
-    return res.json({
-      success: true,
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      error: "Failed to delete post",
-    });
-  }
-}
+export const deleteBlogPost = deletePost;
 
 /* =====================================================
-   PUBLISH
+   PUBLISH POST
 ===================================================== */
-
-export async function publishPost(req, res) {
-  try {
-    const post = await publishBlogPost(req.params.id);
-
-    return res.json({
-      success: true,
-      post,
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      error: "Failed to publish post",
-    });
-  }
-}
+export const publishBlogPost = publishPost;
