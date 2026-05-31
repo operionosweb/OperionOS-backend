@@ -7,7 +7,6 @@ import dotenv from "dotenv";
 /**
  * ROUTES
  */
-
 import contractRoutes from "./routes/contractRoutes.js";
 import providerRoutes from "./routes/providerRoutes.js";
 import searchRoutes from "./routes/searchRoutes.js";
@@ -16,13 +15,18 @@ import adminRoutes from "./routes/adminRoutes.js";
 import blogRoutes from "./routes/blogRoutes.js";
 import mediaRoutes from "./routes/mediaRoutes.js";
 
+/**
+ * AUTH MIDDLEWARE
+ */
+import { apiKeyMiddleware } from "./middleware/authMiddleware.js";
+
 dotenv.config();
 
 const app = express();
 
 /**
  * =========================================
- * MIDDLEWARE
+ * GLOBAL MIDDLEWARE
  * =========================================
  */
 
@@ -43,23 +47,7 @@ app.use(
 
 /**
  * =========================================
- * AUTH TEST MIDDLEWARE
- * =========================================
- * TEMPORARY ONLY (DEV MODE)
- */
-
-app.use((req, res, next) => {
-  req.user = {
-    id: "b8e9cfc7-4fdf-4046-b981-fb67e94f5cbb",
-    role: "super_admin",
-  };
-
-  next();
-});
-
-/**
- * =========================================
- * ROOT
+ * ROOT (PUBLIC HEALTH CHECK)
  * =========================================
  */
 
@@ -73,27 +61,31 @@ app.get("/", (req, res) => {
 
 /**
  * =========================================
- * API ROUTES
+ * PUBLIC ROUTES (NO AUTH)
  * =========================================
+ * These are safe endpoints like search or blog reading
  */
 
-app.use("/api/contracts", contractRoutes);
-app.use("/api/providers", providerRoutes);
 app.use("/api/search", searchRoutes);
-app.use("/api/portfolio", portfolioRoutes);
+app.use("/api/blog", blogRoutes);
 
 /**
  * =========================================
- * BLOG + MEDIA (FIXED - WAS MISSING)
+ * PROTECTED ROUTES (API KEY REQUIRED)
  * =========================================
+ * Everything below requires INTERNAL_API_KEY
  */
 
-app.use("/api/blog", blogRoutes);
+app.use(apiKeyMiddleware);
+
+app.use("/api/contracts", contractRoutes);
+app.use("/api/providers", providerRoutes);
+app.use("/api/portfolio", portfolioRoutes);
 app.use("/api/media", mediaRoutes);
 
 /**
  * =========================================
- * ADMIN ROUTES
+ * ADMIN ROUTES (STRICTLY PROTECTED)
  * =========================================
  */
 
