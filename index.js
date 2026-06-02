@@ -3,24 +3,26 @@ import cors from "cors";
 import dotenv from "dotenv";
 
 /**
- * =========================================
- * ENV CONFIG
- * =========================================
+ * ROUTES
  */
+
+import contractRoutes from "./routes/contractRoutes.js";
+import providerRoutes from "./routes/providerRoutes.js";
+import searchRoutes from "./routes/searchRoutes.js";
+import portfolioRoutes from "./routes/portfolioRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
+import blogRoutes from "./routes/blogRoutes.js";
+
 dotenv.config();
 
-/**
- * =========================================
- * APP INIT
- * =========================================
- */
 const app = express();
 
 /**
  * =========================================
- * GLOBAL MIDDLEWARE
+ * MIDDLEWARE
  * =========================================
  */
+
 app.use(cors());
 
 app.use(
@@ -38,29 +40,30 @@ app.use(
 
 /**
  * =========================================
- * ROUTES IMPORTS
+ * AUTH TEST MIDDLEWARE
  * =========================================
+ * TEMPORARY ONLY
+ *
+ * This injects your Super Admin user
+ * into every request until real
+ * Supabase JWT authentication is added.
  */
-import contractRoutes from "./routes/contractRoutes.js";
-import providerRoutes from "./routes/providerRoutes.js";
-import searchRoutes from "./routes/searchRoutes.js";
-import portfolioRoutes from "./routes/portfolioRoutes.js";
-import adminRoutes from "./routes/adminRoutes.js";
-import blogRoutes from "./routes/blogRoutes.js";
-import mediaRoutes from "./routes/mediaRoutes.js";
+
+app.use((req, res, next) => {
+  req.user = {
+    id: "b8e9cfc7-4fdf-4046-b981-fb67e94f5cbb",
+    role: "super_admin",
+  };
+
+  next();
+});
 
 /**
  * =========================================
- * AUTH MIDDLEWARE
+ * ROOT
  * =========================================
  */
-import { apiKeyMiddleware } from "./middleware/authMiddleware.js";
 
-/**
- * =========================================
- * HEALTH CHECK (PUBLIC)
- * =========================================
- */
 app.get("/", (req, res) => {
   return res.status(200).json({
     status: "alive",
@@ -71,37 +74,52 @@ app.get("/", (req, res) => {
 
 /**
  * =========================================
- * PUBLIC ROUTES
+ * API ROUTES
  * =========================================
- * Safe for frontend / SEO / reads
  */
-app.use("/api/search", searchRoutes);
-app.use("/api/blog", blogRoutes);
+
+app.use(
+  "/api/contracts",
+  contractRoutes
+);
+
+app.use(
+  "/api/providers",
+  providerRoutes
+);
+
+app.use(
+  "/api/search",
+  searchRoutes
+);
+
+app.use(
+  "/api/portfolio",
+  portfolioRoutes
+);
+
+app.use(
+  "/api/blog",
+  blogRoutes
+);
 
 /**
  * =========================================
- * PROTECTED ROUTES (API KEY REQUIRED)
+ * ADMIN ROUTES
  * =========================================
  */
-app.use(apiKeyMiddleware);
 
-app.use("/api/contracts", contractRoutes);
-app.use("/api/providers", providerRoutes);
-app.use("/api/portfolio", portfolioRoutes);
-app.use("/api/media", mediaRoutes);
-
-/**
- * =========================================
- * ADMIN ROUTES (STRICT PROTECTION)
- * =========================================
- */
-app.use("/api/admin", adminRoutes);
+app.use(
+  "/api/admin",
+  adminRoutes
+);
 
 /**
  * =========================================
  * 404 HANDLER
  * =========================================
  */
+
 app.use((req, res) => {
   return res.status(404).json({
     success: false,
@@ -111,25 +129,15 @@ app.use((req, res) => {
 
 /**
  * =========================================
- * GLOBAL ERROR HANDLER (STEP 8 FIX)
+ * SERVER
  * =========================================
  */
-app.use((err, req, res, next) => {
-  console.error("🔥 GLOBAL ERROR:", err);
 
-  return res.status(500).json({
-    success: false,
-    error: "Internal Server Error",
-  });
-});
-
-/**
- * =========================================
- * SERVER START
- * =========================================
- */
-const PORT = process.env.PORT || 10000;
+const PORT =
+  process.env.PORT || 10000;
 
 app.listen(PORT, () => {
-  console.log(`🚀 OperionOS running on port ${PORT}`);
+  console.log(
+    `🚀 OperionOS running on port ${PORT}`
+  );
 });
