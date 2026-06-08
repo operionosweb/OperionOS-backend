@@ -1,45 +1,37 @@
 import axios from "axios";
 
-/**
- * =========================================
- * SAFE JSON PARSER
- * =========================================
- */
+/* =========================================
+   SAFE JSON PARSER (HARDENED)
+========================================= */
+
 function safeParse(text) {
   if (!text || typeof text !== "string") return null;
 
   try {
     return JSON.parse(text);
   } catch (err) {
-    console.error("❌ JSON Parse Failed:", err.message);
-
-    /**
-     * TRY CLEANING COMMON LLM OUTPUT ISSUES
-     */
     try {
-      const cleaned = text
-        .replace(/```json/g, "")
-        .replace(/```/g, "")
-        .trim();
-
-      return JSON.parse(cleaned);
-    } catch (err2) {
-      console.error("❌ Cleaned JSON Parse Failed:", err2.message);
+      // attempt to extract JSON block if model adds noise
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) {
+        return JSON.parse(match[0]);
+      }
+      return null;
+    } catch {
       return null;
     }
   }
 }
 
-/**
- * =========================================
- * HYBRID LLM CALL
- * =========================================
- */
+/* =========================================
+   LLM CALL (MISTRAL → OPENROUTER FALLBACK)
+========================================= */
+
 async function callLLM(prompt) {
   try {
-    /**
-     * MISTRAL FIRST (EU OPTION)
-     */
+    /* =========================
+       1. MISTRAL (EU-FIRST)
+    ========================= */
     if (process.env.MISTRAL_API_KEY) {
       const res = await axios.post(
         "https://api.mistral.ai/v1/chat/completions",
@@ -59,9 +51,31 @@ async function callLLM(prompt) {
       return res.data?.choices?.[0]?.message?.content;
     }
 
-    /**
-     * FALLBACK: OPENAI
-     */
+    /* =========================
+       2. OPENROUTER (EU FRIENDLY)
+    ========================= */
+    if (process.env.OPENROUTER_API_KEY) {
+      const res = await axios.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          model: "mistral/mistral-large",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.2,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      return res.data?.choices?.[0]?.message?.content;
+    }
+
+    /* =========================
+       3. OPENAI (LAST RESORT)
+    ========================= */
     if (process.env.OPENAI_API_KEY) {
       const res = await axios.post(
         "https://api.openai.com/v1/chat/completions",
@@ -81,18 +95,18 @@ async function callLLM(prompt) {
       return res.data?.choices?.[0]?.message?.content;
     }
 
-    throw new Error("No LLM API key configured");
+    throw new Error("No LLM provider configured");
+
   } catch (err) {
-    console.error("❌ LLM ERROR:", err.response?.data || err.message);
+    console.error("LLM ERROR:", err?.response?.data || err.message);
     throw new Error("Copilot AI failed");
   }
 }
 
-/**
- * =========================================
- * MAIN COPILOT ENGINE
- * =========================================
- */
+/* =========================================
+   MAIN COPILOT ENGINE
+========================================= */
+
 export async function generateContractCopilot({
   contract,
   company_context = {},
@@ -101,13 +115,13 @@ export async function generateContractCopilot({
     const prompt = `
 You are an aviation contract negotiation copilot.
 
-Analyze this contract:
+Analyze this contract intelligence:
 
 SUMMARY:
 ${contract.summary || ""}
 
-RISK SCORE:
-${contract.risk_score || 0}
+OVERALL RISK:
+${contract.overall_risk || 0}
 
 CLAUSES:
 ${JSON.stringify(contract.clauses || []).slice(0, 12000)}
@@ -127,22 +141,22 @@ Return ONLY valid JSON:
 
 Rules:
 - Be strict and realistic
-- Focus on aviation leasing risk
+- Aviation industry focus
 - NO markdown
 - NO extra text
 `;
 
     const raw = await callLLM(prompt);
 
-    console.log("🔵 RAW COPILOT OUTPUT:", raw);
-
     const parsed = safeParse(raw);
 
     if (!parsed) {
+      console.error("❌ Copilot JSON parse failed. Raw output:", raw);
+
       return {
         recommendation: "NEGOTIATE",
         confidence: 50,
-        why: "Fallback due to invalid JSON from LLM",
+        why: "Fallback due to AI parsing failure",
         top_risks: [],
         negotiation_points: [],
         cost_exposure_summary: "",
@@ -152,13 +166,14 @@ Rules:
     }
 
     return parsed;
+
   } catch (err) {
-    console.error("❌ COPILOT ERROR:", err.message);
+    console.error("COPILOT ENGINE ERROR:", err.message);
 
     return {
       recommendation: "NEGOTIATE",
-      confidence: 50,
-      why: "System fallback error",
+      confidence: 40,
+      why: "System fallback due to execution error",
       top_risks: [],
       negotiation_points: [],
       cost_exposure_summary: "",
