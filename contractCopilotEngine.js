@@ -1,5 +1,5 @@
 import axios from "axios";
-import supabase from "../config/supabase.js";
+import supabase from "./config/supabase.js"; // ✅ FIXED PATH
 
 /* ===============================
    EU LLM CALL (MISTRAL ONLY)
@@ -63,10 +63,10 @@ function isValid(obj) {
 }
 
 /* ===============================
-   FETCH SIMILAR CONTRACTS (VECTOR CONTEXT)
+   VECTOR CONTEXT FETCH
 =============================== */
 
-async function getSimilarContracts(contractId) {
+async function getSimilarContracts() {
   try {
     const { data, error } = await supabase
       .from("contract_embeddings")
@@ -75,7 +75,7 @@ async function getSimilarContracts(contractId) {
 
     if (error) throw error;
 
-    return (data || []).map((d) => d.metadata || {});
+    return (data || []).map((d) => d.metadata || []);
   } catch (err) {
     console.error("Vector fetch error:", err.message);
     return [];
@@ -83,7 +83,7 @@ async function getSimilarContracts(contractId) {
 }
 
 /* ===============================
-   BUILD CONTEXT
+   CONTEXT BUILDER
 =============================== */
 
 function buildContext(similarContracts = []) {
@@ -113,9 +113,7 @@ function buildPrompt(contract, context) {
   return `
 You are an aviation contract negotiation AI.
 
-You must use both:
-1. This contract
-2. Market/portfolio intelligence
+Use historical contract intelligence to improve decisions.
 
 ${context}
 
@@ -130,12 +128,12 @@ ${contract.overall_risk || 0}
 Clauses:
 ${JSON.stringify(contract.clauses || []).slice(0, 12000)}
 
-OUTPUT ONLY JSON:
+RETURN ONLY VALID JSON:
 
 {
   "recommendation": "SIGN | REJECT | NEGOTIATE",
   "confidence": 0-100,
-  "why": "string",
+  "why": "",
   "top_risks": [],
   "negotiation_points": [],
   "cost_exposure_summary": "",
@@ -159,33 +157,34 @@ export async function generateContractCopilot({
 
     const prompt = buildPrompt(contract, context);
 
-    const raw1 = await callLLM(prompt);
-    let parsed = safeParse(raw1);
+    const raw = await callLLM(prompt);
+
+    const parsed = safeParse(raw);
 
     if (!isValid(parsed)) {
       const repairPrompt = `
-Fix into valid JSON ONLY:
+Fix into VALID JSON ONLY:
 
-${raw1}
+${raw}
 `;
       const raw2 = await callLLM(repairPrompt);
-      parsed = safeParse(raw2);
+      const parsed2 = safeParse(raw2);
+
+      if (isValid(parsed2)) return parsed2;
     }
 
-    if (!isValid(parsed)) {
-      return {
-        recommendation: "NEGOTIATE",
-        confidence: 60,
-        why: "Fallback after vector-enhanced generation failure",
-        top_risks: ["AI instability"],
-        negotiation_points: [],
-        cost_exposure_summary: "",
-        board_summary: "",
-        action_plan: [],
-      };
-    }
+    if (isValid(parsed)) return parsed;
 
-    return parsed;
+    return {
+      recommendation: "NEGOTIATE",
+      confidence: 60,
+      why: "Fallback after Copilot failure",
+      top_risks: ["AI instability"],
+      negotiation_points: [],
+      cost_exposure_summary: "",
+      board_summary: "",
+      action_plan: [],
+    };
   } catch (err) {
     console.error("Copilot engine error:", err.message);
 
