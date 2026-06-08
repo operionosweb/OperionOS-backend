@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 /**
  * ROUTES
  */
+
 import contractRoutes from "./routes/contractRoutes.js";
 import providerRoutes from "./routes/providerRoutes.js";
 import searchRoutes from "./routes/searchRoutes.js";
@@ -12,74 +13,116 @@ import portfolioRoutes from "./routes/portfolioRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import blogRoutes from "./routes/blogRoutes.js";
 import copilotRoutes from "./routes/copilotRoutes.js";
-import internalRoutes from "./routes/internalRoutes.js";
+import healthRoutes from "./routes/healthRoutes.js";
+import dashboardRoutes from "./routes/dashboardRoutes.js";
+import metricsRoutes from "./routes/metricsRoutes.js";
+import mediaRoutes from "./routes/mediaRoutes.js";
+import authRoutes from "./routes/authRoutes.js";
 
 dotenv.config();
 
 const app = express();
 
-/* =========================================
-   MIDDLEWARE
-========================================= */
+/**
+ * =========================================
+ * MIDDLEWARE
+ * =========================================
+ */
 
 app.use(cors());
 
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+app.use(
+  express.json({
+    limit: "50mb",
+  })
+);
 
-/* =========================================
-   TEMP AUTH (DEV ONLY)
-========================================= */
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "50mb",
+  })
+);
+
+/**
+ * TEMP AUTH (DEV ONLY)
+ */
 
 app.use((req, res, next) => {
   req.user = {
     id: "b8e9cfc7-4fdf-4046-b981-fb67e94f5cbb",
     role: "super_admin",
   };
+
   next();
 });
 
-/* =========================================
-   ROOT
-========================================= */
+/**
+ * =========================================
+ * ROOT
+ * =========================================
+ */
 
 app.get("/", (req, res) => {
-  res.json({
+  return res.status(200).json({
     status: "alive",
     service: "OperionOS Backend",
     timestamp: new Date().toISOString(),
   });
 });
 
-/* =========================================
-   ROUTES
-========================================= */
+/**
+ * =========================================
+ * API ROUTES
+ * =========================================
+ */
 
 app.use("/api/contracts", contractRoutes);
 app.use("/api/providers", providerRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/portfolio", portfolioRoutes);
 app.use("/api/blog", blogRoutes);
-app.use("/api/admin", adminRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/media", mediaRoutes);
+app.use("/api/metrics", metricsRoutes);
+app.use("/api/dashboard", dashboardRoutes);
+
+/**
+ * COPILOT
+ */
+
 app.use("/api/copilot", copilotRoutes);
 
-/* 🔥 NEW INTERNAL SYSTEM */
-app.use("/api/internal", internalRoutes);
+/**
+ * ADMIN
+ */
 
-/* =========================================
-   404
-========================================= */
+app.use("/api/admin", adminRoutes);
+
+/**
+ * HEALTH (optional fallback)
+ */
+
+app.use("/api/health", healthRoutes);
+
+/**
+ * =========================================
+ * 404 HANDLER
+ * =========================================
+ */
 
 app.use((req, res) => {
-  res.status(404).json({
+  return res.status(404).json({
     success: false,
     error: "Route not found",
   });
 });
 
-/* =========================================
-   START SERVER
-========================================= */
+/**
+ * =========================================
+ * SERVER
+ * =========================================
+ */
 
 const PORT = process.env.PORT || 10000;
 
