@@ -1,0 +1,88 @@
+import express from "express";
+
+const router = express.Router();
+
+/* =========================================================
+   SIMPLE ZERO-COST EMBEDDING (FALLBACK ENGINE)
+   - deterministic
+   - no external API
+   - stable vector output for same input
+========================================================= */
+
+function hashString(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash;
+}
+
+function generateEmbedding(text = "") {
+  const size = 128; // fixed vector size
+
+  const embedding = new Array(size).fill(0);
+
+  const words = text.toLowerCase().split(/\s+/);
+
+  words.forEach((word, idx) => {
+    const base = hashString(word + idx);
+
+    for (let i = 0; i < size; i++) {
+      embedding[i] += Math.sin(base + i * 0.01) * 0.5;
+    }
+  });
+
+  // normalize
+  const magnitude = Math.sqrt(
+    embedding.reduce((sum, v) => sum + v * v, 0)
+  );
+
+  return embedding.map((v) => v / (magnitude || 1));
+}
+
+/* =========================================================
+   HEALTH CHECK
+========================================================= */
+
+router.get("/health", (req, res) => {
+  return res.json({
+    success: true,
+    service: "internal-routes",
+    status: "operational",
+  });
+});
+
+/* =========================================================
+   EMBEDDING ENDPOINT (CRITICAL)
+========================================================= */
+
+router.post("/embedding", (req, res) => {
+  try {
+    const { text } = req.body;
+
+    if (!text) {
+      return res.status(400).json({
+        success: false,
+        error: "Text is required",
+      });
+    }
+
+    const embedding = generateEmbedding(text);
+
+    return res.json({
+      success: true,
+      embedding,
+      model: "local-deterministic-v1",
+    });
+  } catch (error) {
+    console.error("Internal embedding error:", error);
+
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+export default router;
