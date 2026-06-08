@@ -1,134 +1,118 @@
 import axios from "axios";
-import supabase from "./config/supabase.js"; // ✅ FIXED PATH
 
-/* ===============================
-   EU LLM CALL (MISTRAL ONLY)
-=============================== */
-
-async function callLLM(prompt) {
-  if (!process.env.MISTRAL_API_KEY) {
-    throw new Error("MISTRAL_API_KEY missing");
-  }
-
-  const res = await axios.post(
-    "https://api.mistral.ai/v1/chat/completions",
-    {
-      model: "mistral-large-latest",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.2,
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-    }
-  );
-
-  return res.data.choices?.[0]?.message?.content;
-}
-
-/* ===============================
-   SAFE JSON PARSER
-=============================== */
-
+/**
+ * =========================================
+ * SAFE JSON PARSER
+ * =========================================
+ */
 function safeParse(text) {
   if (!text || typeof text !== "string") return null;
 
   try {
     return JSON.parse(text);
-  } catch (e) {
-    try {
-      const match = text.match(/\{[\s\S]*\}/);
-      if (!match) return null;
+  } catch (err) {
+    console.error("❌ JSON Parse Failed:", err.message);
 
-      return JSON.parse(match[0]);
-    } catch (err) {
+    /**
+     * TRY CLEANING COMMON LLM OUTPUT ISSUES
+     */
+    try {
+      const cleaned = text
+        .replace(/```json/g, "")
+        .replace(/```/g, "")
+        .trim();
+
+      return JSON.parse(cleaned);
+    } catch (err2) {
+      console.error("❌ Cleaned JSON Parse Failed:", err2.message);
       return null;
     }
   }
 }
 
-/* ===============================
-   VALIDATION
-=============================== */
-
-function isValid(obj) {
-  return (
-    obj &&
-    typeof obj === "object" &&
-    typeof obj.recommendation === "string" &&
-    typeof obj.confidence === "number"
-  );
-}
-
-/* ===============================
-   VECTOR CONTEXT FETCH
-=============================== */
-
-async function getSimilarContracts() {
+/**
+ * =========================================
+ * HYBRID LLM CALL
+ * =========================================
+ */
+async function callLLM(prompt) {
   try {
-    const { data, error } = await supabase
-      .from("contract_embeddings")
-      .select("metadata")
-      .limit(5);
+    /**
+     * MISTRAL FIRST (EU OPTION)
+     */
+    if (process.env.MISTRAL_API_KEY) {
+      const res = await axios.post(
+        "https://api.mistral.ai/v1/chat/completions",
+        {
+          model: "mistral-large-latest",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.2,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-    if (error) throw error;
+      return res.data?.choices?.[0]?.message?.content;
+    }
 
-    return (data || []).map((d) => d.metadata || []);
+    /**
+     * FALLBACK: OPENAI
+     */
+    if (process.env.OPENAI_API_KEY) {
+      const res = await axios.post(
+        "https://api.openai.com/v1/chat/completions",
+        {
+          model: "gpt-4o-mini",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.2,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      return res.data?.choices?.[0]?.message?.content;
+    }
+
+    throw new Error("No LLM API key configured");
   } catch (err) {
-    console.error("Vector fetch error:", err.message);
-    return [];
+    console.error("❌ LLM ERROR:", err.response?.data || err.message);
+    throw new Error("Copilot AI failed");
   }
 }
 
-/* ===============================
-   CONTEXT BUILDER
-=============================== */
+/**
+ * =========================================
+ * MAIN COPILOT ENGINE
+ * =========================================
+ */
+export async function generateContractCopilot({
+  contract,
+  company_context = {},
+}) {
+  try {
+    const prompt = `
+You are an aviation contract negotiation copilot.
 
-function buildContext(similarContracts = []) {
-  if (!similarContracts.length) return "";
+Analyze this contract:
 
-  return `
-SIMILAR CONTRACT INTELLIGENCE:
-
-${similarContracts
-  .map((c, i) => {
-    return `
-[${i + 1}]
-Supplier: ${c.supplier_name || "Unknown"}
-Risk Score: ${c.risk_score || "N/A"}
-Summary: ${c.summary || ""}
-`;
-  })
-  .join("\n")}
-`;
-}
-
-/* ===============================
-   PROMPT
-=============================== */
-
-function buildPrompt(contract, context) {
-  return `
-You are an aviation contract negotiation AI.
-
-Use historical contract intelligence to improve decisions.
-
-${context}
-
-CURRENT CONTRACT:
-
-Summary:
+SUMMARY:
 ${contract.summary || ""}
 
-Risk:
-${contract.overall_risk || 0}
+RISK SCORE:
+${contract.risk_score || 0}
 
-Clauses:
+CLAUSES:
 ${JSON.stringify(contract.clauses || []).slice(0, 12000)}
 
-RETURN ONLY VALID JSON:
+Return ONLY valid JSON:
 
 {
   "recommendation": "SIGN | REJECT | NEGOTIATE",
@@ -140,57 +124,46 @@ RETURN ONLY VALID JSON:
   "board_summary": "",
   "action_plan": []
 }
+
+Rules:
+- Be strict and realistic
+- Focus on aviation leasing risk
+- NO markdown
+- NO extra text
 `;
-}
-
-/* ===============================
-   MAIN ENGINE
-=============================== */
-
-export async function generateContractCopilot({
-  contract,
-  contractId,
-}) {
-  try {
-    const similarContracts = await getSimilarContracts(contractId);
-    const context = buildContext(similarContracts);
-
-    const prompt = buildPrompt(contract, context);
 
     const raw = await callLLM(prompt);
 
+    console.log("🔵 RAW COPILOT OUTPUT:", raw);
+
     const parsed = safeParse(raw);
 
-    if (!isValid(parsed)) {
-      const repairPrompt = `
-Fix into VALID JSON ONLY:
-
-${raw}
-`;
-      const raw2 = await callLLM(repairPrompt);
-      const parsed2 = safeParse(raw2);
-
-      if (isValid(parsed2)) return parsed2;
+    if (!parsed) {
+      return {
+        recommendation: "NEGOTIATE",
+        confidence: 50,
+        why: "Fallback due to invalid JSON from LLM",
+        top_risks: [],
+        negotiation_points: [],
+        cost_exposure_summary: "",
+        board_summary: "",
+        action_plan: [],
+      };
     }
 
-    if (isValid(parsed)) return parsed;
+    return parsed;
+  } catch (err) {
+    console.error("❌ COPILOT ERROR:", err.message);
 
     return {
       recommendation: "NEGOTIATE",
-      confidence: 60,
-      why: "Fallback after Copilot failure",
-      top_risks: ["AI instability"],
+      confidence: 50,
+      why: "System fallback error",
+      top_risks: [],
       negotiation_points: [],
       cost_exposure_summary: "",
       board_summary: "",
       action_plan: [],
-    };
-  } catch (err) {
-    console.error("Copilot engine error:", err.message);
-
-    return {
-      success: false,
-      error: "Copilot failed",
     };
   }
 }
