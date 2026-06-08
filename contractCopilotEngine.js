@@ -1,4 +1,5 @@
 import axios from "axios";
+import supabase from "../config/supabase.js";
 
 /* ===============================
    EU LLM CALL (MISTRAL ONLY)
@@ -49,34 +50,87 @@ function safeParse(text) {
 }
 
 /* ===============================
-   VALIDATION CHECK
+   VALIDATION
 =============================== */
 
-function isValidCopilot(obj) {
-  if (!obj || typeof obj !== "object") return false;
-
+function isValid(obj) {
   return (
+    obj &&
+    typeof obj === "object" &&
     typeof obj.recommendation === "string" &&
-    typeof obj.confidence === "number" &&
-    typeof obj.why === "string"
+    typeof obj.confidence === "number"
   );
 }
 
 /* ===============================
-   PROMPT BUILDER
+   FETCH SIMILAR CONTRACTS (VECTOR CONTEXT)
 =============================== */
 
-function buildPrompt(contract) {
+async function getSimilarContracts(contractId) {
+  try {
+    const { data, error } = await supabase
+      .from("contract_embeddings")
+      .select("metadata")
+      .limit(5);
+
+    if (error) throw error;
+
+    return (data || []).map((d) => d.metadata || {});
+  } catch (err) {
+    console.error("Vector fetch error:", err.message);
+    return [];
+  }
+}
+
+/* ===============================
+   BUILD CONTEXT
+=============================== */
+
+function buildContext(similarContracts = []) {
+  if (!similarContracts.length) return "";
+
   return `
-You are an aviation contract negotiation copilot.
+SIMILAR CONTRACT INTELLIGENCE:
 
-STRICT RULES:
-- Output ONLY valid JSON
-- No markdown
-- No explanation
-- No text before or after JSON
+${similarContracts
+  .map((c, i) => {
+    return `
+[${i + 1}]
+Supplier: ${c.supplier_name || "Unknown"}
+Risk Score: ${c.risk_score || "N/A"}
+Summary: ${c.summary || ""}
+`;
+  })
+  .join("\n")}
+`;
+}
 
-RETURN FORMAT:
+/* ===============================
+   PROMPT
+=============================== */
+
+function buildPrompt(contract, context) {
+  return `
+You are an aviation contract negotiation AI.
+
+You must use both:
+1. This contract
+2. Market/portfolio intelligence
+
+${context}
+
+CURRENT CONTRACT:
+
+Summary:
+${contract.summary || ""}
+
+Risk:
+${contract.overall_risk || 0}
+
+Clauses:
+${JSON.stringify(contract.clauses || []).slice(0, 12000)}
+
+OUTPUT ONLY JSON:
 
 {
   "recommendation": "SIGN | REJECT | NEGOTIATE",
@@ -88,54 +142,42 @@ RETURN FORMAT:
   "board_summary": "",
   "action_plan": []
 }
-
-CONTRACT SUMMARY:
-${contract.summary || ""}
-
-RISK SCORE:
-${contract.overall_risk || 0}
-
-CLAUSES:
-${JSON.stringify(contract.clauses || []).slice(0, 12000)}
 `;
 }
 
 /* ===============================
-   MAIN COPILOT ENGINE (HARD MODE)
+   MAIN ENGINE
 =============================== */
 
 export async function generateContractCopilot({
   contract,
-  company_context = {},
+  contractId,
 }) {
   try {
-    const prompt = buildPrompt(contract);
+    const similarContracts = await getSimilarContracts(contractId);
+    const context = buildContext(similarContracts);
 
-    // FIRST ATTEMPT
+    const prompt = buildPrompt(contract, context);
+
     const raw1 = await callLLM(prompt);
     let parsed = safeParse(raw1);
 
-    // SECOND ATTEMPT (AUTO-RETRY)
-    if (!isValidCopilot(parsed)) {
+    if (!isValid(parsed)) {
       const repairPrompt = `
-Fix this output into valid JSON ONLY:
+Fix into valid JSON ONLY:
 
 ${raw1}
-
-Return ONLY valid JSON in correct format.
 `;
-
       const raw2 = await callLLM(repairPrompt);
       parsed = safeParse(raw2);
     }
 
-    // FINAL FALLBACK (CONTROLLED)
-    if (!isValidCopilot(parsed)) {
+    if (!isValid(parsed)) {
       return {
         recommendation: "NEGOTIATE",
         confidence: 60,
-        why: "Fallback after failed structured generation",
-        top_risks: ["AI output instability"],
+        why: "Fallback after vector-enhanced generation failure",
+        top_risks: ["AI instability"],
         negotiation_points: [],
         cost_exposure_summary: "",
         board_summary: "",
@@ -149,7 +191,7 @@ Return ONLY valid JSON in correct format.
 
     return {
       success: false,
-      error: "Copilot generation failed",
+      error: "Copilot failed",
     };
   }
 }
