@@ -1,35 +1,69 @@
-// services/semanticSearchService.js
-
 import supabase from "../config/supabase.js";
 
-/**
- * =========================================
- * SIMPLE TEXT SIMILARITY (NO OPENAI)
- * =========================================
- */
+/* ===============================
+   COSINE SIMILARITY
+=============================== */
 
-function simpleScore(text = "", query = "") {
-  if (!text || !query) return 0;
+function cosineSimilarity(a = [], b = []) {
+  if (!a.length || !b.length) return 0;
 
-  const t = text.toLowerCase();
-  const q = query.toLowerCase().split(" ");
+  let dot = 0;
+  let magA = 0;
+  let magB = 0;
 
-  let score = 0;
-
-  for (const word of q) {
-    if (t.includes(word)) {
-      score += 1;
-    }
+  for (let i = 0; i < a.length; i++) {
+    dot += (a[i] || 0) * (b[i] || 0);
+    magA += (a[i] || 0) * (a[i] || 0);
+    magB += (b[i] || 0) * (b[i] || 0);
   }
 
-  return score / q.length;
+  magA = Math.sqrt(magA);
+  magB = Math.sqrt(magB);
+
+  if (magA === 0 || magB === 0) return 0;
+
+  return dot / (magA * magB);
 }
 
-/**
- * =========================================
- * SEMANTIC SEARCH (FALLBACK MODE)
- * =========================================
- */
+/* ===============================
+   LOCAL EMBEDDING (must match vectorMemoryService.js)
+=============================== */
+
+function createEmbedding(text = "") {
+  if (!text) return [];
+
+  const words = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const vector = new Array(128).fill(0);
+
+  for (let word of words) {
+    let hash = 0;
+
+    for (let i = 0; i < word.length; i++) {
+      hash = (hash << 5) - hash + word.charCodeAt(i);
+      hash |= 0;
+    }
+
+    const index = Math.abs(hash) % 128;
+    vector[index] += 1;
+  }
+
+  const magnitude = Math.sqrt(
+    vector.reduce((s, v) => s + v * v, 0)
+  );
+
+  return vector.map((v) =>
+    magnitude === 0 ? 0 : v / magnitude
+  );
+}
+
+/* ===============================
+   SEMANTIC SEARCH (REAL VERSION)
+=============================== */
 
 export async function semanticSearch(query = "", limit = 5) {
   try {
@@ -40,45 +74,34 @@ export async function semanticSearch(query = "", limit = 5) {
       };
     }
 
-    /**
-     * LOAD CONTRACTS
-     */
+    const queryVector = createEmbedding(query);
 
-    const { data: contracts, error } = await supabase
-      .from("contracts")
-      .select("*");
+    const { data: embeddings, error } = await supabase
+      .from("contract_embeddings")
+      .select(`
+        embedding,
+        metadata
+      `);
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
-    /**
-     * SCORE DOCUMENTS
-     */
-
-    const scored = (contracts || []).map((contract) => {
-      const text =
-        `
-        ${contract.summary || ""}
-        ${JSON.stringify(contract.clauses || "")}
-        ${JSON.stringify(contract.obligations || "")}
-        `.toLowerCase();
+    const scored = (embeddings || []).map((item) => {
+      const score = cosineSimilarity(
+        queryVector,
+        item.embedding || []
+      );
 
       return {
-        contract,
-        score: simpleScore(text, query),
+        score,
+        contract: item.metadata || {},
       };
     });
-
-    /**
-     * SORT RESULTS
-     */
 
     const results = scored
       .sort((a, b) => b.score - a.score)
       .slice(0, limit)
       .map((r) => ({
-        similarity_score: Number(r.score.toFixed(3)),
+        similarity_score: Number(r.score.toFixed(4)),
         contract: r.contract,
       }));
 
@@ -87,10 +110,10 @@ export async function semanticSearch(query = "", limit = 5) {
       query,
       total_results: results.length,
       results,
-      mode: "fallback-text-search",
+      mode: "cosine-vector-search",
     };
   } catch (error) {
-    console.error("semanticSearch fallback error:", error);
+    console.error("semanticSearch error:", error);
 
     return {
       success: false,
