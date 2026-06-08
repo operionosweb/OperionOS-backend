@@ -5,31 +5,26 @@ import axios from "axios";
 =============================== */
 
 async function callLLM(prompt) {
-  try {
-    if (!process.env.MISTRAL_API_KEY) {
-      throw new Error("MISTRAL_API_KEY missing");
-    }
-
-    const res = await axios.post(
-      "https://api.mistral.ai/v1/chat/completions",
-      {
-        model: "mistral-large-latest",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.2,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    return res.data.choices?.[0]?.message?.content;
-  } catch (err) {
-    console.error("LLM error:", err.message);
-    throw new Error("Copilot AI failed (Mistral only mode)");
+  if (!process.env.MISTRAL_API_KEY) {
+    throw new Error("MISTRAL_API_KEY missing");
   }
+
+  const res = await axios.post(
+    "https://api.mistral.ai/v1/chat/completions",
+    {
+      model: "mistral-large-latest",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  return res.data.choices?.[0]?.message?.content;
 }
 
 /* ===============================
@@ -54,25 +49,34 @@ function safeParse(text) {
 }
 
 /* ===============================
-   MAIN COPILOT ENGINE
+   VALIDATION CHECK
 =============================== */
 
-export async function generateContractCopilot({
-  contract,
-  company_context = {},
-}) {
-  try {
-    const prompt = `
+function isValidCopilot(obj) {
+  if (!obj || typeof obj !== "object") return false;
+
+  return (
+    typeof obj.recommendation === "string" &&
+    typeof obj.confidence === "number" &&
+    typeof obj.why === "string"
+  );
+}
+
+/* ===============================
+   PROMPT BUILDER
+=============================== */
+
+function buildPrompt(contract) {
+  return `
 You are an aviation contract negotiation copilot.
 
-STRICT OUTPUT RULES:
-- Return ONLY raw JSON
+STRICT RULES:
+- Output ONLY valid JSON
 - No markdown
-- No explanations
-- No extra text
-- No backticks
+- No explanation
+- No text before or after JSON
 
-Return EXACT JSON:
+RETURN FORMAT:
 
 {
   "recommendation": "SIGN | REJECT | NEGOTIATE",
@@ -88,23 +92,50 @@ Return EXACT JSON:
 CONTRACT SUMMARY:
 ${contract.summary || ""}
 
-OVERALL RISK:
+RISK SCORE:
 ${contract.overall_risk || 0}
 
 CLAUSES:
 ${JSON.stringify(contract.clauses || []).slice(0, 12000)}
 `;
+}
 
-    const raw = await callLLM(prompt);
+/* ===============================
+   MAIN COPILOT ENGINE (HARD MODE)
+=============================== */
 
-    const parsed = safeParse(raw);
+export async function generateContractCopilot({
+  contract,
+  company_context = {},
+}) {
+  try {
+    const prompt = buildPrompt(contract);
 
-    if (!parsed) {
+    // FIRST ATTEMPT
+    const raw1 = await callLLM(prompt);
+    let parsed = safeParse(raw1);
+
+    // SECOND ATTEMPT (AUTO-RETRY)
+    if (!isValidCopilot(parsed)) {
+      const repairPrompt = `
+Fix this output into valid JSON ONLY:
+
+${raw1}
+
+Return ONLY valid JSON in correct format.
+`;
+
+      const raw2 = await callLLM(repairPrompt);
+      parsed = safeParse(raw2);
+    }
+
+    // FINAL FALLBACK (CONTROLLED)
+    if (!isValidCopilot(parsed)) {
       return {
         recommendation: "NEGOTIATE",
-        confidence: 50,
-        why: "AI parsing failure fallback",
-        top_risks: [],
+        confidence: 60,
+        why: "Fallback after failed structured generation",
+        top_risks: ["AI output instability"],
         negotiation_points: [],
         cost_exposure_summary: "",
         board_summary: "",
