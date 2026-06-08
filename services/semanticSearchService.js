@@ -1,8 +1,8 @@
 import supabase from "../config/supabase.js";
 
-/* ===============================
+/* =========================================
    COSINE SIMILARITY
-=============================== */
+========================================= */
 
 function cosineSimilarity(a = [], b = []) {
   if (!a.length || !b.length) return 0;
@@ -11,113 +11,145 @@ function cosineSimilarity(a = [], b = []) {
   let magA = 0;
   let magB = 0;
 
-  for (let i = 0; i < a.length; i++) {
-    dot += (a[i] || 0) * (b[i] || 0);
-    magA += (a[i] || 0) * (a[i] || 0);
-    magB += (b[i] || 0) * (b[i] || 0);
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    dot += a[i] * b[i];
+    magA += a[i] * a[i];
+    magB += b[i] * b[i];
   }
-
-  magA = Math.sqrt(magA);
-  magB = Math.sqrt(magB);
 
   if (magA === 0 || magB === 0) return 0;
 
-  return dot / (magA * magB);
+  return dot / (Math.sqrt(magA) * Math.sqrt(magB));
 }
 
-/* ===============================
-   LOCAL EMBEDDING (must match vectorMemoryService.js)
-=============================== */
+/* =========================================
+   GET QUERY EMBEDDING
+========================================= */
 
-function createEmbedding(text = "") {
-  if (!text) return [];
+async function getQueryEmbedding(query) {
+  try {
+    const res = await fetch(
+      `${process.env.BASE_URL || ""}/api/internal/embedding`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": process.env.INTERNAL_API_KEY || "",
+        },
+        body: JSON.stringify({ text: query }),
+      }
+    );
 
-  const words = text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter(Boolean);
+    const data = await res.json();
 
-  const vector = new Array(128).fill(0);
+    if (!data?.embedding) return null;
 
-  for (let word of words) {
-    let hash = 0;
-
-    for (let i = 0; i < word.length; i++) {
-      hash = (hash << 5) - hash + word.charCodeAt(i);
-      hash |= 0;
-    }
-
-    const index = Math.abs(hash) % 128;
-    vector[index] += 1;
+    return data.embedding;
+  } catch (err) {
+    console.error("Query embedding error:", err.message);
+    return null;
   }
-
-  const magnitude = Math.sqrt(
-    vector.reduce((s, v) => s + v * v, 0)
-  );
-
-  return vector.map((v) =>
-    magnitude === 0 ? 0 : v / magnitude
-  );
 }
 
-/* ===============================
-   SEMANTIC SEARCH (REAL VERSION)
-=============================== */
+/* =========================================
+   MAIN SEMANTIC SEARCH
+========================================= */
 
 export async function semanticSearch(query = "", limit = 5) {
   try {
-    if (!query || typeof query !== "string") {
+    if (!query) {
       return {
         success: false,
         error: "Query is required",
       };
     }
 
-    const queryVector = createEmbedding(query);
+    console.log("====================================");
+    console.log("🔵 SEMANTIC SEARCH START");
+    console.log("QUERY:", query);
 
-    const { data: embeddings, error } = await supabase
+    /**
+     * 1. GET QUERY EMBEDDING
+     */
+
+    const queryEmbedding = await getQueryEmbedding(query);
+
+    /**
+     * 2. LOAD ALL EMBEDDINGS
+     */
+
+    const { data: rows, error } = await supabase
       .from("contract_embeddings")
       .select(`
         embedding,
-        metadata
+        contract_id,
+        contracts (
+          id,
+          filename,
+          contract_type,
+          supplier_name,
+          summary,
+          risk_score,
+          clauses,
+          obligations,
+          document_hash
+        )
       `);
 
     if (error) throw error;
 
-    const scored = (embeddings || []).map((item) => {
-      const score = cosineSimilarity(
-        queryVector,
-        item.embedding || []
-      );
+    if (!rows || rows.length === 0) {
+      return {
+        success: true,
+        query,
+        total_results: 0,
+        results: [],
+      };
+    }
+
+    /**
+     * 3. SCORE RESULTS
+     */
+
+    const scored = rows.map((row) => {
+      const score = queryEmbedding
+        ? cosineSimilarity(queryEmbedding, row.embedding)
+        : 0;
 
       return {
         score,
-        contract: item.metadata || {},
+        contract: row.contracts,
       };
     });
+
+    /**
+     * 4. SORT RESULTS
+     */
 
     const results = scored
       .sort((a, b) => b.score - a.score)
       .slice(0, limit)
       .map((r) => ({
-        similarity_score: Number(r.score.toFixed(4)),
+        similarity_score: Number(r.score.toFixed(3)),
         contract: r.contract,
       }));
+
+    console.log("✅ SEARCH COMPLETE");
+    console.log("====================================");
 
     return {
       success: true,
       query,
       total_results: results.length,
       results,
-      mode: "cosine-vector-search",
+      mode: "true-semantic-vector-search",
     };
   } catch (error) {
-    console.error("semanticSearch error:", error);
+    console.error("🚨 semanticSearch error:", error);
 
     return {
       success: false,
-      error: error.message || "Semantic search failed",
+      error: error.message || "Search failed",
     };
   }
 }
