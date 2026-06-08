@@ -1,40 +1,25 @@
 import axios from "axios";
 
 /* ===============================
-   HYBRID AI CALL (MISTRAL FIRST)
+   EU LLM CALL (MISTRAL ONLY)
 =============================== */
 
 async function callLLM(prompt) {
   try {
-    if (process.env.MISTRAL_API_KEY) {
-      const res = await axios.post(
-        "https://api.mistral.ai/v1/chat/completions",
-        {
-          model: "mistral-large-latest",
-          messages: [{ role: "user", content: prompt }],
-          temperature: 0.2,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      return res.data.choices?.[0]?.message?.content;
+    if (!process.env.MISTRAL_API_KEY) {
+      throw new Error("MISTRAL_API_KEY missing");
     }
 
     const res = await axios.post(
-      "https://api.openai.com/v1/chat/completions",
+      "https://api.mistral.ai/v1/chat/completions",
       {
-        model: "gpt-4o-mini",
+        model: "mistral-large-latest",
         messages: [{ role: "user", content: prompt }],
         temperature: 0.2,
       },
       {
         headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
           "Content-Type": "application/json",
         },
       }
@@ -43,23 +28,21 @@ async function callLLM(prompt) {
     return res.data.choices?.[0]?.message?.content;
   } catch (err) {
     console.error("LLM error:", err.message);
-    throw new Error("Copilot AI failed");
+    throw new Error("Copilot AI failed (Mistral only mode)");
   }
 }
 
 /* ===============================
-   SAFE JSON PARSER (FIXED)
+   SAFE JSON PARSER
 =============================== */
 
 function safeParse(text) {
   if (!text || typeof text !== "string") return null;
 
   try {
-    // First attempt: strict JSON parse
     return JSON.parse(text);
   } catch (e) {
     try {
-      // Second attempt: extract JSON block from messy LLM output
       const match = text.match(/\{[\s\S]*\}/);
       if (!match) return null;
 
@@ -86,10 +69,10 @@ STRICT OUTPUT RULES:
 - Return ONLY raw JSON
 - No markdown
 - No explanations
+- No extra text
 - No backticks
-- No extra text before or after JSON
 
-Return EXACTLY this structure:
+Return EXACT JSON:
 
 {
   "recommendation": "SIGN | REJECT | NEGOTIATE",
@@ -133,6 +116,9 @@ ${JSON.stringify(contract.clauses || []).slice(0, 12000)}
   } catch (err) {
     console.error("Copilot engine error:", err.message);
 
-    throw new Error("Contract copilot generation failed");
+    return {
+      success: false,
+      error: "Copilot generation failed",
+    };
   }
 }
