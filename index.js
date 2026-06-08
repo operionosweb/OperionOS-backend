@@ -12,6 +12,7 @@ import searchRoutes from "./routes/searchRoutes.js";
 import portfolioRoutes from "./routes/portfolioRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import blogRoutes from "./routes/blogRoutes.js";
+import copilotRoutes from "./routes/copilotRoutes.js";
 
 dotenv.config();
 
@@ -78,30 +79,12 @@ app.get("/", (req, res) => {
  * =========================================
  */
 
-app.use(
-  "/api/contracts",
-  contractRoutes
-);
-
-app.use(
-  "/api/providers",
-  providerRoutes
-);
-
-app.use(
-  "/api/search",
-  searchRoutes
-);
-
-app.use(
-  "/api/portfolio",
-  portfolioRoutes
-);
-
-app.use(
-  "/api/blog",
-  blogRoutes
-);
+app.use("/api/contracts", contractRoutes);
+app.use("/api/providers", providerRoutes);
+app.use("/api/search", searchRoutes);
+app.use("/api/portfolio", portfolioRoutes);
+app.use("/api/blog", blogRoutes);
+app.use("/api/copilot", copilotRoutes);
 
 /**
  * =========================================
@@ -109,10 +92,7 @@ app.use(
  * =========================================
  */
 
-app.use(
-  "/api/admin",
-  adminRoutes
-);
+app.use("/api/admin", adminRoutes);
 
 /**
  * =========================================
@@ -133,11 +113,8 @@ app.use((req, res) => {
  * =========================================
  */
 
-const PORT =
-  process.env.PORT || 10000;
+const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
-  console.log(
-    `🚀 OperionOS running on port ${PORT}`
-  );
+  console.log(`🚀 OperionOS running on port ${PORT}`);
 });
