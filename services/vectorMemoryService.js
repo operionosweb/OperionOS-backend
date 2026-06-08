@@ -1,30 +1,49 @@
-import OpenAI from "openai";
 import supabase from "../config/supabase.js";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+/* ===============================
+   LIGHTWEIGHT EMBEDDING (NO OPENAI)
+=============================== */
+
+function createEmbedding(text = "") {
+  if (!text) return [];
+
+  const words = text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const vector = new Array(128).fill(0);
+
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+
+    let hash = 0;
+    for (let j = 0; j < word.length; j++) {
+      hash = (hash << 5) - hash + word.charCodeAt(j);
+      hash |= 0;
+    }
+
+    const index = Math.abs(hash) % 128;
+    vector[index] += 1;
+  }
+
+  // normalize vector
+  const magnitude = Math.sqrt(
+    vector.reduce((sum, v) => sum + v * v, 0)
+  );
+
+  return vector.map((v) =>
+    magnitude === 0 ? 0 : v / magnitude
+  );
+}
+
+/* ===============================
+   GENERATE EMBEDDING (DROP-IN REPLACEMENT)
+=============================== */
 
 export async function generateEmbedding(text = "") {
   try {
-    console.log("====================================");
-    console.log("🔴 OPENAI DEBUG START");
-    console.log("API KEY EXISTS:", !!process.env.OPENAI_API_KEY);
-
-    if (process.env.OPENAI_API_KEY) {
-      console.log(
-        "KEY PREFIX:",
-        process.env.OPENAI_API_KEY.substring(0, 8)
-      );
-    }
-
-    if (!process.env.OPENAI_API_KEY) {
-      return {
-        success: false,
-        error: "OPENAI_API_KEY missing in Render environment",
-      };
-    }
-
     if (!text) {
       return {
         success: false,
@@ -32,49 +51,26 @@ export async function generateEmbedding(text = "") {
       };
     }
 
-    console.log("TEXT LENGTH:", text.length);
-
-    const response = await openai.embeddings.create({
-      model: "text-embedding-3-small",
-      input: text.slice(0, 8000),
-    });
-
-    console.log("RAW OPENAI RESPONSE:", response);
-
-    const embedding = response?.data?.[0]?.embedding;
-
-    if (!embedding) {
-      console.error("❌ NO EMBEDDING IN RESPONSE");
-      console.error(response);
-
-      return {
-        success: false,
-        error: "No embedding returned",
-      };
-    }
-
-    console.log("✅ EMBEDDING SUCCESS");
-    console.log("====================================");
+    const embedding = createEmbedding(text.slice(0, 8000));
 
     return {
       success: true,
       embedding,
+      model: "local-hash-embedding",
     };
   } catch (error) {
-    console.log("====================================");
-    console.error("🚨 OPENAI FAILED FULL ERROR:");
-    console.error("MESSAGE:", error.message);
-    console.error("STATUS:", error.status);
-    console.error("CODE:", error.code);
-    console.error("TYPE:", error.type);
-    console.error("FULL ERROR:", error);
+    console.error("Embedding error:", error);
 
     return {
       success: false,
-      error: error.message,
+      error: error.message || "Embedding failed",
     };
   }
 }
+
+/* ===============================
+   STORE EMBEDDING
+=============================== */
 
 export async function storeEmbedding({
   contractId,
