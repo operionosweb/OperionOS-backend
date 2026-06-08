@@ -48,14 +48,25 @@ async function callLLM(prompt) {
 }
 
 /* ===============================
-   SAFE JSON PARSER
+   SAFE JSON PARSER (FIXED)
 =============================== */
 
 function safeParse(text) {
+  if (!text || typeof text !== "string") return null;
+
   try {
+    // First attempt: strict JSON parse
     return JSON.parse(text);
-  } catch {
-    return null;
+  } catch (e) {
+    try {
+      // Second attempt: extract JSON block from messy LLM output
+      const match = text.match(/\{[\s\S]*\}/);
+      if (!match) return null;
+
+      return JSON.parse(match[0]);
+    } catch (err) {
+      return null;
+    }
   }
 }
 
@@ -65,16 +76,33 @@ function safeParse(text) {
 
 export async function generateContractCopilot({
   contract,
-  company_context = {}
+  company_context = {},
 }) {
   try {
-
     const prompt = `
 You are an aviation contract negotiation copilot.
 
-Analyze this contract intelligence:
+STRICT OUTPUT RULES:
+- Return ONLY raw JSON
+- No markdown
+- No explanations
+- No backticks
+- No extra text before or after JSON
 
-SUMMARY:
+Return EXACTLY this structure:
+
+{
+  "recommendation": "SIGN | REJECT | NEGOTIATE",
+  "confidence": 0-100,
+  "why": "string",
+  "top_risks": [],
+  "negotiation_points": [],
+  "cost_exposure_summary": "",
+  "board_summary": "",
+  "action_plan": []
+}
+
+CONTRACT SUMMARY:
 ${contract.summary || ""}
 
 OVERALL RISK:
@@ -82,25 +110,6 @@ ${contract.overall_risk || 0}
 
 CLAUSES:
 ${JSON.stringify(contract.clauses || []).slice(0, 12000)}
-
-Return ONLY valid JSON:
-
-{
-  "recommendation": "SIGN | REJECT | NEGOTIATE",
-  "confidence": 0-100,
-  "why": "",
-  "top_risks": ["", "", ""],
-  "negotiation_points": ["", "", ""],
-  "cost_exposure_summary": "",
-  "board_summary": "",
-  "action_plan": ["", "", ""]
-}
-
-Rules:
-- Be strict and realistic
-- Focus on airline operations (leasing, maintenance, penalties, uptime, liability)
-- No markdown
-- No extra text
 `;
 
     const raw = await callLLM(prompt);
@@ -116,12 +125,11 @@ Rules:
         negotiation_points: [],
         cost_exposure_summary: "",
         board_summary: "",
-        action_plan: []
+        action_plan: [],
       };
     }
 
     return parsed;
-
   } catch (err) {
     console.error("Copilot engine error:", err.message);
 
