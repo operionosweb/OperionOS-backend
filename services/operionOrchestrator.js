@@ -1,54 +1,84 @@
-const contractRiskScoringEngine = require("../contractRiskScoringEngine");
-const clauseReasoningEngine = require("../clauseReasoningEngine");
-const clauseComparisonEngine = require("../clauseComparisonEngine");
-const contractNegotiationSimulator = require("../contractNegotiationSimulator");
-const decisionOS = require("../decisionOS");
-const contractCopilotEngine = require("../contractCopilotEngine");
+import contractRiskScoringEngine from "../contractRiskScoringEngine.js";
+import clauseReasoningEngine from "../clauseReasoningEngine.js";
+import clauseComparisonEngine from "../clauseComparisonEngine.js";
+import contractNegotiationSimulator from "../contractNegotiationSimulator.js";
+import decisionOS from "../decisionOS.js";
+import contractCopilotEngine from "../contractCopilotEngine.js";
 
 class OperionOrchestrator {
   async analyzeContract(input) {
+    const { contract_text, context } = input;
 
-    // 1. UNDERSTANDING LAYER
-    const clauses = await clauseReasoningEngine.extractClauses(input);
-    const structured = await clauseComparisonEngine.analyze(clauses);
+    try {
+      // =========================
+      // 1. UNDERSTANDING LAYER
+      // =========================
+      const clauses = await clauseReasoningEngine.extractClauses(contract_text);
 
-    // 2. RISK LAYER
-    const risk = await contractRiskScoringEngine.score(structured);
+      const structured = await clauseComparisonEngine.analyze(clauses);
 
-    // FIX: unified risk aggregation
-    const totalRisk = risk.clauses.reduce((sum, c) => {
-      return sum + (c.score * (c.weight || 1));
-    }, 0);
+      // =========================
+      // 2. RISK LAYER
+      // =========================
+      const risk = await contractRiskScoringEngine.score(structured);
 
-    const normalizedRisk = Math.min(100, totalRisk);
+      // FIX: safe aggregation (prevents "risk = 0" bug)
+      const totalRisk = (risk?.clauses || []).reduce((sum, c) => {
+        const score = c.score || 0;
+        const weight = c.weight || 1;
+        return sum + score * weight;
+      }, 0);
 
-    // 3. SIMULATION LAYER
-    const simulation = await contractNegotiationSimulator.run({
-      clauses: structured,
-      risk: normalizedRisk
-    });
+      const normalizedRisk = Math.min(100, Math.round(totalRisk));
 
-    const decision = await decisionOS.evaluate({
-      risk: normalizedRisk,
-      simulation
-    });
+      // =========================
+      // 3. SIMULATION LAYER
+      // =========================
+      const simulation = await contractNegotiationSimulator.run({
+        clauses: structured,
+        risk: normalizedRisk,
+        context,
+      });
 
-    // 4. FINAL COPILOT OUTPUT
-    const final = await contractCopilotEngine.generate({
-      clauses: structured,
-      risk: normalizedRisk,
-      simulation,
-      decision
-    });
+      // =========================
+      // 4. DECISION ENGINE
+      // =========================
+      const decision = await decisionOS.evaluate({
+        risk: normalizedRisk,
+        simulation,
+      });
 
-    return {
-      risk_score: normalizedRisk,
-      decision,
-      clauses: structured,
-      simulation,
-      copilot: final
-    };
+      // =========================
+      // 5. COPILOT (FINAL OUTPUT)
+      // =========================
+      const copilot = await contractCopilotEngine.generate({
+        clauses: structured,
+        risk: normalizedRisk,
+        simulation,
+        decision,
+        context,
+      });
+
+      // =========================
+      // FINAL RESPONSE
+      // =========================
+      return {
+        risk_score: normalizedRisk,
+        decision,
+        clauses: structured,
+        simulation,
+        copilot,
+        metadata: {
+          request_id: context?.request_id,
+          org_id: context?.org_id,
+          timestamp: new Date().toISOString(),
+        },
+      };
+    } catch (err) {
+      console.error("❌ Operion Orchestrator Error:", err);
+      throw err;
+    }
   }
 }
 
-module.exports = new OperionOrchestrator();
+export default new OperionOrchestrator();
