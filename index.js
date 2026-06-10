@@ -6,18 +6,24 @@ import dotenv from "dotenv";
  * ROUTES
  */
 
+// EXISTING ROUTES (UNCHANGED)
 import contractRoutes from "./routes/contractRoutes.js";
 import providerRoutes from "./routes/providerRoutes.js";
 import searchRoutes from "./routes/searchRoutes.js";
 import portfolioRoutes from "./routes/portfolioRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import blogRoutes from "./routes/blogRoutes.js";
-import copilotRoutes from "./routes/copilotRoutes.js";
 import healthRoutes from "./routes/healthRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import metricsRoutes from "./routes/metricsRoutes.js";
 import mediaRoutes from "./routes/mediaRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
+
+// COPILOT (LEGACY - KEEP FOR NOW)
+import copilotRoutes from "./routes/copilotRoutes.js";
+
+// 🧠 NEW OPERION ORCHESTRATOR ROUTE (NEW CORE)
+import operionRoutes from "./routes/operionRoutes.js";
 
 dotenv.config();
 
@@ -46,12 +52,14 @@ app.use(
 
 /**
  * TEMP AUTH (DEV ONLY)
+ * ⚠️ KEEP FOR NOW, BUT LATER REPLACE WITH REAL RBAC
  */
 
 app.use((req, res, next) => {
   req.user = {
     id: "b8e9cfc7-4fdf-4046-b981-fb67e94f5cbb",
     role: "super_admin",
+    org_id: "default-org"
   };
 
   next();
@@ -67,13 +75,14 @@ app.get("/", (req, res) => {
   return res.status(200).json({
     status: "alive",
     service: "OperionOS Backend",
+    version: "2.0-orchestrated",
     timestamp: new Date().toISOString(),
   });
 });
 
 /**
  * =========================================
- * API ROUTES
+ * API ROUTES (LEGACY SYSTEM)
  * =========================================
  */
 
@@ -88,21 +97,26 @@ app.use("/api/metrics", metricsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
 /**
- * COPILOT
+ * COPILOT (LEGACY - DO NOT REMOVE YET)
+ * We keep this temporarily to avoid breaking frontend.
  */
-
 app.use("/api/copilot", copilotRoutes);
+
+/**
+ * 🧠 NEW OPERION INTELLIGENCE LAYER (MAIN SYSTEM)
+ *
+ * THIS IS NOW YOUR PRIMARY AI ENTRY POINT
+ */
+app.use("/api/operion", operionRoutes);
 
 /**
  * ADMIN
  */
-
 app.use("/api/admin", adminRoutes);
 
 /**
- * HEALTH (optional fallback)
+ * HEALTH CHECK
  */
-
 app.use("/api/health", healthRoutes);
 
 /**
@@ -128,4 +142,5 @@ const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
   console.log(`🚀 OperionOS running on port ${PORT}`);
+  console.log(`🧠 Operion Orchestrator active at /api/operion`);
 });
