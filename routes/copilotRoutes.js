@@ -49,6 +49,7 @@ router.post("/analyze/:contractId", apiKeyMiddleware, async (req, res) => {
       contract_id: contractId,
       copilot: copilotResult,
     });
+
   } catch (error) {
     console.error("Copilot route error:", error);
 
@@ -86,6 +87,7 @@ router.post("/analyze-direct", apiKeyMiddleware, async (req, res) => {
       success: true,
       copilot: copilotResult,
     });
+
   } catch (error) {
     console.error("Copilot direct error:", error);
 
