@@ -1,11 +1,11 @@
-const express = require("express");
-const router = express.Router();
+import express from "express";
+import operionOrchestrator from "../services/operionOrchestrator.js";
 
-const operionOrchestrator = require("../services/operionOrchestrator");
+const router = express.Router();
 
 /**
  * 🧠 OPERION CONTRACT ANALYSIS ENDPOINT
- * This is the single AI entry point for OperionOS
+ * Single entry point for AI contract intelligence
  */
 
 router.post("/analyze-contract", async (req, res) => {
@@ -13,7 +13,7 @@ router.post("/analyze-contract", async (req, res) => {
     const { contract_text, document_id, metadata } = req.body;
 
     // =========================
-    // 1. BASIC VALIDATION
+    // VALIDATION
     // =========================
     if (!contract_text) {
       return res.status(400).json({
@@ -23,11 +23,10 @@ router.post("/analyze-contract", async (req, res) => {
     }
 
     // =========================
-    // 2. CONTEXT ENRICHMENT
-    // (multi-tenant ready)
+    // CONTEXT ENRICHMENT (MULTI-TENANT READY)
     // =========================
     const context = {
-      user: req.user, // from your temp auth middleware
+      user: req.user,
       org_id: req.user?.org_id || "default-org",
       document_id: document_id || null,
       metadata: metadata || {},
@@ -35,8 +34,10 @@ router.post("/analyze-contract", async (req, res) => {
       timestamp: new Date().toISOString(),
     };
 
+    console.log("🧠 Operion request:", context.request_id);
+
     // =========================
-    // 3. ORCHESTRATOR CALL
+    // ORCHESTRATOR CALL
     // =========================
     const result = await operionOrchestrator.analyzeContract({
       contract_text,
@@ -44,7 +45,7 @@ router.post("/analyze-contract", async (req, res) => {
     });
 
     // =========================
-    // 4. STRUCTURED RESPONSE
+    // RESPONSE
     // =========================
     return res.json({
       success: true,
@@ -64,9 +65,7 @@ router.post("/analyze-contract", async (req, res) => {
 });
 
 /**
- * =========================
- * HEALTH CHECK FOR OPERION
- * =========================
+ * 🩺 OPERION HEALTH CHECK
  */
 
 router.get("/health", (req, res) => {
@@ -93,4 +92,4 @@ function generateRequestId() {
   );
 }
 
-module.exports = router;
+export default router;
