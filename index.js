@@ -23,16 +23,10 @@ import authRoutes from "./routes/authRoutes.js";
 import copilotRoutes from "./routes/copilotRoutes.js";
 
 /**
- * ⚠️ OPERION ORCHESTRATOR TEMPORARILY DISABLED
- *
- * Reason:
- * ESM migration not finished.
- * Prevents backend startup.
- *
- * We'll re-enable after engine standardization.
+ * 🧠 OPERION CORE (RE-ENABLED)
  */
-
-// import operionRoutes from "./routes/operionRoutes.js";
+import operionRoutes from "./routes/operionRoutes.js";
+import operionDashboardRoutes from "./routes/operionDashboardRoutes.js";
 
 dotenv.config();
 
@@ -105,21 +99,28 @@ app.use("/api/metrics", metricsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
 /**
- * COPILOT
+ * COPILOT (LEGACY SYSTEM - STILL ACTIVE)
  */
-
 app.use("/api/copilot", copilotRoutes);
+
+/**
+ * 🧠 OPERION CORE ENGINE (NEW)
+ */
+app.use("/api/operion", operionRoutes);
+
+/**
+ * 📊 OPERION DASHBOARD LAYER (STEP 8A)
+ */
+app.use("/api/operion/dashboard", operionDashboardRoutes);
 
 /**
  * ADMIN
  */
-
 app.use("/api/admin", adminRoutes);
 
 /**
  * HEALTH
  */
-
 app.use("/api/health", healthRoutes);
 
 /**
@@ -145,4 +146,6 @@ const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
   console.log(`🚀 OperionOS running on port ${PORT}`);
+  console.log(`🧠 Operion Core active at /api/operion`);
+  console.log(`📊 Dashboard active at /api/operion/dashboard`);
 });
