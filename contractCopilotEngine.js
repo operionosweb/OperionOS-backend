@@ -1,7 +1,7 @@
 import axios from "axios";
 
 /* =========================================
-   SAFE JSON PARSER
+SAFE JSON PARSER
 ========================================= */
 
 function safeParse(text) {
@@ -21,7 +21,7 @@ function safeParse(text) {
 }
 
 /* =========================================
-   EU-FIRST LLM ROUTER (MISTRAL → OPENROUTER → OPENAI)
+EU-FIRST LLM ROUTER (MISTRAL → OPENROUTER → OPENAI)
 ========================================= */
 
 async function callLLM(prompt) {
@@ -61,7 +61,7 @@ async function callLLM(prompt) {
       const res = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
         {
-          model: "mistralai/mistral-large",
+          model: "mistral/mistral-large-latest",
           messages: [{ role: "user", content: prompt }],
           temperature: 0.2,
         },
@@ -106,7 +106,7 @@ async function callLLM(prompt) {
 }
 
 /* =========================================
-   MAIN COPILOT ENGINE (AVIATION DECISION CHAIN)
+MAIN COPILOT ENGINE (AVIATION DECISION CHAIN)
 ========================================= */
 
 export async function generateContractCopilot({
@@ -124,13 +124,12 @@ You DO NOT summarize.
 You extract structured operational intelligence.
 
 For each clause produce:
-
 - clause
-- obligation (what must be done)
-- risk_trigger (what activates risk)
-- operational_consequence (real airline impact)
+- obligation
+- risk_trigger
+- operational_consequence
 - owner (Technical Services, Finance, Asset Management, Ground Operations, Flight Operations, Compliance, Legal)
-- recommendation (mitigation action)
+- recommendation
 
 AIRLINE MAPPING RULES:
 - Aircraft availability → Flight Operations + Technical Services
