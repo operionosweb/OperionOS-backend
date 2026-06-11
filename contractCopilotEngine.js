@@ -115,19 +115,29 @@ export async function generateContractCopilot({
 }) {
   try {
     const prompt = `
-You are an aviation contract intelligence system.
+You are an AIRLINE OPERATIONS DECISION ENGINE.
 
-You do NOT summarize contracts.
+You convert aviation contracts into operational decision chains.
 
-You extract operational decision chains for airlines.
+You DO NOT summarize.
+
+You extract structured operational intelligence.
 
 For each clause produce:
+
 - clause
-- obligation
-- risk_trigger
-- operational_consequence
+- obligation (what must be done)
+- risk_trigger (what activates risk)
+- operational_consequence (real airline impact)
 - owner (Technical Services, Finance, Asset Management, Ground Operations, Flight Operations, Compliance, Legal)
-- recommendation
+- recommendation (mitigation action)
+
+AIRLINE MAPPING RULES:
+- Aircraft availability → Flight Operations + Technical Services
+- Maintenance obligations → Technical Services
+- Financial exposure → Finance
+- Return conditions → Asset Management
+- Compliance risk → Compliance / Legal
 
 CONTRACT CLAUSES:
 ${JSON.stringify(contract?.clauses || []).slice(0, 12000)}
@@ -146,7 +156,14 @@ Return ONLY valid JSON:
     }
   ],
   "executive_summary": "",
-  "risk_level": "LOW | MEDIUM | HIGH | CRITICAL"
+  "risk_level": "LOW | MEDIUM | HIGH | CRITICAL",
+  "top_operational_risks": [
+    {
+      "issue": "",
+      "impact": "",
+      "severity": ""
+    }
+  ]
 }
 
 Rules:
@@ -163,6 +180,7 @@ Rules:
         decision_chain: [],
         executive_summary: "Fallback due to parsing failure",
         risk_level: "MEDIUM",
+        top_operational_risks: [],
       };
     }
 
@@ -174,6 +192,7 @@ Rules:
       decision_chain: [],
       executive_summary: "System error fallback",
       risk_level: "MEDIUM",
+      top_operational_risks: [],
     };
   }
 }
