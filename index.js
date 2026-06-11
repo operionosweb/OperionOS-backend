@@ -6,7 +6,7 @@ import dotenv from "dotenv";
  * ROUTES
  */
 
-// EXISTING ROUTES (UNCHANGED)
+// EXISTING ROUTES
 import contractRoutes from "./routes/contractRoutes.js";
 import providerRoutes from "./routes/providerRoutes.js";
 import searchRoutes from "./routes/searchRoutes.js";
@@ -19,11 +19,20 @@ import metricsRoutes from "./routes/metricsRoutes.js";
 import mediaRoutes from "./routes/mediaRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 
-// COPILOT (LEGACY - KEEP FOR NOW)
+// COPILOT (CURRENT WORKING SYSTEM)
 import copilotRoutes from "./routes/copilotRoutes.js";
 
-// 🧠 NEW OPERION ORCHESTRATOR ROUTE (NEW CORE)
-import operionRoutes from "./routes/operionRoutes.js";
+/**
+ * ⚠️ OPERION ORCHESTRATOR TEMPORARILY DISABLED
+ *
+ * Reason:
+ * ESM migration not finished.
+ * Prevents backend startup.
+ *
+ * We'll re-enable after engine standardization.
+ */
+
+// import operionRoutes from "./routes/operionRoutes.js";
 
 dotenv.config();
 
@@ -52,14 +61,13 @@ app.use(
 
 /**
  * TEMP AUTH (DEV ONLY)
- * ⚠️ KEEP FOR NOW, BUT LATER REPLACE WITH REAL RBAC
  */
 
 app.use((req, res, next) => {
   req.user = {
     id: "b8e9cfc7-4fdf-4046-b981-fb67e94f5cbb",
     role: "super_admin",
-    org_id: "default-org"
+    org_id: "default-org",
   };
 
   next();
@@ -75,14 +83,14 @@ app.get("/", (req, res) => {
   return res.status(200).json({
     status: "alive",
     service: "OperionOS Backend",
-    version: "2.0-orchestrated",
+    version: "2.0-stable",
     timestamp: new Date().toISOString(),
   });
 });
 
 /**
  * =========================================
- * API ROUTES (LEGACY SYSTEM)
+ * API ROUTES
  * =========================================
  */
 
@@ -97,26 +105,21 @@ app.use("/api/metrics", metricsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
 /**
- * COPILOT (LEGACY - DO NOT REMOVE YET)
- * We keep this temporarily to avoid breaking frontend.
+ * COPILOT
  */
-app.use("/api/copilot", copilotRoutes);
 
-/**
- * 🧠 NEW OPERION INTELLIGENCE LAYER (MAIN SYSTEM)
- *
- * THIS IS NOW YOUR PRIMARY AI ENTRY POINT
- */
-app.use("/api/operion", operionRoutes);
+app.use("/api/copilot", copilotRoutes);
 
 /**
  * ADMIN
  */
+
 app.use("/api/admin", adminRoutes);
 
 /**
- * HEALTH CHECK
+ * HEALTH
  */
+
 app.use("/api/health", healthRoutes);
 
 /**
@@ -142,5 +145,4 @@ const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
   console.log(`🚀 OperionOS running on port ${PORT}`);
-  console.log(`🧠 Operion Orchestrator active at /api/operion`);
 });
