@@ -1,7 +1,7 @@
 import axios from "axios";
 
 /* =========================================
-   SAFE JSON PARSER (HARDENED)
+   SAFE JSON PARSER
 ========================================= */
 
 function safeParse(text) {
@@ -32,9 +32,7 @@ async function callLLM(prompt) {
       openai: !!process.env.OPENAI_API_KEY,
     });
 
-    /* =========================
-       1. MISTRAL (EU PRIMARY)
-    ========================= */
+    // 1. MISTRAL (EU FIRST)
     if (process.env.MISTRAL_API_KEY) {
       const res = await axios.post(
         "https://api.mistral.ai/v1/chat/completions",
@@ -54,9 +52,7 @@ async function callLLM(prompt) {
       return res.data?.choices?.[0]?.message?.content;
     }
 
-    /* =========================
-       2. OPENROUTER (EU FALLBACK)
-    ========================= */
+    // 2. OPENROUTER (EU fallback)
     if (process.env.OPENROUTER_API_KEY) {
       const res = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
@@ -76,9 +72,7 @@ async function callLLM(prompt) {
       return res.data?.choices?.[0]?.message?.content;
     }
 
-    /* =========================
-       3. OPENAI (LAST RESORT)
-    ========================= */
+    // 3. OPENAI (last resort)
     if (process.env.OPENAI_API_KEY) {
       const res = await axios.post(
         "https://api.openai.com/v1/chat/completions",
@@ -100,13 +94,13 @@ async function callLLM(prompt) {
 
     throw new Error("No LLM provider configured");
   } catch (err) {
-    console.error("❌ LLM ERROR:", err?.response?.data || err.message);
+    console.error("LLM ERROR:", err?.response?.data || err.message);
     throw new Error("Copilot AI failed");
   }
 }
 
 /* =========================================
-   AIRCRAFT OPERATIONS DECISION COPILOT
+   AIRLINE OPERATIONS DECISION ENGINE
 ========================================= */
 
 export async function generateContractCopilot({
@@ -115,37 +109,36 @@ export async function generateContractCopilot({
 }) {
   try {
     const prompt = `
-You are an aviation OPERATIONS DECISION ENGINE.
+You are an AIRLINE OPERATIONS DECISION ENGINE.
 
-You do NOT summarize contracts.
+You convert aviation lease/maintenance contracts into operational decision chains.
 
-You convert each clause into a REAL operational decision chain used by airlines.
+DO NOT summarize.
 
-Each clause must map to:
+For each clause output:
 
-1. clause (original meaning)
-2. obligation (what must be done)
-3. risk_trigger (what failure triggers risk)
-4. operational_consequence (real airline impact)
-5. owner (ONLY one of:
-   Technical Services,
-   Finance,
-   Asset Management,
-   Ground Operations,
-   Flight Operations,
-   Compliance,
-   Legal)
-6. recommendation (what action to take)
+- clause
+- obligation (what must be done)
+- risk_trigger (what failure activates risk)
+- operational_consequence (real airline impact)
+- owner (must be EXACTLY one of:
+  Technical Services,
+  Finance,
+  Asset Management,
+  Ground Operations,
+  Flight Operations,
+  Compliance,
+  Legal)
+- recommendation (action to mitigate risk)
 
-IMPORTANT RULES:
-- Think like airline operations control center
-- Focus on maintenance, airworthiness, lease return, insurance, penalties
-- If clause is vague → mark HIGH operational risk
-- If clause affects aircraft availability → prioritize Flight Operations + Technical Services
-- If financial exposure → Finance
-- If compliance/legal exposure → Compliance/Legal
+AIRLINE RULES:
+- Aircraft availability issues → Flight Ops + Technical Services
+- Maintenance obligations → Technical Services
+- Financial exposure → Finance
+- Return conditions → Asset Management
+- Compliance risk → Compliance/Legal
 
-CONTRACT CLAUSES:
+CONTRACT:
 ${JSON.stringify(contract?.clauses || []).slice(0, 12000)}
 
 Return ONLY valid JSON:
@@ -187,7 +180,7 @@ Return ONLY valid JSON:
 
     return parsed;
   } catch (err) {
-    console.error("❌ COPILOT ENGINE ERROR:", err.message);
+    console.error("COPILOT ENGINE ERROR:", err.message);
 
     return {
       decision_chain: [],
