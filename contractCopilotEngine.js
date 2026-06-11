@@ -1,4 +1,5 @@
 import axios from "axios";
+import { validateCopilotOutput } from "./validators/copilotValidator.js";
 
 /* =========================================
 SAFE JSON PARSER
@@ -9,9 +10,9 @@ function safeParse(text) {
 
   try {
     return JSON.parse(text);
-  } catch (err) {
+  } catch {
     try {
-      const match = text.match(/\{[\s\S]*\}/);
+      const match = text.match(/{[\s\S]*}/);
       if (match) return JSON.parse(match[0]);
       return null;
     } catch {
@@ -32,9 +33,7 @@ async function callLLM(prompt) {
       openai: !!process.env.OPENAI_API_KEY,
     });
 
-    /* =========================
-       1. MISTRAL (PRIMARY)
-    ========================= */
+    // 1. MISTRAL (EU PRIMARY)
     if (process.env.MISTRAL_API_KEY) {
       const res = await axios.post(
         "https://api.mistral.ai/v1/chat/completions",
@@ -54,14 +53,12 @@ async function callLLM(prompt) {
       return res.data?.choices?.[0]?.message?.content;
     }
 
-    /* =========================
-       2. OPENROUTER
-    ========================= */
+    // 2. OPENROUTER (EU AGGREGATOR)
     if (process.env.OPENROUTER_API_KEY) {
       const res = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
         {
-          model: "mistral/mistral-large-latest",
+          model: "mistralai/mistral-large",
           messages: [{ role: "user", content: prompt }],
           temperature: 0.2,
         },
@@ -76,9 +73,7 @@ async function callLLM(prompt) {
       return res.data?.choices?.[0]?.message?.content;
     }
 
-    /* =========================
-       3. OPENAI (LAST RESORT)
-    ========================= */
+    // 3. OPENAI (LAST RESORT)
     if (process.env.OPENAI_API_KEY) {
       const res = await axios.post(
         "https://api.openai.com/v1/chat/completions",
@@ -106,7 +101,7 @@ async function callLLM(prompt) {
 }
 
 /* =========================================
-COPILOT ENGINE (EXPLAINABLE DECISION LAYER)
+COPILOT ENGINE (AIRLINE DECISION CHAIN)
 ========================================= */
 
 export async function generateContractCopilot({
@@ -117,79 +112,44 @@ export async function generateContractCopilot({
     const prompt = `
 You are an AIRLINE OPERATIONS DECISION ENGINE.
 
-You convert aviation contracts into explainable operational intelligence.
+You extract structured operational intelligence from aviation contracts.
 
-You MUST explain WHY each risk exists.
+Return STRICT JSON ONLY.
 
 For each clause produce:
-
 - clause
 - obligation
 - risk_trigger
 - operational_consequence
 - owner (Technical Services, Finance, Asset Management, Ground Operations, Flight Operations, Compliance, Legal)
-
-NEW FIELD:
-- why_it_matters (plain aviation reasoning, 1–2 sentences)
-- severity_score (0–100 risk intensity)
-
 - recommendation
-
-AIRLINE MAPPING RULES:
-- Aircraft availability → Flight Ops + Technical Services
-- Maintenance → Technical Services
-- Financial exposure → Finance
-- Return conditions → Asset Management
-- Compliance → Legal
 
 CONTRACT CLAUSES:
 ${JSON.stringify(contract?.clauses || []).slice(0, 12000)}
 
-Return ONLY valid JSON:
-
 {
-  "decision_chain": [
-    {
-      "clause": "",
-      "obligation": "",
-      "risk_trigger": "",
-      "operational_consequence": "",
-      "owner": "",
-      "why_it_matters": "",
-      "severity_score": 0,
-      "recommendation": ""
-    }
-  ],
+  "decision_chain": [],
   "executive_summary": "",
   "risk_level": "LOW | MEDIUM | HIGH | CRITICAL",
-  "top_operational_risks": [
-    {
-      "issue": "",
-      "impact": "",
-      "severity": ""
-    }
-  ]
+  "top_operational_risks": []
 }
-
-Rules:
-- Aviation operational thinking only
-- No markdown
-- No extra text
 `;
 
     const raw = await callLLM(prompt);
     const parsed = safeParse(raw);
 
-    if (!parsed) {
+    const validated = validateCopilotOutput(parsed);
+
+    if (!validated) {
       return {
         decision_chain: [],
-        executive_summary: "Fallback due to parsing failure",
+        executive_summary: "Invalid model output",
         risk_level: "MEDIUM",
         top_operational_risks: [],
       };
     }
 
-    return parsed;
+    return validated;
   } catch (err) {
     console.error("❌ COPILOT ENGINE ERROR:", err.message);
 
