@@ -1,7 +1,7 @@
 import axios from "axios";
 
 /* =========================================
-   SAFE JSON PARSER
+   SAFE JSON PARSER (HARDENED)
 ========================================= */
 
 function safeParse(text) {
@@ -32,7 +32,9 @@ async function callLLM(prompt) {
       openai: !!process.env.OPENAI_API_KEY,
     });
 
-    // 1. MISTRAL (EU PRIMARY)
+    /* =========================
+       1. MISTRAL (EU PRIMARY)
+    ========================= */
     if (process.env.MISTRAL_API_KEY) {
       const res = await axios.post(
         "https://api.mistral.ai/v1/chat/completions",
@@ -52,7 +54,9 @@ async function callLLM(prompt) {
       return res.data?.choices?.[0]?.message?.content;
     }
 
-    // 2. OPENROUTER (EU AGGREGATOR)
+    /* =========================
+       2. OPENROUTER (EU FALLBACK)
+    ========================= */
     if (process.env.OPENROUTER_API_KEY) {
       const res = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
@@ -72,7 +76,9 @@ async function callLLM(prompt) {
       return res.data?.choices?.[0]?.message?.content;
     }
 
-    // 3. OPENAI (LAST RESORT ONLY)
+    /* =========================
+       3. OPENAI (LAST RESORT)
+    ========================= */
     if (process.env.OPENAI_API_KEY) {
       const res = await axios.post(
         "https://api.openai.com/v1/chat/completions",
@@ -100,7 +106,7 @@ async function callLLM(prompt) {
 }
 
 /* =========================================
-   COPILOT DECISION CHAIN ENGINE
+   AIRCRAFT OPERATIONS DECISION COPILOT
 ========================================= */
 
 export async function generateContractCopilot({
@@ -109,20 +115,35 @@ export async function generateContractCopilot({
 }) {
   try {
     const prompt = `
-You are an aviation contract intelligence system.
+You are an aviation OPERATIONS DECISION ENGINE.
 
 You do NOT summarize contracts.
 
-You extract operational decision chains for airlines.
+You convert each clause into a REAL operational decision chain used by airlines.
 
-For each clause produce:
+Each clause must map to:
 
-- clause
-- obligation
-- risk_trigger
-- operational_consequence
-- owner
-- recommendation
+1. clause (original meaning)
+2. obligation (what must be done)
+3. risk_trigger (what failure triggers risk)
+4. operational_consequence (real airline impact)
+5. owner (ONLY one of:
+   Technical Services,
+   Finance,
+   Asset Management,
+   Ground Operations,
+   Flight Operations,
+   Compliance,
+   Legal)
+6. recommendation (what action to take)
+
+IMPORTANT RULES:
+- Think like airline operations control center
+- Focus on maintenance, airworthiness, lease return, insurance, penalties
+- If clause is vague → mark HIGH operational risk
+- If clause affects aircraft availability → prioritize Flight Operations + Technical Services
+- If financial exposure → Finance
+- If compliance/legal exposure → Compliance/Legal
 
 CONTRACT CLAUSES:
 ${JSON.stringify(contract?.clauses || []).slice(0, 12000)}
@@ -141,17 +162,18 @@ Return ONLY valid JSON:
     }
   ],
   "executive_summary": "",
-  "risk_level": "LOW | MEDIUM | HIGH | CRITICAL"
+  "risk_level": "LOW | MEDIUM | HIGH | CRITICAL",
+  "top_operational_risks": [
+    {
+      "issue": "",
+      "impact": "",
+      "severity": ""
+    }
+  ]
 }
-
-Rules:
-- Aviation operational thinking only
-- No markdown
-- No extra text
 `;
 
     const raw = await callLLM(prompt);
-
     const parsed = safeParse(raw);
 
     if (!parsed) {
@@ -159,6 +181,7 @@ Rules:
         decision_chain: [],
         executive_summary: "Fallback due to parsing failure",
         risk_level: "MEDIUM",
+        top_operational_risks: [],
       };
     }
 
@@ -170,6 +193,7 @@ Rules:
       decision_chain: [],
       executive_summary: "System error fallback",
       risk_level: "MEDIUM",
+      top_operational_risks: [],
     };
   }
 }
