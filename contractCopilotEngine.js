@@ -21,7 +21,7 @@ function safeParse(text) {
 }
 
 /* =========================================
-EU-FIRST LLM ROUTER (MISTRAL → OPENROUTER → OPENAI)
+EU-FIRST LLM ROUTER
 ========================================= */
 
 async function callLLM(prompt) {
@@ -33,7 +33,7 @@ async function callLLM(prompt) {
     });
 
     /* =========================
-       1. MISTRAL (EU PRIMARY)
+       1. MISTRAL (PRIMARY)
     ========================= */
     if (process.env.MISTRAL_API_KEY) {
       const res = await axios.post(
@@ -55,7 +55,7 @@ async function callLLM(prompt) {
     }
 
     /* =========================
-       2. OPENROUTER (EU AGGREGATOR)
+       2. OPENROUTER
     ========================= */
     if (process.env.OPENROUTER_API_KEY) {
       const res = await axios.post(
@@ -106,7 +106,7 @@ async function callLLM(prompt) {
 }
 
 /* =========================================
-MAIN COPILOT ENGINE (AVIATION DECISION CHAIN)
+COPILOT ENGINE (EXPLAINABLE DECISION LAYER)
 ========================================= */
 
 export async function generateContractCopilot({
@@ -117,26 +117,30 @@ export async function generateContractCopilot({
     const prompt = `
 You are an AIRLINE OPERATIONS DECISION ENGINE.
 
-You convert aviation contracts into operational decision chains.
+You convert aviation contracts into explainable operational intelligence.
 
-You DO NOT summarize.
-
-You extract structured operational intelligence.
+You MUST explain WHY each risk exists.
 
 For each clause produce:
+
 - clause
 - obligation
 - risk_trigger
 - operational_consequence
 - owner (Technical Services, Finance, Asset Management, Ground Operations, Flight Operations, Compliance, Legal)
+
+NEW FIELD:
+- why_it_matters (plain aviation reasoning, 1–2 sentences)
+- severity_score (0–100 risk intensity)
+
 - recommendation
 
 AIRLINE MAPPING RULES:
-- Aircraft availability → Flight Operations + Technical Services
-- Maintenance obligations → Technical Services
+- Aircraft availability → Flight Ops + Technical Services
+- Maintenance → Technical Services
 - Financial exposure → Finance
 - Return conditions → Asset Management
-- Compliance risk → Compliance / Legal
+- Compliance → Legal
 
 CONTRACT CLAUSES:
 ${JSON.stringify(contract?.clauses || []).slice(0, 12000)}
@@ -151,6 +155,8 @@ Return ONLY valid JSON:
       "risk_trigger": "",
       "operational_consequence": "",
       "owner": "",
+      "why_it_matters": "",
+      "severity_score": 0,
       "recommendation": ""
     }
   ],
