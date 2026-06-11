@@ -21,7 +21,7 @@ function safeParse(text) {
 }
 
 /* =========================================
-   EU-FIRST LLM ROUTER
+   EU-FIRST LLM ROUTER (MISTRAL → OPENROUTER → OPENAI)
 ========================================= */
 
 async function callLLM(prompt) {
@@ -32,7 +32,9 @@ async function callLLM(prompt) {
       openai: !!process.env.OPENAI_API_KEY,
     });
 
-    // 1. MISTRAL (EU FIRST)
+    /* =========================
+       1. MISTRAL (EU PRIMARY)
+    ========================= */
     if (process.env.MISTRAL_API_KEY) {
       const res = await axios.post(
         "https://api.mistral.ai/v1/chat/completions",
@@ -52,7 +54,9 @@ async function callLLM(prompt) {
       return res.data?.choices?.[0]?.message?.content;
     }
 
-    // 2. OPENROUTER (EU fallback)
+    /* =========================
+       2. OPENROUTER (EU AGGREGATOR)
+    ========================= */
     if (process.env.OPENROUTER_API_KEY) {
       const res = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
@@ -72,7 +76,9 @@ async function callLLM(prompt) {
       return res.data?.choices?.[0]?.message?.content;
     }
 
-    // 3. OPENAI (last resort)
+    /* =========================
+       3. OPENAI (LAST RESORT)
+    ========================= */
     if (process.env.OPENAI_API_KEY) {
       const res = await axios.post(
         "https://api.openai.com/v1/chat/completions",
@@ -94,13 +100,13 @@ async function callLLM(prompt) {
 
     throw new Error("No LLM provider configured");
   } catch (err) {
-    console.error("LLM ERROR:", err?.response?.data || err.message);
+    console.error("❌ LLM ERROR:", err?.response?.data || err.message);
     throw new Error("Copilot AI failed");
   }
 }
 
 /* =========================================
-   AIRLINE OPERATIONS DECISION ENGINE
+   MAIN COPILOT ENGINE (AVIATION DECISION CHAIN)
 ========================================= */
 
 export async function generateContractCopilot({
@@ -109,36 +115,21 @@ export async function generateContractCopilot({
 }) {
   try {
     const prompt = `
-You are an AIRLINE OPERATIONS DECISION ENGINE.
+You are an aviation contract intelligence system.
 
-You convert aviation lease/maintenance contracts into operational decision chains.
+You do NOT summarize contracts.
 
-DO NOT summarize.
+You extract operational decision chains for airlines.
 
-For each clause output:
-
+For each clause produce:
 - clause
-- obligation (what must be done)
-- risk_trigger (what failure activates risk)
-- operational_consequence (real airline impact)
-- owner (must be EXACTLY one of:
-  Technical Services,
-  Finance,
-  Asset Management,
-  Ground Operations,
-  Flight Operations,
-  Compliance,
-  Legal)
-- recommendation (action to mitigate risk)
+- obligation
+- risk_trigger
+- operational_consequence
+- owner (Technical Services, Finance, Asset Management, Ground Operations, Flight Operations, Compliance, Legal)
+- recommendation
 
-AIRLINE RULES:
-- Aircraft availability issues → Flight Ops + Technical Services
-- Maintenance obligations → Technical Services
-- Financial exposure → Finance
-- Return conditions → Asset Management
-- Compliance risk → Compliance/Legal
-
-CONTRACT:
+CONTRACT CLAUSES:
 ${JSON.stringify(contract?.clauses || []).slice(0, 12000)}
 
 Return ONLY valid JSON:
@@ -155,15 +146,13 @@ Return ONLY valid JSON:
     }
   ],
   "executive_summary": "",
-  "risk_level": "LOW | MEDIUM | HIGH | CRITICAL",
-  "top_operational_risks": [
-    {
-      "issue": "",
-      "impact": "",
-      "severity": ""
-    }
-  ]
+  "risk_level": "LOW | MEDIUM | HIGH | CRITICAL"
 }
+
+Rules:
+- Aviation operational thinking only
+- No markdown
+- No extra text
 `;
 
     const raw = await callLLM(prompt);
@@ -174,19 +163,17 @@ Return ONLY valid JSON:
         decision_chain: [],
         executive_summary: "Fallback due to parsing failure",
         risk_level: "MEDIUM",
-        top_operational_risks: [],
       };
     }
 
     return parsed;
   } catch (err) {
-    console.error("COPILOT ENGINE ERROR:", err.message);
+    console.error("❌ COPILOT ENGINE ERROR:", err.message);
 
     return {
       decision_chain: [],
       executive_summary: "System error fallback",
       risk_level: "MEDIUM",
-      top_operational_risks: [],
     };
   }
 }
