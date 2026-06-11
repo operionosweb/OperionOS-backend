@@ -26,16 +26,13 @@ function safeParse(text) {
 
 async function callLLM(prompt) {
   try {
-    // DEBUG (Render logs)
     console.log("🧠 LLM ENV CHECK:", {
       mistral: !!process.env.MISTRAL_API_KEY,
       openrouter: !!process.env.OPENROUTER_API_KEY,
       openai: !!process.env.OPENAI_API_KEY,
     });
 
-    /* =====================================
-       1. MISTRAL (EU PRIMARY)
-    ===================================== */
+    // 1. MISTRAL (EU PRIMARY)
     if (process.env.MISTRAL_API_KEY) {
       const res = await axios.post(
         "https://api.mistral.ai/v1/chat/completions",
@@ -55,9 +52,7 @@ async function callLLM(prompt) {
       return res.data?.choices?.[0]?.message?.content;
     }
 
-    /* =====================================
-       2. OPENROUTER (EU AGGREGATOR)
-    ===================================== */
+    // 2. OPENROUTER (EU AGGREGATOR)
     if (process.env.OPENROUTER_API_KEY) {
       const res = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
@@ -77,9 +72,7 @@ async function callLLM(prompt) {
       return res.data?.choices?.[0]?.message?.content;
     }
 
-    /* =====================================
-       3. OPENAI (LAST RESORT ONLY)
-    ===================================== */
+    // 3. OPENAI (LAST RESORT ONLY)
     if (process.env.OPENAI_API_KEY) {
       const res = await axios.post(
         "https://api.openai.com/v1/chat/completions",
@@ -107,7 +100,7 @@ async function callLLM(prompt) {
 }
 
 /* =========================================
-   MAIN COPILOT ENGINE (DECISION CHAIN)
+   COPILOT DECISION CHAIN ENGINE
 ========================================= */
 
 export async function generateContractCopilot({
@@ -128,7 +121,7 @@ For each clause produce:
 - obligation
 - risk_trigger
 - operational_consequence
-- owner (must be one of: Technical Services, Finance, Asset Management, Ground Operations, Flight Operations, Compliance, Legal)
+- owner
 - recommendation
 
 CONTRACT CLAUSES:
@@ -170,7 +163,6 @@ Rules:
     }
 
     return parsed;
-
   } catch (err) {
     console.error("❌ COPILOT ENGINE ERROR:", err.message);
 
