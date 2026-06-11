@@ -21,11 +21,21 @@ function safeParse(text) {
 }
 
 /* =========================================
-   LLM CALL
+   EU-FIRST LLM ROUTER
 ========================================= */
 
 async function callLLM(prompt) {
   try {
+    // DEBUG (Render logs)
+    console.log("🧠 LLM ENV CHECK:", {
+      mistral: !!process.env.MISTRAL_API_KEY,
+      openrouter: !!process.env.OPENROUTER_API_KEY,
+      openai: !!process.env.OPENAI_API_KEY,
+    });
+
+    /* =====================================
+       1. MISTRAL (EU PRIMARY)
+    ===================================== */
     if (process.env.MISTRAL_API_KEY) {
       const res = await axios.post(
         "https://api.mistral.ai/v1/chat/completions",
@@ -45,6 +55,31 @@ async function callLLM(prompt) {
       return res.data?.choices?.[0]?.message?.content;
     }
 
+    /* =====================================
+       2. OPENROUTER (EU AGGREGATOR)
+    ===================================== */
+    if (process.env.OPENROUTER_API_KEY) {
+      const res = await axios.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          model: "mistralai/mistral-large",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.2,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      return res.data?.choices?.[0]?.message?.content;
+    }
+
+    /* =====================================
+       3. OPENAI (LAST RESORT ONLY)
+    ===================================== */
     if (process.env.OPENAI_API_KEY) {
       const res = await axios.post(
         "https://api.openai.com/v1/chat/completions",
@@ -66,13 +101,13 @@ async function callLLM(prompt) {
 
     throw new Error("No LLM provider configured");
   } catch (err) {
-    console.error("LLM ERROR:", err?.response?.data || err.message);
+    console.error("❌ LLM ERROR:", err?.response?.data || err.message);
     throw new Error("Copilot AI failed");
   }
 }
 
 /* =========================================
-   MAIN DECISION CHAIN COPILOT ENGINE
+   MAIN COPILOT ENGINE (DECISION CHAIN)
 ========================================= */
 
 export async function generateContractCopilot({
@@ -81,31 +116,22 @@ export async function generateContractCopilot({
 }) {
   try {
     const prompt = `
-You are an aviation contract intelligence system used by airlines and lessors.
+You are an aviation contract intelligence system.
 
-Your job is NOT to summarize contracts.
+You do NOT summarize contracts.
 
-Your job is to produce a DECISION CHAIN for operational use.
+You extract operational decision chains for airlines.
 
-For each clause, extract:
+For each clause produce:
 
 - clause
-- obligation (what is required)
-- risk_trigger (what event causes risk)
-- operational_consequence (what happens in real aviation operations)
-- owner (who in airline organization is responsible)
-- recommendation (what to do in negotiation or execution)
+- obligation
+- risk_trigger
+- operational_consequence
+- owner (must be one of: Technical Services, Finance, Asset Management, Ground Operations, Flight Operations, Compliance, Legal)
+- recommendation
 
-Owners must be EXACTLY one of:
-Technical Services
-Finance
-Asset Management
-Ground Operations
-Flight Operations
-Compliance
-Legal
-
-CONTRACT DATA:
+CONTRACT CLAUSES:
 ${JSON.stringify(contract?.clauses || []).slice(0, 12000)}
 
 Return ONLY valid JSON:
@@ -121,16 +147,14 @@ Return ONLY valid JSON:
       "recommendation": ""
     }
   ],
-
   "executive_summary": "",
   "risk_level": "LOW | MEDIUM | HIGH | CRITICAL"
 }
 
 Rules:
 - Aviation operational thinking only
-- No marketing language
-- No extra text
 - No markdown
+- No extra text
 `;
 
     const raw = await callLLM(prompt);
@@ -148,7 +172,7 @@ Rules:
     return parsed;
 
   } catch (err) {
-    console.error("COPILOT ENGINE ERROR:", err.message);
+    console.error("❌ COPILOT ENGINE ERROR:", err.message);
 
     return {
       decision_chain: [],
