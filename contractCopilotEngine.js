@@ -1,7 +1,7 @@
 import axios from "axios";
 
 /* =========================================
-   SAFE JSON PARSER (HARDENED)
+   SAFE JSON PARSER
 ========================================= */
 
 function safeParse(text) {
@@ -11,11 +11,8 @@ function safeParse(text) {
     return JSON.parse(text);
   } catch (err) {
     try {
-      // attempt to extract JSON block if model adds noise
       const match = text.match(/\{[\s\S]*\}/);
-      if (match) {
-        return JSON.parse(match[0]);
-      }
+      if (match) return JSON.parse(match[0]);
       return null;
     } catch {
       return null;
@@ -24,14 +21,11 @@ function safeParse(text) {
 }
 
 /* =========================================
-   LLM CALL (MISTRAL → OPENROUTER FALLBACK)
+   LLM CALL
 ========================================= */
 
 async function callLLM(prompt) {
   try {
-    /* =========================
-       1. MISTRAL (EU-FIRST)
-    ========================= */
     if (process.env.MISTRAL_API_KEY) {
       const res = await axios.post(
         "https://api.mistral.ai/v1/chat/completions",
@@ -51,31 +45,6 @@ async function callLLM(prompt) {
       return res.data?.choices?.[0]?.message?.content;
     }
 
-    /* =========================
-       2. OPENROUTER (EU FRIENDLY)
-    ========================= */
-    if (process.env.OPENROUTER_API_KEY) {
-      const res = await axios.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        {
-          model: "mistral/mistral-large",
-          messages: [{ role: "user", content: prompt }],
-          temperature: 0.2,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      return res.data?.choices?.[0]?.message?.content;
-    }
-
-    /* =========================
-       3. OPENAI (LAST RESORT)
-    ========================= */
     if (process.env.OPENAI_API_KEY) {
       const res = await axios.post(
         "https://api.openai.com/v1/chat/completions",
@@ -96,7 +65,6 @@ async function callLLM(prompt) {
     }
 
     throw new Error("No LLM provider configured");
-
   } catch (err) {
     console.error("LLM ERROR:", err?.response?.data || err.message);
     throw new Error("Copilot AI failed");
@@ -104,7 +72,7 @@ async function callLLM(prompt) {
 }
 
 /* =========================================
-   MAIN COPILOT ENGINE
+   MAIN DECISION CHAIN COPILOT ENGINE
 ========================================= */
 
 export async function generateContractCopilot({
@@ -113,37 +81,56 @@ export async function generateContractCopilot({
 }) {
   try {
     const prompt = `
-You are an aviation contract negotiation copilot.
+You are an aviation contract intelligence system used by airlines and lessors.
 
-Analyze this contract intelligence:
+Your job is NOT to summarize contracts.
 
-SUMMARY:
-${contract.summary || ""}
+Your job is to produce a DECISION CHAIN for operational use.
 
-OVERALL RISK:
-${contract.overall_risk || 0}
+For each clause, extract:
 
-CLAUSES:
-${JSON.stringify(contract.clauses || []).slice(0, 12000)}
+- clause
+- obligation (what is required)
+- risk_trigger (what event causes risk)
+- operational_consequence (what happens in real aviation operations)
+- owner (who in airline organization is responsible)
+- recommendation (what to do in negotiation or execution)
+
+Owners must be EXACTLY one of:
+Technical Services
+Finance
+Asset Management
+Ground Operations
+Flight Operations
+Compliance
+Legal
+
+CONTRACT DATA:
+${JSON.stringify(contract?.clauses || []).slice(0, 12000)}
 
 Return ONLY valid JSON:
 
 {
-  "recommendation": "SIGN | REJECT | NEGOTIATE",
-  "confidence": 0-100,
-  "why": "",
-  "top_risks": [],
-  "negotiation_points": [],
-  "cost_exposure_summary": "",
-  "board_summary": "",
-  "action_plan": []
+  "decision_chain": [
+    {
+      "clause": "",
+      "obligation": "",
+      "risk_trigger": "",
+      "operational_consequence": "",
+      "owner": "",
+      "recommendation": ""
+    }
+  ],
+
+  "executive_summary": "",
+  "risk_level": "LOW | MEDIUM | HIGH | CRITICAL"
 }
 
 Rules:
-- Be strict and realistic
-- Aviation industry focus
-- NO markdown
-- NO extra text
+- Aviation operational thinking only
+- No marketing language
+- No extra text
+- No markdown
 `;
 
     const raw = await callLLM(prompt);
@@ -151,17 +138,10 @@ Rules:
     const parsed = safeParse(raw);
 
     if (!parsed) {
-      console.error("❌ Copilot JSON parse failed. Raw output:", raw);
-
       return {
-        recommendation: "NEGOTIATE",
-        confidence: 50,
-        why: "Fallback due to AI parsing failure",
-        top_risks: [],
-        negotiation_points: [],
-        cost_exposure_summary: "",
-        board_summary: "",
-        action_plan: [],
+        decision_chain: [],
+        executive_summary: "Fallback due to parsing failure",
+        risk_level: "MEDIUM",
       };
     }
 
@@ -171,14 +151,9 @@ Rules:
     console.error("COPILOT ENGINE ERROR:", err.message);
 
     return {
-      recommendation: "NEGOTIATE",
-      confidence: 40,
-      why: "System fallback due to execution error",
-      top_risks: [],
-      negotiation_points: [],
-      cost_exposure_summary: "",
-      board_summary: "",
-      action_plan: [],
+      decision_chain: [],
+      executive_summary: "System error fallback",
+      risk_level: "MEDIUM",
     };
   }
 }
