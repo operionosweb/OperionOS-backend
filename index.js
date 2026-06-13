@@ -35,6 +35,11 @@ import horizonRoutes from "./routes/horizonRoutes.js";
 import systemRoutes from "./routes/systemRoutes.js";
 
 /**
+ * 🧪 BACKEND VERIFICATION SUITE (STEP 11B)
+ */
+import verificationRoutes from "./routes/verificationRoutes.js";
+
+/**
  * 🧠 TENANT SYSTEM (SAAS CORE)
  */
 import { tenantContext } from "./middleware/tenantContext.js";
@@ -79,7 +84,7 @@ app.get("/", (req, res) => {
   res.json({
     status: "alive",
     service: "OperionOS Backend",
-    version: "2.2-saas-horizon-diagnostics",
+    version: "2.3-saas-verification",
     tenant: req.tenant || null,
     timestamp: new Date().toISOString(),
   });
@@ -123,6 +128,11 @@ app.use("/api/horizon", horizonRoutes);
 app.use("/api/system", systemRoutes);
 
 /**
+ * 🧪 BACKEND VERIFICATION SUITE (STEP 11B)
+ */
+app.use("/api/verification", verificationRoutes);
+
+/**
  * ADMIN
  */
 app.use("/api/admin", adminRoutes);
@@ -158,4 +168,5 @@ app.listen(PORT, () => {
   console.log(`🧠 SaaS tenant system ACTIVE`);
   console.log(`📡 Horizon Sync API ACTIVE (/api/horizon)`);
   console.log(`🩺 System Diagnostics ACTIVE (/api/system/status)`);
+  console.log(`🧪 Backend Verification ACTIVE (/api/verification)`);
 });
