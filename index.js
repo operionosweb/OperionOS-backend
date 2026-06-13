@@ -3,10 +3,11 @@ import cors from "cors";
 import dotenv from "dotenv";
 
 /**
+ * =========================================
  * ROUTES
+ * =========================================
  */
 
-// EXISTING ROUTES
 import contractRoutes from "./routes/contractRoutes.js";
 import providerRoutes from "./routes/providerRoutes.js";
 import searchRoutes from "./routes/searchRoutes.js";
@@ -19,14 +20,24 @@ import metricsRoutes from "./routes/metricsRoutes.js";
 import mediaRoutes from "./routes/mediaRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 
-// COPILOT (CURRENT WORKING SYSTEM)
 import copilotRoutes from "./routes/copilotRoutes.js";
-
-/**
- * 🧠 OPERION CORE (RE-ENABLED)
- */
 import operionRoutes from "./routes/operionRoutes.js";
 import operionDashboardRoutes from "./routes/operionDashboardRoutes.js";
+
+/**
+ * 🧠 HORIZON SYNC LAYER (STEP 9C)
+ */
+import horizonRoutes from "./routes/horizonRoutes.js";
+
+/**
+ * 🧠 SYSTEM DIAGNOSTICS (STEP 11A)
+ */
+import systemRoutes from "./routes/systemRoutes.js";
+
+/**
+ * 🧠 TENANT SYSTEM (SAAS CORE)
+ */
+import { tenantContext } from "./middleware/tenantContext.js";
 
 dotenv.config();
 
@@ -54,18 +65,9 @@ app.use(
 );
 
 /**
- * TEMP AUTH (DEV ONLY)
+ * 🧠 TENANT CONTEXT (MUST BE BEFORE ROUTES)
  */
-
-app.use((req, res, next) => {
-  req.user = {
-    id: "b8e9cfc7-4fdf-4046-b981-fb67e94f5cbb",
-    role: "super_admin",
-    org_id: "default-org",
-  };
-
-  next();
-});
+app.use(tenantContext);
 
 /**
  * =========================================
@@ -74,10 +76,11 @@ app.use((req, res, next) => {
  */
 
 app.get("/", (req, res) => {
-  return res.status(200).json({
+  res.json({
     status: "alive",
     service: "OperionOS Backend",
-    version: "2.0-stable",
+    version: "2.2-saas-horizon-diagnostics",
+    tenant: req.tenant || null,
     timestamp: new Date().toISOString(),
   });
 });
@@ -99,19 +102,25 @@ app.use("/api/metrics", metricsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
 /**
- * COPILOT (LEGACY SYSTEM - STILL ACTIVE)
+ * COPILOT AI SYSTEM
  */
 app.use("/api/copilot", copilotRoutes);
 
 /**
- * 🧠 OPERION CORE ENGINE (NEW)
+ * OPERION CORE SYSTEM
  */
 app.use("/api/operion", operionRoutes);
+app.use("/api/operion/dashboard", operionDashboardRoutes);
 
 /**
- * 📊 OPERION DASHBOARD LAYER (STEP 8A)
+ * 🧠 HORIZON SYNC API (STEP 9C)
  */
-app.use("/api/operion/dashboard", operionDashboardRoutes);
+app.use("/api/horizon", horizonRoutes);
+
+/**
+ * 🧠 SYSTEM DIAGNOSTICS API (STEP 11A)
+ */
+app.use("/api/system", systemRoutes);
 
 /**
  * ADMIN
@@ -119,7 +128,7 @@ app.use("/api/operion/dashboard", operionDashboardRoutes);
 app.use("/api/admin", adminRoutes);
 
 /**
- * HEALTH
+ * HEALTH CHECK
  */
 app.use("/api/health", healthRoutes);
 
@@ -130,7 +139,7 @@ app.use("/api/health", healthRoutes);
  */
 
 app.use((req, res) => {
-  return res.status(404).json({
+  res.status(404).json({
     success: false,
     error: "Route not found",
   });
@@ -146,6 +155,7 @@ const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
   console.log(`🚀 OperionOS running on port ${PORT}`);
-  console.log(`🧠 Operion Core active at /api/operion`);
-  console.log(`📊 Dashboard active at /api/operion/dashboard`);
+  console.log(`🧠 SaaS tenant system ACTIVE`);
+  console.log(`📡 Horizon Sync API ACTIVE (/api/horizon)`);
+  console.log(`🩺 System Diagnostics ACTIVE (/api/system/status)`);
 });
