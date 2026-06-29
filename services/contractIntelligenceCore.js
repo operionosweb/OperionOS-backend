@@ -1,141 +1,253 @@
-// services/contractIntelligenceCore.js
-
-const contractPipeline = require("../contractPipeline");
-const contractRiskScoringEngine = require("../contractRiskScoringEngine");
-const clauseReasoningEngine = require("../clauseReasoningEngine");
-const contractCopilotEngine = require("../contractCopilotEngine");
-const contractVersionEngine = require("../contractVersionEngine");
-const contractDashboardEngine = require("../contractDashboardEngine");
-const decisionOS = require("../decisionOS");
+import { diffClauses, calculateRiskDelta } from "../contractPipeline.js";
 
 /**
- * Contract Intelligence Core
- * -----------------------------------------
- * This is the single orchestration layer for ALL contract intelligence operations.
- * It ensures every uploaded contract flows through a unified intelligence pipeline.
+ * =====================================================
+ * OPERION CONTRACT INTELLIGENCE CORE
+ * =====================================================
+ *
+ * Single orchestration layer for:
+ *
+ * - Contract ingestion
+ * - Clause extraction
+ * - Obligation extraction
+ * - Deadline extraction
+ * - Risk assessment
+ * - Recommendation generation
+ *
+ * Aviation-first architecture.
+ *
+ * This layer becomes the foundation for:
+ *
+ * 1. Contract Intelligence
+ * 2. Aviation Intelligence
+ * 3. Predictive Risk Engine
+ * 4. Scenario Simulation
+ *
+ * =====================================================
  */
 
-class ContractIntelligenceCore {
-  
+export class ContractIntelligenceCore {
   /**
-   * MAIN ENTRY POINT
-   * Called whenever a contract is uploaded or updated.
+   * ---------------------------------------------
+   * Normalize Contract Text
+   * ---------------------------------------------
    */
-  static async processContract({
-    contractId,
-    fileText,
-    metadata = {},
-    source = "upload"
+  static normalizeText(text = "") {
+    return text
+      .replace(/\r/g, "")
+      .replace(/\n{2,}/g, "\n")
+      .trim();
+  }
+
+  /**
+   * ---------------------------------------------
+   * Clause Extraction
+   * ---------------------------------------------
+   *
+   * Placeholder implementation.
+   *
+   * Later:
+   * - OpenAI
+   * - Claude
+   * - Gemini
+   * - Local LLM
+   */
+  static async extractClauses(contractText) {
+    const clauses = [];
+
+    const lower = contractText.toLowerCase();
+
+    if (lower.includes("termination")) {
+      clauses.push({
+        type: "Termination",
+        risk: "Medium",
+        summary: "Termination clause detected"
+      });
+    }
+
+    if (lower.includes("force majeure")) {
+      clauses.push({
+        type: "Force Majeure",
+        risk: "Medium",
+        summary: "Force majeure clause detected"
+      });
+    }
+
+    if (lower.includes("liability")) {
+      clauses.push({
+        type: "Liability",
+        risk: "High",
+        summary: "Liability clause detected"
+      });
+    }
+
+    return clauses;
+  }
+
+  /**
+   * ---------------------------------------------
+   * Obligation Extraction
+   * ---------------------------------------------
+   */
+  static async extractObligations(contractText) {
+    const obligations = [];
+
+    const lines = contractText.split("\n");
+
+    for (const line of lines) {
+      const lower = line.toLowerCase();
+
+      if (
+        lower.includes("shall") ||
+        lower.includes("must") ||
+        lower.includes("required")
+      ) {
+        obligations.push({
+          obligation: line.trim()
+        });
+      }
+    }
+
+    return obligations;
+  }
+
+  /**
+   * ---------------------------------------------
+   * Deadline Extraction
+   * ---------------------------------------------
+   */
+  static async extractDeadlines(contractText) {
+    const deadlines = [];
+
+    const regex =
+      /\b\d+\s+(days|months|years|hours|weeks)\b/gi;
+
+    const matches = contractText.match(regex);
+
+    if (matches) {
+      matches.forEach(item => {
+        deadlines.push({
+          deadline: item
+        });
+      });
+    }
+
+    return deadlines;
+  }
+
+  /**
+   * ---------------------------------------------
+   * Risk Assessment
+   * ---------------------------------------------
+   */
+  static async calculateRiskScore(clauses) {
+    let score = 0;
+
+    clauses.forEach(clause => {
+      if (clause.risk === "High") score += 30;
+      if (clause.risk === "Medium") score += 15;
+      if (clause.risk === "Low") score += 5;
+    });
+
+    return Math.min(score, 100);
+  }
+
+  /**
+   * ---------------------------------------------
+   * Recommendations
+   * ---------------------------------------------
+   */
+  static async generateRecommendations({
+    clauses,
+    riskScore
   }) {
-    try {
-      
-      // STEP 1: Normalize + preprocess contract
-      const normalizedContract = await contractPipeline.normalize({
-        contractId,
-        fileText,
-        metadata
-      });
+    const recommendations = [];
 
-      // STEP 2: Clause extraction
-      const clauses = await clauseReasoningEngine.extractClauses({
-        contractText: normalizedContract.text
-      });
+    if (riskScore > 70) {
+      recommendations.push(
+        "Immediate legal review recommended."
+      );
+    }
 
-      // STEP 3: Risk scoring
-      const riskScore = await contractRiskScoringEngine.scoreContract({
-        contractText: normalizedContract.text,
-        clauses
-      });
-
-      // STEP 4: Contract Copilot summary + intelligence
-      const copilotInsight = await contractCopilotEngine.analyze({
-        contractText: normalizedContract.text,
-        clauses,
-        metadata
-      });
-
-      // STEP 5: Version tracking
-      const versionData = await contractVersionEngine.process({
-        contractId,
-        fileText: normalizedContract.text
-      });
-
-      // STEP 6: Decision OS integration
-      const decisionOutput = await decisionOS.evaluate({
-        contractId,
-        clauses,
-        riskScore,
-        metadata
-      });
-
-      // STEP 7: Build unified intelligence object
-      const intelligence = {
-        contractId,
-        source,
-
-        summary: copilotInsight.summary,
-        keyInsights: copilotInsight.insights,
-
-        clauses,
-        riskScore,
-
-        decisionRecommendations: decisionOutput.recommendations,
-
-        version: versionData.version,
-        timestamp: new Date().toISOString()
-      };
-
-      // STEP 8: Send to dashboard engine (non-blocking)
-      try {
-        await contractDashboardEngine.update(intelligence);
-      } catch (err) {
-        console.warn("Dashboard update failed:", err.message);
+    clauses.forEach(clause => {
+      if (clause.type === "Liability") {
+        recommendations.push(
+          "Review liability cap and indemnity exposure."
+        );
       }
 
-      return intelligence;
+      if (clause.type === "Termination") {
+        recommendations.push(
+          "Verify termination notice periods."
+        );
+      }
+    });
 
-    } catch (error) {
-      console.error("ContractIntelligenceCore error:", error);
-      throw new Error("Failed to process contract intelligence");
-    }
+    return recommendations;
   }
 
   /**
-   * QUICK ANALYSIS (for chat / copilot queries)
+   * ---------------------------------------------
+   * Main Intelligence Pipeline
+   * ---------------------------------------------
    */
-  static async quickAnalyze({ contractText }) {
-    const clauses = await clauseReasoningEngine.extractClauses({
-      contractText
-    });
+  static async processContract({
+    contractText,
+    previousClauses = [],
+    previousRiskScore = 0
+  }) {
+    const normalizedText =
+      this.normalizeText(contractText);
 
-    const riskScore = await contractRiskScoringEngine.scoreContract({
-      contractText,
+    const clauses =
+      await this.extractClauses(normalizedText);
+
+    const obligations =
+      await this.extractObligations(normalizedText);
+
+    const deadlines =
+      await this.extractDeadlines(normalizedText);
+
+    const riskScore =
+      await this.calculateRiskScore(clauses);
+
+    const recommendations =
+      await this.generateRecommendations({
+        clauses,
+        riskScore
+      });
+
+    const clauseChanges = diffClauses(
+      previousClauses,
       clauses
-    });
+    );
+
+    const riskDelta =
+      calculateRiskDelta(
+        previousRiskScore,
+        riskScore
+      );
 
     return {
+      summary: {
+        clauseCount: clauses.length,
+        obligationCount: obligations.length,
+        deadlineCount: deadlines.length,
+        riskScore
+      },
+
       clauses,
-      riskScore
+      obligations,
+      deadlines,
+
+      recommendations,
+
+      clauseChanges,
+      riskDelta,
+
+      generatedAt: new Date().toISOString()
     };
-  }
-
-  /**
-   * RISK ONLY MODE (for dashboards)
-   */
-  static async riskOnly({ contractText }) {
-    return await contractRiskScoringEngine.scoreContract({
-      contractText
-    });
-  }
-
-  /**
-   * CLAUSE ONLY MODE (for UI inspection)
-   */
-  static async clausesOnly({ contractText }) {
-    return await clauseReasoningEngine.extractClauses({
-      contractText
-    });
   }
 }
 
-module.exports = ContractIntelligenceCore;
+export default ContractIntelligenceCore;
