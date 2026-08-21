@@ -1,5 +1,7 @@
 // middleware/apiKeyMiddleware.js
 
+import crypto from "node:crypto";
+
 export function apiKeyMiddleware(req, res, next) {
   try {
     /**
@@ -16,30 +18,6 @@ export function apiKeyMiddleware(req, res, next) {
 
     /**
      * =========================================
-     * DEBUG LOGS
-     * =========================================
-     */
-
-    console.log(
-      "================ API KEY DEBUG ================"
-    );
-
-    console.log(
-      "EXPECTED KEY:",
-      expectedKey
-    );
-
-    console.log(
-      "RECEIVED KEY:",
-      receivedKey
-    );
-
-    console.log(
-      "================================================"
-    );
-
-    /**
-     * =========================================
      * VALIDATION
      * =========================================
      */
@@ -51,12 +29,24 @@ export function apiKeyMiddleware(req, res, next) {
       });
     }
 
-    if (receivedKey !== expectedKey) {
+    const receivedBuffer = Buffer.from(receivedKey);
+    const expectedBuffer = Buffer.from(expectedKey || "");
+    const isValid =
+      receivedBuffer.length === expectedBuffer.length &&
+      crypto.timingSafeEqual(receivedBuffer, expectedBuffer);
+
+    if (!isValid) {
       return res.status(403).json({
         success: false,
         error: "Invalid API key",
       });
     }
+
+    req.auth = {
+      type: "internal_api_key",
+      isAuthenticated: true,
+      role: "internal",
+    };
 
     next();
 

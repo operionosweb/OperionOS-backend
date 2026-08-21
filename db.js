@@ -1,5 +1,6 @@
 import pkg from "pg";
 import dotenv from "dotenv";
+import crypto from "node:crypto";
 
 dotenv.config();
 
@@ -8,11 +9,6 @@ const { Pool } = pkg;
 /* ===============================
    DATABASE CONNECTION
 =============================== */
-
-if (!process.env.DATABASE_URL) {
-  console.error("❌ DATABASE_URL missing");
-  process.exit(1);
-}
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -26,21 +22,29 @@ const pool = new Pool({
    CONNECTION TEST
 =============================== */
 
-pool.connect()
-  .then(client => {
-    console.log("🟢 DB connected (audit layer active)");
-    client.release();
-  })
-  .catch(err => {
-    console.error("❌ DB connection failed");
-    console.error(err.message);
-  });
+if (process.env.DATABASE_URL) {
+  pool.connect()
+    .then(client => {
+      console.log("🟢 DB connected (audit layer active)");
+      client.release();
+    })
+    .catch(err => {
+      console.error("❌ DB connection failed");
+      console.error(err.message);
+    });
+}
 
 /* ===============================
    SAFE QUERY WRAPPER
 =============================== */
 
 export async function query(text, params = []) {
+  if (!process.env.DATABASE_URL) {
+    const error = new Error("DATABASE_URL is not configured");
+    error.code = "DATABASE_NOT_CONFIGURED";
+    throw error;
+  }
+
   try {
     return await pool.query(text, params);
   } catch (err) {

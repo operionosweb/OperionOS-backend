@@ -38,9 +38,10 @@ export async function searchContracts({
   type = "",
   provider = "",
   minRisk = 0,
+  organizationId,
 }) {
   try {
-    const allContractsResult = await getAllContracts();
+    const allContractsResult = await getAllContracts(organizationId);
 
     const contracts = allContractsResult.contracts || [];
 

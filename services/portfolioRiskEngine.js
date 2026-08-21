@@ -9,8 +9,12 @@ import supabase from "../config/supabase.js";
  * =========================================
  */
 
-export async function calculatePortfolioRisk() {
+export async function calculatePortfolioRisk(organizationId) {
   try {
+    if (!organizationId) {
+      throw new TypeError("organizationId is required");
+    }
+
     /**
      * -----------------------------------------
      * LOAD CONTRACTS
@@ -19,7 +23,8 @@ export async function calculatePortfolioRisk() {
 
     const { data, error } = await supabase
       .from("contracts")
-      .select("*");
+      .select("*")
+      .eq("organization_id", organizationId);
 
     if (error) {
       throw error;

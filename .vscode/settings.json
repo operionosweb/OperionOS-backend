@@ -1,0 +1,49 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "Test-Path": true,
+        "npm.cmd": true,
+        "/^node --check services/documentIngestionService\\.js; node --check services/contractService\\.js; node --check routes/documentRoutes\\.js; node --check routes/contractRoutes\\.js; node --check routes/analysisRunRoutes\\.js; node --check test/document-ingestion\\.test\\.js$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^git diff --check; node --check services/documentIngestionService\\.js; node --check services/contractService\\.js$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "ForEach-Object": true,
+        "/^node --test test/http-security\\.test\\.js$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^node --test test/phase3a-foundation\\.test\\.js$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "Get-Command": true,
+        "/^node --test test/phase3a-foundation\\.test\\.js; npm\\.cmd test; git diff --check$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^node --check services/phase3/source/documentVersionSourceService\\.js; node --check repositories/phase3/clauseRepository\\.js; node --check services/phase3/intelligence/deterministicClauseService\\.js; node --input-type=module -e \"import \\{ segmentDeterministicClauses \\} from '\\./services/phase3/intelligence/deterministicClauseService\\.js'; const source=\\{text:'ARTICLE 1 - RENT\\\\nThe lessee shall pay rent\\.\\\\n\\\\n3\\. Maintenance\\\\nThe lessee shall maintain the aircraft\\.\\\\n\\\\n3\\.1 Inspections\\\\nInspections are required\\.',organizationId:'11111111-1111-4111-8111-111111111111',contractId:'22222222-2222-4222-8222-222222222222',documentId:'33333333-3333-4333-8333-333333333333',documentVersionId:'44444444-4444-4444-8444-444444444444',analysisRunId:'55555555-5555-4555-8555-555555555555',pageBoundaries:'unavailable',sourceLocator:\\(a,b\\)=>'document_version:x:char:'\\+a\\+'-'\\+b\\}; const clauses=segmentDeterministicClauses\\(source\\); if\\(clauses\\.length!==3 ; clauses\\[1\\]\\.clause_number!=='3' ; clauses\\[2\\]\\.clause_number!=='3\\.1' ; clauses\\[0\\]\\.evidence\\.char_start!==0\\) throw new Error\\('deterministic segmentation check failed'\\); console\\.log\\('Phase 3B segmentation smoke check passed'\\);\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^node --test test/phase3b-deterministic-clause\\.test\\.js 2>&1 \\| tail -100$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "Set-ExecutionPolicy": true,
+        "/^Set-Location \"c:\\\\Users\\\\meeli\\\\Operion OS GitHub\\\\OperionOS-backend\"; node --test test/phase3b-deterministic-clause\\.test\\.js$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^node --test test/phase3b-deterministic-clause\\.test\\.js$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^node --check services/phase3/intelligence/deterministicClauseService\\.js ; echo \"EXIT_CODE: \\$LastExitCode\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

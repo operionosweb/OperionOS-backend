@@ -1,7 +1,16 @@
 import express from "express";
 import operionOrchestrator from "../services/operionOrchestrator.js";
+import { authenticateUser } from "../middleware/userAuthMiddleware.js";
+import { requireOrganizationMembership } from "../middleware/organizationMiddleware.js";
+import { requireOrganizationPermission } from "../middleware/authorizationMiddleware.js";
 
 const router = express.Router();
+
+router.use(
+  authenticateUser,
+  requireOrganizationMembership,
+  requireOrganizationPermission("contract:read")
+);
 
 /**
  * 🧠 OPERION CONTRACT ANALYSIS ENDPOINT
@@ -27,7 +36,7 @@ router.post("/analyze-contract", async (req, res) => {
     // =========================
     const context = {
       user: req.user,
-      org_id: req.user?.org_id || "default-org",
+      org_id: req.organization.id,
       document_id: document_id || null,
       metadata: metadata || {},
       request_id: generateRequestId(),

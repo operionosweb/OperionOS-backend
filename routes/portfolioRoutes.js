@@ -5,8 +5,17 @@ import express from "express";
 import {
   calculatePortfolioRisk,
 } from "../services/portfolioRiskEngine.js";
+import { authenticateUser } from "../middleware/userAuthMiddleware.js";
+import { requireOrganizationMembership } from "../middleware/organizationMiddleware.js";
+import { requireOrganizationPermission } from "../middleware/authorizationMiddleware.js";
 
 const router = express.Router();
+
+router.use(
+  authenticateUser,
+  requireOrganizationMembership,
+  requireOrganizationPermission("contract:read")
+);
 
 /**
  * =========================================
@@ -17,7 +26,7 @@ const router = express.Router();
 router.get("/", async (req, res) => {
   try {
     const portfolio =
-      await calculatePortfolioRisk();
+      await calculatePortfolioRisk(req.organization.id);
 
     return res.status(200).json({
       success: true,
@@ -47,7 +56,7 @@ router.get("/", async (req, res) => {
 router.get("/summary", async (req, res) => {
   try {
     const portfolio =
-      await calculatePortfolioRisk();
+      await calculatePortfolioRisk(req.organization.id);
 
     return res.status(200).json({
       success: true,

@@ -1,8 +1,5 @@
-// routes/contractRoutes.js
-
 import express from "express";
 import multer from "multer";
-import pdfParse from "pdf-parse";
 
 import {
   createContract,
@@ -11,215 +8,165 @@ import {
   updateContract,
   deleteContract,
 } from "../services/contractService.js";
-
-import { apiKeyMiddleware } from "../middleware/apiKeyMiddleware.js";
+import {
+  ingestContractUpload,
+  listDocumentsForContract,
+} from "../services/documentIngestionService.js";
+import { authenticateUser } from "../middleware/userAuthMiddleware.js";
+import { requireOrganizationMembership } from "../middleware/organizationMiddleware.js";
+import { requireOrganizationPermission } from "../middleware/authorizationMiddleware.js";
 
 const router = express.Router();
-
-/**
- * =========================================
- * MULTER CONFIG
- * =========================================
- */
-
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 20 * 1024 * 1024,
-  },
+  limits: { fileSize: 20 * 1024 * 1024 },
 });
 
-/**
- * =========================================
- * DEBUG MIDDLEWARE (TEMP - SAFE)
- * =========================================
- */
+function receiveUpload(req, res, next) {
+  upload.single("file")(req, res, (error) => {
+    if (!error) return next();
 
-function debugHeaders(req, res, next) {
-  console.log("🔥 REQUEST HEADERS:", req.headers);
-  console.log("🔥 API KEY HEADER:", req.headers["x-api-key"]);
-  next();
+    if (error.code === "LIMIT_FILE_SIZE") {
+      return res.status(413).json({
+        success: false,
+        code: "FILE_TOO_LARGE",
+        error: "The uploaded file exceeds the 20MB limit",
+      });
+    }
+
+    return res.status(400).json({
+      success: false,
+      code: "INVALID_FILE",
+      error: "The uploaded file could not be received",
+    });
+  });
 }
 
-/**
- * =========================================
- * HEALTH CHECK
- * =========================================
- */
+function sendIngestionError(error, res) {
+  const status = error.status || (error.code === "STORAGE_ERROR" ? 503 : 400);
+  return res.status(status).json({
+    success: false,
+    code: error.code || "STORAGE_ERROR",
+    error: error.message || "Document request failed",
+  });
+}
 
-router.get("/health", async (req, res) => {
-  return res.status(200).json({
+router.get("/health", (req, res) => {
+  res.status(200).json({
     success: true,
     service: "contract-routes",
     status: "operational",
   });
 });
 
-/**
- * =========================================
- * UPLOAD CONTRACT (PROTECTED)
- * =========================================
- */
+router.use(authenticateUser, requireOrganizationMembership);
 
 router.post(
   "/upload",
-  debugHeaders,
-  apiKeyMiddleware,
-  upload.single("file"),
+  requireOrganizationPermission("contract:write"),
+  receiveUpload,
   async (req, res) => {
     try {
-      if (!req.file) {
-        return res.status(400).json({
-          success: false,
-          error: "No file uploaded",
-        });
-      }
-
-      let extractedText = "";
-
-      try {
-        const pdfData = await pdfParse(req.file.buffer);
-        extractedText = pdfData.text || "";
-      } catch (err) {
-        console.error("PDF Parse Error:", err);
-
-        return res.status(500).json({
-          success: false,
-          error: "Failed to extract PDF text",
-        });
-      }
-
-      if (!extractedText || extractedText.length < 100) {
-        return res.status(400).json({
-          success: false,
-          error: "Document text too short or unreadable",
-        });
-      }
-
-      const result = await createContract({
-        text: extractedText,
-        filename: req.file.originalname,
+      const result = await ingestContractUpload({
+        file: req.file,
+        organizationId: req.organization.id,
+        userId: req.user.id,
+        requestId: req.requestId,
+        title: req.body.title,
+        contractId: req.body.contract_id || null,
+        documentId: req.body.document_id || null,
       });
 
       return res.status(201).json(result);
     } catch (error) {
-      console.error("Upload Route Error:", error);
+      return sendIngestionError(error, res);
+    }
+  }
+);
 
+// Legacy JSON contract path remains protected but is not used by Phase 2 upload.
+router.post(
+  "/",
+  requireOrganizationPermission("contract:write"),
+  async (req, res) => {
+    try {
+      const result = await createContract({
+        ...req.body,
+        organizationId: req.organization.id,
+        userId: req.user.id,
+      });
+      return res.status(201).json(result);
+    } catch (error) {
       return res.status(500).json({
         success: false,
-        error: error.message || "Upload failed",
+        error: "Contract creation failed",
       });
     }
   }
 );
 
-/**
- * =========================================
- * CREATE CONTRACT (JSON) - PROTECTED
- * =========================================
- */
-
-router.post("/", debugHeaders, apiKeyMiddleware, async (req, res) => {
-  try {
-    const result = await createContract(req.body);
-
-    return res.status(201).json(result);
-  } catch (error) {
-    console.error("Create Contract Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      error: error.message || "Internal server error",
-    });
-  }
-});
-
-/**
- * =========================================
- * GET ALL CONTRACTS
- * =========================================
- */
-
-router.get("/", async (req, res) => {
-  try {
-    const result = await getAllContracts();
-
-    return res.status(200).json(result);
-  } catch (error) {
-    console.error("Get Contracts Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      error: error.message || "Failed to fetch contracts",
-    });
-  }
-});
-
-/**
- * =========================================
- * GET CONTRACT BY ID
- * =========================================
- */
-
-router.get("/:id", async (req, res) => {
-  try {
-    const result = await getContractById(req.params.id);
-
-    if (!result.success) {
-      return res.status(404).json(result);
+router.get(
+  "/",
+  requireOrganizationPermission("contract:read"),
+  async (req, res) => {
+    try {
+      return res.status(200).json(await getAllContracts(req.organization.id));
+    } catch {
+      return res.status(503).json({
+        success: false,
+        code: "STORAGE_ERROR",
+        error: "Contract lookup failed",
+      });
     }
-
-    return res.status(200).json(result);
-  } catch (error) {
-    console.error("Get Contract Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      error: error.message || "Failed to fetch contract",
-    });
   }
-});
+);
 
-/**
- * =========================================
- * UPDATE CONTRACT (PROTECTED)
- * =========================================
- */
-
-router.put("/:id", debugHeaders, apiKeyMiddleware, async (req, res) => {
-  try {
-    const result = await updateContract(req.params.id, req.body);
-
-    return res.status(200).json(result);
-  } catch (error) {
-    console.error("Update Contract Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      error: error.message || "Update failed",
-    });
+router.get(
+  "/:id/documents",
+  requireOrganizationPermission("contract:read"),
+  async (req, res) => {
+    try {
+      const documents = await listDocumentsForContract(
+        req.params.id,
+        req.organization.id
+      );
+      return res.json({ success: true, documents });
+    } catch (error) {
+      return sendIngestionError(error, res);
+    }
   }
-});
+);
 
-/**
- * =========================================
- * DELETE CONTRACT (PROTECTED)
- * =========================================
- */
-
-router.delete("/:id", debugHeaders, apiKeyMiddleware, async (req, res) => {
-  try {
-    const result = await deleteContract(req.params.id);
-
+router.get(
+  "/:id",
+  requireOrganizationPermission("contract:read"),
+  async (req, res) => {
+    const result = await getContractById(req.params.id, req.organization.id);
+    if (!result.success) return res.status(404).json(result);
     return res.status(200).json(result);
-  } catch (error) {
-    console.error("Delete Contract Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      error: error.message || "Delete failed",
-    });
   }
-});
+);
+
+router.put(
+  "/:id",
+  requireOrganizationPermission("contract:write"),
+  async (req, res) => {
+    const result = await updateContract(
+      req.params.id,
+      req.body,
+      req.organization.id
+    );
+    return res.status(result.success ? 200 : 404).json(result);
+  }
+);
+
+router.delete(
+  "/:id",
+  requireOrganizationPermission("contract:write"),
+  async (req, res) => {
+    const result = await deleteContract(req.params.id, req.organization.id);
+    return res.status(result.success ? 200 : 404).json(result);
+  }
+);
 
 export default router;

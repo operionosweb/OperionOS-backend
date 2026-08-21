@@ -4,13 +4,7 @@ import crypto from "crypto";
 
 import supabase from "../config/supabase.js";
 
-import { analyzeContractText } from "./aiExtractionService.js";
 import { ingestContract } from "./contractIngestionEngine.js";
-
-import {
-  generateEmbedding,
-  storeEmbedding,
-} from "./vectorMemoryService.js";
 
 import {
   calculatePortfolioRisk,
@@ -26,6 +20,14 @@ function generateId() {
   return crypto.randomUUID();
 }
 
+function requireOrganizationScope(organizationId) {
+  if (!organizationId || typeof organizationId !== "string") {
+    throw new TypeError("organizationId is required");
+  }
+
+  return organizationId;
+}
+
 /**
  * =========================================
  * CREATE CONTRACT
@@ -36,8 +38,24 @@ export async function createContract({
   text,
   filename = "contract.pdf",
   fileId = null,
+  organizationId,
+  userId,
 }) {
   try {
+    const { analyzeContractText } = await import("./aiExtractionService.js");
+    const { generateEmbedding, storeEmbedding } = await import(
+      "./vectorMemoryService.js"
+    );
+
+    requireOrganizationScope(organizationId);
+
+    if (!userId || typeof userId !== "string") {
+      return {
+        success: false,
+        error: "userId is required",
+      };
+    }
+
     /**
      * -----------------------------------------
      * VALIDATION
@@ -89,6 +107,12 @@ export async function createContract({
 
     const contract = {
       id: generateId(),
+
+      organization_id: organizationId,
+
+      created_by: userId,
+
+      title: filename,
 
       filename,
 
@@ -192,7 +216,7 @@ export async function createContract({
 
     try {
       portfolioAnalytics =
-        await calculatePortfolioRisk();
+        await calculatePortfolioRisk(organizationId);
     } catch (portfolioError) {
       console.error(
         "Portfolio analytics error:",
@@ -230,11 +254,14 @@ export async function createContract({
  * =========================================
  */
 
-export async function getAllContracts() {
+export async function getAllContracts(organizationId) {
   try {
+    requireOrganizationScope(organizationId);
+
     const { data, error } = await supabase
       .from("contracts")
       .select("*")
+      .eq("organization_id", organizationId)
       .order("created_at", {
         ascending: false,
       });
@@ -249,13 +276,12 @@ export async function getAllContracts() {
       contracts: data,
     };
   } catch (error) {
-    console.error("getAllContracts error:", error);
+    console.error("getAllContracts error", { code: error.code || "STORAGE_ERROR" });
 
     return {
       success: false,
-      error:
-        error.message ||
-        "Failed to fetch contracts",
+      code: "STORAGE_ERROR",
+      error: "Contract lookup failed",
     };
   }
 }
@@ -266,12 +292,15 @@ export async function getAllContracts() {
  * =========================================
  */
 
-export async function getContractById(id) {
+export async function getContractById(id, organizationId) {
   try {
+    requireOrganizationScope(organizationId);
+
     const { data, error } = await supabase
       .from("contracts")
       .select("*")
       .eq("id", id)
+      .eq("organization_id", organizationId)
       .single();
 
     if (error) {
@@ -283,13 +312,12 @@ export async function getContractById(id) {
       contract: data,
     };
   } catch (error) {
-    console.error("getContractById error:", error);
+    console.error("getContractById error", { code: error.code || "CONTRACT_NOT_FOUND" });
 
     return {
       success: false,
-      error:
-        error.message ||
-        "Contract not found",
+      code: error.code === "STORAGE_ERROR" ? "STORAGE_ERROR" : "CONTRACT_NOT_FOUND",
+      error: error.code === "STORAGE_ERROR" ? "Contract lookup failed" : "Contract not found",
     };
   }
 }
@@ -302,11 +330,21 @@ export async function getContractById(id) {
 
 export async function updateContract(
   id,
-  updates = {}
+  updates = {},
+  organizationId
 ) {
   try {
+    requireOrganizationScope(organizationId);
+
+    const {
+      id: ignoredId,
+      organization_id: ignoredOrganizationId,
+      created_by: ignoredCreatedBy,
+      ...allowedUpdates
+    } = updates;
+
     const payload = {
-      ...updates,
+      ...allowedUpdates,
       updated_at: new Date().toISOString(),
     };
 
@@ -314,6 +352,7 @@ export async function updateContract(
       .from("contracts")
       .update(payload)
       .eq("id", id)
+      .eq("organization_id", organizationId)
       .select()
       .single();
 
@@ -326,13 +365,12 @@ export async function updateContract(
       contract: data,
     };
   } catch (error) {
-    console.error("updateContract error:", error);
+    console.error("updateContract error", { code: error.code || "CONTRACT_NOT_FOUND" });
 
     return {
       success: false,
-      error:
-        error.message ||
-        "Update failed",
+      code: error.code === "STORAGE_ERROR" ? "STORAGE_ERROR" : "CONTRACT_NOT_FOUND",
+      error: error.code === "STORAGE_ERROR" ? "Contract update failed" : "Contract not found",
     };
   }
 }
@@ -343,12 +381,15 @@ export async function updateContract(
  * =========================================
  */
 
-export async function deleteContract(id) {
+export async function deleteContract(id, organizationId) {
   try {
+    requireOrganizationScope(organizationId);
+
     const { error } = await supabase
       .from("contracts")
       .delete()
-      .eq("id", id);
+      .eq("id", id)
+      .eq("organization_id", organizationId);
 
     if (error) {
       throw error;
@@ -359,13 +400,12 @@ export async function deleteContract(id) {
       deleted_id: id,
     };
   } catch (error) {
-    console.error("deleteContract error:", error);
+    console.error("deleteContract error", { code: error.code || "CONTRACT_NOT_FOUND" });
 
     return {
       success: false,
-      error:
-        error.message ||
-        "Delete failed",
+      code: error.code === "STORAGE_ERROR" ? "STORAGE_ERROR" : "CONTRACT_NOT_FOUND",
+      error: error.code === "STORAGE_ERROR" ? "Contract deletion failed" : "Contract not found",
     };
   }
 }
@@ -376,10 +416,12 @@ export async function deleteContract(id) {
  * =========================================
  */
 
-export async function getPortfolioAnalytics() {
+export async function getPortfolioAnalytics(organizationId) {
   try {
+    requireOrganizationScope(organizationId);
+
     const analytics =
-      await calculatePortfolioRisk();
+      await calculatePortfolioRisk(organizationId);
 
     return {
       success: true,

@@ -9,8 +9,17 @@ import {
 import {
   semanticSearch,
 } from "../services/semanticSearchService.js";
+import { authenticateUser } from "../middleware/userAuthMiddleware.js";
+import { requireOrganizationMembership } from "../middleware/organizationMiddleware.js";
+import { requireOrganizationPermission } from "../middleware/authorizationMiddleware.js";
 
 const router = express.Router();
+
+router.use(
+  authenticateUser,
+  requireOrganizationMembership,
+  requireOrganizationPermission("contract:read")
+);
 
 /**
  * =========================================
@@ -37,6 +46,7 @@ router.get("/", async (req, res) => {
       type,
       provider,
       minRisk: Number(minRisk),
+      organizationId: req.organization.id,
     });
 
     return res.status(200).json(results);
@@ -69,7 +79,8 @@ router.get("/semantic", async (req, res) => {
 
     const results = await semanticSearch(
       q,
-      Number(limit)
+      Number(limit),
+      req.organization.id
     );
 
     return res.status(200).json(results);

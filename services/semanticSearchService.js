@@ -55,9 +55,9 @@ async function getQueryEmbedding(query) {
    MAIN SEMANTIC SEARCH
 ========================================= */
 
-export async function semanticSearch(query = "", limit = 5) {
+export async function semanticSearch(query = "", limit = 5, organizationId) {
   try {
-    if (!query) {
+    if (!query || !organizationId) {
       return {
         success: false,
         error: "Query is required",
@@ -94,7 +94,8 @@ export async function semanticSearch(query = "", limit = 5) {
           obligations,
           document_hash
         )
-      `);
+      `)
+      .eq("contracts.organization_id", organizationId);
 
     if (error) throw error;
 

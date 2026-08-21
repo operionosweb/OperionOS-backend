@@ -1,9 +1,13 @@
 import express from "express";
-import { apiKeyMiddleware } from "../middleware/apiKeyMiddleware.js";
 import { getContractById } from "../services/contractService.js";
 import { generateContractCopilot } from "../contractCopilotEngine.js";
+import { authenticateUser } from "../middleware/userAuthMiddleware.js";
+import { requireOrganizationMembership } from "../middleware/organizationMiddleware.js";
+import { requireOrganizationPermission } from "../middleware/authorizationMiddleware.js";
 
 const router = express.Router();
+
+router.use(authenticateUser, requireOrganizationMembership);
 
 /**
  * =========================================
@@ -26,11 +30,17 @@ router.get("/health", (req, res) => {
  * POST /api/copilot/analyze/:contractId
  */
 
-router.post("/analyze/:contractId", apiKeyMiddleware, async (req, res) => {
+router.post(
+  "/analyze/:contractId",
+  requireOrganizationPermission("contract:read"),
+  async (req, res) => {
   try {
     const { contractId } = req.params;
 
-    const contractResult = await getContractById(contractId);
+    const contractResult = await getContractById(
+      contractId,
+      req.organization.id
+    );
 
     if (!contractResult?.success) {
       return res.status(404).json({
@@ -58,7 +68,8 @@ router.post("/analyze/:contractId", apiKeyMiddleware, async (req, res) => {
       error: error.message || "Copilot analysis failed",
     });
   }
-});
+  }
+);
 
 /**
  * =========================================
@@ -67,7 +78,10 @@ router.post("/analyze/:contractId", apiKeyMiddleware, async (req, res) => {
  * POST /api/copilot/analyze-direct
  */
 
-router.post("/analyze-direct", apiKeyMiddleware, async (req, res) => {
+router.post(
+  "/analyze-direct",
+  requireOrganizationPermission("contract:read"),
+  async (req, res) => {
   try {
     const { contract } = req.body;
 
@@ -96,6 +110,7 @@ router.post("/analyze-direct", apiKeyMiddleware, async (req, res) => {
       error: error.message || "Direct copilot analysis failed",
     });
   }
-});
+  }
+);
 
 export default router;

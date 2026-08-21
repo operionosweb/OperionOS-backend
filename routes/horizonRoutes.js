@@ -1,5 +1,7 @@
 import express from "express";
 import { buildHorizonPayload } from "../services/horizonSyncService.js";
+import { authenticateUser } from "../middleware/userAuthMiddleware.js";
+import { requireOrganizationMembership } from "../middleware/organizationMiddleware.js";
 
 const router = express.Router();
 
@@ -9,9 +11,13 @@ const router = express.Router();
  * =========================================
  */
 
-router.post("/contract-intelligence", async (req, res) => {
+router.post(
+  "/contract-intelligence",
+  authenticateUser,
+  requireOrganizationMembership,
+  async (req, res) => {
   try {
-    const { contract, tenant } = req.body;
+    const { contract } = req.body;
 
     if (!contract) {
       return res.status(400).json({
@@ -22,7 +28,7 @@ router.post("/contract-intelligence", async (req, res) => {
 
     const result = await buildHorizonPayload({
       contract,
-      tenant,
+      tenant: req.tenant,
     });
 
     return res.json(result);
@@ -34,6 +40,7 @@ router.post("/contract-intelligence", async (req, res) => {
       error: "Internal server error",
     });
   }
-});
+  }
+);
 
 export default router;

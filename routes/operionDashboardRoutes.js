@@ -1,7 +1,16 @@
 import express from "express";
 import supabase from "../supabaseClient.js";
+import { authenticateUser } from "../middleware/userAuthMiddleware.js";
+import { requireOrganizationMembership } from "../middleware/organizationMiddleware.js";
+import { requireOrganizationPermission } from "../middleware/authorizationMiddleware.js";
 
 const router = express.Router();
+
+router.use(
+  authenticateUser,
+  requireOrganizationMembership,
+  requireOrganizationPermission("audit:read")
+);
 
 /* =========================================
 GET ALL AUDIT LOGS
@@ -9,13 +18,10 @@ GET ALL AUDIT LOGS
 
 router.get("/audit", async (req, res) => {
   try {
-    const { company_id } = req.query;
-
-    const query = supabase.from("contract_audit_log").select("*");
-
-    if (company_id) {
-      query.eq("company_id", company_id);
-    }
+    const query = supabase
+      .from("contract_audit_log")
+      .select("*")
+      .eq("org_id", req.organization.id);
 
     const { data, error } = await query.order("timestamp", {
       ascending: false,
@@ -46,24 +52,19 @@ GET CONTRACT DECISIONS (LATEST FIRST)
 
 router.get("/decisions", async (req, res) => {
   try {
-    const { company_id } = req.query;
-
     const { data, error } = await supabase
       .from("contract_audit_log")
       .select("contract_id, output_snapshot, risk_score, timestamp")
+      .eq("org_id", req.organization.id)
       .order("timestamp", { ascending: false });
 
     if (error) {
       return res.status(500).json({ success: false, error: error.message });
     }
 
-    const filtered = company_id
-      ? data.filter((d) => d.company_id === company_id)
-      : data;
-
     res.json({
       success: true,
-      data: filtered,
+      data,
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -78,7 +79,8 @@ router.get("/risk-summary", async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("contract_audit_log")
-      .select("risk_score");
+      .select("risk_score")
+      .eq("org_id", req.organization.id);
 
     if (error) {
       return res.status(500).json({ success: false, error: error.message });
