@@ -50,6 +50,26 @@ const compatibilityConstraints = [
   "analysis_runs_document_version_organization_fk",
 ];
 
+const allowedPlatformSchemas = new Set([
+  "public",
+  "auth",
+  "storage",
+  "realtime",
+  "graphql",
+  "graphql_public",
+  "extensions",
+  "vault",
+  "supabase_functions",
+]);
+
+const migrationHistoryTables = [
+  "supabase_migrations.schema_migrations",
+  "public.schema_migrations",
+  "public._prisma_migrations",
+  "public.goose_db_version",
+  "public.flyway_schema_history",
+];
+
 function required(name) {
   const value = process.env[name];
 
@@ -67,6 +87,115 @@ function projectRefFromUrl(url) {
   return parsed.hostname.split(".")[0];
 }
 
+function classifyMigrationError(error) {
+  if (error?.code === "23505") return "duplicate_constraint_or_unique_violation";
+  if (error?.code === "42710") return "duplicate_object";
+  if (error?.code === "42P01") return "undefined_relation";
+  if (error?.code === "42703") return "undefined_column";
+  if (error?.code === "28P01" || error?.code === "28000") return "authentication_failure";
+  if (error?.code === "ECONNREFUSED" || error?.code === "ETIMEDOUT") return "connection_failure";
+  return "database_or_migration_error";
+}
+
+export async function inspectMigrationState(client) {
+  const tables = await client.query(`
+    select n.nspname as schema_name, c.relname as object_name, c.relkind as object_kind
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public'
+       and c.relkind in ('r', 'p', 'v', 'm', 'f')
+     order by c.relname
+  `);
+  const schemas = await client.query(`
+    select nspname as schema_name
+      from pg_namespace
+     where nspname not like 'pg_%'
+       and nspname <> 'information_schema'
+     order by nspname
+  `);
+  const history = await client.query(`
+    select table_schema, table_name
+      from information_schema.tables
+     where (table_schema, table_name) in (
+       ('supabase_migrations', 'schema_migrations'),
+       ('public', 'schema_migrations'),
+       ('public', '_prisma_migrations'),
+       ('public', 'goose_db_version'),
+       ('public', 'flyway_schema_history')
+     )
+  `);
+  const buckets = await client.query(`
+    select id from storage.buckets where id = 'contract-documents'
+  `);
+  const users = await client.query(`
+    select count(*)::integer as count from auth.users
+  `);
+
+  return {
+    publicObjects: tables.rows || [],
+    unexpectedSchemas: (schemas.rows || []).filter(
+      ({ schema_name }) => !allowedPlatformSchemas.has(schema_name)
+    ),
+    migrationHistory: history.rows || [],
+    contractDocumentBucket: buckets.rows || [],
+    authUserCount: Number(users.rows?.[0]?.count || 0),
+  };
+}
+
+export async function getDatabaseEmptyState(client) {
+  try {
+    const state = await inspectMigrationState(client);
+    const reasons = [];
+
+    if (state.publicObjects.length) {
+      reasons.push(`public objects: ${state.publicObjects.map((row) => row.object_name).join(", ")}`);
+    }
+    if (state.unexpectedSchemas.length) {
+      reasons.push(`unexpected schemas: ${state.unexpectedSchemas.map((row) => row.schema_name).join(", ")}`);
+    }
+    if (state.migrationHistory.length) {
+      reasons.push(`migration history tables: ${state.migrationHistory.map((row) => `${row.table_schema}.${row.table_name}`).join(", ")}`);
+    }
+    if (state.contractDocumentBucket.length) {
+      reasons.push("Storage bucket: contract-documents");
+    }
+    if (state.authUserCount > 0) {
+      reasons.push(`auth users: ${state.authUserCount}`);
+    }
+
+    return {
+      status: reasons.length ? "DATABASE_NOT_EMPTY" : "DATABASE_EMPTY",
+      reasons,
+      migrationHistory: state.migrationHistory.length ? "KNOWN" : "UNKNOWN",
+      ...state,
+    };
+  } catch (error) {
+    return {
+      status: "DATABASE_CHECK_FAILED",
+      reasons: [error.code || "database_catalog_check_failed"],
+      migrationHistory: "UNKNOWN",
+      publicObjects: [],
+      unexpectedSchemas: [],
+      migrationHistoryRows: [],
+      contractDocumentBucket: [],
+      authUserCount: 0,
+    };
+  }
+}
+
+export async function assertDatabaseEmpty(client) {
+  const state = await getDatabaseEmptyState(client);
+  if (state.status !== "DATABASE_EMPTY") {
+    const error = new Error(`Database state ${state.status}; refusing migration execution (${state.reasons.join("; ")})`);
+    error.code = state.status;
+    error.databaseStatus = state.status;
+    error.migrationHistory = state.migrationHistory;
+    throw error;
+  }
+
+  return state;
+}
+
 function loadSafeConfig() {
   if (process.env.PHASE3_DB_TEST_ENABLED !== "1") {
     throw new Error(
@@ -77,6 +206,18 @@ function loadSafeConfig() {
   if (process.env.PHASE3_DB_ENV !== "non-production-test") {
     throw new Error(
       "Refusing live verification: PHASE3_DB_ENV must equal non-production-test"
+    );
+  }
+
+  if (process.env.PHASE3_APPLY_MIGRATIONS !== "1") {
+    throw new Error(
+      "Refusing live verification: PHASE3_APPLY_MIGRATIONS must equal 1"
+    );
+  }
+
+  if (process.env.PHASE3_EMPTY_DATABASE !== "1") {
+    throw new Error(
+      "Refusing live verification: PHASE3_EMPTY_DATABASE must equal 1"
     );
   }
 
@@ -102,8 +243,8 @@ function loadSafeConfig() {
     supabaseUrl,
     anonKey: required("SUPABASE_ANON_KEY"),
     serviceRoleKey: required("SUPABASE_TEST_SERVICE_ROLE_KEY"),
-    applyMigrations: process.env.PHASE3_APPLY_MIGRATIONS === "1",
-    emptyDatabase: process.env.PHASE3_EMPTY_DATABASE === "1",
+    applyMigrations: true,
+    emptyDatabase: true,
     validateExistingForeignKeys:
       process.env.PHASE3_VALIDATE_EXISTING_FKS === "1",
   };
@@ -117,12 +258,16 @@ async function expectQueryFailure(client, text, values = []) {
   await assert.rejects(() => query(client, text, values));
 }
 
-async function applyMigrations(client) {
-  if (!process.env.PHASE3_APPLY_MIGRATIONS) {
+async function applyMigrations(client, {
+  requireEnabled = true,
+  log = console.log,
+  logError = console.error,
+} = {}) {
+  if (requireEnabled && process.env.PHASE3_APPLY_MIGRATIONS !== "1") {
     return;
   }
 
-  if (process.env.PHASE3_EMPTY_DATABASE !== "1") {
+  if (requireEnabled && process.env.PHASE3_EMPTY_DATABASE !== "1") {
     throw new Error(
       "Refusing migration application without PHASE3_EMPTY_DATABASE=1"
     );
@@ -133,21 +278,38 @@ async function applyMigrations(client) {
     "002_secure_document_ingestion.sql",
     "003_phase3a_foundation.sql",
     "004_phase3b_clause_identity_atomicity.sql",
+    "005_phase3c_obligation_identity_atomicity.sql",
   ];
 
   for (const filename of migrationFiles) {
-    const sql = await fs.readFile(
-      path.join(
-        repositoryRoot,
-        "supabase",
-        "migrations",
-        filename
-      ),
-      "utf8"
-    );
-
-    await query(client, sql);
+    const startedAt = Date.now();
+    const startedAtIso = new Date().toISOString();
+    log(`${filename} — START — ${startedAtIso}`);
+    try {
+      const sql = await fs.readFile(
+        path.join(
+          repositoryRoot,
+          "supabase",
+          "migrations",
+          filename
+        ),
+        "utf8"
+      );
+      await query(client, sql);
+      log(`${filename} — PASS — ${Date.now() - startedAt}ms — database_migration_applied`);
+    } catch (error) {
+      logError(`${filename} — FAIL — ${Date.now() - startedAt}ms — ${classifyMigrationError(error)}`);
+      error.migrationFilename = filename;
+      error.migrationClassification = classifyMigrationError(error);
+      throw error;
+    }
   }
+}
+
+export async function applyMigrationsAfterEmptyCheck(client) {
+  const migrationState = await assertDatabaseEmpty(client);
+  await applyMigrations(client);
+  return migrationState;
 }
 
 async function verifySchema(
@@ -250,6 +412,7 @@ async function verifySchema(
       "clause_id",
       "description",
       "obligation_type",
+      "obligation_identity",
       "confidence",
       "review_status",
     ],
@@ -383,6 +546,36 @@ async function verifySchema(
         "clauses_document_version_run_identity_key"
     ),
     "clause_identity uniqueness constraint exists"
+  );
+
+  const obligationIdentityConstraints = await query(
+    client,
+    `select conname
+       from pg_constraint
+      where conrelid = 'public.obligations'::regclass
+        and conname = any($1::text[])`,
+    [[
+      "obligations_obligation_identity_format_check",
+      "obligations_scope_identity_key",
+    ]]
+  );
+
+  assert.ok(
+    obligationIdentityConstraints.rows.some(
+      (row) =>
+        row.conname ===
+        "obligations_obligation_identity_format_check"
+    ),
+    "obligation_identity format check exists"
+  );
+
+  assert.ok(
+    obligationIdentityConstraints.rows.some(
+      (row) =>
+        row.conname ===
+        "obligations_scope_identity_key"
+    ),
+    "obligation_identity uniqueness constraint exists"
   );
 
   const constraints = await query(
@@ -545,6 +738,19 @@ async function seedTenant(client, user, label) {
 
   const clauseText =
     `${label} maintenance clause`;
+
+  const obligationIdentity = crypto
+    .createHash("sha256")
+    .update(
+      [
+        ids.organizationId,
+        ids.runId,
+        ids.clauseId,
+        "maintenance",
+        "maintain the aircraft",
+      ].join("|")
+    )
+    .digest("hex");
 
   await query(
     client,
@@ -908,6 +1114,7 @@ async function seedTenant(client, user, label) {
         obligor_party_id,
         description,
         obligation_type,
+        obligation_identity,
         priority,
         confidence
       )
@@ -921,8 +1128,9 @@ async function seedTenant(client, user, label) {
         $6,
         $7,
         $8,
-        'Maintain the aircraft',
+        'maintain the aircraft',
         'maintenance',
+        $9,
         'high',
         0.9
       )`,
@@ -935,6 +1143,7 @@ async function seedTenant(client, user, label) {
       ids.runId,
       ids.clauseId,
       ids.partyId,
+      obligationIdentity,
     ]
   );
 
@@ -1435,7 +1644,8 @@ async function main() {
 
   try {
     if (config.applyMigrations) {
-      await applyMigrations(database);
+      const migrationState = await applyMigrationsAfterEmptyCheck(database);
+      console.log(`Database emptiness — PASS — public objects: ${migrationState.publicObjects.length}; MIGRATION HISTORY: ${migrationState.migrationHistory.length ? "KNOWN" : "UNKNOWN"}`);
     }
 
     await verifySchema(
@@ -1542,10 +1752,19 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(
-    `Phase 3A live verification did not run: ${error.message}`
-  );
+export { loadSafeConfig, applyMigrations, main };
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+  const classification = error.code === "DATABASE_NOT_EMPTY"
+    ? "database_not_empty"
+    : error.migrationClassification || classifyMigrationError(error);
+  console.error(`Phase 3A live verification did not run: ${classification}`);
+  if (error.code === "DATABASE_NOT_EMPTY") {
+    console.error(`Database emptiness assertion failed: ${error.message}`);
+    console.error(`MIGRATION HISTORY: ${error.migrationHistory === "UNKNOWN" ? "UNKNOWN" : "present"}`);
+  }
 
   process.exitCode = 2;
-});
+  });
+}
