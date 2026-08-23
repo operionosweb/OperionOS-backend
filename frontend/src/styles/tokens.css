@@ -1,0 +1,205 @@
+/* Operion OS — semantic design tokens for operational + spatial UI. */
+:root {
+  color-scheme: light;
+
+  /* Color roles */
+  --op-color-background: #f3f5f9;
+  --op-color-surface: #ffffff;
+  --op-color-surface-raised: #f8f9fc;
+  --op-color-surface-overlay: rgba(255, 255, 255, 0.92);
+  --op-color-surface-inset: #eef2f8;
+  --op-color-text-primary: #11131a;
+  --op-color-text-secondary: #2b3446;
+  --op-color-text-muted: #5f6b84;
+  --op-color-text-inverse: #ffffff;
+  --op-color-border: #d7deea;
+  --op-color-border-strong: #bac5da;
+  --op-color-accent: #2468f2;
+  --op-color-accent-soft: rgba(36, 104, 242, 0.12);
+  --op-color-success: #12825f;
+  --op-color-warning: #a56c09;
+  --op-color-danger: #b03434;
+  --op-color-info: #2563eb;
+  --op-color-data-positive: #0f8c66;
+  --op-color-data-negative: #cb3346;
+  --op-color-spatial-depth-1: #f7f8fc;
+  --op-color-spatial-depth-2: #e8edf8;
+  --op-color-spatial-depth-3: #dbe3f2;
+  --op-color-focus: #1d4ed8;
+
+  /* Typography */
+  --op-font-display: "Segoe UI", "Inter", system-ui, -apple-system, sans-serif;
+  --op-font-heading: "Segoe UI", "Inter", system-ui, -apple-system, sans-serif;
+  --op-font-subheading: "Segoe UI", "Inter", system-ui, -apple-system, sans-serif;
+  --op-font-body: "Segoe UI", "Inter", system-ui, -apple-system, sans-serif;
+  --op-font-body-small: "Segoe UI", "Inter", system-ui, -apple-system, sans-serif;
+  --op-font-label: "Segoe UI", "Inter", system-ui, -apple-system, sans-serif;
+  --op-font-numeric: "Segoe UI", "Inter", system-ui, -apple-system, sans-serif;
+  --op-font-mono: "Cascadia Mono", "Consolas", "SFMono-Regular", Menlo, monospace;
+  --op-font-evidence: "Cascadia Mono", "Consolas", "SFMono-Regular", Menlo, monospace;
+
+  /* Type sizes */
+  --op-type-display: clamp(2.1rem, 4vw, 3.8rem);
+  --op-type-heading: clamp(1.55rem, 2.2vw, 2.45rem);
+  --op-type-subheading: clamp(1.2rem, 1.8vw, 1.45rem);
+  --op-type-body: 1rem;
+  --op-type-body-small: 0.875rem;
+  --op-type-label: 0.76rem;
+
+  /* Spacing */
+  --op-space-0: 0;
+  --op-space-1: 4px;
+  --op-space-2: 8px;
+  --op-space-3: 12px;
+  --op-space-4: 16px;
+  --op-space-5: 24px;
+  --op-space-6: 32px;
+  --op-space-7: 48px;
+  --op-space-8: 64px;
+  --op-space-9: 88px;
+  --op-space-10: 120px;
+
+  /* Radius semantics */
+  --op-radius-tight: 8px;
+  --op-radius-control: 12px;
+  --op-radius-panel: 18px;
+  --op-radius-shell: 24px;
+  --op-radius-pill: 999px;
+
+  /* Depth semantics */
+  --op-depth-flat: none;
+  --op-depth-raised: 0 8px 24px rgba(20, 33, 61, 0.08);
+  --op-depth-floating: 0 18px 42px rgba(16, 28, 56, 0.14);
+  --op-depth-spatial: 0 26px 64px rgba(11, 20, 42, 0.2);
+
+  /* Motion semantics */
+  --op-motion-instant: 0ms;
+  --op-motion-fast: 120ms;
+  --op-motion-normal: 220ms;
+  --op-motion-slow: 360ms;
+  --op-motion-spatial-transition: 520ms;
+  --op-motion-propagation: 680ms;
+  --op-motion-interaction: 180ms;
+  --op-ease-standard: cubic-bezier(0.3, 0, 0.2, 1);
+  --op-ease-emphasis: cubic-bezier(0.16, 1, 0.3, 1);
+  --op-ease-propagation: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Layout */
+  --op-max-width: 1280px;
+  --op-breakpoint-mobile: 640px;
+  --op-breakpoint-tablet: 960px;
+  --op-breakpoint-desktop: 1240px;
+
+  /* Compatibility aliases for existing components */
+  --op-bg: var(--op-color-background);
+  --op-surface: var(--op-color-surface);
+  --op-surface-raised: var(--op-color-surface-raised);
+  --op-border: var(--op-color-border);
+  --op-border-strong: var(--op-color-border-strong);
+  --op-glass: var(--op-color-surface-overlay);
+  --op-text: var(--op-color-text-primary);
+  --op-text-muted: var(--op-color-text-muted);
+  --op-text-faint: var(--op-color-text-secondary);
+  --op-accent: var(--op-color-accent);
+  --op-accent-soft: var(--op-color-accent-soft);
+  --op-accent-strong: #1856d7;
+  --op-signal-risk: var(--op-color-danger);
+  --op-signal-warn: var(--op-color-warning);
+  --op-signal-good: var(--op-color-success);
+  --op-radius-sm: var(--op-radius-tight);
+  --op-radius-md: var(--op-radius-control);
+  --op-radius-lg: var(--op-radius-panel);
+  --op-radius-full: var(--op-radius-pill);
+  --op-ease: var(--op-ease-emphasis);
+  --op-duration-fast: var(--op-motion-fast);
+  --op-duration-base: var(--op-motion-normal);
+  --op-duration-slow: var(--op-motion-slow);
+}
+
+[data-op-theme="dark"] {
+  color-scheme: dark;
+  --op-color-background: #0d111a;
+  --op-color-surface: #141a26;
+  --op-color-surface-raised: #1c2536;
+  --op-color-surface-overlay: rgba(20, 26, 38, 0.9);
+  --op-color-surface-inset: #0f1623;
+  --op-color-text-primary: #f3f6ff;
+  --op-color-text-secondary: #d7dff3;
+  --op-color-text-muted: #9da9c7;
+  --op-color-text-inverse: #121826;
+  --op-color-border: #2e3a53;
+  --op-color-border-strong: #435373;
+  --op-color-accent: #6f97ff;
+  --op-color-accent-soft: rgba(111, 151, 255, 0.16);
+  --op-color-success: #37b88a;
+  --op-color-warning: #e8b14c;
+  --op-color-danger: #ef6f83;
+  --op-color-info: #72a1ff;
+  --op-color-data-positive: #34c593;
+  --op-color-data-negative: #f86f81;
+  --op-color-spatial-depth-1: #151f31;
+  --op-color-spatial-depth-2: #1a2943;
+  --op-color-spatial-depth-3: #23365b;
+  --op-color-focus: #93b1ff;
+  --op-accent-strong: #9eb8ff;
+
+  --op-depth-raised: 0 12px 28px rgba(2, 7, 16, 0.36);
+  --op-depth-floating: 0 18px 48px rgba(2, 7, 16, 0.5);
+  --op-depth-spatial: 0 28px 72px rgba(2, 7, 16, 0.62);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--op-color-background);
+  color: var(--op-color-text-primary);
+  font-family: var(--op-font-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+  font-family: var(--op-font-display);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+}
+
+::selection {
+  background: var(--op-color-accent-soft);
+  color: var(--op-color-text-primary);
+}
+
+:focus-visible {
+  outline: 2px solid var(--op-color-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

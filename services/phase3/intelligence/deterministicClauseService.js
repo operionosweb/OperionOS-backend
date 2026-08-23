@@ -137,6 +137,24 @@ export function resolveParentClauseNumber(clauseNumber, knownNumbers) {
   return knownNumbers.has(parent) ? parent : null;
 }
 
+function assignClauseIdsAndParents(segments) {
+  const clauseIdsByNumber = new Map();
+  segments.forEach((segment) => {
+    segment.id = crypto.randomUUID();
+    if (segment.clause_number) {
+      clauseIdsByNumber.set(canonicalizeClauseNumber(segment.clause_number), segment.id);
+    }
+  });
+
+  segments.forEach((segment) => {
+    segment.parent_clause_id = segment.parent_clause_number
+      ? clauseIdsByNumber.get(canonicalizeClauseNumber(segment.parent_clause_number)) || null
+      : null;
+  });
+
+  return segments;
+}
+
 export function computeClauseIdentity({ clauseNumber, title, sourceText, charStart, charEnd, organizationId, documentVersionId, analysisRunId }) {
   const identitySource = [
     organizationId,
@@ -308,7 +326,7 @@ export function segmentDeterministicClauses(source) {
   })).filter((entry) => entry.heading);
 
   if (!entries.length) {
-    return [buildSegment({
+    return assignClauseIdsAndParents([buildSegment({
       source,
       start: 0,
       end: source.text.length,
@@ -318,7 +336,7 @@ export function segmentDeterministicClauses(source) {
         structure: "unstructured",
       },
       isUnstructured: true,
-    })];
+    })]);
   }
 
   const segments = [];
@@ -357,27 +375,7 @@ export function segmentDeterministicClauses(source) {
     segment.parent_clause_number = resolveParentClauseNumber(segment.clause_number, knownNumbers);
   });
 
-  return segments;
-}
-
-function buildParentLinkMap(clauses, segmentPlan) {
-  const clauseIndexByNumber = new Map(
-    clauses.filter((clause) => clause.clause_number).map((clause) => [clause.clause_number, clause])
-  );
-
-  return segmentPlan
-    .filter((segment) => Boolean(segment.parent_clause_number))
-    .map((segment) => {
-      const parentClause = clauseIndexByNumber.get(segment.parent_clause_number);
-      if (!parentClause) return null;
-      const childClause = clauseIndexByNumber.get(segment.clause_number);
-      if (!childClause) return null;
-      return {
-        clause_id: childClause.id,
-        parent_clause_id: parentClause.id,
-      };
-    })
-    .filter(Boolean);
+  return assignClauseIdsAndParents(segments);
 }
 
 export async function runDeterministicClauseStage({
@@ -439,12 +437,6 @@ export async function runDeterministicClauseStage({
     analysisRunId,
     clauses: insertRows,
     evidenceRows: segmentPlan.map((segment) => segment.evidence),
-    parentClausePlan: segmentPlan
-      .filter((segment) => Boolean(segment.parent_clause_number))
-      .map((segment) => ({
-        clause_number: segment.clause_number,
-        parent_clause_number: segment.parent_clause_number,
-      })),
   });
 
   if (!result?.clauses || result.clauses.length !== segmentPlan.length) {

@@ -4,43 +4,37 @@ import { supabase } from "../lib/supabaseClient";
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
-
-  const [user, setUser] = useState(null);
+  const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  async function loadSession() {
-
-    const { data } = await supabase.auth.getSession();
-
-    setUser(data?.session?.user || null);
-    setLoading(false);
-  }
-
   useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data?.session || null);
+      setLoading(false);
+    });
 
-    loadSession();
-
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_, session) => {
-        setUser(session?.user || null);
-      }
-    );
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+    });
 
     return () => listener.subscription.unsubscribe();
-
   }, []);
 
   async function logout() {
     await supabase.auth.signOut();
-    setUser(null);
-    window.location.href = "/auth";
+    setSession(null);
+    window.location.href = "/login";
   }
 
-  return (
-    <AuthContext.Provider value={{ user, loading, logout }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  const value = {
+    session,
+    user: session?.user || null,
+    loading,
+    isAuthenticated: Boolean(session),
+    logout,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

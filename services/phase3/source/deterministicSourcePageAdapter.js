@@ -54,16 +54,24 @@ export function buildCanonicalPageSource({
     });
   }
 
-  const orderedPages = [...pageRows]
+  const candidatePages = [...pageRows]
     .filter((page) => page && typeof page === "object")
-    .sort((left, right) => Number(left.page_number || 1) - Number(right.page_number || 1))
-    .map((page, index) => {
-      const firstChar = typeof page.char_start === "number" ? page.char_start : index === 0 ? 0 : 0;
-      const lastChar = typeof page.char_end === "number" ? page.char_end : text.length;
-      const sourceText = text.slice(firstChar, lastChar);
-      const pageText = typeof page.text_content === "string" && page.text_content.length > 0
-        ? page.text_content
-        : sourceText;
+    .sort((left, right) => Number(left.page_number || 1) - Number(right.page_number || 1));
+  const hasTrustedPageOffsets = candidatePages.length > 0 && candidatePages.every((page) => {
+    const start = page.char_start;
+    const end = page.char_end;
+    return Number.isInteger(start)
+      && Number.isInteger(end)
+      && start >= 0
+      && end > start
+      && end <= text.length
+      && (typeof page.text_content !== "string" || page.text_content === text.slice(start, end));
+  });
+  const orderedPages = hasTrustedPageOffsets
+    ? candidatePages.map((page, index) => {
+      const firstChar = page.char_start;
+      const lastChar = page.char_end;
+      const pageText = text.slice(firstChar, lastChar);
       return {
         id: page.id || null,
         organization_id: documentVersion.organization_id,
@@ -81,7 +89,8 @@ export function buildCanonicalPageSource({
         source_provenance: page.source_provenance || "derived_from_extraction_text",
         source_status: page.source_status || "derived_unavailable",
       };
-    });
+    })
+    : [];
 
   const canonicalPages = orderedPages.length
     ? orderedPages

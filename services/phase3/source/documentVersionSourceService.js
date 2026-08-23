@@ -9,6 +9,15 @@ function sourceError(code, message, status = 400) {
   return error;
 }
 
+function traceError(error) {
+  return error ? { code: error.code || null, message: String(error.message || "").slice(0, 160) } : null;
+}
+
+function traceRow(row, fields) {
+  if (!row) return null;
+  return Object.fromEntries(fields.filter((field) => row[field] !== undefined).map((field) => [field, row[field]]));
+}
+
 export function requireUsableExtractionText(extraction) {
   if (!extraction || extraction.extraction_status !== "completed") {
     throw sourceError("SOURCE_TEXT_UNAVAILABLE", "Completed extraction text is required", 422);
@@ -38,13 +47,34 @@ export function buildSourceRepresentation({
   });
 }
 
-export function createDocumentVersionSourceService(client = supabase) {
+export function createDocumentVersionSourceService(client = supabase, diagnostic = null) {
+  const diagnosticSink = typeof diagnostic === "function" ? diagnostic : diagnostic?.onEvent;
+  const expectedClient = typeof diagnostic === "object" ? diagnostic.expectedClient : null;
+  const diagnosticClientMarker = typeof diagnostic === "object" ? diagnostic.clientMarker : null;
+  const trace = (event, details) => {
+    if (typeof diagnosticSink === "function") diagnosticSink({ event, ...details });
+  };
+
   return {
     async load({ documentVersionId, analysisRunId, organizationId }) {
+      trace("load.entry", {
+        argumentTypes: {
+          documentVersionId: typeof documentVersionId,
+          analysisRunId: typeof analysisRunId,
+          organizationId: typeof organizationId,
+        },
+        arguments: { documentVersionId, analysisRunId, organizationId },
+        clientInstance: expectedClient ? {
+          suppliedClientMatchesExpected: client === expectedClient,
+          clientType: typeof client,
+          clientMarker: diagnosticClientMarker,
+        } : { suppliedClient: true },
+      });
       assertResourceId(documentVersionId, "documentVersionId");
       assertResourceId(analysisRunId, "analysisRunId");
       assertOrganizationScope(organizationId);
 
+      trace("document_versions.before", { documentVersionId, organizationId });
       const { data: documentVersion, error: versionError } = await client
         .from("document_versions")
         .select("id, document_id, organization_id, version_number, extraction_status")
@@ -52,9 +82,16 @@ export function createDocumentVersionSourceService(client = supabase) {
         .eq("organization_id", organizationId)
         .maybeSingle();
 
+      trace("document_versions.after", {
+        rowCount: documentVersion ? 1 : 0,
+        row: traceRow(documentVersion, ["id", "document_id", "organization_id", "version_number", "extraction_status"]),
+        error: traceError(versionError),
+      });
+
       if (versionError) throw sourceError("SOURCE_LOOKUP_FAILED", "Document version lookup failed", 503);
       if (!documentVersion) throw sourceError("DOCUMENT_VERSION_NOT_FOUND", "Document version not found", 404);
 
+      trace("documents.before", { documentId: documentVersion.document_id, organizationId });
       const { data: document, error: documentError } = await client
         .from("documents")
         .select("id, contract_id, organization_id")
@@ -62,9 +99,27 @@ export function createDocumentVersionSourceService(client = supabase) {
         .eq("organization_id", organizationId)
         .maybeSingle();
 
+      trace("documents.after", {
+        rowCount: document ? 1 : 0,
+        row: traceRow(document, ["id", "contract_id", "organization_id"]),
+        error: traceError(documentError),
+      });
+
       if (documentError) throw sourceError("SOURCE_LOOKUP_FAILED", "Document lookup failed", 503);
       if (!document) throw sourceError("DOCUMENT_NOT_FOUND", "Document not found", 404);
 
+      trace("analysis_runs.before", {
+        analysisRunId,
+        organizationId,
+        documentVersionId,
+        contractId: document.contract_id,
+        argumentTypes: {
+          analysisRunId: typeof analysisRunId,
+          organizationId: typeof organizationId,
+          documentVersionId: typeof documentVersionId,
+          contractId: typeof document.contract_id,
+        },
+      });
       const { data: analysisRun, error: runError } = await client
         .from("analysis_runs")
         .select("id, organization_id, contract_id, document_version_id, status, pipeline_version")
@@ -74,9 +129,37 @@ export function createDocumentVersionSourceService(client = supabase) {
         .eq("contract_id", document.contract_id)
         .maybeSingle();
 
-      if (runError) throw sourceError("SOURCE_LOOKUP_FAILED", "Analysis run lookup failed", 503);
-      if (!analysisRun) throw sourceError("ANALYSIS_RUN_NOT_FOUND", "Analysis run not found", 404);
+      trace("analysis_runs.after", {
+        rowCount: analysisRun ? 1 : 0,
+        row: traceRow(analysisRun, ["id", "organization_id", "contract_id", "document_version_id", "status", "pipeline_version"]),
+        error: traceError(runError),
+      });
 
+      if (runError) throw sourceError("SOURCE_LOOKUP_FAILED", "Analysis run lookup failed", 503);
+      if (!analysisRun) {
+        trace("analysis_run_not_found", {
+          analysisRunId,
+          organizationId,
+          documentVersionId,
+          contractId: document.contract_id,
+          rowCount: 0,
+          error: null,
+          clientInstance: expectedClient ? client === expectedClient : true,
+          clientMarker: diagnosticClientMarker,
+        });
+        throw sourceError("ANALYSIS_RUN_NOT_FOUND", "Analysis run not found", 404);
+      }
+      trace("analysis_run_lookup_result", {
+        result: "FOUND",
+        analysisRunId,
+        organizationId,
+        documentVersionId,
+        contractId: document.contract_id,
+        rowCount: 1,
+        row: traceRow(analysisRun, ["id", "organization_id", "contract_id", "document_version_id", "status", "pipeline_version"]),
+      });
+
+      trace("extractions.before", { documentVersionId, organizationId });
       const { data: extraction, error: extractionError } = await client
         .from("document_version_extractions")
         .select("document_version_id, organization_id, text_content, text_length, text_truncated, extraction_status")
@@ -84,8 +167,20 @@ export function createDocumentVersionSourceService(client = supabase) {
         .eq("organization_id", organizationId)
         .maybeSingle();
 
+      trace("extractions.after", {
+        rowCount: extraction ? 1 : 0,
+        row: extraction && {
+          document_version_id: extraction.document_version_id,
+          organization_id: extraction.organization_id,
+          extraction_status: extraction.extraction_status,
+          text_length: extraction.text_length,
+        },
+        error: traceError(extractionError),
+      });
+
       if (extractionError) throw sourceError("SOURCE_LOOKUP_FAILED", "Extraction lookup failed", 503);
 
+      trace("pages.before", { documentVersionId, analysisRunId, organizationId });
       const { data: pageRows, error: pageError } = await client
         .from("document_version_pages")
         .select("id, organization_id, contract_id, document_id, document_version_id, analysis_run_id, page_number, text_content, text_length, char_start, char_end, text_hash, extraction_status")
@@ -93,6 +188,12 @@ export function createDocumentVersionSourceService(client = supabase) {
         .eq("analysis_run_id", analysisRunId)
         .eq("organization_id", organizationId)
         .order("page_number", { ascending: true });
+
+      trace("pages.after", {
+        rowCount: (pageRows || []).length,
+        pageIds: (pageRows || []).map((page) => page.id),
+        error: traceError(pageError),
+      });
 
       if (pageError) throw sourceError("SOURCE_LOOKUP_FAILED", "Page source lookup failed", 503);
 

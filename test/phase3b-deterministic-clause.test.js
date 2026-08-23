@@ -95,8 +95,10 @@ function createFakeTransactionalPgPool() {
               error.code = "23505";
               throw error;
             }
-            idCounter += 1;
-            row.id = `clause-${idCounter}`;
+            if (!row.id) {
+              idCounter += 1;
+              row.id = `clause-${idCounter}`;
+            }
           }
           pending.clauses.push(...rows);
           return { rows };
@@ -138,6 +140,7 @@ function createFakeTransactionalPgPool() {
 
 function buildClausePlan({ clauseNumber, title, sourceText, charStart, charEnd }) {
   return {
+    id: crypto.randomUUID(),
     organization_id: UUID_PLACEHOLDER,
     contract_id: UUID_PLACEHOLDER,
     document_id: UUID_PLACEHOLDER,
@@ -194,6 +197,7 @@ test("clauseRepository.persistDeterministicClauseStage real transaction boundary
     const repository = createClauseRepository({}, pgPool);
     const clause1 = buildClausePlan({ clauseNumber: "1", title: "Payment", sourceText: "1. Payment\nPay rent.", charStart: 0, charEnd: 20 });
     const clause2 = buildClausePlan({ clauseNumber: "1.1", title: "Timing", sourceText: "1.1 Timing\nMonthly.", charStart: 20, charEnd: 40 });
+    clause2.parent_clause_id = clause1.id;
 
     const result = await repository.persistDeterministicClauseStage({
       organizationId: UUID_PLACEHOLDER,
@@ -203,7 +207,7 @@ test("clauseRepository.persistDeterministicClauseStage real transaction boundary
       analysisRunId: UUID_PLACEHOLDER,
       clauses: [clause1, clause2],
       evidenceRows: [buildEvidencePlan(clause1, { charStart: 0, charEnd: 20 }), buildEvidencePlan(clause2, { charStart: 20, charEnd: 40 })],
-      parentClausePlan: [{ clause_number: "1.1", parent_clause_number: "1" }],
+      parentClausePlan: [],
     });
 
     assert.equal(result.clauses.length, 2);
@@ -217,6 +221,18 @@ test("clauseRepository.persistDeterministicClauseStage real transaction boundary
     assert.deepEqual(pgPool.log.slice(0, 1), ["begin"]);
     assert.ok(pgPool.log.includes("commit"));
     assert.ok(!pgPool.log.includes("rollback"));
+  });
+
+  await suite.test("pre-insert clause IDs preserve root and nested parent relationships", () => {
+    const clauses = segmentDeterministicClauses(buildTestSource(
+      "3. Maintenance\nRequired.\n\n3.1 Inspection\nRequired.\n\n3.2 Notice\nRequired.\n\n4. Delivery\nRequired."
+    ));
+    const byNumber = new Map(clauses.map((clause) => [clause.clause_number, clause]));
+    clauses.forEach((clause) => assert.match(clause.id, /^[0-9a-f-]{36}$/));
+    assert.equal(byNumber.get("3").parent_clause_id, null);
+    assert.equal(byNumber.get("3.1").parent_clause_id, byNumber.get("3").id);
+    assert.equal(byNumber.get("3.2").parent_clause_id, byNumber.get("3").id);
+    assert.equal(byNumber.get("4").parent_clause_id, null);
   });
 
   await suite.test("CODE-VERIFIED: failure during evidence insert rolls back the whole batch, no clauses persist", async () => {
@@ -258,6 +274,28 @@ test("clauseRepository.persistDeterministicClauseStage real transaction boundary
     assert.equal(pgPool.committed.intelligence_evidence.length, 0);
     assert.ok(pgPool.log.includes("rollback"));
     assert.ok(!pgPool.log.includes("commit"));
+  });
+
+  await suite.test("CODE-VERIFIED: parent links are included in the initial insert", async () => {
+    const pgPool = createFakeTransactionalPgPool();
+    const repository = createClauseRepository({}, pgPool);
+    const parent = buildClausePlan({ clauseNumber: "3", title: "Maintenance", sourceText: "3. Maintenance\nRequired.", charStart: 0, charEnd: 24 });
+    const child = buildClausePlan({ clauseNumber: "3.1", title: "Inspection", sourceText: "3.1 Inspection\nRequired.", charStart: 24, charEnd: 49 });
+    child.parent_clause_id = parent.id;
+
+    const result = await repository.persistDeterministicClauseStage({
+      organizationId: UUID_PLACEHOLDER,
+      contractId: UUID_PLACEHOLDER,
+      documentId: UUID_PLACEHOLDER,
+      documentVersionId: UUID_PLACEHOLDER,
+      analysisRunId: UUID_PLACEHOLDER,
+      clauses: [parent, child],
+      evidenceRows: [buildEvidencePlan(parent, { charStart: 0, charEnd: 24 }), buildEvidencePlan(child, { charStart: 24, charEnd: 49 })],
+      parentClausePlan: [],
+    });
+
+    assert.equal(result.clauses.find((row) => row.id === child.id).parent_clause_id, parent.id);
+    assert.equal(pgPool.log.some((entry) => entry.includes("update clauses")), false);
   });
 
   await suite.test("CODE-VERIFIED: failure during clause_evidence insert rolls back clauses and evidence together", async () => {
@@ -387,6 +425,38 @@ test("canonical source page adapter and atomic persistence boundaries", async (s
       source.text.slice(source.pages[1].char_start, source.pages[1].char_end),
       source.pages[1].text_content
     );
+  });
+
+  await suite.test("inconsistent persisted page metadata cannot replace canonical extraction text", () => {
+    const text = "1. Payment\nRent is due.\n\n2. Maintenance\nAircraft must be maintained.";
+    const source = buildCanonicalPageSource({
+      documentVersion: { id: UUID_PLACEHOLDER, organization_id: UUID_PLACEHOLDER },
+      document: { id: UUID_PLACEHOLDER, contract_id: UUID_PLACEHOLDER, organization_id: UUID_PLACEHOLDER },
+      analysisRun: { id: UUID_PLACEHOLDER, organization_id: UUID_PLACEHOLDER, status: "extracting" },
+      extraction: { text_content: text, extraction_status: "completed", text_truncated: false },
+      pageRows: [{ page_number: 1, char_start: 0, char_end: 10, text_content: "not the source" }],
+    });
+
+    assert.equal(source.pages.length, 2);
+    assert.equal(source.text.slice(source.pages[0].char_start, source.pages[0].char_end), source.pages[0].text_content);
+    assert.equal(source.pages[0].text_content, "1. Payment\nRent is due.");
+  });
+
+  await suite.test("trusted persisted pages retain deterministic page ordering", () => {
+    const text = "Page one\n\nPage two";
+    const source = buildCanonicalPageSource({
+      documentVersion: { id: UUID_PLACEHOLDER, organization_id: UUID_PLACEHOLDER },
+      document: { id: UUID_PLACEHOLDER, contract_id: UUID_PLACEHOLDER, organization_id: UUID_PLACEHOLDER },
+      analysisRun: { id: UUID_PLACEHOLDER, organization_id: UUID_PLACEHOLDER, status: "extracting" },
+      extraction: { text_content: text, extraction_status: "completed", text_truncated: false },
+      pageRows: [
+        { page_number: 2, char_start: 10, char_end: text.length, text_content: text.slice(10) },
+        { page_number: 1, char_start: 0, char_end: 8, text_content: text.slice(0, 8) },
+      ],
+    });
+
+    assert.deepEqual(source.pages.map((page) => page.page_number), [1, 2]);
+    assert.deepEqual(source.pages.map((page) => page.text_content), ["Page one", "Page two"]);
   });
 
   await suite.test("runDeterministicClauseStage preserves atomic persistence contract", async () => {
@@ -943,61 +1013,24 @@ Delivery occurs.`;
     })));
   });
 
-  await suite.test("repository query scopes parent update by organization, contract, document, document version, and run", async () => {
-    const { createClauseRepository } = await import("../repositories/phase3/clauseRepository.js");
-    const calls = [];
-    const fakeClient = {
-      from(table) {
-        calls.push(["from", table]);
-        return {
-          select(field) {
-            calls.push(["select", field]);
-            return {
-              in(column, values) {
-                calls.push(["in", column, values]);
-                return {
-                  eq(key, value) {
-                    calls.push(["eq", key, value]);
-                    return this;
-                  },
-                  then(resolve) {
-                    resolve({ data: [{ id: "id-1" }], error: null });
-                    return this;
-                  },
-                };
-              },
-            };
-          },
-          update(payload) {
-            calls.push(["update", payload]);
-            return {
-              eq(key, value) {
-                calls.push(["eq", key, value]);
-                return this;
-              },
-              select() {
-                calls.push(["select"]);
-                return { single: async () => ({ data: { id: "id-1" }, error: null }) };
-              },
-            };
-          },
-        };
-      },
-    };
+  await suite.test("repository transaction does not issue a post-insert parent update", async () => {
+    const pgPool = createFakeTransactionalPgPool();
+    const repository = createClauseRepository({}, pgPool);
+    const parent = buildClausePlan({ clauseNumber: "3", title: "Maintenance", sourceText: "3. Maintenance\nRequired.", charStart: 0, charEnd: 24 });
+    const child = buildClausePlan({ clauseNumber: "3.1", title: "Inspection", sourceText: "3.1 Inspection\nRequired.", charStart: 24, charEnd: 49 });
+    child.parent_clause_id = parent.id;
 
-    const repo = createClauseRepository(fakeClient);
-    await repo.updateParentLinks({
+    await repository.persistDeterministicClauseStage({
       organizationId: UUID_PLACEHOLDER,
       contractId: UUID_PLACEHOLDER,
       documentId: UUID_PLACEHOLDER,
       documentVersionId: UUID_PLACEHOLDER,
       analysisRunId: UUID_PLACEHOLDER,
-      parentLinks: [{ clause_id: "id-1", parent_clause_id: "parent-1" }],
+      clauses: [parent, child],
+      evidenceRows: [buildEvidencePlan(parent, { charStart: 0, charEnd: 24 }), buildEvidencePlan(child, { charStart: 24, charEnd: 49 })],
+      parentClausePlan: [],
     });
 
-    assert.ok(calls.some((call) => call[0] === "eq" && call[1] === "contract_id"));
-    assert.ok(calls.some((call) => call[0] === "eq" && call[1] === "document_id"));
-    assert.ok(calls.some((call) => call[0] === "eq" && call[1] === "document_version_id"));
-    assert.ok(calls.some((call) => call[0] === "eq" && call[1] === "analysis_run_id"));
+    assert.equal(pgPool.log.some((entry) => entry.includes("update clauses")), false);
   });
 });

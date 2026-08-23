@@ -66,51 +66,6 @@ export function createClauseRepository(client = supabase, pgPool = defaultPgPool
       return data || [];
     },
 
-    async updateParentLinks({ organizationId, contractId, documentId, documentVersionId, analysisRunId, parentLinks }) {
-      assertOrganizationScope(organizationId);
-      assertResourceId(contractId, "contractId");
-      assertResourceId(documentId, "documentId");
-      assertResourceId(documentVersionId, "documentVersionId");
-      assertResourceId(analysisRunId, "analysisRunId");
-      if (!parentLinks.length) return [];
-
-      const clauseIds = parentLinks.map((link) => link.clause_id);
-      const { data: scopedRows, error: scopeError } = await client
-        .from("clauses")
-        .select("id, organization_id, contract_id, document_id, document_version_id, analysis_run_id")
-        .in("id", clauseIds)
-        .eq("organization_id", organizationId)
-        .eq("contract_id", contractId)
-        .eq("document_id", documentId)
-        .eq("document_version_id", documentVersionId)
-        .eq("analysis_run_id", analysisRunId);
-
-      if (scopeError) throw scopeError;
-
-      const validIds = new Set((scopedRows || []).map((row) => row.id));
-      const filteredLinks = parentLinks.filter((link) => validIds.has(link.clause_id));
-      const results = [];
-
-      for (const link of filteredLinks) {
-        const { data, error } = await client
-          .from("clauses")
-          .update({ parent_clause_id: link.parent_clause_id })
-          .eq("id", link.clause_id)
-          .eq("organization_id", organizationId)
-          .eq("contract_id", contractId)
-          .eq("document_id", documentId)
-          .eq("document_version_id", documentVersionId)
-          .eq("analysis_run_id", analysisRunId)
-          .select("*")
-          .single();
-
-        if (error) throw error;
-        results.push(data);
-      }
-
-      return results;
-    },
-
     async deleteMany({ organizationId, clauseIds }) {
       assertOrganizationScope(organizationId);
       if (!clauseIds.length) return [];
@@ -140,7 +95,6 @@ export function createClauseRepository(client = supabase, pgPool = defaultPgPool
       analysisRunId,
       clauses,
       evidenceRows,
-      parentClausePlan = [],
     }) {
       assertOrganizationScope(organizationId);
       assertResourceId(contractId, "contractId");
@@ -153,11 +107,13 @@ export function createClauseRepository(client = supabase, pgPool = defaultPgPool
       }
 
       const clauseColumns = [
+        "id",
         "organization_id",
         "contract_id",
         "document_id",
         "document_version_id",
         "analysis_run_id",
+        "parent_clause_id",
         "clause_number",
         "title",
         "category",
@@ -191,6 +147,20 @@ export function createClauseRepository(client = supabase, pgPool = defaultPgPool
       ];
       const clauseEvidenceColumns = ["organization_id", "clause_id", "evidence_id", "rank", "support_type", "is_primary"];
 
+      const clausesById = new Map(clauses.map((clause) => [clause.id, clause]));
+      clauses.forEach((clause) => {
+        if (!clause.parent_clause_id) return;
+        const parent = clausesById.get(clause.parent_clause_id);
+        if (!parent
+          || parent.organization_id !== organizationId
+          || parent.contract_id !== contractId
+          || parent.document_id !== documentId
+          || parent.document_version_id !== documentVersionId
+          || parent.analysis_run_id !== analysisRunId) {
+          throw new Error("Parent clause must belong to the same deterministic stage scope");
+        }
+      });
+
       const pgClient = await pgPool.connect();
       try {
         await pgClient.query("BEGIN");
@@ -208,24 +178,6 @@ export function createClauseRepository(client = supabase, pgPool = defaultPgPool
           }
           return row;
         });
-
-        const clauseRowByNumber = new Map(
-          orderedClauseRows.filter((row) => row.clause_number).map((row) => [row.clause_number, row])
-        );
-
-        for (const link of parentClausePlan) {
-          const childRow = clauseRowByNumber.get(link.clause_number);
-          const parentRow = clauseRowByNumber.get(link.parent_clause_number);
-          if (!childRow || !parentRow) continue;
-
-          await pgClient.query(
-            `update clauses set parent_clause_id = $1
-             where id = $2 and organization_id = $3 and contract_id = $4
-               and document_id = $5 and document_version_id = $6 and analysis_run_id = $7`,
-            [parentRow.id, childRow.id, organizationId, contractId, documentId, documentVersionId, analysisRunId]
-          );
-          childRow.parent_clause_id = parentRow.id;
-        }
 
         const evidenceInsertRows = evidenceRows.map((row) => ({ ...row, organization_id: organizationId }));
         const insertedEvidence = await insertRowsInTransaction(pgClient, "intelligence_evidence", evidenceColumns, evidenceInsertRows);
