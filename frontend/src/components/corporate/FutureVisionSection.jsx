@@ -5,21 +5,20 @@ import Reveal from "../ui/Reveal";
 export default function FutureVisionSection() {
   return (
     <Section>
-      <div className="op-surface" style={{ padding: "var(--op-space-8)", textAlign: "center" }}>
+      <div className="op-surface op-home-roadmap" style={{ padding: "var(--op-space-8)" }}>
         <Reveal>
           <span className="op-badge op-badge-future" style={{ marginBottom: "var(--op-space-4)" }}>
-            Next evolution — not yet built
+            Future / Roadmap
           </span>
           <h2 className="op-heading-lg" style={{ maxWidth: 720, margin: "0 auto var(--op-space-4)" }}>
-            What happens to my contracts if the world changes tomorrow?
+            Reason about uncertainty, not just certainty.
           </h2>
           <p className="op-body-lg" style={{ margin: "0 auto" }}>
-            Once Contract Intelligence is solid, Operion extends into
-            Predictive Risk Intelligence and Scenario Simulation — modeling
-            how fuel prices, regulation, counterparty risk and market shifts
-            ripple through your contractual obligations. This is the
-            direction we are building toward, not a capability available
-            today.
+            Real-world operations rarely follow a single predictable path.
+            Operion's intelligence architecture is being developed to reason
+            about uncertainty using probabilistic approaches, Bayesian
+            reasoning, Monte Carlo methods and quantum-computing-inspired
+            approaches to complex simulation and optimisation.
           </p>
         </Reveal>
       </div>

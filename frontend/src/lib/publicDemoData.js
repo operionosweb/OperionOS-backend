@@ -1,0 +1,100 @@
+export const PUBLIC_DEMO_NOTICE = "This demonstration uses prepared sample data and does not represent live customer information.";
+
+export const PUBLIC_DEMO_CONTRACTS = [
+  {
+    id: "demo-aircraft-lease",
+    title: "AeroNorth Aircraft Lease Agreement",
+    type: "Aircraft lease",
+    counterparty: "Northstar Aviation Leasing",
+    status: "Active sample",
+    description: "A prepared aircraft leasing example showing how payment, maintenance, utilisation and return requirements can be structured.",
+    clauses: [
+      {
+        id: "demo-lease-maintenance",
+        number: "7.2",
+        title: "Maintenance programme",
+        category: "Maintenance",
+        sourceText: "The Lessee shall maintain the Aircraft in accordance with the approved maintenance programme and shall provide the Lessor with the required maintenance status reports.",
+        context: "Maintenance requirement",
+        evidence: "Sample source text from the prepared lease agreement.",
+      },
+      {
+        id: "demo-lease-return",
+        number: "12.1",
+        title: "Return condition",
+        category: "Return conditions",
+        sourceText: "At the end of the Lease Term, the Lessee shall return the Aircraft in the condition and configuration specified in the agreed return conditions.",
+        context: "Return obligation",
+        evidence: "Sample source text from the prepared lease agreement.",
+      },
+    ],
+    obligations: [
+      { id: "demo-lease-obligation-1", description: "Maintain the aircraft under the approved maintenance programme", responsibleParty: "Lessee", deadline: "As defined by the maintenance programme", status: "Open", clauseId: "demo-lease-maintenance", consequence: "Review maintenance evidence before the relevant reporting point." },
+      { id: "demo-lease-obligation-2", description: "Return the aircraft in the agreed condition", responsibleParty: "Lessee", deadline: "End of lease term", status: "Planned", clauseId: "demo-lease-return", consequence: "Review return conditions before redelivery planning." },
+    ],
+  },
+  {
+    id: "demo-mro-agreement",
+    title: "AeroNorth MRO Services Agreement",
+    type: "MRO agreement",
+    counterparty: "Summit Maintenance Services",
+    status: "Active sample",
+    description: "A prepared MRO example showing service levels, turnaround expectations and maintenance commitments.",
+    clauses: [
+      {
+        id: "demo-mro-sla",
+        number: "4.1",
+        title: "Turnaround service level",
+        category: "Service level",
+        sourceText: "The Service Provider shall use reasonable efforts to complete scheduled maintenance within the turnaround period set out in the applicable work package.",
+        context: "Turnaround expectation",
+        evidence: "Sample source text from the prepared MRO agreement.",
+      },
+      {
+        id: "demo-mro-parts",
+        number: "6.3",
+        title: "Parts and warranty records",
+        category: "Parts commitment",
+        sourceText: "The Service Provider shall maintain records of installed parts and provide warranty documentation upon completion of the applicable work package.",
+        context: "Parts and warranty obligation",
+        evidence: "Sample source text from the prepared MRO agreement.",
+      },
+    ],
+    obligations: [
+      { id: "demo-mro-obligation-1", description: "Complete scheduled maintenance within the applicable turnaround period", responsibleParty: "Service provider", deadline: "Work-package dependent", status: "Open", clauseId: "demo-mro-sla", consequence: "Review the work package and service-level evidence." },
+      { id: "demo-mro-obligation-2", description: "Provide installed-parts and warranty documentation", responsibleParty: "Service provider", deadline: "On work-package completion", status: "Open", clauseId: "demo-mro-parts", consequence: "Confirm records are available for technical review." },
+    ],
+  },
+  {
+    id: "demo-ground-handling",
+    title: "AeroNorth Ground Handling Agreement",
+    type: "Ground handling agreement",
+    counterparty: "Harbour Airport Services",
+    status: "Review sample",
+    description: "A prepared ground handling example showing responsibilities, turnaround thresholds and service-level context.",
+    clauses: [
+      {
+        id: "demo-ground-turnaround",
+        number: "3.4",
+        title: "Turnaround responsibilities",
+        category: "Operational responsibility",
+        sourceText: "The Ground Handler shall coordinate the services necessary to support the agreed turnaround plan for each scheduled movement.",
+        context: "Turnaround responsibility",
+        evidence: "Sample source text from the prepared ground handling agreement.",
+      },
+      {
+        id: "demo-ground-performance",
+        number: "5.2",
+        title: "Performance review",
+        category: "Performance requirement",
+        sourceText: "The parties shall review service performance against the agreed operating measures at the review interval specified in the service schedule.",
+        context: "Performance review",
+        evidence: "Sample source text from the prepared ground handling agreement.",
+      },
+    ],
+    obligations: [
+      { id: "demo-ground-obligation-1", description: "Coordinate services supporting each scheduled turnaround", responsibleParty: "Ground handler", deadline: "Each scheduled movement", status: "Open", clauseId: "demo-ground-turnaround", consequence: "Review the applicable operating plan and service evidence." },
+      { id: "demo-ground-obligation-2", description: "Review service performance against agreed operating measures", responsibleParty: "Both parties", deadline: "Review interval in service schedule", status: "Planned", clauseId: "demo-ground-performance", consequence: "Prepare the relevant performance records for review." },
+    ],
+  },
+];

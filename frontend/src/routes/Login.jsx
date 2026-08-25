@@ -40,9 +40,9 @@ export default function Login() {
           <div style={{ marginBottom: "var(--op-space-4)" }}>
             <Logo />
           </div>
-          <p className="op-eyebrow">Operion OS</p>
+          <p className="op-eyebrow">Operion</p>
           <h1 className="op-heading-lg" style={{ marginBottom: "var(--op-space-6)" }}>
-            {mode === "login" ? "Sign in" : "Create an account"}
+            {mode === "login" ? "Sign in to Operion" : "Create an account"}
           </h1>
         </Reveal>
 
@@ -83,6 +83,15 @@ export default function Login() {
           >
             {mode === "login" ? "Need an account? Sign up" : "Already have an account? Sign in"}
           </button>
+
+          <div className="op-login-demo-path">
+            <p className="op-kicker">New visitors</p>
+            <h2 className="op-heading-md" style={{ margin: "var(--op-space-2) 0" }}>Explore Operion first</h2>
+            <p className="op-body-sm" style={{ marginBottom: "var(--op-space-3)" }}>
+              See Contract Intelligence in action using a controlled demonstration environment.
+            </p>
+            <Button to="/demo" variant="secondary">Explore the Demo</Button>
+          </div>
         </Reveal>
       </div>
     </Section>

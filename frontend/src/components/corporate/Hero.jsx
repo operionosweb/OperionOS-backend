@@ -26,25 +26,23 @@ export default function Hero() {
 
       <Container>
         <div style={{ maxWidth: 900 }}>
-          <Reveal className="op-eyebrow">Aviation Contract Intelligence</Reveal>
+          <Reveal className="op-eyebrow">Contract Intelligence for operational industries</Reveal>
 
           <Reveal as="h1" className="op-heading-xl" style={{ marginBottom: "var(--op-space-5)" }}>
-            Understand your contracts.
-            <br />
-            Predict your exposure.
-            <br />
-            Make better decisions.
+            Turn contracts into operational intelligence.
           </Reveal>
 
           <Reveal className="op-body-lg" style={{ marginBottom: "var(--op-space-6)" }}>
-            Operion OS turns aviation contracts into structured, evidence-backed
-            intelligence — clauses, obligations, deadlines and risk, traced back
-            to the exact source text they came from.
+            Your contracts contain the rules that determine obligations, costs,
+            rights, penalties and financial consequences. Your operations are
+            constantly changing. Operion is building an intelligence layer that
+            connects the two, helping organisations understand risk and act
+            before potential losses become realised costs.
           </Reveal>
 
           <Reveal style={{ display: "flex", gap: "var(--op-space-4)", flexWrap: "wrap" }}>
-            <Button to="/demo" variant="primary">Explore the Demo</Button>
-            <Button to="/product" variant="secondary">Discover Operion</Button>
+            <Button to="/demo" variant="primary">Request a Demo</Button>
+            <Button to="/platform" variant="secondary">Explore the Platform</Button>
           </Reveal>
         </div>
 
@@ -56,49 +54,18 @@ export default function Hero() {
   );
 }
 
-/* Understated spatial visual: contracts as nodes, relationships as connecting
-   lines, intelligence as the highlighted node. Pure SVG, no external asset. */
 function ContractGraphic() {
   return (
-    <div
-      className="op-surface"
-      style={{
-        marginTop: "var(--op-space-8)",
-        padding: "var(--op-space-6)",
-        overflow: "hidden",
-      }}
-    >
-      <svg viewBox="0 0 800 220" width="100%" height="220" role="img" aria-label="Contract relationship and intelligence graphic">
-        <defs>
-          <linearGradient id="op-line" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="rgba(91,140,255,0.05)" />
-            <stop offset="50%" stopColor="rgba(91,140,255,0.55)" />
-            <stop offset="100%" stopColor="rgba(91,140,255,0.05)" />
-          </linearGradient>
-        </defs>
-        {[
-          [80, 40, 260, 110],
-          [260, 110, 430, 60],
-          [260, 110, 430, 170],
-          [430, 60, 620, 100],
-          [430, 170, 620, 100],
-          [620, 100, 730, 50],
-          [620, 100, 730, 150],
-        ].map(([x1, y1, x2, y2], i) => (
-          <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="url(#op-line)" strokeWidth="1.5" />
-        ))}
-        {[
-          [80, 40, 5, "var(--op-text-faint)"],
-          [260, 110, 7, "var(--op-text-muted)"],
-          [430, 60, 5, "var(--op-text-faint)"],
-          [430, 170, 5, "var(--op-text-faint)"],
-          [620, 100, 10, "var(--op-accent)"],
-          [730, 50, 4, "var(--op-text-faint)"],
-          [730, 150, 4, "var(--op-text-faint)"],
-        ].map(([cx, cy, r, fill], i) => (
-          <circle key={i} cx={cx} cy={cy} r={r} fill={fill} />
-        ))}
-      </svg>
+    <div className="op-home-flow" aria-label="Contract to operational intelligence flow">
+      {["Contract", "Clauses", "Obligations", "Events", "Risk", "Financial impact", "Action"].map((label, index) => (
+        <React.Fragment key={label}>
+          <div className={index === 0 ? "op-home-flow-node op-home-flow-node-active" : "op-home-flow-node"}>
+            <span className="op-kicker">{String(index + 1).padStart(2, "0")}</span>
+            <strong>{label}</strong>
+          </div>
+          {index < 6 && <span className="op-home-flow-arrow" aria-hidden="true">→</span>}
+        </React.Fragment>
+      ))}
     </div>
   );
 }

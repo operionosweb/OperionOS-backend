@@ -3,10 +3,10 @@ import { Section } from "../ui/Layout";
 import Reveal from "../ui/Reveal";
 
 const STAGES = [
-  { label: "Understand", status: "live", desc: "Structured clauses, obligations and evidence." },
-  { label: "Monitor", status: "live", desc: "Deadlines and risk surfaced from your contracts." },
-  { label: "Predict", status: "future", desc: "Forward-looking exposure as circumstances change." },
-  { label: "Simulate", status: "future", desc: "Model contractual outcomes before they happen." },
+  { label: "Now", status: "live", title: "Contract Intelligence", desc: "Understand agreements, clauses and obligations." },
+  { label: "Developing", status: "future", title: "AI Insights and Financial Intelligence", desc: "Extend structured contract understanding toward exposure and decision support." },
+  { label: "Future", status: "future", title: "Real-Time and Scenario Intelligence", desc: "Connect operational events to contractual consequences and probabilities." },
+  { label: "Long-term", status: "future", title: "Continuous Decision Intelligence", desc: "Build toward a Contract Digital Twin architecture." },
 ];
 
 export default function ProgressionSection() {
@@ -15,11 +15,11 @@ export default function ProgressionSection() {
       <Reveal>
         <p className="op-eyebrow">Product progression</p>
         <h2 className="op-heading-lg" style={{ marginBottom: "var(--op-space-7)" }}>
-          Understand → Monitor → Predict → Simulate
+          From understanding contracts to understanding what happens next.
         </h2>
       </Reveal>
 
-      <div className="op-grid op-grid-3" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+      <div className="op-grid op-home-evolution-grid">
         {STAGES.map((stage, index) => (
           <Reveal key={stage.label} className="op-surface" style={{ padding: "var(--op-space-5)", position: "relative" }}>
             <span
@@ -29,7 +29,7 @@ export default function ProgressionSection() {
               {stage.status === "live" ? "Available now" : "Coming next"}
             </span>
             <h3 className="op-heading-md" style={{ margin: "var(--op-space-3) 0" }}>
-              {index + 1}. {stage.label}
+              {stage.label}: {stage.title}
             </h3>
             <p className="op-body">{stage.desc}</p>
           </Reveal>

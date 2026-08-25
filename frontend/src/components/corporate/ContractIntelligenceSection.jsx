@@ -3,14 +3,10 @@ import { Section } from "../ui/Layout";
 import Reveal from "../ui/Reveal";
 
 const CAPABILITIES = [
-  { title: "Contract understanding", desc: "Documents, versions and analysis runs form a single traceable record." },
-  { title: "Clause extraction", desc: "Deterministic segmentation identifies clause structure and hierarchy." },
-  { title: "Obligation identification", desc: "What each party is required to do, and when." },
-  { title: "Deadline detection", desc: "Notice periods, renewal dates and time-bound commitments." },
-  { title: "Risk identification", desc: "Contractual exposure surfaced from the clauses that create it." },
-  { title: "Evidence-backed intelligence", desc: "Every finding links back to the exact source text it came from." },
-  { title: "Search", desc: "Find language and clauses across your contract portfolio." },
-  { title: "Recommendations", desc: "Clear next actions grounded in the underlying evidence." },
+  { title: "Clause Intelligence", desc: "Identify and understand the clauses that define contractual rules.", status: "Current" },
+  { title: "Obligations Tracker", desc: "Structure contractual commitments and required actions.", status: "Current" },
+  { title: "Contract Intelligence", desc: "Transform complex agreements into structured, searchable intelligence.", status: "Current" },
+  { title: "Financial Intelligence", desc: "Understand financial mechanisms and potential exposure embedded in contracts.", status: "In development" },
 ];
 
 export default function ContractIntelligenceSection() {
@@ -21,18 +17,21 @@ export default function ContractIntelligenceSection() {
           Current priority
         </span>
         <h2 className="op-heading-lg" style={{ marginBottom: "var(--op-space-3)" }}>
-          Contract Intelligence
+          Everything starts with understanding the contract.
         </h2>
         <p className="op-body-lg" style={{ marginBottom: "var(--op-space-7)" }}>
-          The foundation Operion is building first — before prediction, before
-          simulation. Every contract becomes structured, evidence-linked
-          intelligence.
+          Before an organisation can predict contractual exposure, simulate
+          future outcomes or recommend actions, it must first understand what
+          its contracts actually say.
         </p>
       </Reveal>
 
       <div className="op-grid op-grid-3">
         {CAPABILITIES.map((item) => (
           <Reveal key={item.title} className="op-surface" style={{ padding: "var(--op-space-5)" }}>
+            <span className={item.status === "Current" ? "op-badge op-badge-live" : "op-badge op-badge-future"} style={{ marginBottom: "var(--op-space-3)" }}>
+              {item.status}
+            </span>
             <h3 className="op-heading-md" style={{ marginBottom: "var(--op-space-2)" }}>
               {item.title}
             </h3>

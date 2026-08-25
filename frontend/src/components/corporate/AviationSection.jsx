@@ -1,8 +1,9 @@
 import React from "react";
 import { Section } from "../ui/Layout";
 import Reveal from "../ui/Reveal";
+import Button from "../ui/Button";
 
-const SEGMENTS = ["Airlines", "Aircraft leasing", "MRO", "Ground handling", "Airport operations"];
+const SEGMENTS = ["Aircraft leasing", "MRO", "PBH", "Ground handling", "Supplier management", "Operational disruption"];
 
 export default function AviationSection() {
   return (
@@ -14,11 +15,13 @@ export default function AviationSection() {
             Aviation contracts are dense, technical, and high-stakes.
           </h2>
           <p className="op-body-lg">
-            Lease agreements, maintenance reserves, insurance terms and
-            operational obligations carry real financial and safety exposure.
-            Operion starts here because the complexity is highest — and the
-            value of getting it right is greatest.
+            Aviation contracts are interconnected with operational reality. A
+            delay, crew disruption, AOG event, supplier failure, weather event
+            or fuel price movement can trigger contractual consequences.
+            Operion is being built to help aviation organisations understand
+            those connections before potential exposure becomes realised cost.
           </p>
+          <Button to="/aviation" variant="secondary" style={{ marginTop: "var(--op-space-5)" }}>Explore Aviation</Button>
         </Reveal>
 
         <Reveal>
@@ -35,7 +38,7 @@ export default function AviationSection() {
                 }}
               >
                 <span>{segment}</span>
-                <span style={{ color: "var(--op-text-faint)", fontSize: "0.85rem" }}>Target segment</span>
+                <span style={{ color: "var(--op-text-faint)", fontSize: "0.85rem" }}>Aviation first</span>
               </div>
             ))}
           </div>

@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { OrganizationProvider } from "./context/OrganizationContext";
 import CorporateLayout from "./components/layout/CorporateLayout";
@@ -12,6 +12,10 @@ import ContractWorkspace from "./routes/ContractWorkspace";
 import AnalysisView from "./routes/AnalysisView";
 import Login from "./routes/Login";
 import PlaceholderPage from "./routes/PlaceholderPage";
+import Platform from "./routes/Platform";
+import Aviation from "./routes/Aviation";
+import Scenarios from "./routes/Scenarios";
+import Enterprise from "./routes/Enterprise";
 
 export default function App() {
   return (
@@ -21,24 +25,24 @@ export default function App() {
           <Routes>
             <Route element={<CorporateLayout />}>
               <Route path="/" element={<CorporateHome />} />
+              <Route path="/platform" element={<Platform />} />
+              <Route path="/industries/aviation" element={<Aviation />} />
+              <Route path="/scenarios" element={<Scenarios />} />
+              <Route path="/enterprise" element={<Enterprise />} />
+              <Route
+                path="/industries"
+                element={
+                  <PlaceholderPage
+                    title="Industries"
+                    description="Aviation & Aerospace is Operion's first commercial focus. Industry-specific experiences are being prepared for a later phase."
+                  />
+                }
+              />
               <Route
                 path="/product"
-                element={
-                  <PlaceholderPage
-                    title="Product"
-                    description="A closer look at Contract Intelligence is coming here — this page is a structural placeholder for the next implementation phase."
-                  />
-                }
+                element={<Navigate to="/platform" replace />}
               />
-              <Route
-                path="/aviation"
-                element={
-                  <PlaceholderPage
-                    title="Aviation"
-                    description="Aviation-specific detail for airlines, lessors, MRO, ground handling and airport operators is coming here."
-                  />
-                }
-              />
+              <Route path="/aviation" element={<Navigate to="/industries/aviation" replace />} />
               <Route
                 path="/how-it-works"
                 element={
@@ -63,11 +67,7 @@ export default function App() {
             <Route element={<DemoLayout />}>
               <Route
                 path="/demo"
-                element={
-                  <RequireAuth>
-                    <DemoHub />
-                  </RequireAuth>
-                }
+                element={<DemoHub />}
               />
               <Route
                 path="/demo/contracts"

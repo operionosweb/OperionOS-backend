@@ -19,6 +19,7 @@ export default function DemoLayout() {
 
   const activeContract = params?.id || "None selected";
   const stageHint = location.pathname.includes("/analysis") ? "Analysis" : "Workspace";
+  const isPublicDemo = location.pathname === "/demo";
 
   return (
     <div className="op-shell" data-op-theme="light">
@@ -27,7 +28,7 @@ export default function DemoLayout() {
           <div className="op-topbar" style={{ minHeight: 68 }}>
             <div className="op-row" style={{ alignItems: "center", gap: "var(--op-space-5)" }}>
               <Logo />
-              <nav className="op-nav" aria-label="Demo navigation">
+              <nav className="op-nav op-demo-nav" aria-label="Demo navigation">
                 {DEMO_NAV.map((link) => (
                   <Link key={link.to} to={link.to} className="op-nav-link">
                     {link.label}
@@ -36,8 +37,8 @@ export default function DemoLayout() {
               </nav>
             </div>
 
-            <div className="op-row" style={{ justifyContent: "flex-end", gap: "var(--op-space-3)" }}>
-              <span className="op-badge">Demo environment</span>
+            <div className="op-row op-demo-header-actions" style={{ justifyContent: "flex-end", gap: "var(--op-space-3)" }}>
+              <span className="op-badge op-demo-environment-badge">Demo environment</span>
               {auth?.isAuthenticated ? (
                 <Button variant="secondary" onClick={auth.logout}>
                   Sign out
@@ -51,7 +52,7 @@ export default function DemoLayout() {
           </div>
         </Container>
 
-        <div className="op-context-bar" role="status" aria-live="polite">
+        {!isPublicDemo && <div className="op-context-bar" role="status" aria-live="polite">
           <Container>
             <div className="op-context-grid">
               <div className="op-context-item">
@@ -72,7 +73,7 @@ export default function DemoLayout() {
               </div>
             </div>
           </Container>
-        </div>
+        </div>}
       </header>
 
       <main className="op-shell-main">

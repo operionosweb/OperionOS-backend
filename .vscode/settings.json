@@ -44,6 +44,22 @@
         "/^node --check services/phase3/intelligence/deterministicClauseService\\.js ; echo \"EXIT_CODE: \\$LastExitCode\"$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^node --check services/phase3/source/deterministicSourcePageAdapter\\.js; node --check services/phase3/intelligence/deterministicClauseService\\.js; node --check repositories/phase3/clauseRepository\\.js$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^Set-Location frontend; npm run; echo \"EXIT_CODE: \\$LastExitCode\"; Set-Location \\.\\.$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^Set-Location \"c:\\\\Users\\\\meeli\\\\Operion OS GitHub\\\\OperionOS-backend\\\\frontend\"; npm run$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cd \"c:/Users/meeli/Operion OS GitHub/OperionOS-backend\"; node --test test/analysisRunIntelligenceReadRoutes\\.test\\.js$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

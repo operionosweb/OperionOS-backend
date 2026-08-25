@@ -6,7 +6,7 @@ export default function PlaceholderPage({ title, description }) {
   return (
     <Section>
       <Reveal>
-        <p className="op-eyebrow">Operion OS</p>
+        <p className="op-eyebrow">Operion</p>
         <h1 className="op-heading-lg" style={{ marginBottom: "var(--op-space-4)" }}>
           {title}
         </h1>

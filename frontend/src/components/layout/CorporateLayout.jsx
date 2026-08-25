@@ -5,9 +5,10 @@ import Button from "../ui/Button";
 import { Container } from "../ui/Layout";
 
 const NAV_LINKS = [
-  { to: "/product", label: "Product" },
-  { to: "/aviation", label: "Aviation" },
-  { to: "/how-it-works", label: "How it works" },
+  { to: "/platform", label: "Platform" },
+  { to: "/industries/aviation", label: "Industries" },
+  { to: "/scenarios", label: "Scenarios" },
+  { to: "/enterprise", label: "Enterprise" },
   { to: "/about", label: "About" },
 ];
 
@@ -15,8 +16,8 @@ export default function CorporateLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <div className="op-shell" data-op-theme="dark">
-      <header className="op-shell-header">
+    <div className="op-shell op-corporate-shell" data-op-theme="light">
+      <header className="op-shell-header op-corporate-header">
         <Container>
           <div className="op-topbar">
             <Logo />
@@ -29,12 +30,12 @@ export default function CorporateLayout() {
               ))}
             </nav>
 
-            <div className="op-row" style={{ justifyContent: "flex-end", gap: "var(--op-space-2)" }}>
+            <div className="op-row op-corporate-actions" style={{ justifyContent: "flex-end", gap: "var(--op-space-2)" }}>
               <Button to="/login" variant="secondary">
                 Sign in
               </Button>
               <Button to="/demo" variant="primary">
-                Explore the demo
+                Request a Demo
               </Button>
             </div>
 
@@ -57,29 +58,6 @@ export default function CorporateLayout() {
           </div>
         </Container>
 
-        <div className="op-context-bar" role="status" aria-live="polite">
-          <Container>
-            <div className="op-context-grid">
-              <div className="op-context-item">
-                <span className="op-context-label">Operating mode</span>
-                <span className="op-context-value">Intelligence environment</span>
-              </div>
-              <div className="op-context-item">
-                <span className="op-context-label">Current phase</span>
-                <span className="op-context-value">Contract intelligence foundation</span>
-              </div>
-              <div className="op-context-item">
-                <span className="op-context-label">Spatial posture</span>
-                <span className="op-context-value">Operational + spatial architecture</span>
-              </div>
-              <div className="op-context-item">
-                <span className="op-context-label">Data integrity</span>
-                <span className="op-context-value">No fabricated intelligence data</span>
-              </div>
-            </div>
-          </Container>
-        </div>
-
         {menuOpen && (
           <div className="op-mobile-menu" style={{ borderTop: "1px solid var(--op-color-border)" }}>
             <Container>
@@ -90,7 +68,7 @@ export default function CorporateLayout() {
                   </Link>
                 ))}
                 <Button to="/login" variant="secondary">Sign in</Button>
-                <Button to="/demo" variant="primary">Explore the demo</Button>
+                <Button to="/demo" variant="primary">Request a Demo</Button>
               </div>
             </Container>
           </div>
@@ -106,7 +84,7 @@ export default function CorporateLayout() {
           <div className="op-row" style={{ flexWrap: "wrap" }}>
             <Logo size="sm" />
             <p className="op-body-sm" style={{ margin: 0 }}>
-              © {new Date().getFullYear()} Operion OS. Aviation contract intelligence.
+              © {new Date().getFullYear()} Operion. Aviation contract intelligence.
             </p>
           </div>
         </Container>
