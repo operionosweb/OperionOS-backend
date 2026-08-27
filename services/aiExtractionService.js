@@ -1,7 +1,7 @@
 // services/aiExtractionService.js
 
 import crypto from "crypto";
-import { analyzeWithProviders } from "./aiProviders.js";
+import { requestLegacyAI } from "./ai/legacyAIRequest.js";
 
 /**
  * =========================================
@@ -132,7 +132,7 @@ function normalizeAIOutput(providerResult, chunksLength = 0) {
  * MAIN ANALYSIS ENGINE
  * =========================================
  */
-export async function analyzeContractText(rawText = "") {
+export async function analyzeContractText(rawText = "", organizationId) {
   try {
     if (!rawText) {
       return {
@@ -171,7 +171,7 @@ export async function analyzeContractText(rawText = "") {
     /**
      * AI PIPELINE
      */
-    const aiResult = await analyzeWithProviders(rawText);
+    const aiResult = await requestLegacyAI({ organizationId, operation: "full_contract_analysis", input: rawText });
 
     /**
      * NORMALIZATION
@@ -209,6 +209,6 @@ export async function analyzeContractText(rawText = "") {
 /**
  * BACKWARD COMPATIBILITY
  */
-export async function extractContractIntelligence(rawText = "") {
-  return analyzeContractText(rawText);
+export async function extractContractIntelligence(rawText = "", organizationId) {
+  return analyzeContractText(rawText, organizationId);
 }

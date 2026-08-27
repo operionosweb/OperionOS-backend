@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import pdfParse from "pdf-parse";
+import mammoth from "mammoth";
 
 import supabase from "../config/supabase.js";
 import { recordAuditEvent } from "./foundationAuditService.js";
@@ -9,8 +10,9 @@ import {
   removeDocumentSource,
   uploadDocumentSource,
 } from "./documentStorageService.js";
+import { parseDocumentStructure, persistDocumentStructure } from "./documentStructureService.js";
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024;
+export const MAX_FILE_SIZE = Number(process.env.CONTRACT_UPLOAD_MAX_BYTES || 20 * 1024 * 1024);
 const MAX_PERSISTED_TEXT_LENGTH = 1_000_000;
 const PIPELINE_VERSION = "ingestion-v1";
 
@@ -62,40 +64,53 @@ async function audit(event, context, metadata = {}) {
   }
 }
 
-export function validatePdfFile(file) {
+export function validateDocumentFile(file) {
   if (!file || !Buffer.isBuffer(file.buffer)) {
-    throw appError("INVALID_FILE", "A PDF file is required");
+    throw appError("INVALID_FILE", "A PDF or DOCX file is required");
   }
 
   const filename = file.originalname || "";
   const extension = filename.slice(filename.lastIndexOf(".")).toLowerCase();
-
-  if (extension !== ".pdf") {
-    throw appError("UNSUPPORTED_FILE_TYPE", "Only PDF files are supported");
-  }
-
-  if (file.mimetype !== "application/pdf") {
-    throw appError("UNSUPPORTED_FILE_TYPE", "The file MIME type must be application/pdf");
-  }
 
   if (file.buffer.length === 0) {
     throw appError("INVALID_FILE", "The uploaded file is empty");
   }
 
   if (file.buffer.length > MAX_FILE_SIZE) {
-    throw appError("FILE_TOO_LARGE", "The uploaded file exceeds the 20MB limit");
+    throw appError("FILE_TOO_LARGE", "The uploaded file exceeds the configured size limit");
   }
 
-  if (file.buffer.subarray(0, 5).toString("ascii") !== "%PDF-") {
-    throw appError("INVALID_PDF", "The uploaded file is not a valid PDF source");
+  if (extension === ".pdf") {
+    if (file.mimetype !== "application/pdf") {
+      throw appError("UNSUPPORTED_FILE_TYPE", "The file MIME type must be application/pdf");
+    }
+    if (file.buffer.subarray(0, 5).toString("ascii") !== "%PDF-") {
+      throw appError("INVALID_PDF", "The uploaded file is not a valid PDF source");
+    }
+    return { buffer: file.buffer, filename, mimeType: "application/pdf", fileSize: file.buffer.length, extension };
   }
 
-  return {
-    buffer: file.buffer,
-    filename,
-    mimeType: "application/pdf",
-    fileSize: file.buffer.length,
-  };
+  if (extension === ".docx") {
+    const acceptedMimeTypes = new Set([
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ]);
+    if (!acceptedMimeTypes.has(file.mimetype)) {
+      throw appError("UNSUPPORTED_FILE_TYPE", "The file MIME type must be application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    }
+    if (file.buffer.subarray(0, 2).toString("ascii") !== "PK") {
+      throw appError("INVALID_DOCX", "The uploaded file is not a valid DOCX source");
+    }
+    return { buffer: file.buffer, filename, mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", fileSize: file.buffer.length, extension };
+  }
+
+  throw appError("UNSUPPORTED_FILE_TYPE", "Only PDF and DOCX files are supported");
+}
+
+export function validatePdfFile(file) {
+  if ((file?.originalname || "").slice((file?.originalname || "").lastIndexOf(".")).toLowerCase() !== ".pdf") {
+    throw appError("UNSUPPORTED_FILE_TYPE", "Only PDF files are supported");
+  }
+  return validateDocumentFile(file);
 }
 
 export function calculateSha256(buffer) {
@@ -127,8 +142,26 @@ async function parsePdf(buffer) {
   }
 }
 
+async function parseDocx(buffer) {
+  try {
+    const result = await mammoth.extractRawText({ buffer });
+    const text = typeof result.value === "string" ? result.value : "";
+    return { pageCount: null, text, requiresOcr: false };
+  } catch {
+    throw appError("INVALID_DOCX", "The DOCX could not be parsed");
+  }
+}
+
+async function parseDocument(buffer, extension) {
+  return extension === ".docx" ? parseDocx(buffer) : parsePdf(buffer);
+}
+
 export async function extractPdfMetadata(buffer) {
   return parsePdf(buffer);
+}
+
+export async function extractDocumentMetadata(buffer, extension = ".pdf") {
+  return parseDocument(buffer, extension);
 }
 
 async function findDuplicateVersion(organizationId, sha256) {
@@ -218,6 +251,7 @@ async function createDocumentRecord({
 
 async function createVersionRecord({
   documentId,
+  contractId,
   organizationId,
   userId,
   versionNumber,
@@ -231,6 +265,7 @@ async function createVersionRecord({
     .from("document_versions")
     .insert({
       document_id: documentId,
+      contract_id: contractId,
       organization_id: organizationId,
       version_number: versionNumber,
       sha256,
@@ -286,7 +321,10 @@ async function updateStatus({
   errorMessage = null,
 }) {
   const documentUpdate = { status: documentStatus, updated_at: new Date().toISOString() };
-  const versionUpdate = { extraction_status: extractionStatus };
+  const versionUpdate = {
+    extraction_status: extractionStatus,
+    processing_status: documentStatus === "ready" || documentStatus === "requires_ocr" ? "processed" : documentStatus,
+  };
   const runUpdate = {
     status: runStatus,
     started_at: startedAt || null,
@@ -295,7 +333,7 @@ async function updateStatus({
     error_message: errorMessage,
   };
 
-  const [documentResult, versionResult, runResult] = await Promise.all([
+  const updates = [
     supabase
       .from("documents")
       .update(documentUpdate)
@@ -306,14 +344,19 @@ async function updateStatus({
       .update(versionUpdate)
       .eq("id", versionId)
       .eq("organization_id", organizationId),
-    supabase
-      .from("analysis_runs")
-      .update(runUpdate)
-      .eq("id", analysisRunId)
-      .eq("organization_id", organizationId),
-  ]);
+  ];
+  if (analysisRunId && runStatus) {
+    updates.push(
+      supabase
+        .from("analysis_runs")
+        .update(runUpdate)
+        .eq("id", analysisRunId)
+        .eq("organization_id", organizationId)
+    );
+  }
+  const results = await Promise.all(updates);
 
-  if (documentResult.error || versionResult.error || runResult.error) {
+  if (results.some((result) => result.error)) {
     throw appError("STORAGE_ERROR", "Processing status update failed", 503);
   }
 }
@@ -349,9 +392,9 @@ export async function ingestContractUpload({
   contractId = null,
   documentId = null,
 }) {
-  const validated = validatePdfFile(file);
+  const validated = validateDocumentFile(file);
   const sha256 = calculateSha256(validated.buffer);
-  const parsed = await parsePdf(validated.buffer);
+  const parsed = await parseDocument(validated.buffer, validated.extension);
   const context = {
     organizationId,
     userId,
@@ -420,6 +463,7 @@ export async function ingestContractUpload({
       organizationId,
       documentId: createdDocumentId,
       versionId: createdVersionId,
+      extension: validated.extension,
     });
 
     await uploadDocumentSource({
@@ -459,6 +503,7 @@ export async function ingestContractUpload({
 
     const version = await createVersionRecord({
       documentId: createdDocumentId,
+      contractId: createdContractId,
       organizationId,
       userId,
       versionNumber: (latestVersion?.version_number || 0) + 1,
@@ -470,17 +515,8 @@ export async function ingestContractUpload({
     });
     context.documentVersionId = version.id;
 
-    analysisRunId = (await createAnalysisRun({
-      organizationId,
-      contractId: createdContractId,
-      versionId: version.id,
-      userId,
-    })).id;
-    context.analysisRunId = analysisRunId;
-
     await audit("document.uploaded", context, { sha256, file_size: validated.fileSize });
     await audit("document.version.created", context, { version_number: version.version_number, sha256 });
-    await audit("analysis.started", context, { pipeline_version: PIPELINE_VERSION });
 
     const startedAt = new Date().toISOString();
     await updateStatus({
@@ -490,7 +526,7 @@ export async function ingestContractUpload({
       analysisRunId,
       documentStatus: "processing",
       extractionStatus: "processing",
-      runStatus: "processing",
+      runStatus: null,
       startedAt,
     });
 
@@ -509,14 +545,12 @@ export async function ingestContractUpload({
         analysisRunId,
         documentStatus: "requires_ocr",
         extractionStatus: "requires_ocr",
-        runStatus: "completed",
+        runStatus: null,
         startedAt,
         completedAt: new Date().toISOString(),
         errorCode: "PDF_REQUIRES_OCR",
         errorMessage: "PDF contains no usable text",
       });
-      await audit("analysis.completed", context, { status: "requires_ocr" });
-
       return {
         contractId: createdContractId,
         documentId: createdDocumentId,
@@ -535,6 +569,15 @@ export async function ingestContractUpload({
       text: parsed.text,
       status: "completed",
     });
+    const structure = parseDocumentStructure({ text: parsed.text });
+    const structureCounts = await persistDocumentStructure({
+      supabase,
+      organizationId,
+      contractId: createdContractId,
+      documentId: createdDocumentId,
+      documentVersionId: version.id,
+      structure,
+    });
     await updateStatus({
       organizationId,
       documentId: createdDocumentId,
@@ -542,12 +585,12 @@ export async function ingestContractUpload({
       analysisRunId,
       documentStatus: "ready",
       extractionStatus: "completed",
-      runStatus: "completed",
+      runStatus: null,
       startedAt,
       completedAt: new Date().toISOString(),
     });
-    await audit("analysis.completed", context, {
-      status: "completed",
+    await audit("document.ready", context, {
+      status: "ready",
       page_count: parsed.pageCount,
       text_length: parsed.text.length,
     });
@@ -557,10 +600,11 @@ export async function ingestContractUpload({
       documentId: createdDocumentId,
       documentVersionId: version.id,
       analysisRunId,
-      status: "completed",
+      status: "ready",
       sha256,
       pageCount: parsed.pageCount,
       textLength: parsed.text.length,
+      structure: structureCounts,
     };
   } catch (error) {
     if (analysisRunId) {
@@ -572,7 +616,7 @@ export async function ingestContractUpload({
           analysisRunId,
           documentStatus: "failed",
           extractionStatus: "failed",
-          runStatus: "failed",
+          runStatus: analysisRunId ? "failed" : null,
           completedAt: new Date().toISOString(),
           errorCode: error.code || "INGESTION_FAILED",
           errorMessage: "Document processing failed",
@@ -651,18 +695,68 @@ export async function getDocumentById(documentId, organizationId) {
   return data;
 }
 
+export async function getDocumentStructure(documentId, organizationId) {
+  requireOrganizationScope(organizationId);
+  await getDocumentById(documentId, organizationId);
+  const [pagesResult, sectionsResult, chunksResult] = await Promise.all([
+    supabase
+      .from("contract_document_pages")
+      .select("id, document_version_id, page_number, text_length, char_start, char_end, text_hash")
+      .eq("document_id", documentId)
+      .eq("organization_id", organizationId)
+      .order("page_number", { ascending: true }),
+    supabase
+      .from("contract_sections")
+      .select("id, contract_id, document_id, document_version_id, parent_section_id, heading, section_order, page_start, page_end, source_text, metadata")
+      .eq("document_id", documentId)
+      .eq("organization_id", organizationId)
+      .order("section_order", { ascending: true }),
+    supabase
+      .from("contract_document_chunks")
+      .select("id, contract_id, document_id, document_version_id, section_id, page_number, chunk_order, source_text, content_hash, metadata")
+      .eq("document_id", documentId)
+      .eq("organization_id", organizationId)
+      .order("chunk_order", { ascending: true }),
+  ]);
+  if (pagesResult.error || sectionsResult.error || chunksResult.error) throw appError("STORAGE_ERROR", "Document structure lookup failed", 503);
+  return { pages: pagesResult.data || [], sections: sectionsResult.data || [], chunks: chunksResult.data || [] };
+}
+
 export async function listDocumentVersions(documentId, organizationId) {
   requireOrganizationScope(organizationId);
   await getDocumentById(documentId, organizationId);
   const { data, error } = await supabase
     .from("document_versions")
-    .select("id, document_id, organization_id, version_number, sha256, mime_type, file_size, page_count, extraction_status, created_by, created_at")
+    .select("id, document_id, organization_id, version_number, sha256, mime_type, file_size, page_count, extraction_status, processing_status, analysis_status, created_by, created_at")
     .eq("document_id", documentId)
     .eq("organization_id", organizationId)
     .order("version_number", { ascending: false });
 
   if (error) throw appError("STORAGE_ERROR", "Document version lookup failed", 503);
   return data || [];
+}
+
+export async function getContractProcessingStatus(contractId, organizationId) {
+  requireOrganizationScope(organizationId);
+  await getContractRecord(contractId, organizationId);
+  const documents = await listDocumentsForContract(contractId, organizationId);
+  const latestDocument = documents[0] || null;
+  if (!latestDocument) {
+    return { contractId, status: "not_uploaded", document: null, version: null };
+  }
+  const versions = await listDocumentVersions(latestDocument.id, organizationId);
+  const latestVersion = versions[0] || null;
+  return {
+    contractId,
+    status: latestDocument.status,
+    document: {
+      id: latestDocument.id,
+      filename: latestDocument.filename,
+      status: latestDocument.status,
+      createdAt: latestDocument.created_at,
+    },
+    version: latestVersion,
+  };
 }
 
 export async function getAnalysisRunById(runId, organizationId) {

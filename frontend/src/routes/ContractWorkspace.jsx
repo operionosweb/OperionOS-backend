@@ -12,9 +12,13 @@ import {
   getContract,
   listContractDocuments,
   listDocumentVersions,
+  getDocumentStructure,
   getAnalysisRun,
   listAnalysisRunClauses,
   listAnalysisRunObligations,
+  getObligationEstimate,
+  analyzeObligations,
+  analyzeContractClauses,
 } from "../lib/contractsApi";
 import { CONTRACT_INTELLIGENCE_HIERARCHY, INTELLIGENCE_AVAILABILITY, deriveAvailabilityState } from "../lib/contractIntelligenceModel";
 
@@ -47,9 +51,14 @@ function ContractWorkspace({ contractId, organizationId }) {
   const [state, setState] = useState("loading");
   const [contract, setContract] = useState(null);
   const [documents, setDocuments] = useState([]);
+  const [structure, setStructure] = useState({ pages: [], sections: [], chunks: [] });
+  const [latestVersionId, setLatestVersionId] = useState("");
+  const [analysisState, setAnalysisState] = useState("idle");
   const [analysisRun, setAnalysisRun] = useState(null);
   const [clauses, setClauses] = useState([]);
   const [obligations, setObligations] = useState([]);
+  const [obligationEstimate, setObligationEstimate] = useState(null);
+  const [obligationAnalysisState, setObligationAnalysisState] = useState("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [activeAnalysisRunId, setActiveAnalysisRunId] = useState(() => {
     try {
@@ -90,12 +99,22 @@ function ContractWorkspace({ contractId, organizationId }) {
 
         if (latestDocument) {
           try {
-            const versionsResult = await listDocumentVersions(latestDocument.id, organizationId);
+            const [versionsResult, structureResult] = await Promise.all([
+              listDocumentVersions(latestDocument.id, organizationId),
+              getDocumentStructure(latestDocument.id, organizationId),
+            ]);
             const latestVersion = versionsResult?.versions?.[0];
+            setLatestVersionId(latestVersion?.id || "");
+            setStructure({
+              pages: structureResult?.pages || [],
+              sections: structureResult?.sections || [],
+              chunks: structureResult?.chunks || [],
+            });
             if (latestVersion && latestVersion.analysis_run_id) {
               nextAnalysisRunId = latestVersion.analysis_run_id;
             }
           } catch {
+            setStructure({ pages: [], sections: [], chunks: [] });
             nextAnalysisRunId = nextAnalysisRunId || "";
           }
         }
@@ -141,6 +160,53 @@ function ContractWorkspace({ contractId, organizationId }) {
       cancelled = true;
     };
   }, [contractId, organizationId]);
+
+  useEffect(() => {
+    if (!analysisRun?.id || obligations.length) return undefined;
+    let cancelled = false;
+    getObligationEstimate(analysisRun.id, organizationId)
+      .then((result) => {
+        if (!cancelled) setObligationEstimate(result);
+      })
+      .catch(() => {
+        if (!cancelled) setObligationEstimate(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [analysisRun, organizationId, obligations.length]);
+
+  async function handleObligationAnalysis() {
+    if (!analysisRun?.id) return;
+    setObligationAnalysisState("processing");
+    try {
+      const result = await analyzeObligations(analysisRun.id, organizationId);
+      setObligations(result?.obligations || []);
+      setObligationAnalysisState("ready");
+    } catch (error) {
+      setErrorMessage(error.message || "Obligation analysis could not be completed.");
+      setObligationAnalysisState("error");
+    }
+  }
+
+  async function handleClauseAnalysis() {
+    if (!latestVersionId) return;
+    setAnalysisState("processing");
+    try {
+      const result = await analyzeContractClauses({ contractId, documentVersionId: latestVersionId, organizationId });
+      const runId = result?.analysisRun?.id;
+      setAnalysisRun(result?.analysisRun || null);
+      setActiveAnalysisRunId(runId || "");
+      if (runId) {
+        const clausesResult = await listAnalysisRunClauses(runId, organizationId);
+        setClauses(clausesResult?.clauses || []);
+      }
+      setAnalysisState("ready");
+    } catch (error) {
+      setErrorMessage(error.message || "Clause analysis could not be completed.");
+      setAnalysisState("error");
+    }
+  }
 
   if (state === "loading") return <LoadingState label="Loading contract…" />;
   if (state === "error") return <ErrorState message={errorMessage} />;
@@ -198,10 +264,24 @@ function ContractWorkspace({ contractId, organizationId }) {
           </div>
 
           <div className="op-surface-plane-secondary" style={{ padding: "var(--op-space-5)" }}>
+            <p className="op-kicker" style={{ marginBottom: "var(--op-space-2)" }}>Document structure</p>
+            <p className="op-body-sm" style={{ marginBottom: "var(--op-space-3)" }}>
+              Deterministic structure is ready for later Contract Intelligence analysis.
+            </p>
+            <div className="op-inspector-kv"><span className="op-body-sm">Pages</span><span className="op-body-sm">{structure.pages.length}</span></div>
+            <div className="op-inspector-kv"><span className="op-body-sm">Sections</span><span className="op-body-sm">{structure.sections.length}</span></div>
+            <div className="op-inspector-kv"><span className="op-body-sm">Chunks</span><span className="op-body-sm">{structure.chunks.length}</span></div>
+          </div>
+
+          <div className="op-surface-plane-secondary" style={{ padding: "var(--op-space-5)" }}>
             <p className="op-kicker" style={{ marginBottom: "var(--op-space-2)" }}>Analysis</p>
             <p className="op-body-sm" style={{ marginBottom: "var(--op-space-4)" }}>
-              {analysisRun?.status ? `Active analysis run: ${analysisRun.status}` : "No active analysis run is currently attached to this contract view."}
+              {analysisRun?.status ? `Active analysis run: ${analysisRun.status}` : "Clause analysis has not been requested for this document."}
             </p>
+            {latestVersionId && !analysisRun && <Button type="button" variant="primary" onClick={handleClauseAnalysis} disabled={analysisState === "processing"}>
+              {analysisState === "processing" ? "Analysing clauses…" : "Analyse clauses"}
+            </Button>}
+            {analysisState === "error" && <p className="op-body-sm" style={{ color: "var(--op-signal-risk)", marginTop: "var(--op-space-3)" }}>{errorMessage}</p>}
             <Button to={`/demo/contracts/${contractId}/analysis`} variant="secondary">View analysis</Button>
           </div>
         </div>
@@ -256,6 +336,23 @@ function ContractWorkspace({ contractId, organizationId }) {
       </Reveal>
 
       <Reveal style={{ marginBottom: "var(--op-space-5)" }}>
+        <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-3)" }}>Structure</h2>
+        {!structure.sections.length ? (
+          <EmptyState title="No structural sections" description="The document has not produced structural records yet." />
+        ) : (
+          <div className="op-list-table">
+            {structure.sections.map((section) => (
+              <div key={section.id} className="op-list-row" style={{ gridTemplateColumns: "auto 1fr auto" }}>
+                <span className="op-body-sm">{section.metadata?.clause_number || section.section_order + 1}</span>
+                <span className="op-body-sm">{section.heading || "Untitled section"}</span>
+                <span className="op-badge">{section.parent_section_id ? "Subsection" : "Section"}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Reveal>
+
+      <Reveal style={{ marginBottom: "var(--op-space-5)" }}>
         <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-3)" }}>Clauses</h2>
         {!activeAnalysisRunId ? (
           <EmptyState title="No active analysis run selected" description="This contract has no active run selected, so no clause records can be shown yet." />
@@ -279,6 +376,18 @@ function ContractWorkspace({ contractId, organizationId }) {
 
       <Reveal style={{ marginBottom: "var(--op-space-5)" }}>
         <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-3)" }}>Obligations</h2>
+        {analysisRun && !obligations.length && (
+          <div className="op-surface" style={{ padding: "var(--op-space-4)", marginBottom: "var(--op-space-4)" }}>
+            <p className="op-body-sm" style={{ marginBottom: "var(--op-space-3)" }}>
+              Extract actionable commitments from the validated clauses. This uses the AI Intelligence Budget only after you start it.
+            </p>
+            {obligationEstimate && <p className="op-body-sm" style={{ marginBottom: "var(--op-space-3)" }}>Estimated Intelligence Budget: {obligationEstimate.estimatedIntelligence} · Remaining: {obligationEstimate.budget?.remaining ?? "unknown"}</p>}
+            <Button type="button" variant="primary" onClick={handleObligationAnalysis} disabled={obligationAnalysisState === "processing"}>
+              {obligationAnalysisState === "processing" ? "Analysing obligations…" : "Analyse obligations"}
+            </Button>
+            {obligationAnalysisState === "error" && <p className="op-body-sm" style={{ color: "var(--op-signal-risk)", marginTop: "var(--op-space-3)" }}>{errorMessage}</p>}
+          </div>
+        )}
         {!activeAnalysisRunId ? (
           <EmptyState title="No active analysis run selected" description="This contract has no active run selected, so no obligation records can be shown yet." />
         ) : obligationAvailability === INTELLIGENCE_AVAILABILITY.LOADING ? (
@@ -289,10 +398,10 @@ function ContractWorkspace({ contractId, organizationId }) {
           <div className="op-list-table">
             {obligations.map((obligation) => (
               <div key={obligation.id} className="op-list-row" style={{ gridTemplateColumns: "1.5fr 1fr 1fr auto" }}>
-                <span className="op-body-sm">{obligation.description || "Untitled obligation"}</span>
+                <div><span className="op-body-sm">{obligation.description || "Untitled obligation"}</span><p className="op-body-sm" style={{ margin: "var(--op-space-1) 0 0" }}>{obligation.actor || "Actor unclear"} · {obligation.action || "Action unclear"} · {obligation.object || "Object unclear"}</p></div>
                 <span className="op-body-sm">{obligation.obligation_type || "unspecified"}</span>
-                <span className="op-body-sm">{obligation.priority || "unknown"}</span>
-                <span className="op-badge">{obligation.status || "unknown"}</span>
+                <span className="op-body-sm">{obligation.timing_expression || obligation.frequency || "Timing not stated"}</span>
+                <span className="op-badge">{obligation.confidence != null ? `${Math.round(obligation.confidence * 100)}%` : "unknown"}</span>
               </div>
             ))}
           </div>

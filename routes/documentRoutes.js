@@ -7,6 +7,7 @@ import {
   downloadDocumentById,
   getDocumentById,
   listDocumentVersions,
+  getDocumentStructure,
 } from "../services/documentIngestionService.js";
 import { recordAuditEvent } from "../services/foundationAuditService.js";
 
@@ -40,6 +41,14 @@ router.get("/:id/versions", async (req, res) => {
   try {
     const versions = await listDocumentVersions(req.params.id, req.organization.id);
     return res.json({ success: true, versions });
+  } catch (error) {
+    return sendError(error, res);
+  }
+});
+
+router.get("/:id/structure", async (req, res) => {
+  try {
+    return res.json({ success: true, ...(await getDocumentStructure(req.params.id, req.organization.id)) });
   } catch (error) {
     return sendError(error, res);
   }

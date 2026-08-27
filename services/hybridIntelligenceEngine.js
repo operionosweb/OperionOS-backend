@@ -151,7 +151,8 @@ function generateComplianceFlags({
  */
 
 export async function runHybridIntelligence(
-  contractText = ""
+  contractText = "",
+  organizationId
 ) {
   try {
     /**
@@ -162,7 +163,8 @@ export async function runHybridIntelligence(
 
     const structured =
       await extractStructuredContractData(
-        contractText
+        contractText,
+        organizationId
       );
 
     /**
@@ -173,7 +175,8 @@ export async function runHybridIntelligence(
 
     const ai =
       await analyzeContractText(
-        contractText
+        contractText,
+        organizationId
       );
 
     const structuredData =

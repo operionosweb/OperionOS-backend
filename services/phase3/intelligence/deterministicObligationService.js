@@ -4,9 +4,13 @@ import { z } from "zod";
 import { createObligationRepository } from "../../../repositories/phase3/obligationRepository.js";
 import { assertOrganizationScope, assertResourceId } from "../../../repositories/phase3/scope.js";
 import { createDocumentVersionSourceService } from "../source/documentVersionSourceService.js";
+import { aiGateway } from "../../ai/aiGateway.js";
 
 const PIPELINE_VERSION = "phase3c-obligation-foundation-v1";
-const ACTIVE_ANALYSIS_STATES = new Set(["extracting", "analysing", "indexing"]);
+const OBLIGATION_TAXONOMY_VERSION = "aviation-obligations-v1";
+const OBLIGATION_PROMPT_VERSION = "obligation-semantic-prompt-v1";
+const OBLIGATION_SCHEMA_VERSION = "phase3-obligation-semantic-v1";
+const ACTIVE_ANALYSIS_STATES = new Set(["extracting", "analysing", "indexing", "completed"]);
 const DEFAULT_PROVIDER_TIMEOUT_MS = 5000;
 const DEFAULT_PROVIDER_MAX_RETRIES = 1;
 
@@ -33,6 +37,14 @@ const ProviderOutputSchema = z.object({
   status: z.enum(["identified", "requires_review", "active", "unclear"]).optional(),
   confidence: z.number().min(0).max(1).optional(),
   review_status: z.enum(["pending", "verified", "requires_review", "rejected"]).optional(),
+  actor: z.string().trim().min(1).optional(),
+  action: z.string().trim().min(1).optional(),
+  object: z.string().trim().min(1).optional(),
+  beneficiary: z.string().trim().min(1).optional(),
+  condition: z.string().trim().min(1).optional(),
+  timing_expression: z.string().trim().min(1).optional(),
+  consequence: z.string().trim().min(1).optional(),
+  modality: z.enum(["mandatory", "prohibited", "discretionary", "conditional"]).optional(),
 }).strict();
 
 function stageError(code, message, status = 400) {
@@ -48,6 +60,36 @@ function normalizeWhitespace(value) {
 
 function normalizeObligationDescription(value) {
   return normalizeWhitespace(value).toLowerCase();
+}
+
+function extractParty(text) {
+  return text.match(/\b(lessor|lessee|airline|mro provider|supplier|airport|ground handler|manufacturer|insurer)\b/i)?.[1] || null;
+}
+
+function extractAction(text) {
+  return text.match(/\b(pay|reimburse|fund|maintain|inspect|repair|overhaul|provide|operate|comply|obtain|notify|report|deliver|accept|redeliver|indemnify|cooperate|obtain consent)\b/i)?.[1] || null;
+}
+
+function extractObject(text, action) {
+  if (!action) return null;
+  const match = text.match(new RegExp(`\\b${action}\\b(?:\\s+the)?\\s+([^,.]+)`, "i"));
+  return match?.[1]?.trim() || null;
+}
+
+function extractTiming(text) {
+  return text.match(/\b(within\s+\d+\s+(?:business\s+)?days?|before\s+[^,.]+|upon\s+[^,.]+|no later than\s+[^,.]+)/i)?.[0] || null;
+}
+
+function extractFrequency(text) {
+  return text.match(/\b(monthly|quarterly|annually|weekly|daily|recurring|each\s+(?:month|quarter|year))\b/i)?.[1] || null;
+}
+
+function extractCondition(text) {
+  return text.match(/\b(if|unless|provided that|when)\b[^.]+/i)?.[0] || null;
+}
+
+function extractConsequence(text) {
+  return text.match(/\b(default|penalty|terminate|termination|indemnif\w*|loss of right)\b[^.]*?/i)?.[0] || null;
 }
 
 export function canonicalizeObligationIdentityPayload({
@@ -71,6 +113,31 @@ export function computeObligationIdentity(input) {
     .createHash("sha256")
     .update(canonicalizeObligationIdentityPayload(input))
     .digest("hex");
+}
+
+export function createGatewayObligationProvider({ gateway = aiGateway, confirmation = false, metrics = {} } = {}) {
+  return {
+    async analyzeStructured(payload) {
+      metrics.requests = (metrics.requests || 0) + 1;
+      const result = await gateway.request({
+        organizationId: payload.organization_id,
+        userId: payload.user_id || null,
+        operation: "obligation_reasoning",
+        input: JSON.stringify(payload),
+        confirmation,
+        structured: true,
+        system: "Return one structured obligation object. Preserve mandatory, prohibited, discretionary, and conditional meaning. Do not invent source references.",
+      });
+      metrics.estimatedIntelligence = (metrics.estimatedIntelligence || 0) + Number(result.estimatedIntelligence || result.job?.estimatedIntelligence || 0);
+      if (result.source === "cache") metrics.cacheHits = (metrics.cacheHits || 0) + 1;
+      else if (result.source === "provider") metrics.cacheMisses = (metrics.cacheMisses || 0) + 1;
+      metrics.actualIntelligence = (metrics.actualIntelligence || 0) + Number(result.job?.actualIntelligence || 0);
+      if (!result.success || result.result === undefined) {
+        throw stageError(result.code || "AI_REQUEST_BLOCKED", "Obligation analysis was not completed", 409);
+      }
+      return { output: result.result };
+    },
+  };
 }
 
 function detectObligationType(text) {
@@ -105,16 +172,26 @@ function extractObligationSentence(sourceText) {
   return normalizeWhitespace(match || cleaned);
 }
 
-function buildDeterministicCandidate(clause) {
-  const description = extractObligationSentence(clause.source_text);
+export function buildDeterministicObligationCandidate(clause) {
+  const sourceText = clause.source_text || "";
+  const description = extractObligationSentence(sourceText);
   if (!description) return null;
+  const actor = extractParty(description);
+  const action = extractAction(description);
 
   return {
     description,
     obligation_type: detectObligationType(description),
-    trigger_expression: undefined,
-    conditionality: undefined,
-    frequency: undefined,
+    actor: actor || undefined,
+    action: action || undefined,
+    object: extractObject(description, action) || undefined,
+    beneficiary: undefined,
+    condition: extractCondition(description) || undefined,
+    trigger_expression: extractTiming(description) || undefined,
+    timing_expression: extractTiming(description) || undefined,
+    consequence: extractConsequence(description) || undefined,
+    modality: /\b(may|can)\b/i.test(description) ? "discretionary" : /\b(shall not|must not)\b/i.test(description) ? "prohibited" : /\b(if|unless|provided that|when)\b/i.test(description) ? "conditional" : "mandatory",
+    frequency: extractFrequency(description) || undefined,
     priority: undefined,
     status: undefined,
     confidence: undefined,
@@ -235,6 +312,7 @@ export function createDeterministicObligationService({
       documentId,
       documentVersionId,
       analysisRunId,
+      userId = null,
       useProviderNormalization = false,
       providerTimeoutMs = DEFAULT_PROVIDER_TIMEOUT_MS,
       providerMaxRetries = DEFAULT_PROVIDER_MAX_RETRIES,
@@ -312,6 +390,7 @@ export function createDeterministicObligationService({
             obligations: [],
             obligationEvidence: [],
             pipelineVersion: PIPELINE_VERSION,
+            analysedClauses: 0,
           };
         }
 
@@ -354,12 +433,14 @@ export function createDeterministicObligationService({
         });
 
         const obligations = [];
+        let analysedClauses = 0;
         const obligationEvidenceByIdentity = new Map();
 
         for (const clause of clauses) {
           const clauseLinks = linksByClauseId.get(clause.id) || [];
-          const deterministicCandidate = buildDeterministicCandidate(clause);
+          const deterministicCandidate = buildDeterministicObligationCandidate(clause);
           if (!deterministicCandidate) continue;
+          analysedClauses += 1;
 
           if (!clauseLinks.length) {
             throw stageError(
@@ -394,6 +475,10 @@ export function createDeterministicObligationService({
 
             emit("provider_request_metadata", {
               organization_id: organizationId,
+              user_id: userId,
+              taxonomy_version: OBLIGATION_TAXONOMY_VERSION,
+              prompt_version: OBLIGATION_PROMPT_VERSION,
+              schema_version: OBLIGATION_SCHEMA_VERSION,
               analysis_run_id: analysisRunId,
               clause_id: clause.id,
               timeout_ms: providerTimeoutMs,
@@ -406,6 +491,7 @@ export function createDeterministicObligationService({
               clause_id: clause.id,
               clause_number: clause.clause_number || null,
               clause_title: clause.title,
+              clause_text: clause.source_text,
               deterministic_candidate: {
                 description: deterministicCandidate.description,
                 obligation_type: deterministicCandidate.obligation_type,
@@ -413,17 +499,22 @@ export function createDeterministicObligationService({
               evidence_ids: evidenceLinks.map((link) => link.evidence_id),
             };
 
-            normalized = await normalizeWithProvider({
+            normalized = {
+              ...deterministicCandidate,
+              ...await normalizeWithProvider({
               provider,
               payload: providerPayload,
               timeoutMs: providerTimeoutMs,
               maxRetries: providerMaxRetries,
-            });
+              }),
+            };
           }
 
           const parsed = ProviderOutputSchema.safeParse(normalized);
           if (!parsed.success) {
-            throw stageError("OBLIGATION_VALIDATION_FAILED", "Obligation candidate validation failed", 422);
+            const validationError = stageError("OBLIGATION_VALIDATION_FAILED", "Obligation candidate validation failed", 422);
+            validationError.issues = parsed.error.issues;
+            throw validationError;
           }
 
           const output = parsed.data;
@@ -449,6 +540,14 @@ export function createDeterministicObligationService({
             trigger_expression: output.trigger_expression || null,
             conditionality: output.conditionality || null,
             frequency: output.frequency || null,
+            actor: output.actor || deterministicCandidate.actor || null,
+            action: output.action || deterministicCandidate.action || null,
+            object: output.object || deterministicCandidate.object || null,
+            beneficiary: output.beneficiary || deterministicCandidate.beneficiary || null,
+            condition: output.condition || deterministicCandidate.condition || null,
+            timing_expression: output.timing_expression || deterministicCandidate.timing_expression || null,
+            consequence: output.consequence || deterministicCandidate.consequence || null,
+            modality: output.modality || deterministicCandidate.modality || "mandatory",
             priority: output.priority || "medium",
             status: output.status || "identified",
             confidence: output.confidence ?? 0.5,
@@ -481,6 +580,7 @@ export function createDeterministicObligationService({
             obligations: [],
             obligationEvidence: [],
             pipelineVersion: PIPELINE_VERSION,
+            analysedClauses,
           };
         }
 
@@ -527,6 +627,7 @@ export function createDeterministicObligationService({
           obligations: persisted.obligations,
           obligationEvidence: persisted.obligationEvidence,
           pipelineVersion: PIPELINE_VERSION,
+            analysedClauses,
         };
       } catch (error) {
         emit("rollback", {

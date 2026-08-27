@@ -14,12 +14,16 @@ export function buildDocumentStorageKey({
   organizationId,
   documentId,
   versionId,
+  extension = ".pdf",
 }) {
   assertUuid(organizationId, "organizationId");
   assertUuid(documentId, "documentId");
   assertUuid(versionId, "versionId");
 
-  return `organizations/${organizationId}/documents/${documentId}/versions/${versionId}/source.pdf`;
+  if (![".pdf", ".docx"].includes(extension)) {
+    throw new TypeError("extension must be .pdf or .docx");
+  }
+  return `organizations/${organizationId}/documents/${documentId}/versions/${versionId}/source${extension}`;
 }
 
 export async function uploadDocumentSource({ storageKey, buffer, mimeType }) {

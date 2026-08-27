@@ -10,16 +10,19 @@ import {
 } from "../services/contractService.js";
 import {
   ingestContractUpload,
+  getContractProcessingStatus,
   listDocumentsForContract,
 } from "../services/documentIngestionService.js";
 import { authenticateUser } from "../middleware/userAuthMiddleware.js";
 import { requireOrganizationMembership } from "../middleware/organizationMiddleware.js";
 import { requireOrganizationPermission } from "../middleware/authorizationMiddleware.js";
+import { analyzeContractClauses } from "../services/clauseIntelligenceService.js";
 
 const router = express.Router();
+const uploadLimit = Number(process.env.CONTRACT_UPLOAD_MAX_BYTES || 20 * 1024 * 1024);
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 },
+  limits: { fileSize: uploadLimit },
 });
 
 function receiveUpload(req, res, next) {
@@ -30,7 +33,7 @@ function receiveUpload(req, res, next) {
       return res.status(413).json({
         success: false,
         code: "FILE_TOO_LARGE",
-        error: "The uploaded file exceeds the 20MB limit",
+        error: "The uploaded file exceeds the configured size limit",
       });
     }
 
@@ -117,6 +120,37 @@ router.get(
         code: "STORAGE_ERROR",
         error: "Contract lookup failed",
       });
+    }
+  }
+);
+
+router.post(
+  "/:id/analyze",
+  requireOrganizationPermission("contract:write"),
+  async (req, res) => {
+    try {
+      const result = await analyzeContractClauses({
+        contractId: req.params.id,
+        documentVersionId: req.body.document_version_id,
+        organizationId: req.organization.id,
+        userId: req.user.id,
+        confirmation: req.body.confirmation === true,
+      });
+      return res.status(201).json({ success: true, ...result });
+    } catch (error) {
+      return sendIngestionError(error, res);
+    }
+  }
+);
+
+router.get(
+  "/:id/processing-status",
+  requireOrganizationPermission("contract:read"),
+  async (req, res) => {
+    try {
+      return res.json(await getContractProcessingStatus(req.params.id, req.organization.id));
+    } catch (error) {
+      return sendIngestionError(error, res);
     }
   }
 );

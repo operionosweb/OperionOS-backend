@@ -15,35 +15,11 @@ router.get("/health", async (req, res) => {
 
     const providers = [
       {
-        name: "openai",
-        status: process.env.OPENAI_API_KEY
-          ? "configured"
-          : "missing_key",
-        region: "global",
-      },
-
-      {
-        name: "anthropic",
-        status: process.env.ANTHROPIC_API_KEY
-          ? "configured"
-          : "missing_key",
-        region: "global",
-      },
-
-      {
         name: "mistral",
         status: process.env.MISTRAL_API_KEY
           ? "configured"
           : "missing_key",
         region: "EU (France)",
-      },
-
-      {
-        name: "azure-openai",
-        status: process.env.AZURE_OPENAI_API_KEY
-          ? "configured"
-          : "missing_key",
-        region: "EU/Global",
       },
 
       {

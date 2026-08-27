@@ -92,7 +92,8 @@ export async function createContract({
      */
 
     const intelligence = await analyzeContractText(
-      text
+      text,
+      organizationId
     );
 
     if (!intelligence.success) {

@@ -29,6 +29,7 @@ router.post(
     const result = await buildHorizonPayload({
       contract,
       tenant: req.tenant,
+      organizationId: req.organization.id,
     });
 
     return res.json(result);

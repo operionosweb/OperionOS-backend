@@ -50,7 +50,6 @@ export function estimateCost(tokens, model = "mistral") {
   const rates = {
     mistral: 0.0002,
     openrouter: 0.0003,
-    openai: 0.0005,
   };
 
   const rate = rates[model] || 0.0003;

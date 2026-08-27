@@ -4,6 +4,7 @@ import { Section } from "../components/ui/Layout";
 import Reveal from "../components/ui/Reveal";
 import { LoadingState, ErrorState, EmptyState } from "../components/ui/States";
 import OrganizationGate from "../components/demo/OrganizationGate";
+import UploadContract from "../components/demo/UploadContract";
 import { useOrganization } from "../context/OrganizationContext";
 import { listContracts } from "../lib/contractsApi";
 
@@ -27,6 +28,7 @@ export default function ContractPortfolio() {
 }
 
 function PortfolioList({ organizationId }) {
+  const [reloadToken, setReloadToken] = useState(0);
   const [state, setState] = useState("loading");
   const [contracts, setContracts] = useState([]);
   const [errorMessage, setErrorMessage] = useState("");
@@ -53,7 +55,7 @@ function PortfolioList({ organizationId }) {
     return () => {
       cancelled = true;
     };
-  }, [organizationId]);
+  }, [organizationId, reloadToken]);
 
   const visible = useMemo(() => {
     const filtered = contracts.filter((contract) =>
@@ -100,6 +102,15 @@ function PortfolioList({ organizationId }) {
         <button type="button" className="op-btn op-btn-secondary" onClick={() => setSortDesc((value) => !value)}>
           Sort: {sortDesc ? "Newest first" : "Oldest first"}
         </button>
+      </Reveal>
+
+      <Reveal className="op-surface-plane-primary" style={{ padding: "var(--op-space-5)", marginBottom: "var(--op-space-6)" }}>
+        <p className="op-kicker" style={{ marginBottom: "var(--op-space-2)" }}>Register a contract</p>
+        <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-2)" }}>Upload contract source</h2>
+        <p className="op-body-sm" style={{ marginBottom: "var(--op-space-4)" }}>
+          Files are securely registered and prepared for later intelligence analysis. Uploading does not spend AI budget.
+        </p>
+        <UploadContract organizationId={organizationId} onUploaded={() => setReloadToken((value) => value + 1)} />
       </Reveal>
 
       {!visible.length ? (

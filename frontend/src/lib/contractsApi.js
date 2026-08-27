@@ -16,6 +16,10 @@ export function getContract(contractId, organizationId) {
   return apiRequest(`/api/contracts/${contractId}`, { organizationId });
 }
 
+export function getContractProcessingStatus(contractId, organizationId) {
+  return apiRequest(`/api/contracts/${contractId}/processing-status`, { organizationId });
+}
+
 export function listContractDocuments(contractId, organizationId) {
   // GET /api/contracts/:id/documents -> { success, documents }
   return apiRequest(`/api/contracts/${contractId}/documents`, { organizationId });
@@ -24,6 +28,10 @@ export function listContractDocuments(contractId, organizationId) {
 export function listDocumentVersions(documentId, organizationId) {
   // GET /api/documents/:id/versions -> { success, versions }
   return apiRequest(`/api/documents/${documentId}/versions`, { organizationId });
+}
+
+export function getDocumentStructure(documentId, organizationId) {
+  return apiRequest(`/api/documents/${documentId}/structure`, { organizationId });
 }
 
 export function getAnalysisRun(analysisRunId, organizationId) {
@@ -39,6 +47,26 @@ export function listAnalysisRunClauses(analysisRunId, organizationId) {
 export function listAnalysisRunObligations(analysisRunId, organizationId) {
   // GET /api/analysis-runs/:id/obligations -> { success, obligations }
   return apiRequest(`/api/analysis-runs/${analysisRunId}/obligations`, { organizationId });
+}
+
+export function getObligationEstimate(analysisRunId, organizationId) {
+  return apiRequest(`/api/analysis-runs/${analysisRunId}/obligations/estimate`, { organizationId });
+}
+
+export function analyzeObligations(analysisRunId, organizationId, confirmation = false) {
+  return apiRequest(`/api/analysis-runs/${analysisRunId}/obligations/analyze`, {
+    method: "POST",
+    organizationId,
+    body: { confirmation },
+  });
+}
+
+export function analyzeContractClauses({ contractId, documentVersionId, organizationId, confirmation = false }) {
+  return apiRequest(`/api/contracts/${contractId}/analyze`, {
+    method: "POST",
+    organizationId,
+    body: { document_version_id: documentVersionId, confirmation },
+  });
 }
 
 export function uploadContract({ file, title, contractId, organizationId }) {

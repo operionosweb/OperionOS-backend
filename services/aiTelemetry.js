@@ -29,7 +29,7 @@ const metrics = {
   providers: {
     mistral: { calls: 0, failures: 0, totalLatency: 0 },
     aleph_alpha: { calls: 0, failures: 0, totalLatency: 0 },
-    openai: { calls: 0, failures: 0, totalLatency: 0 },
+    openrouter: { calls: 0, failures: 0, totalLatency: 0 },
     fallback: { calls: 0 },
   },
 };
@@ -86,7 +86,7 @@ export function estimateCost(provider, tokensApprox = 1000) {
   const rates = {
     mistral: 0.002,
     aleph_alpha: 0.003,
-    openai: 0.005,
+    openrouter: 0.004,
     fallback: 0,
   };
 
@@ -148,10 +148,10 @@ export function getMetrics() {
             metrics.providers.aleph_alpha.calls
           : 0,
 
-      openai:
-        metrics.providers.openai.calls > 0
-          ? metrics.providers.openai.totalLatency /
-            metrics.providers.openai.calls
+      openrouter:
+        metrics.providers.openrouter.calls > 0
+          ? metrics.providers.openrouter.totalLatency /
+            metrics.providers.openrouter.calls
           : 0,
     },
   };

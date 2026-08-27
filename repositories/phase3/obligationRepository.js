@@ -165,6 +165,15 @@ export function createObligationRepository(client = supabase, pgPool = defaultPg
         "status",
         "confidence",
         "review_status",
+        "actor",
+        "action",
+        "object",
+        "beneficiary",
+        "condition",
+        "timing_expression",
+        "consequence",
+        "modality",
+        "metadata",
         "obligation_identity",
       ];
 

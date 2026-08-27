@@ -14,11 +14,13 @@ import { generateContractCopilot } from "../contractCopilotEngine.js";
 export async function buildHorizonPayload({
   contract,
   tenant,
+  organizationId = tenant?.org_id,
 }) {
   try {
     const result = await generateContractCopilot({
       contract,
       tenant,
+      organizationId,
     });
 
     /**

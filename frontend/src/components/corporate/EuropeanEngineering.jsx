@@ -1,0 +1,10 @@
+import React from "react";
+import { Link } from "react-router-dom";
+import Button from "../ui/Button";
+import Logo from "../ui/Logo";
+
+export default function EuropeanEngineering() {
+  return <><section className="op-home-cta"><div className="op-container"><p className="op-eyebrow">Ready for clarity?</p><h2>Start turning your contracts<br />into intelligence.</h2><p>Join Europe's leading aviation enterprises in architecting a precise, data-driven contractual environment.</p><Button to="/demo" variant="primary">Request a Demo</Button></div></section><section className="op-home-engineering"><div className="op-container"><p className="op-eyebrow">Powered by European Engineering</p><Logo size="sm" /></div></section><footer className="op-home-footer"><div className="op-container"><div className="op-home-footer-grid"><div><Logo size="sm" /><p>European Contract Intelligence infrastructure. Secure, spatial, and architected for precision.</p></div><FooterColumn title="Platform" links={[["Overview", "/platform"], ["Security", "/enterprise"], ["API", "/platform"]]} /><FooterColumn title="Industries" links={[["Aerospace", "/industries/aviation"], ["Automotive", "/industries"], ["Legal", "/industries"]]} /><FooterColumn title="Enterprise" links={[["Solutions", "/enterprise"], ["Case Studies", "/enterprise"]]} /><FooterColumn title="Company" links={[["About Us", "/about"], ["Contact", "/demo"]]} /><FooterColumn title="Legal" links={[["Privacy", "/about"], ["Security", "/enterprise"]]} /></div><div className="op-home-footer-bottom"><span>© {new Date().getFullYear()} Operion OS. All rights reserved.</span><span>LinkedIn &nbsp; Twitter &nbsp; Status</span></div></div></footer></>;
+}
+
+function FooterColumn({ title, links }) { return <div><h3>{title}</h3>{links.map(([label, to]) => <Link key={`${title}-${label}`} to={to}>{label}</Link>)}</div>; }

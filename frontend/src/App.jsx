@@ -16,6 +16,8 @@ import Platform from "./routes/Platform";
 import Aviation from "./routes/Aviation";
 import Scenarios from "./routes/Scenarios";
 import Enterprise from "./routes/Enterprise";
+import Solutions from "./routes/Solutions";
+import About from "./routes/About";
 
 export default function App() {
   return (
@@ -29,6 +31,7 @@ export default function App() {
               <Route path="/industries/aviation" element={<Aviation />} />
               <Route path="/scenarios" element={<Scenarios />} />
               <Route path="/enterprise" element={<Enterprise />} />
+              <Route path="/solutions" element={<Solutions />} />
               <Route
                 path="/industries"
                 element={
@@ -52,15 +55,7 @@ export default function App() {
                   />
                 }
               />
-              <Route
-                path="/about"
-                element={
-                  <PlaceholderPage
-                    title="About Operion"
-                    description="Our vision for aviation contract intelligence and predictive scenario simulation."
-                  />
-                }
-              />
+              <Route path="/about" element={<About />} />
               <Route path="/login" element={<Login />} />
             </Route>
 

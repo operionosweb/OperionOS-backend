@@ -51,6 +51,7 @@ router.post(
 
     const copilotResult = await generateContractCopilot({
       contract: contractResult.contract,
+      organizationId: req.organization.id,
       company_context: req.body?.company_context || {},
     });
 
@@ -94,6 +95,7 @@ router.post(
 
     const copilotResult = await generateContractCopilot({
       contract,
+      organizationId: req.organization.id,
       company_context: req.body?.company_context || {},
     });
 

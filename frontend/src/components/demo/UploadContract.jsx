@@ -1,23 +1,38 @@
 import React, { useRef, useState } from "react";
 import { uploadContract } from "../../lib/contractsApi";
 
+const MAX_FILE_SIZE = Number(import.meta.env.VITE_CONTRACT_UPLOAD_MAX_BYTES || 20 * 1024 * 1024);
+const MAX_FILE_SIZE_LABEL = `${Math.round(MAX_FILE_SIZE / 1024 / 1024)}MB`;
+const ACCEPTED_TYPES = new Set([
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
+
 export default function UploadContract({ organizationId, onUploaded }) {
   const inputRef = useRef(null);
   const [file, setFile] = useState(null);
   const [dragOver, setDragOver] = useState(false);
   const [state, setState] = useState("idle"); // idle | uploading | success | error
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
   function handleFiles(fileList) {
     const selected = fileList?.[0];
     if (!selected) return;
-    if (selected.type !== "application/pdf") {
-      setError("Only PDF files are supported.");
+    const extension = selected.name.slice(selected.name.lastIndexOf(".")).toLowerCase();
+    if (!ACCEPTED_TYPES.has(selected.type) || ![".pdf", ".docx"].includes(extension)) {
+      setError("Unsupported file type. Please upload a PDF or DOCX document.");
+      setState("error");
+      return;
+    }
+    if (selected.size > MAX_FILE_SIZE) {
+      setError(`This file exceeds the maximum supported size of ${MAX_FILE_SIZE_LABEL}.`);
       setState("error");
       return;
     }
     setFile(selected);
     setError("");
+    setSuccessMessage("");
     setState("idle");
   }
 
@@ -27,13 +42,7 @@ export default function UploadContract({ organizationId, onUploaded }) {
     setError("");
     try {
       const result = await uploadContract({ file, organizationId });
-      if (result?.analysisRunId) {
-        try {
-          localStorage.setItem("operion.activeAnalysisRunId", result.analysisRunId);
-        } catch (storageError) {
-          console.warn("Could not persist active analysis run id", storageError);
-        }
-      }
+      setSuccessMessage(result?.duplicate ? "This document has already been uploaded." : "Contract uploaded and ready for analysis.");
       setState("success");
       onUploaded?.(result);
     } catch (err) {
@@ -69,14 +78,15 @@ export default function UploadContract({ organizationId, onUploaded }) {
         <input
           ref={inputRef}
           type="file"
-          accept="application/pdf"
+          accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           hidden
           onChange={(event) => handleFiles(event.target.files)}
         />
         <p className="op-heading-md" style={{ marginBottom: "var(--op-space-2)" }}>
           {file ? file.name : "Drop a contract PDF, or click to select"}
         </p>
-        <p className="op-body">PDF only, up to 20MB.</p>
+        <p className="op-body">PDF or DOCX, up to {MAX_FILE_SIZE_LABEL}.</p>
+        {file && <p className="op-body-sm" style={{ marginTop: "var(--op-space-2)" }}>{(file.size / 1024 / 1024).toFixed(2)} MB selected</p>}
       </div>
 
       {error && (
@@ -87,7 +97,7 @@ export default function UploadContract({ organizationId, onUploaded }) {
 
       {state === "success" && (
         <p className="op-body" style={{ color: "var(--op-signal-good)", marginTop: "var(--op-space-3)" }}>
-          Upload received — analysis started.
+          {successMessage}
         </p>
       )}
 

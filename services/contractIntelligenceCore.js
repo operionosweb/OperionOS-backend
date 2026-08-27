@@ -47,7 +47,6 @@ export class ContractIntelligenceCore {
    * Placeholder implementation.
    *
    * Later:
-   * - OpenAI
    * - Claude
    * - Gemini
    * - Local LLM

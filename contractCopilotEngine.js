@@ -1,4 +1,4 @@
-import axios from "axios";
+import { requestLegacyAI } from "./services/ai/legacyAIRequest.js";
 import redis from "./services/redisClient.js";
 import { logDecisionTrace } from "./services/auditEngine.js";
 import { explainDecision } from "./services/explainabilityEngine.js";
@@ -31,25 +31,9 @@ function safeParse(text) {
  * =========================================
  */
 
-async function callLLM(prompt) {
-  if (process.env.MISTRAL_API_KEY) {
-    const res = await axios.post(
-      "https://api.mistral.ai/v1/chat/completions",
-      {
-        model: "mistral-large-latest",
-        messages: [{ role: "user", content: prompt }],
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.MISTRAL_API_KEY}`,
-        },
-      }
-    );
-
-    return res.data?.choices?.[0]?.message?.content;
-  }
-
-  throw new Error("No LLM");
+async function callLLM(prompt, organizationId) {
+  const response = await requestLegacyAI({ organizationId, operation: "risk_reasoning", input: prompt, structured: false });
+  return response.result;
 }
 
 /**
@@ -61,6 +45,7 @@ async function callLLM(prompt) {
 export async function generateContractCopilot({
   contract,
   tenant,
+  organizationId = tenant?.org_id,
 }) {
   try {
     const prompt = `
@@ -70,7 +55,7 @@ CONTRACT:
 ${JSON.stringify(contract?.clauses || []).slice(0, 12000)}
 `;
 
-    const raw = await callLLM(prompt);
+    const raw = await callLLM(prompt, organizationId);
     const parsed = safeParse(raw);
 
     if (!parsed) {
@@ -88,7 +73,7 @@ ${JSON.stringify(contract?.clauses || []).slice(0, 12000)}
 
     await logDecisionTrace({
       contract_id: contract?.id || "unknown",
-      tenant_id: tenant?.org_id || "default",
+      tenant_id: organizationId,
       input: contract,
       output: parsed,
       model: "mistral-large",

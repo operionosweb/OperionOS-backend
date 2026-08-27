@@ -14,6 +14,7 @@ const repositoryRoot = path.dirname(
 );
 
 const phase3Tables = [
+  "contract_document_pages",
   "contract_parties",
   "document_version_pages",
   "intelligence_evidence",
@@ -279,6 +280,11 @@ async function applyMigrations(client, {
     "003_phase3a_foundation.sql",
     "004_phase3b_clause_identity_atomicity.sql",
     "005_phase3c_obligation_identity_atomicity.sql",
+    "006_ai_intelligence_foundation.sql",
+    "007_contract_intelligence_technical_foundation.sql",
+    "008_contract_upload_docx.sql",
+    "009_document_structure_pages.sql",
+    "010_semantic_obligation_fields.sql",
   ];
 
   for (const filename of migrationFiles) {

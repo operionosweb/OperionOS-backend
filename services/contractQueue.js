@@ -26,6 +26,7 @@ const worker = new Worker(
     const result = await generateContractCopilot({
       contract,
       tenant,
+      organizationId: tenant?.org_id,
     });
 
     return result;

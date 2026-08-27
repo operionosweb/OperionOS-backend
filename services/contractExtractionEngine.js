@@ -1,7 +1,7 @@
 // services/contractExtractionEngine.js
 
 import crypto from "crypto";
-import { analyzeWithProviders } from "./aiProviders.js";
+import { requestLegacyAI } from "./ai/legacyAIRequest.js";
 
 /**
  * =========================================
@@ -75,7 +75,7 @@ function chunkText(text = "", size = 4000) {
  * -----------------------------------------
  */
 
-export async function extractStructuredContractData(text = "") {
+export async function extractStructuredContractData(text = "", organizationId) {
   try {
     if (!text || typeof text !== "string") {
       return {
@@ -87,7 +87,7 @@ export async function extractStructuredContractData(text = "") {
     const hash = generateHash(text);
     const chunks = chunkText(text);
 
-    const ai = await analyzeWithProviders(text);
+    const ai = await requestLegacyAI({ organizationId, operation: "full_contract_analysis", input: text });
 
     return {
       success: true,
@@ -112,6 +112,6 @@ export async function extractStructuredContractData(text = "") {
  * -----------------------------------------
  */
 
-export async function analyzeContractText(text) {
-  return extractStructuredContractData(text);
+export async function analyzeContractText(text, organizationId) {
+  return extractStructuredContractData(text, organizationId);
 }

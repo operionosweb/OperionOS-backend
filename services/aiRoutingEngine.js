@@ -7,7 +7,7 @@
  * =========================================
  */
 
-import { analyzeWithProviders } from "./aiProviders.js";
+import { requestLegacyAI } from "./ai/legacyAIRequest.js";
 
 /**
  * -----------------------------------------
@@ -18,7 +18,7 @@ import { analyzeWithProviders } from "./aiProviders.js";
 const AI_PROVIDERS_PRIORITY = [
   "mistral",
   "aleph_alpha",
-  "openai",
+  "openrouter",
 ];
 
 /**
@@ -72,7 +72,7 @@ function withTimeout(promise, timeoutMs) {
  * -----------------------------------------
  */
 
-export async function routeAIAnalysis(text = "") {
+export async function routeAIAnalysis(text = "", organizationId) {
   if (!text) {
     return {
       success: false,
@@ -93,7 +93,7 @@ export async function routeAIAnalysis(text = "") {
       console.log(`🧠 AI Router → Trying provider: ${provider}`);
 
       const result = await withTimeout(
-        analyzeWithProviders(text, provider),
+        requestLegacyAI({ organizationId, provider, operation: "full_contract_analysis", input: text }),
         TIMEOUT_MS
       );
 
@@ -136,10 +136,10 @@ export async function routeAIAnalysis(text = "") {
  * -----------------------------------------
  */
 
-export async function routeSingleProvider(text, provider) {
+export async function routeSingleProvider(text, provider, organizationId) {
   try {
     const result = await withTimeout(
-      analyzeWithProviders(text, provider),
+      requestLegacyAI({ organizationId, provider, operation: "full_contract_analysis", input: text }),
       TIMEOUT_MS
     );
 

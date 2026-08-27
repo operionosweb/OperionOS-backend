@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   calculateSha256,
   extractPdfMetadata,
+  validateDocumentFile,
   validatePdfFile,
 } from "../services/documentIngestionService.js";
 import { buildDocumentStorageKey } from "../services/documentStorageService.js";
@@ -23,6 +24,26 @@ test("PDF signature and metadata validation are server-controlled", () => {
 
   assert.equal(file.mimeType, "application/pdf");
   assert.equal(file.fileSize, buffer.length);
+});
+
+test("DOCX extension, MIME, ZIP signature, and storage key are server-controlled", () => {
+  const file = validateDocumentFile({
+    originalname: "source.docx",
+    mimetype: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    buffer: Buffer.from("PK\x03\x04docx source"),
+  });
+
+  assert.equal(file.extension, ".docx");
+  assert.equal(file.mimeType, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+  assert.equal(
+    buildDocumentStorageKey({
+      organizationId: "11111111-1111-4111-8111-111111111111",
+      documentId: "22222222-2222-4222-8222-222222222222",
+      versionId: "33333333-3333-4333-8333-333333333333",
+      extension: ".docx",
+    }).endsWith("/source.docx"),
+    true
+  );
 });
 
 test("parseable image-like PDF is marked as requiring OCR", async () => {

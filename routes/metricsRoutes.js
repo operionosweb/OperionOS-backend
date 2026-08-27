@@ -23,7 +23,7 @@ router.get("/", (req, res) => {
       ai_metrics: metrics,
       system: {
         region: "EU-first",
-        pipeline: "mistral → aleph_alpha → openai → fallback",
+        pipeline: "mistral → openrouter (optional)",
       },
     });
   } catch (error) {

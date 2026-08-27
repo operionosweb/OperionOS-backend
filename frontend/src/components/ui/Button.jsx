@@ -7,7 +7,7 @@ const VARIANT_CLASS = {
   quiet: "op-btn op-btn-quiet",
 };
 
-export default function Button({ to, href, variant = "primary", children, onClick, type = "button", ariaLabel }) {
+export default function Button({ to, href, variant = "primary", children, onClick, type = "button", ariaLabel, disabled = false }) {
   const className = VARIANT_CLASS[variant] || VARIANT_CLASS.primary;
 
   if (to) {
@@ -27,7 +27,7 @@ export default function Button({ to, href, variant = "primary", children, onClic
   }
 
   return (
-    <button type={type} className={className} onClick={onClick} aria-label={ariaLabel}>
+    <button type={type} className={className} onClick={onClick} aria-label={ariaLabel} disabled={disabled}>
       {children}
     </button>
   );

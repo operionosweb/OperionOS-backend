@@ -1,4 +1,4 @@
-const PROVIDER_PRIORITY = Object.freeze(["mistral", "openai", "aleph_alpha"]);
+const PROVIDER_PRIORITY = Object.freeze(["mistral", "aleph_alpha"]);
 
 export function getProviderPriority() {
   return [...PROVIDER_PRIORITY];
