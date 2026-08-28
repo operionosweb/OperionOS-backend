@@ -6,11 +6,6 @@ import { Container } from "../ui/Layout";
 import { useAuth } from "../../context/AuthContext";
 import { useOrganization } from "../../context/OrganizationContext";
 
-const DEMO_NAV = [
-  { to: "/demo", label: "Intelligence Hub" },
-  { to: "/demo/contracts", label: "Contracts" },
-];
-
 export default function DemoLayout() {
   const auth = useAuth();
   const { organizationId } = useOrganization();
@@ -19,21 +14,21 @@ export default function DemoLayout() {
 
   const activeContract = params?.id || "None selected";
   const stageHint = location.pathname.includes("/analysis") ? "Analysis" : "Workspace";
-  const isPublicDemo = location.pathname === "/demo";
+  const isPublicDemo = location.pathname === "/demo" || location.pathname === "/demo/explorer";
+  const isCommandCenter = location.pathname === "/demo";
+  const isExplorer = location.pathname === "/demo/explorer";
 
   return (
     <div className="op-shell" data-op-theme="light">
-      <header className="op-shell-header op-demo-header">
+      {!isCommandCenter && !isExplorer && <header className="op-shell-header op-demo-header">
         <Container>
           <div className="op-topbar" style={{ minHeight: 68 }}>
             <div className="op-row" style={{ alignItems: "center", gap: "var(--op-space-5)" }}>
               <Logo />
               <nav className="op-nav op-demo-nav" aria-label="Demo navigation">
-                {DEMO_NAV.map((link) => (
-                  <Link key={link.to} to={link.to} className="op-nav-link">
-                    {link.label}
-                  </Link>
-                ))}
+                <Link to="/demo" className="op-nav-link">Command Center</Link>
+                <Link to="/demo/contracts" className="op-nav-link">Contracts</Link>
+                <Link to="/demo/explorer" className="op-nav-link">Contract Explorer</Link>
               </nav>
             </div>
 
@@ -74,7 +69,7 @@ export default function DemoLayout() {
             </div>
           </Container>
         </div>}
-      </header>
+      </header>}
 
       <main className="op-shell-main">
         <Outlet />

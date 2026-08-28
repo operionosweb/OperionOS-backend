@@ -7,6 +7,8 @@ import DemoLayout from "./components/layout/DemoLayout";
 import RequireAuth from "./components/auth/RequireAuth";
 import CorporateHome from "./routes/CorporateHome";
 import DemoHub from "./routes/DemoHub";
+import ContractExplorer from "./routes/ContractExplorer";
+import CommandCenter from "./routes/CommandCenter";
 import ContractPortfolio from "./routes/ContractPortfolio";
 import ContractWorkspace from "./routes/ContractWorkspace";
 import AnalysisView from "./routes/AnalysisView";
@@ -71,10 +73,8 @@ export default function App() {
             </Route>
 
             <Route element={<DemoLayout />}>
-              <Route
-                path="/demo"
-                element={<DemoHub />}
-              />
+              <Route path="/demo" element={<CommandCenter />} />
+              <Route path="/demo/explorer" element={<ContractExplorer />} />
               <Route
                 path="/demo/contracts"
                 element={
