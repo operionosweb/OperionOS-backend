@@ -1,0 +1,50 @@
+import React, { useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import ObligationsCommitmentsWorkspace from "../components/demo/ObligationsCommitmentsWorkspace";
+import RiskExposureWorkspace from "../components/demo/RiskExposureWorkspace";
+import { DEMO_CONTRACT_INTELLIGENCE } from "../lib/demoContractIntelligence";
+import ContractWorkspace from "./ContractWorkspace";
+
+const TABS = ["Overview", "Clauses", "Obligations & Commitments", "Risk & Exposure", "Deadlines", "Risks", "Exposure", "Recommendations"];
+
+function Panel({ title, children, action }) {
+  return <section className="op-contract-intel-panel"><header><h2>{title}</h2>{action}</header>{children}</section>;
+}
+
+function EvidenceDrawer({ clause, onClose }) {
+  if (!clause) return null;
+  return <div className="op-contract-evidence-backdrop" role="presentation" onClick={onClose}><aside className="op-contract-evidence" role="dialog" aria-modal="true" aria-labelledby="evidence-title" onClick={(event) => event.stopPropagation()}><button type="button" onClick={onClose} aria-label="Close evidence">×</button><span>AI ANALYSIS / SOURCE EVIDENCE</span><h2 id="evidence-title">Clause {clause.number} - {clause.title}</h2><div className="op-contract-evidence-meta"><span>CONTRACT</span><strong>Aircraft Lease Agreement - Airbus A320neo</strong><span>PAGE</span><strong>{clause.page}</strong><span>CONFIDENCE</span><strong>{clause.confidence}</strong></div><blockquote>{clause.text}</blockquote><h3>EXTRACTED OBLIGATION</h3><dl><div><dt>Actor</dt><dd>{clause.actor}</dd></div><div><dt>Action</dt><dd>{clause.obligation}</dd></div><div><dt>Trigger</dt><dd>{clause.trigger}</dd></div><div><dt>Timing</dt><dd>{clause.timing}</dd></div><div><dt>Consequence</dt><dd>{clause.consequence}</dd></div></dl></aside></div>;
+}
+
+export default function DemoContractWorkspace() {
+  const { id } = useParams();
+  const contract = DEMO_CONTRACT_INTELLIGENCE[id];
+  const [tab, setTab] = useState("Overview");
+  const [clauseId, setClauseId] = useState(contract?.clauses[0]?.id);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [answer, setAnswer] = useState("");
+  const clause = contract?.clauses.find((item) => item.id === clauseId) || contract?.clauses[0];
+
+  useEffect(() => { const close = (event) => event.key === "Escape" && setEvidenceOpen(false); window.addEventListener("keydown", close); return () => window.removeEventListener("keydown", close); }, []);
+  useEffect(() => { if (!contract) return; try { const focused = sessionStorage.getItem(`operion.focusClause.${id}`); if (!focused) return; const next = contract.clauses.find((item) => item.id === focused); if (!next) return; setClauseId(next.id); setEvidenceOpen(true); sessionStorage.removeItem(`operion.focusClause.${id}`); } catch {} }, [contract, id]);
+  if (!contract) return <ContractWorkspace />;
+  const selectClause = (next) => { setClauseId(next.id); setEvidenceOpen(true); };
+  const ask = (question) => setAnswer({
+    "What are my highest-risk clauses?": "Clauses 7.3 Delivery Delay, 12.4 Return Conditions and 14.1 Default contain the highest potential exposure. Evidence: Clauses 7.3, 12.4 and 14.1. Confidence: 96%.",
+    "Which obligations are due next?": "Aircraft delivery notice is due 03 Sep 2026, followed by the return inspection on 12 Sep 2026. Evidence: Clauses 7.3 and 12.4. Confidence: 97%.",
+    "What happens if delivery is delayed?": "Clause 7.3 indicates that delivery beyond the agreed threshold may trigger liquidated damages. Potential exposure: €480,000. Evidence: page 18. Confidence: 96%.",
+  }[question]);
+
+  const renderView = () => {
+    if (tab === "Obligations & Commitments") return <ObligationsCommitmentsWorkspace contract={contract} onViewClause={selectClause} />;
+    if (tab === "Risk & Exposure") return <RiskExposureWorkspace contract={contract} onViewClause={selectClause} onViewObligation={(obligation) => { try { sessionStorage.setItem(`operion.focusCommitment.${contract.contractId}`, obligation.id); } catch {} setTab("Obligations & Commitments"); }} />;
+    if (tab === "Clauses") return <div className="op-contract-clause-cards">{contract.clauses.map((item) => <button key={item.id} type="button" onClick={() => selectClause(item)}><span>§{item.number} · {item.category}</span><strong>{item.title}</strong><p>{item.summary}</p><small>{item.risk} · {item.confidence} · Page {item.page}</small></button>)}</div>;
+    if (tab === "Deadlines") return <div className="op-contract-deadlines">{contract.deadlines.map(([due, name, owner, days, exposure, status, related]) => <button type="button" key={name} onClick={() => selectClause(contract.clauses.find((item) => item.id === related))}><span>{due}</span><strong>{name}</strong><p>{owner} · {days} remaining</p><em>{status} · {exposure}</em></button>)}</div>;
+    if (tab === "Risks") return <div className="op-contract-risks">{contract.risks.map(([title, severity, probability, impact, exposure, trigger, related, action]) => <button type="button" key={title} onClick={() => selectClause(contract.clauses.find((item) => item.id === related))}><span>{severity} · Probability {probability} · Impact {impact}</span><strong>{title}</strong><p>{trigger}</p><em>{exposure} · {action}</em></button>)}</div>;
+    if (tab === "Exposure") return <div className="op-contract-exposure-list"><h3>{contract.exposure} total contractual exposure</h3>{contract.exposure.map(([label, value, related]) => <button type="button" key={label} onClick={() => selectClause(contract.clauses.find((item) => item.id === related))}><span>{label}</span><strong>{value}</strong><em>View evidence ↗</em></button>)}</div>;
+    if (tab === "Recommendations") return <div className="op-contract-recommendation"><span>RECOMMENDED ACTION</span><h3>Initiate a contractual notice regarding the delivery milestone.</h3><p>Clause 7.3 establishes a delivery threshold and permits liquidated damages once exceeded. This is AI-generated analysis, not legal advice.</p><dl><div><dt>Potential impact</dt><dd>€480,000</dd></div><div><dt>Confidence</dt><dd>91%</dd></div><div><dt>Evidence</dt><dd>Clause 7.3 · Page 18</dd></div></dl><button type="button" onClick={() => { setClauseId("delivery"); setEvidenceOpen(true); }}>Review Evidence ↗</button></div>;
+    return <div className="op-contract-overview"><p>Operion identified {contract.obligations} obligations, {contract.openRisks} elevated risks and {contract.deadlines.length} upcoming contractual events.</p><button type="button" onClick={() => selectClause(clause)}>View evidence for Clause {clause.number} ↗</button><div className="op-contract-event"><span>OPERATIONAL EVENT</span><strong>{contract.asset} · MRO turnaround +19h</strong><p>Lease utilisation threshold approaching.</p><button type="button" onClick={() => { setClauseId("maintenance"); setEvidenceOpen(true); }}>View obligation ↗</button></div></div>;
+  };
+
+  return <div className="op-contract-intel-app"><header className="op-contract-intel-top"><div><span>COMMAND CENTER / CONTRACTS / {contract.contractId}</span><h1>{contract.title}</h1><p>{contract.counterparty} · {contract.type} · {contract.asset}</p></div><div><Link to="/demo/explorer">← Contract Explorer</Link><Link to="/demo">Command Center</Link></div></header><main className="op-contract-intel-content"><div className="op-contract-intel-meta"><span className="op-contract-risk">{contract.risk}</span>{[["Contract ID", contract.contractId], ["Effective", contract.effective], ["Expiration", contract.expiry], ["Governing law", contract.law], ["Contract value", contract.value], ["Business unit", contract.businessUnit], ["Owner", contract.owner]].map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div><div className="op-contract-intel-summary">{[["Risk", contract.risk, "Risks"], ["Exposure", contract.exposure, "Exposure"], ["Obligations", contract.obligations, "Obligations & Commitments"], ["Upcoming deadlines", contract.deadlines.length, "Deadlines"], ["Open issues", contract.openRisks, "Recommendations"]].map(([label, value, target]) => <button type="button" key={label} onClick={() => setTab(target)}><span>{label}</span><strong>{value}</strong><small>View intelligence ↗</small></button>)}</div><nav className="op-contract-intel-tabs" aria-label="Contract intelligence views">{TABS.map((item) => <button key={item} type="button" className={tab === item ? "op-contract-tab-active" : ""} onClick={() => setTab(item)}>{item}</button>)}</nav><div className="op-contract-intel-workspace"><section className="op-contract-document"><header><span>DOCUMENT / {contract.contractId}</span><strong>Page {clause.page} of 62</strong></header><article><p className="op-contract-doc-label">SECTION {clause.number} · {clause.category.toUpperCase()}</p><h2>{clause.title}</h2><p className="op-contract-doc-copy">This Aircraft Operating Lease sets out commercial, operational and technical conditions for the Airbus A320neo aircraft.</p>{contract.clauses.map((item) => <button type="button" key={item.id} className={item.id === clause.id ? "op-contract-doc-clause op-contract-doc-highlight" : "op-contract-doc-clause"} onClick={() => selectClause(item)}><span>CLAUSE {item.number} · PAGE {item.page}</span><strong>{item.title}</strong><p>{item.text}</p></button>)}</article></section><section className="op-contract-intelligence"><Panel title={tab}>{renderView()}</Panel><Panel title="Ask Operion"><div className="op-contract-ask"><p>Ask anything about this contract's operational and contractual exposure.</p>{["What are my highest-risk clauses?", "Which obligations are due next?", "What happens if delivery is delayed?"].map((item) => <button type="button" key={item} onClick={() => ask(item)}>{item}</button>)}{answer && <div><span>AI ANALYSIS · CONFIDENCE 96%</span><p>{answer}</p><button type="button" onClick={() => { setClauseId("delivery"); setEvidenceOpen(true); }}>View evidence ↗</button></div>}</div></Panel></section></div></main>{evidenceOpen && <EvidenceDrawer clause={clause} onClose={() => setEvidenceOpen(false)} />}</div>;
+}

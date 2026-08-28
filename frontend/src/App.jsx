@@ -11,6 +11,7 @@ import ContractExplorer from "./routes/ContractExplorer";
 import CommandCenter from "./routes/CommandCenter";
 import ContractPortfolio from "./routes/ContractPortfolio";
 import ContractWorkspace from "./routes/ContractWorkspace";
+import DemoContractWorkspace from "./routes/DemoContractWorkspace";
 import AnalysisView from "./routes/AnalysisView";
 import Login from "./routes/Login";
 import PlaceholderPage from "./routes/PlaceholderPage";
@@ -87,7 +88,7 @@ export default function App() {
                 path="/demo/contracts/:id"
                 element={
                   <RequireAuth>
-                    <ContractWorkspace />
+                    <DemoContractWorkspace />
                   </RequireAuth>
                 }
               />

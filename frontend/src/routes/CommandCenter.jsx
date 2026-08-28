@@ -1,11 +1,36 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { COMMAND_CENTER_METRICS, COMMAND_ANSWERS, CONTRACT_ACTIVITY, EXPOSURE_CATEGORIES, INTELLIGENCE_FEED, OBLIGATION_WATCH } from "../lib/commandCenterData";
+import ActionsRecommendationsWorkspace from "../components/demo/ActionsRecommendationsWorkspace";
+import PortfolioIntelligenceWorkspace from "../components/demo/PortfolioIntelligenceWorkspace";
+import ContractLifecycleWorkspace from "../components/demo/ContractLifecycleWorkspace";
+import CounterpartyIntelligenceWorkspace from "../components/demo/CounterpartyIntelligenceWorkspace";
+import FinancialIntelligenceWorkspace from "../components/demo/FinancialIntelligenceWorkspace";
+import ComplianceIntelligenceWorkspace from "../components/demo/ComplianceIntelligenceWorkspace";
+import PerformanceIntelligenceWorkspace from "../components/demo/PerformanceIntelligenceWorkspace";
+import ExecutiveIntelligenceWorkspace from "../components/demo/ExecutiveIntelligenceWorkspace";
+import NegotiationRenewalWorkspace from "../components/demo/NegotiationRenewalWorkspace";
+import GovernanceControlsWorkspace from "../components/demo/GovernanceControlsWorkspace";
+import MonitoringAlertsWorkspace from "../components/demo/MonitoringAlertsWorkspace";
+import ContractOperationsWorkspace from "../components/demo/ContractOperationsWorkspace";
+import CollaborationApprovalsWorkspace from "../components/demo/CollaborationApprovalsWorkspace";
+import VendorIntelligenceWorkspace from "../components/demo/VendorIntelligenceWorkspace";
+import ContractEconomicsWorkspace from "../components/demo/ContractEconomicsWorkspace";
+import ContractReviewWorkspace from "../components/demo/ContractReviewWorkspace";
+import ContractChangesWorkspace from "../components/demo/ContractChangesWorkspace";
+import DataQualityWorkspace from "../components/demo/DataQualityWorkspace";
+import DocumentIntelligenceWorkspace from "../components/demo/DocumentIntelligenceWorkspace";
+import AskOperionWorkspace from "../components/demo/AskOperionWorkspace";
 
 const NAV_GROUPS = [
-  { label: "WORKSPACE", items: [["⌂", "Command Center", "/demo"], ["▤", "Contracts", "/demo/contracts"], ["▥", "Contract Explorer", "/demo/explorer"], ["◫", "Obligations", "/demo?view=obligations"], ["△", "Risk & Exposure", "/demo?view=exposure"], ["◇", "Scenarios", "/demo?view=scenarios"], ["✈", "Live Aviation", "/demo?view=aviation"], ["◎", "Intelligence", "/demo?view=feed"]] },
+  { label: "WORKSPACE", items: [["⌂", "Command Center", "/demo"], ["▤", "Contracts", "/demo/contracts"], ["▥", "Contract Explorer", "/demo/explorer"], ["▤", "Portfolio Intelligence", "/demo?view=portfolio"], ["€", "Financial Intelligence", "/demo?view=financials"], ["✓", "Compliance", "/demo?view=compliance"], ["◌", "Performance & SLAs", "/demo?view=performance"], ["◉", "Counterparties", "/demo?view=counterparties"], ["◷", "Contract Lifecycle", "/demo?view=lifecycle"], ["◫", "Obligations", "/demo?view=obligations"], ["△", "Risk & Exposure", "/demo?view=exposure"], ["✓", "Actions & Recommendations", "/demo?view=actions"], ["◇", "Scenarios", "/demo?view=scenarios"], ["✈", "Live Aviation", "/demo?view=aviation"], ["◎", "Intelligence", "/demo?view=feed"]] },
   { label: "SYSTEM", items: [["◌", "Data Sources", "/demo?view=health"], ["▥", "Reports", "/demo?view=reports"], ["⚙", "Settings", "/demo?view=settings"]] },
 ];
+
+NAV_GROUPS[0].items.splice(1, 0, ["★", "Executive Intelligence", "/demo?view=executive"]);
+NAV_GROUPS[0].items.splice(2, 0, ["?", "Ask Operion", "/demo?view=ask"]);
+NAV_GROUPS[1].items.splice(1, 0, ["◌", "Data Quality", "/demo?view=data-quality"]);
+NAV_GROUPS[1].items.splice(2, 0, ["⌕", "Document Intelligence", "/demo?view=document-intelligence"]);
 
 function StatusDot({ tone = "positive" }) { return <span className={`op-command-dot op-command-dot-${tone}`} aria-hidden="true" />; }
 function Panel({ title, kicker, action, children, className = "" }) { return <section className={`op-command-panel ${className}`.trim()}><div className="op-command-panel-head"><div>{kicker && <span className="op-command-kicker">{kicker}</span>}<h2>{title}</h2></div>{action}</div>{className.includes("op-command-obligations") && <ObligationFilters />}{children}</section>; }
@@ -21,6 +46,16 @@ export default function CommandCenter() {
   const [obligationFilter, setObligationFilter] = useState("All");
   const [clock, setClock] = useState(new Date());
   useEffect(() => { const timer = window.setInterval(() => setClock(new Date()), 30000); return () => window.clearInterval(timer); }, []);
+  useEffect(() => {
+    if (view !== "exposure") return;
+    setSelected({
+      title: "Risk & Exposure",
+      copy: "€12.4M of modeled contractual exposure is concentrated in liquidated damages, service-level penalties, delivery conditions, and termination-related obligations.",
+      status: "4 HIGH-PRIORITY EXPOSURES",
+      action: "Review the linked contract evidence and obligations.",
+      contractId: "demo-aircraft-lease",
+    });
+  }, [view]);
   useEffect(() => { const onKey = (event) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") { event.preventDefault(); document.getElementById("command-search")?.focus(); } if (event.key === "Escape") setSelected(null); }; window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey); }, []);
   useEffect(() => { const button = document.querySelector(".op-command-mobile-menu"); const root = document.querySelector(".op-command-app"); if (!button || !root) return undefined; const toggle = () => { const open = root.classList.toggle("op-command-mobile-nav-open"); button.setAttribute("aria-expanded", String(open)); button.setAttribute("aria-label", `${open ? "Close" : "Open"} command center navigation`); }; button.addEventListener("click", toggle); return () => button.removeEventListener("click", toggle); }, []);
   const normalizedSearch = search.trim().toLowerCase();
@@ -29,10 +64,30 @@ export default function CommandCenter() {
   const pageTitle = view === "obligations" ? "Obligation Watch" : view === "exposure" ? "Risk & Exposure" : view === "aviation" ? "Live Aviation" : view === "feed" ? "Intelligence" : "Command Center";
 
   function ask(question) { setAnswer(COMMAND_ANSWERS[question] || "This prepared demonstration can connect the question to contract evidence, obligations and monitored exposure. Select a linked workspace to inspect the source context."); }
-  return <div className="op-command-app">
-    <aside className="op-command-sidebar"><div className="op-command-brand"><strong>OPERION <span>OS</span></strong><small>COMMAND CENTER</small></div><div className="op-command-org"><span>ORGANIZATION</span><strong>AeroVista Airlines</strong><small><StatusDot /> LIVE INTELLIGENCE</small></div><nav className="op-command-nav" aria-label="Command center navigation">{NAV_GROUPS.map((group) => <div key={group.label}><span className="op-command-nav-label">{group.label}</span>{group.items.map(([icon, label, to]) => <Link key={label} to={to} className={(view === "center" && label === "Command Center") || view === label.toLowerCase().replace(" & ", "").replaceAll(" ", "-") ? "op-command-nav-item op-command-nav-active" : "op-command-nav-item"}><b aria-hidden="true">{icon}</b><span>{label}</span>{label === "Risk & Exposure" && <em>4</em>}</Link>)}</div>)}</nav><div className="op-command-sidebar-foot"><span>OPERION OS / DEMO</span><small>Prepared intelligence environment</small></div></aside>
+  return <div className={`op-command-app${view === "actions" ? " op-command-actions-active" : ""}${view === "portfolio" ? " op-command-portfolio-active" : ""}${view === "lifecycle" ? " op-command-lifecycle-active" : ""}${view === "counterparties" ? " op-command-counterparties-active" : ""}${view === "financials" ? " op-command-financials-active" : ""}${view === "compliance" ? " op-command-compliance-active" : ""}${view === "performance" ? " op-command-performance-active" : ""}`}>
+      <aside className="op-command-sidebar"><div className="op-command-brand"><strong>OPERION <span>OS</span></strong><small>COMMAND CENTER</small></div><div className="op-command-org"><span>ORGANIZATION</span><strong>AeroVista Airlines</strong><small><StatusDot /> LIVE INTELLIGENCE</small></div><nav className="op-command-nav" aria-label="Command center navigation">{NAV_GROUPS.map((group) => <div key={group.label}><span className="op-command-nav-label">{group.label}</span>{group.items.map(([icon, label, to]) => <Link key={label} to={to} className={(view === "center" && label === "Command Center") || (label === "Ask Operion" && view === "ask") || (label === "Risk & Exposure" && view === "exposure") || (label === "Actions & Recommendations" && view === "actions") || (label === "Portfolio Intelligence" && view === "portfolio") || (label === "Counterparties" && view === "counterparties") || (label === "Contract Lifecycle" && view === "lifecycle") || view === label.toLowerCase().replace(" & ", "").replaceAll(" ", "-") ? "op-command-nav-item op-command-nav-active" : "op-command-nav-item"}><b aria-hidden="true">{icon}</b><span>{label}</span>{label === "Risk & Exposure" && <em>4</em>}</Link>)}</div>)}</nav><div className="op-command-sidebar-foot"><span>OPERION OS / DEMO</span><small>Prepared intelligence environment</small></div></aside>
     <main className="op-command-main"><header className="op-command-topbar"><button className="op-command-mobile-menu" type="button" aria-label="Open command center navigation">☰</button><label className="op-command-search"><span aria-hidden="true">⌕</span><input id="command-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search contracts, clauses, obligations, aircraft..." /><kbd>⌘ K</kbd></label><div className="op-command-top-actions"><span className="op-command-date">{clock.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })} · {clock.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</span><button type="button" className="op-command-icon-button" aria-label="View notifications" onClick={() => setSelected({ title: "Notifications", copy: "4 critical items and 14 monitored changes are currently in the command queue.", status: "4 CRITICAL", action: "Review Risk & Exposure" })}>◔<i>4</i></button><span className="op-command-avatar" aria-label="Executive Team">ET</span></div></header>
       <div className="op-command-content"><div className="op-command-heading"><div><span className="op-command-kicker">COMMAND CENTER / LIVE SNAPSHOT</span><h1>Command Center</h1><p>Your operational and contractual exposure, in one view.</p></div><div className="op-command-heading-controls"><div><span>LAST SYNCHRONIZED</span><strong>28 AUG 2026 · 09:42 UTC</strong></div><button type="button">Last 24 hours⌄</button><button type="button">All operations⌄</button><button type="button">All contracts⌄</button><div className="op-command-live"><StatusDot /> SYSTEM OPERATIONAL<strong>Data synchronized 42 sec ago</strong></div></div></div>
+      {view === "actions" && <ActionsRecommendationsWorkspace />}
+      {view === "portfolio" && <PortfolioIntelligenceWorkspace />}
+      {view === "lifecycle" && <ContractLifecycleWorkspace />}
+      {view === "counterparties" && <CounterpartyIntelligenceWorkspace />}
+      {view === "financials" && <FinancialIntelligenceWorkspace />}
+      {view === "compliance" && <ComplianceIntelligenceWorkspace />}
+      {view === "performance" && <PerformanceIntelligenceWorkspace />}
+      {view === "executive" && <ExecutiveIntelligenceWorkspace />}
+      {view === "negotiation" && <NegotiationRenewalWorkspace />}
+      {view === "governance" && <GovernanceControlsWorkspace />}
+      {view === "monitoring" && <MonitoringAlertsWorkspace />}
+      {view === "operations" && <ContractOperationsWorkspace />}
+      {view === "collaboration" && <CollaborationApprovalsWorkspace />}
+      {view === "vendors" && <VendorIntelligenceWorkspace />}
+      {view === "economics" && <ContractEconomicsWorkspace />}
+      {view === "review" && <ContractReviewWorkspace />}
+      {view === "changes" && <ContractChangesWorkspace />}
+      {view === "data-quality" && <DataQualityWorkspace />}
+      {view === "document-intelligence" && <DocumentIntelligenceWorkspace />}
+      {view === "ask" && <AskOperionWorkspace />}
       <div className="op-command-metrics">{COMMAND_CENTER_METRICS.map(([label, value, context, tone]) => <button type="button" key={label} className={`op-command-metric op-command-metric-${tone}`} onClick={() => setSelected({ title: label, copy: `${value} is the current prepared demo value for this intelligence metric.`, status: context, action: "Open the related workspace" })}><span>{label}</span><strong>{value}</strong><small>{context}</small></button>)}</div>
       <div className="op-command-grid op-command-grid-primary"><Panel title="Executive Intelligence" kicker="PRIORITY SIGNAL" action={<span className="op-command-critical-label"><StatusDot tone="critical" /> CRITICAL</span>} className="op-command-executive"><div className="op-command-executive-grid"><div><span className="op-command-kicker">SUPPLIER DELIVERY DELAY DETECTED</span><h3>A320-214 / EC-MXA</h3><dl><div><dt>CONTRACT</dt><dd>OEM Supply Agreement — Airbus</dd></div><div><dt>EVENT</dt><dd>Delivery delayed by 184 days</dd></div><div><dt>CONTRACTUAL EFFECT</dt><dd>Liquidated damages clause may be triggered.</dd></div><div><dt>ESTIMATED EXPOSURE</dt><dd className="op-command-exposure">€640,000</dd></div></dl></div><div className="op-command-recommendation"><span>RECOMMENDED ACTION</span><strong>Review Clause 14.3 and initiate supplier notice procedure.</strong><button type="button" onClick={() => setSelected({ title: "A320-214 / EC-MXA impact", contract: "OEM Supply Agreement — Airbus", copy: "A supplier delivery delay has been connected to a liquidated damages clause for review.", status: "CRITICAL", action: "Review Clause 14.3 and initiate supplier notice procedure.", contractId: "demo-aircraft-lease" })}>View impact ↗</button></div></div></Panel><Panel title="Intelligence Feed" kicker="LIVE STREAM" action={<Link to="/demo?view=feed" className="op-command-text-link">View all ↗</Link>}><div className="op-command-feed">{filteredFeed.map((item) => <button type="button" key={item[1]} onClick={() => setSelected({ source: item[0], title: item[1], copy: item[3], status: item[4].toUpperCase(), action: "Review connected intelligence" })}><span className="op-command-feed-source"><StatusDot tone={item[4]} />{item[0]}</span><strong>{item[1]}</strong><small>{item[2]} · {item[3]}</small></button>)}</div></Panel></div>
         <div className="op-command-grid op-command-grid-secondary"><Panel title="Prioritized Signals" kicker="EXECUTIVE INTELLIGENCE"><div className="op-command-signal-list"><button type="button" onClick={() => setSelected({ title: "MRO SLA deviation", copy: "Turnaround time on 2 aircraft exceeds the contractual threshold.", status: "€620K EXPOSURE", action: "Investigate the linked service-level clause", contractId: "demo-mro-agreement" })}><b>02</b><span>MRO SLA DEVIATION</span><strong>Turnaround time on 2 aircraft exceeds contractual threshold.</strong><em>€620K · Investigate ↗</em></button><button type="button" onClick={() => setSelected({ title: "Fuel price movement", copy: "Current Jet-A1 movement intersects variable-price clauses in 14 active agreements.", status: "14 CONTRACTS", action: "Run a fuel price scenario" })}><b>03</b><span>FUEL PRICE MOVEMENT</span><strong>Jet-A1 movement intersects variable-price clauses.</strong><em>14 contracts · Run scenario ↗</em></button></div></Panel></div>
