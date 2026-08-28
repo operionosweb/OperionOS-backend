@@ -54,6 +54,48 @@ import {
 
 /**
  * -----------------------------------------
+ * STRUCTURED EXECUTIVE SUMMARY
+ * -----------------------------------------
+ */
+export function buildExecutiveSummary({
+  title = "Executive Summary",
+  context = "",
+  highlights = [],
+  tone = "confident",
+} = {}) {
+  const cleanHighlights = Array.isArray(highlights)
+    ? highlights
+        .map((item) => String(item ?? "").trim())
+        .filter(Boolean)
+    : [];
+
+  const safeContext = String(context ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const intro = safeContext
+    ? `${safeContext}.`
+    : "This material is designed to communicate value clearly and efficiently.";
+
+  const label = typeof tone === "string" && tone
+    ? tone.charAt(0).toUpperCase() + tone.slice(1)
+    : "Confident";
+
+  return {
+    meta: {
+      label,
+      title,
+    },
+    summary: intro,
+    bullets: cleanHighlights.map((item, index) => ({
+      id: index + 1,
+      text: item,
+    })),
+  };
+}
+
+/**
+ * -----------------------------------------
  * MAIN ENTRY POINT
  * -----------------------------------------
  */

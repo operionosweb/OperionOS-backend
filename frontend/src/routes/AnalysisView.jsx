@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Section } from "../components/ui/Layout";
+import { Section, Container } from "../components/ui/Layout";
 import Reveal from "../components/ui/Reveal";
 import { LoadingState, ErrorState, EmptyState } from "../components/ui/States";
 import AnalysisPipeline from "../components/demo/AnalysisPipeline";
@@ -19,29 +19,45 @@ import {
 } from "../lib/contractsApi";
 import { CONTRACT_INTELLIGENCE_HIERARCHY, INTELLIGENCE_AVAILABILITY, deriveAvailabilityState } from "../lib/contractIntelligenceModel";
 
+const HERO = "https://images.unsplash.com/photo-1589782182703-2aaa69037b5b?auto=format&fit=crop&w=1800&q=82";
+
 export default function AnalysisView() {
   const { id } = useParams();
   const { organizationId } = useOrganization();
 
   return (
-    <Section>
-      <Reveal>
-        <p className="op-eyebrow">Analysis</p>
-        <h1 className="op-heading-lg" style={{ marginBottom: "var(--op-space-6)" }}>
-          Contract analysis pipeline
-        </h1>
-      </Reveal>
+    <>
+      <section className="op-page-hero op-cinematic-hero" style={{ backgroundImage: `url(${HERO})` }}>
+        <div className="op-page-hero-overlay">
+          <Container>
+            <Reveal>
+              <p className="op-stitch-label">OPERION / ANALYSIS</p>
+              <h1>Contract analysis pipeline</h1>
+              <p>Review extraction and analysis output from the top of the pipeline, not from mid-scroll state.</p>
+            </Reveal>
+          </Container>
+        </div>
+      </section>
 
-      <OrganizationGate>
-        <AnalysisContent contractId={id} organizationId={organizationId} />
-      </OrganizationGate>
+      <Section>
+        <Reveal>
+          <p className="op-eyebrow">Analysis</p>
+          <h1 className="op-heading-lg" style={{ marginBottom: "var(--op-space-6)" }}>
+            Contract analysis pipeline
+          </h1>
+        </Reveal>
 
-      <Reveal style={{ marginTop: "var(--op-space-6)" }}>
-        <Link to={`/demo/contracts/${id}`} className="op-body" style={{ color: "var(--op-text-muted)" }}>
-          ← Back to contract
-        </Link>
-      </Reveal>
-    </Section>
+        <OrganizationGate>
+          <AnalysisContent contractId={id} organizationId={organizationId} />
+        </OrganizationGate>
+
+        <Reveal style={{ marginTop: "var(--op-space-6)" }}>
+          <Link to={`/demo/contracts/${id}`} className="op-body" style={{ color: "var(--op-text-muted)" }}>
+            ← Back to contract
+          </Link>
+        </Reveal>
+      </Section>
+    </>
   );
 }
 

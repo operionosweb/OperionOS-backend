@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Section } from "../components/ui/Layout";
+import { Section, Container } from "../components/ui/Layout";
 import Reveal from "../components/ui/Reveal";
 import { LoadingState, ErrorState, EmptyState } from "../components/ui/States";
 import OrganizationGate from "../components/demo/OrganizationGate";
@@ -8,22 +8,38 @@ import UploadContract from "../components/demo/UploadContract";
 import { useOrganization } from "../context/OrganizationContext";
 import { listContracts } from "../lib/contractsApi";
 
+const HERO = "https://images.unsplash.com/photo-1559268950-abd7e7be7d8d?auto=format&fit=crop&w=1800&q=82";
+
 export default function ContractPortfolio() {
   const { organizationId } = useOrganization();
 
   return (
-    <Section>
-      <Reveal>
-        <p className="op-eyebrow">Contract Portfolio</p>
-        <h1 className="op-heading-lg" style={{ marginBottom: "var(--op-space-6)" }}>
-          Portfolio operations
-        </h1>
-      </Reveal>
+    <>
+      <section className="op-page-hero op-cinematic-hero" style={{ backgroundImage: `url(${HERO})` }}>
+        <div className="op-page-hero-overlay">
+          <Container>
+            <Reveal>
+              <p className="op-stitch-label">OPERION / PORTFOLIO</p>
+              <h1>Portfolio operations</h1>
+              <p>Review registered contracts and open the operational workspace from the top of the flow.</p>
+            </Reveal>
+          </Container>
+        </div>
+      </section>
 
-      <OrganizationGate>
-        <PortfolioList organizationId={organizationId} />
-      </OrganizationGate>
-    </Section>
+      <Section>
+        <Reveal>
+          <p className="op-eyebrow">Contract Portfolio</p>
+          <h1 className="op-heading-lg" style={{ marginBottom: "var(--op-space-6)" }}>
+            Portfolio operations
+          </h1>
+        </Reveal>
+
+        <OrganizationGate>
+          <PortfolioList organizationId={organizationId} />
+        </OrganizationGate>
+      </Section>
+    </>
   );
 }
 

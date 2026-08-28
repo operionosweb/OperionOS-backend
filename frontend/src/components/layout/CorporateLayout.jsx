@@ -15,20 +15,28 @@ const NAV_LINKS = [
 
 export default function CorporateLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
+  const [heroVisible, setHeroVisible] = useState(true);
   const menuButtonRef = React.useRef(null);
   const menuRef = React.useRef(null);
   const location = useLocation();
   const isHome = location.pathname === "/";
 
   useEffect(() => {
-    const updateScrollState = () => setScrolled(window.scrollY > 24);
-    updateScrollState();
-    window.addEventListener("scroll", updateScrollState, { passive: true });
-    return () => window.removeEventListener("scroll", updateScrollState);
-  }, []);
+    const hero = document.querySelector(".op-cinematic-hero");
+    if (!hero) {
+      setHeroVisible(false);
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(([entry]) => {
+      setHeroVisible(entry.isIntersecting && entry.boundingClientRect.top <= 80);
+    }, { rootMargin: "-80px 0px 0px 0px", threshold: [0, 0.01] });
+    observer.observe(hero);
+    return () => observer.disconnect();
+  }, [location.pathname]);
 
   useEffect(() => {
+    menuRef.current?.toggleAttribute("inert", !menuOpen);
     if (!menuOpen) return undefined;
     const closeOnEscape = (event) => {
       if (event.key === "Escape") setMenuOpen(false);
@@ -59,7 +67,7 @@ export default function CorporateLayout() {
   useEffect(() => setMenuOpen(false), [location.pathname]);
 
   return (
-    <div className={`op-shell op-corporate-shell${isHome ? " op-home-shell" : ""}${scrolled ? " op-shell-scrolled" : ""}`} data-op-theme="light">
+    <div className={`op-shell op-corporate-shell${isHome ? " op-home-shell" : ""}${heroVisible ? " op-hero-active" : " op-content-active"}`} data-op-theme="light">
       <header className="op-shell-header op-corporate-header">
         <Container>
           <div className="op-topbar">
@@ -97,7 +105,7 @@ export default function CorporateLayout() {
           </div>
         </Container>
 
-        <div id="corporate-navigation-overlay" ref={menuRef} tabIndex={-1} className={`op-navigation-overlay${menuOpen ? " op-navigation-overlay-open" : ""}`} aria-hidden={!menuOpen} inert={!menuOpen}>
+        <div id="corporate-navigation-overlay" ref={menuRef} tabIndex={-1} className={`op-navigation-overlay${menuOpen ? " op-navigation-overlay-open" : ""}`} aria-hidden={!menuOpen}>
           <div className="op-navigation-overlay-inner">
             <nav aria-label="Expanded corporate navigation">
               <Link to="/" className={location.pathname === "/" ? "op-navigation-active" : ""} onClick={() => setMenuOpen(false)}>Home</Link>

@@ -1,5 +1,5 @@
-import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import React, { useEffect } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { OrganizationProvider } from "./context/OrganizationContext";
 import CorporateLayout from "./components/layout/CorporateLayout";
@@ -19,11 +19,22 @@ import Enterprise from "./routes/Enterprise";
 import Solutions from "./routes/Solutions";
 import About from "./routes/About";
 
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [pathname]);
+
+  return null;
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <OrganizationProvider>
         <BrowserRouter>
+          <ScrollToTop />
           <Routes>
             <Route element={<CorporateLayout />}>
               <Route path="/" element={<CorporateHome />} />

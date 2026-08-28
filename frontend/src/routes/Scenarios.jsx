@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Section } from "../components/ui/Layout";
+import { Section, Container } from "../components/ui/Layout";
 import Button from "../components/ui/Button";
 import Reveal from "../components/ui/Reveal";
 import IntelligenceStatus from "../components/intelligence/IntelligenceStatus";
@@ -11,6 +11,7 @@ import SpatialTransition from "../components/intelligence/spatial/SpatialTransit
 import { INTELLIGENCE_AVAILABILITY } from "../lib/contractIntelligenceModel";
 
 const SCENARIO_EVENTS = ["Weather", "Fuel price", "Crew disruption", "Supplier failure", "Geopolitical event"];
+const HERO = "https://images.unsplash.com/photo-1494412574643-ff11b0a5c1c3?auto=format&fit=crop&w=2000&q=84";
 const SCENARIO_CHAIN = ["Event", "Contract", "Clause", "Impact", "Financial exposure", "Action"];
 const CONSEQUENCE_CHAIN = ["Event", "Affected entity", "Contract", "Clause", "Obligation", "Contractual condition", "Potential impact", "Financial exposure", "Probability", "Recommended action", "Potential outcome"];
 const EXAMPLE_QUESTIONS = [
@@ -154,6 +155,17 @@ export default function Scenarios() {
   return (
     <>
       <ScenariosSeo />
+      <section className="op-page-hero op-cinematic-hero" style={{ backgroundImage: `url(${HERO})` }}>
+        <div className="op-page-hero-overlay">
+          <Container>
+            <Reveal>
+              <p className="op-stitch-label">OPERION / SCENARIO INTELLIGENCE</p>
+              <h1>What happens if the world changes tomorrow?</h1>
+              <p>Explore how changing operational conditions could move through contracts, obligations, exposure and action.</p>
+            </Reveal>
+          </Container>
+        </div>
+      </section>
       <Section className="op-scenario-hero">
         <Reveal>
           <p className="op-eyebrow">Scenario Intelligence</p>

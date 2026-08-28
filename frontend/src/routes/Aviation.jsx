@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Section } from "../components/ui/Layout";
+import { Section, Container } from "../components/ui/Layout";
 import Button from "../components/ui/Button";
 import Reveal from "../components/ui/Reveal";
 import IntelligenceStatus from "../components/intelligence/IntelligenceStatus";
@@ -8,6 +8,7 @@ import SpatialTransition from "../components/intelligence/spatial/SpatialTransit
 import { INTELLIGENCE_AVAILABILITY } from "../lib/contractIntelligenceModel";
 
 const AVIATION_EVENTS = ["Flight delay", "Cancellation", "Crew disruption", "Aircraft AOG", "Supplier failure", "Weather", "Fuel price change", "Geopolitical disruption"];
+const HERO = "https://images.unsplash.com/photo-1570710891163-6d3b5c47248b?auto=format&fit=crop&w=2000&q=84";
 const NETWORK_NODES = ["Flight delay", "Ground handling", "Airport", "Crew", "Passenger obligations", "SLA", "Potential penalty", "Financial exposure"];
 const AIRLINE_LINKS = ["Ground handling SLAs", "Airport agreements", "Crew obligations", "Passenger-related obligations", "Aircraft utilisation", "Maintenance windows", "Supplier commitments"];
 const FOUNDATION = [
@@ -161,6 +162,17 @@ export default function Aviation() {
   return (
     <>
       <AviationSeo />
+      <section className="op-page-hero op-cinematic-hero" style={{ backgroundImage: `url(${HERO})` }}>
+        <div className="op-page-hero-overlay">
+          <Container>
+            <Reveal>
+              <p className="op-stitch-label">OPERION / AVIATION &amp; AEROSPACE</p>
+              <h1>Contract Intelligence for Aviation &amp; Aerospace.</h1>
+              <p>Connect the contractual relationships behind aircraft, operations, suppliers, maintenance and financial exposure.</p>
+            </Reveal>
+          </Container>
+        </div>
+      </section>
       <Section className="op-aviation-hero">
         <Reveal>
           <p className="op-eyebrow">Aviation &amp; Aerospace</p>

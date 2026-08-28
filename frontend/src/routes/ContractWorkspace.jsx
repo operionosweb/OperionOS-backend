@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Section } from "../components/ui/Layout";
+import { Section, Container } from "../components/ui/Layout";
 import Reveal from "../components/ui/Reveal";
 import Button from "../components/ui/Button";
 import { LoadingState, ErrorState, NotYetIntegrated } from "../components/ui/States";
@@ -34,16 +34,32 @@ const INTELLIGENCE_SECTIONS = CONTRACT_INTELLIGENCE_HIERARCHY
     note: "No read endpoint is exposed for this layer in current frontend boundaries.",
   }));
 
+const HERO = "https://images.unsplash.com/photo-1569629743817-70d8db6c323b?auto=format&fit=crop&w=1800&q=82";
+
 export default function ContractDetail() {
   const { id } = useParams();
   const { organizationId } = useOrganization();
 
   return (
-    <Section>
-      <OrganizationGate>
-        <ContractWorkspace contractId={id} organizationId={organizationId} />
-      </OrganizationGate>
-    </Section>
+    <>
+      <section className="op-page-hero op-cinematic-hero" style={{ backgroundImage: `url(${HERO})` }}>
+        <div className="op-page-hero-overlay">
+          <Container>
+            <Reveal>
+              <p className="op-stitch-label">OPERION / CONTRACT WORKSPACE</p>
+              <h1>Contract workspace</h1>
+              <p>Open the document in a clean, full-height view starting from the top of the workspace.</p>
+            </Reveal>
+          </Container>
+        </div>
+      </section>
+
+      <Section>
+        <OrganizationGate>
+          <ContractWorkspace contractId={id} organizationId={organizationId} />
+        </OrganizationGate>
+      </Section>
+    </>
   );
 }
 

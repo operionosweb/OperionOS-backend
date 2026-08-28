@@ -23,7 +23,7 @@ export default function DemoLayout() {
 
   return (
     <div className="op-shell" data-op-theme="light">
-      <header className="op-shell-header">
+      <header className="op-shell-header op-demo-header">
         <Container>
           <div className="op-topbar" style={{ minHeight: 68 }}>
             <div className="op-row" style={{ alignItems: "center", gap: "var(--op-space-5)" }}>

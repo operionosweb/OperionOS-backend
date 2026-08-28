@@ -3,6 +3,7 @@ import test from "node:test";
 import { localRiskEngine } from "../services/contractRiskEngine.js";
 import { localClauseExtractor } from "../services/clauseParser.js";
 import { localObligationEngine } from "../services/obligationParser.js";
+import { buildExecutiveSummary } from "../services/legalCopilot.js";
 
 test("legacy contract risk rules preserve flags, protections, and score cap", () => {
   const result = localRiskEngine([
@@ -59,4 +60,24 @@ test("obligation fallback preserves parties and deadlines", () => {
   assert.deepEqual(result.map((item) => item.responsible_party), ["Lessee", "Lessor", "Lessee"]);
   assert.equal(result[0].deadline, "within 10 days");
   assert.equal(result[1].risk_level, "MEDIUM");
+});
+
+test("structured executive summary builder returns metadata, summary, and bullets", () => {
+  const result = buildExecutiveSummary({
+    title: "Operational intelligence platform",
+    context: "We connect contractual obligations to operational realities so teams can act before problems escalate",
+    highlights: [
+      "Extract obligations from complex aviation agreements",
+      "Map operational events to contractual exposure",
+      "Recommend next actions based on risk and consequence",
+    ],
+    tone: "premium",
+  });
+
+  assert.equal(result.meta.title, "Operational intelligence platform");
+  assert.equal(result.meta.label, "Premium");
+  assert.equal(result.bullets.length, 3);
+  assert.ok(result.summary.includes("We connect contractual obligations to operational realities"));
+  assert.equal(result.bullets[0].id, 1);
+  assert.ok(result.bullets[0].text.includes("Extract obligations"));
 });

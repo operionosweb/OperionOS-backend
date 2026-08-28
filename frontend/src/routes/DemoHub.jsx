@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Section } from "../components/ui/Layout";
+import { Section, Container } from "../components/ui/Layout";
 import Reveal from "../components/ui/Reveal";
 import Button from "../components/ui/Button";
 import { EmptyState } from "../components/ui/States";
@@ -61,6 +61,8 @@ function DemoSeo() {
   return null;
 }
 
+const HERO = "https://images.unsplash.com/photo-1530521954074-e64f6810b32d?auto=format&fit=crop&w=1800&q=82";
+
 export default function DemoHub() {
   const [mode, setMode] = useState("standard");
   const [selectedContractId, setSelectedContractId] = useState(PUBLIC_DEMO_CONTRACTS[0].id);
@@ -87,15 +89,28 @@ export default function DemoHub() {
   }
 
   return (
-    <Section>
-      <DemoSeo />
-      <Reveal>
-        <p className="op-eyebrow">Demo Environment</p>
-        <h1 className="op-heading-lg" style={{ marginBottom: "var(--op-space-4)", maxWidth: 860 }}>Explore Operion Contract Intelligence</h1>
-        <p className="op-body-lg" style={{ marginBottom: "var(--op-space-3)" }}>Explore how Operion turns contracts into structured intelligence — from clauses and obligations to potential risks, financial exposure and future decision support.</p>
-        <p className="op-body-sm" style={{ marginBottom: "var(--op-space-6)" }}>{PUBLIC_DEMO_NOTICE}</p>
-        <SpatialModeToggle mode={mode} onChange={setMode} />
-      </Reveal>
+    <>
+      <section className="op-page-hero op-cinematic-hero" style={{ backgroundImage: `url(${HERO})` }}>
+        <div className="op-page-hero-overlay">
+          <Container>
+            <Reveal>
+              <p className="op-stitch-label">OPERION / DEMO ENVIRONMENT</p>
+              <h1>Explore Operion Contract Intelligence</h1>
+              <p>See how aviation contracts become structured intelligence — from clauses and obligations to risk and decision support.</p>
+            </Reveal>
+          </Container>
+        </div>
+      </section>
+
+      <Section>
+        <DemoSeo />
+        <Reveal>
+          <p className="op-eyebrow">Demo Environment</p>
+          <h1 className="op-heading-lg" style={{ marginBottom: "var(--op-space-4)", maxWidth: 860 }}>Explore Operion Contract Intelligence</h1>
+          <p className="op-body-lg" style={{ marginBottom: "var(--op-space-3)" }}>Explore how Operion turns contracts into structured intelligence — from clauses and obligations to potential risks, financial exposure and future decision support.</p>
+          <p className="op-body-sm" style={{ marginBottom: "var(--op-space-6)" }}>{PUBLIC_DEMO_NOTICE}</p>
+          <SpatialModeToggle mode={mode} onChange={setMode} />
+        </Reveal>
 
       <Reveal className="op-demo-orientation" style={{ marginTop: "var(--op-space-6)" }}>
         <div><span className="op-kicker">Step 1</span><strong>Select a demonstration contract</strong></div>
@@ -131,6 +146,7 @@ export default function DemoHub() {
       <Reveal className="op-demo-future" style={{ marginTop: "var(--op-space-6)" }}><SampleBadge>Illustrative scenario</SampleBadge><h2 className="op-heading-md" style={{ margin: "var(--op-space-3) 0 var(--op-space-2)" }}>Where Contract Intelligence could go next</h2><div className="op-demo-future-flow"><span>Weather disruption</span><b aria-hidden="true">→</b><span>Operational delay</span><b aria-hidden="true">→</b><span>Affected contract</span><b aria-hidden="true">→</b><span>Relevant clause</span><b aria-hidden="true">→</b><span>Potential consequence</span><b aria-hidden="true">→</b><span>Mitigation concept</span></div><p className="op-body-sm" style={{ marginTop: "var(--op-space-4)" }}>Illustrative future direction only. This demo does not track live weather, flights, suppliers or customer data.</p></Reveal>
       <Reveal className="op-demo-cta" style={{ marginTop: "var(--op-space-6)" }}><h2 className="op-heading-md">Want to see this with your contracts?</h2><p className="op-body-lg" style={{ margin: "var(--op-space-3) auto var(--op-space-5)" }}>Operion's public Demo uses prepared demonstration data. For a deeper evaluation, we can explore your contracts, operational context and specific aviation use cases.</p><div className="op-row" style={{ justifyContent: "center", flexWrap: "wrap" }}><Button to="/demo" variant="primary">Request a Demo</Button><Button to="/industries/aviation" variant="secondary">Explore Aviation Intelligence</Button></div></Reveal>
     </Section>
+    </>
   );
 }
 
