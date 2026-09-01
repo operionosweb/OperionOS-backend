@@ -7,7 +7,14 @@ import { getAnalysisRunById } from "../services/documentIngestionService.js";
 import { createAnalysisRunRepository } from "../repositories/phase3/analysisRunRepository.js";
 import { createClauseRepository } from "../repositories/phase3/clauseRepository.js";
 import { createObligationRepository } from "../repositories/phase3/obligationRepository.js";
+import { createDeadlineRepository } from "../repositories/phase3/deadlineRepository.js";
+import { createRiskRepository } from "../repositories/phase3/riskRepository.js";
+import { createEvidenceRepository } from "../repositories/phase3/evidenceRepository.js";
+import { runDeterministicClauseStage } from "../services/phase3/intelligence/deterministicClauseService.js";
 import { createDeterministicObligationService, createGatewayObligationProvider } from "../services/phase3/intelligence/deterministicObligationService.js";
+import { createDeadlineIntelligenceService, createGatewayDeadlineProvider } from "../services/phase3/intelligence/deadlineIntelligenceService.js";
+import { createContractRiskIntelligenceService, createGatewayRiskProvider } from "../services/phase3/intelligence/contractRiskIntelligenceService.js";
+import { answerContractQuestion } from "../services/phase3/intelligence/contractAssistantService.js";
 import { aiGateway } from "../services/ai/aiGateway.js";
 import { assertOrganizationScope, assertResourceId } from "../repositories/phase3/scope.js";
 import supabase from "../config/supabase.js";
@@ -45,6 +52,65 @@ function sanitizeObligation(row) {
     ...safeObligation
   } = row;
   return safeObligation;
+}
+
+function sanitizeDeadline(row) {
+  if (!row) return null;
+  const {
+    organization_id: _organizationId,
+    contract_id: _contractId,
+    document_id: _documentId,
+    document_version_id: _documentVersionId,
+    deadline_identity: _deadlineIdentity,
+    ...safeDeadline
+  } = row;
+  return safeDeadline;
+}
+
+function sanitizeRisk(row) {
+  if (!row) return null;
+  const {
+    organization_id: _organizationId,
+    contract_id: _contractId,
+    document_id: _documentId,
+    document_version_id: _documentVersionId,
+    risk_identity: _riskIdentity,
+    ...safeRisk
+  } = row;
+  return safeRisk;
+}
+
+function sanitizeEvidence(row) {
+  if (!row) return null;
+  const {
+    organization_id: _organizationId,
+    contract_id: _contractId,
+    document_id: _documentId,
+    document_version_id: _documentVersionId,
+    evidence_hash: _evidenceHash,
+    ...safeEvidence
+  } = row;
+  return safeEvidence;
+}
+
+async function resolveAnalysisRunScope({ organizationId, analysisRunId, analysisRunRepository, documentVersionResolver }) {
+  assertOrganizationScope(organizationId);
+  assertResourceId(analysisRunId, "analysisRunId");
+  const analysisRun = await analysisRunRepository.getById(analysisRunId, organizationId);
+  if (!analysisRun || analysisRun.organization_id !== organizationId) {
+    throw Object.assign(new Error("Analysis run not found"), { code: "ANALYSIS_RUN_NOT_FOUND", status: 404 });
+  }
+  const documentVersion = await documentVersionResolver(analysisRun.document_version_id, organizationId);
+  if (!documentVersion || documentVersion.organization_id && documentVersion.organization_id !== organizationId) {
+    throw Object.assign(new Error("Analysis run not found"), { code: "ANALYSIS_RUN_NOT_FOUND", status: 404 });
+  }
+  return {
+    organizationId,
+    contractId: analysisRun.contract_id,
+    documentId: documentVersion.document_id,
+    documentVersionId: analysisRun.document_version_id,
+    analysisRunId,
+  };
 }
 
 export async function readAnalysisRunClauses({
@@ -130,6 +196,78 @@ export async function readAnalysisRunObligations({
   return (obligations || []).map(sanitizeObligation);
 }
 
+export async function readAnalysisRunDeadlines({
+  organizationId,
+  analysisRunId,
+  analysisRunRepository = createAnalysisRunRepository(),
+  deadlineRepository = createDeadlineRepository(),
+  documentVersionResolver = async (documentVersionId, orgId) => {
+    const { data, error } = await supabase.from("document_versions")
+      .select("id, document_id, organization_id")
+      .eq("id", documentVersionId).eq("organization_id", orgId).maybeSingle();
+    if (error) throw Object.assign(new Error("Document version lookup failed"), { code: "STORAGE_ERROR", status: 503 });
+    return data || null;
+  },
+}) {
+  const scope = await resolveAnalysisRunScope({ organizationId, analysisRunId, analysisRunRepository, documentVersionResolver });
+  return (await deadlineRepository.listByRunScope(scope)).map(sanitizeDeadline);
+}
+
+export async function readAnalysisRunRisks({
+  organizationId,
+  analysisRunId,
+  analysisRunRepository = createAnalysisRunRepository(),
+  riskRepository = createRiskRepository(),
+  documentVersionResolver = async (documentVersionId, orgId) => {
+    const { data, error } = await supabase.from("document_versions")
+      .select("id, document_id, organization_id")
+      .eq("id", documentVersionId).eq("organization_id", orgId).maybeSingle();
+    if (error) throw Object.assign(new Error("Document version lookup failed"), { code: "STORAGE_ERROR", status: 503 });
+    return data || null;
+  },
+}) {
+  const scope = await resolveAnalysisRunScope({ organizationId, analysisRunId, analysisRunRepository, documentVersionResolver });
+  return (await riskRepository.listByRunScope(scope)).map(sanitizeRisk);
+}
+
+export async function readAnalysisRunEvidence({
+  organizationId,
+  analysisRunId,
+  analysisRunRepository = createAnalysisRunRepository(),
+  evidenceRepository = createEvidenceRepository(),
+}) {
+  assertOrganizationScope(organizationId);
+  assertResourceId(analysisRunId, "analysisRunId");
+  const analysisRun = await analysisRunRepository.getById(analysisRunId, organizationId);
+  if (!analysisRun || analysisRun.organization_id !== organizationId) {
+    throw Object.assign(new Error("Analysis run not found"), { code: "ANALYSIS_RUN_NOT_FOUND", status: 404 });
+  }
+  return (await evidenceRepository.listByRun({ organizationId, analysisRunId })).map(sanitizeEvidence);
+}
+
+export async function answerAnalysisRunQuestion({
+  organizationId,
+  analysisRunId,
+  question,
+  readers = {
+    clauses: readAnalysisRunClauses,
+    obligations: readAnalysisRunObligations,
+    deadlines: readAnalysisRunDeadlines,
+    risks: readAnalysisRunRisks,
+    evidence: readAnalysisRunEvidence,
+  },
+}) {
+  const scope = { organizationId, analysisRunId };
+  const [clauses, obligations, deadlines, risks, evidence] = await Promise.all([
+    readers.clauses(scope),
+    readers.obligations(scope),
+    readers.deadlines(scope),
+    readers.risks(scope),
+    readers.evidence(scope),
+  ]);
+  return answerContractQuestion({ question, clauses, obligations, deadlines, risks, evidence });
+}
+
 router.use(
   authenticateUser,
   requireOrganizationMembership,
@@ -160,6 +298,50 @@ router.get("/:id/clauses", async (req, res) => {
   }
 });
 
+router.post("/:id/clauses/analyze", requireOrganizationPermission("contract:write"), async (req, res) => {
+  const analysisRunRepository = createAnalysisRunRepository();
+  try {
+    const analysisRun = await analysisRunRepository.getById(req.params.id, req.organization.id);
+    if (!analysisRun) {
+      throw Object.assign(new Error("Analysis run not found"), { code: "ANALYSIS_RUN_NOT_FOUND", status: 404 });
+    }
+    if (analysisRun.status === "queued") {
+      await analysisRunRepository.updateStatus({
+        analysisRunId: analysisRun.id,
+        organizationId: req.organization.id,
+        status: "processing",
+        startedAt: new Date().toISOString(),
+      });
+      await analysisRunRepository.updateStatus({
+        analysisRunId: analysisRun.id,
+        organizationId: req.organization.id,
+        status: "extracting",
+        startedAt: new Date().toISOString(),
+      });
+    }
+    const result = await runDeterministicClauseStage({
+      organizationId: req.organization.id,
+      documentVersionId: analysisRun.document_version_id,
+      analysisRunId: analysisRun.id,
+    });
+    const updatedRun = await analysisRunRepository.updateStatus({
+      analysisRunId: analysisRun.id,
+      organizationId: req.organization.id,
+      status: "analysing",
+      startedAt: analysisRun.started_at || new Date().toISOString(),
+    });
+    return res.status(201).json({
+      success: true,
+      status: result.status,
+      analysisRun: updatedRun,
+      clauses: (result.clauses || []).map(sanitizeClause),
+      intelligenceConsumption: 0,
+    });
+  } catch (error) {
+    return res.status(error.status || (error.code === "STORAGE_ERROR" ? 503 : 409)).json(normalizeAnalysisRunError(error));
+  }
+});
+
 router.get("/:id/obligations/estimate", requireOrganizationPermission("contract:read"), async (req, res) => {
   try {
     const analysisRun = await getAnalysisRunById(req.params.id, req.organization.id);
@@ -167,7 +349,7 @@ router.get("/:id/obligations/estimate", requireOrganizationPermission("contract:
     return res.json({
       success: true,
       estimatedIntelligence,
-      budget: aiGateway.getBudget(req.organization.id),
+      budget: await aiGateway.getBudget(req.organization.id),
       analysisRunId: analysisRun.id,
     });
   } catch (error) {
@@ -201,7 +383,7 @@ router.post("/:id/obligations/analyze", requireOrganizationPermission("contract:
       documentVersionId: analysisRun.document_version_id,
       analysisRunId: analysisRun.id,
       userId: req.user.id,
-      useProviderNormalization: true,
+      useProviderNormalization: req.body?.useProviderNormalization === true,
     });
     return res.status(201).json({
       success: true,
@@ -228,6 +410,167 @@ router.get("/:id/obligations", async (req, res) => {
       analysisRunId: req.params.id,
     });
     return res.json({ success: true, obligations });
+  } catch (error) {
+    return res.status(error.status || 404).json(normalizeAnalysisRunError(error));
+  }
+});
+
+router.post("/:id/deadlines/analyze", requireOrganizationPermission("contract:write"), async (req, res) => {
+  const metrics = {};
+  try {
+    const analysisRunRepository = createAnalysisRunRepository();
+    const scope = await resolveAnalysisRunScope({
+      organizationId: req.organization.id,
+      analysisRunId: req.params.id,
+      analysisRunRepository,
+      documentVersionResolver: async (documentVersionId, orgId) => {
+        const { data, error } = await supabase.from("document_versions")
+          .select("id, document_id, organization_id")
+          .eq("id", documentVersionId).eq("organization_id", orgId).maybeSingle();
+        if (error) throw Object.assign(new Error("Document version lookup failed"), { code: "STORAGE_ERROR", status: 503 });
+        return data || null;
+      },
+    });
+    const result = await createDeadlineIntelligenceService({
+      metrics,
+      provider: createGatewayDeadlineProvider({ gateway: aiGateway, confirmation: req.body?.confirmation === true, metrics }),
+    }).runStage({
+      ...scope,
+      userId: req.user.id,
+      useAIFallback: req.body?.useAIFallback === true,
+    });
+    console.info("contract_risk_analysis_completed", {
+      organizationId: scope.organizationId,
+      contractId: scope.contractId,
+      documentVersionId: scope.documentVersionId,
+      analysisRunId: scope.analysisRunId,
+      deterministicCandidates: result.deterministicCandidates,
+      aiCandidates: result.aiCandidates,
+      aiRequests: result.aiRequests,
+      estimatedIntelligence: result.estimatedIntelligence,
+      actualIntelligence: result.actualIntelligence,
+      cacheHits: result.cacheHits,
+      cacheMisses: result.cacheMisses,
+      riskCount: result.risks?.length || 0,
+      severityCounts: result.severityCounts,
+      durationMs: result.performance?.totalMs,
+      failedCandidateCount: result.failedCandidates?.length || 0,
+    });
+    return res.status(201).json({
+      success: true,
+      ...result,
+      deadlines: (result.deadlines || []).map(sanitizeDeadline),
+      metrics: {
+        deterministicAnalyses: result.deterministicAnalyses,
+        aiFallbackAnalyses: result.aiFallbackAnalyses,
+        aiIntelligenceConsumed: result.aiIntelligenceConsumed,
+        cacheHits: result.cacheHits,
+        cacheMisses: result.cacheMisses,
+      },
+    });
+  } catch (error) {
+    console.warn("contract_risk_analysis_failed", {
+      organizationId: req.organization?.id || null,
+      analysisRunId: req.params.id,
+      errorCategory: error.code || "RISK_ANALYSIS_FAILED",
+    });
+    return res.status(error.status || (error.code === "STORAGE_ERROR" ? 503 : 409)).json(normalizeAnalysisRunError(error));
+  }
+});
+
+router.get("/:id/deadlines", async (req, res) => {
+  try {
+    const deadlines = await readAnalysisRunDeadlines({
+      organizationId: req.organization.id,
+      analysisRunId: req.params.id,
+    });
+    return res.json({ success: true, deadlines });
+  } catch (error) {
+    return res.status(error.status || 404).json(normalizeAnalysisRunError(error));
+  }
+});
+
+router.get("/:id/risks/estimate", async (req, res) => {
+  try {
+    const analysisRun = await getAnalysisRunById(req.params.id, req.organization.id);
+    const estimatedIntelligence = aiGateway.estimate("risk_reasoning", "bounded risk candidate clauses and related intelligence");
+    return res.json({
+      success: true,
+      estimatedIntelligence,
+      budget: await aiGateway.getBudget(req.organization.id),
+      analysisRunId: analysisRun.id,
+    });
+  } catch (error) {
+    return res.status(error.status || 404).json(normalizeAnalysisRunError(error));
+  }
+});
+
+router.post("/:id/risks/analyze", requireOrganizationPermission("contract:write"), async (req, res) => {
+  const metrics = {};
+  try {
+    const analysisRunRepository = createAnalysisRunRepository();
+    const scope = await resolveAnalysisRunScope({
+      organizationId: req.organization.id,
+      analysisRunId: req.params.id,
+      analysisRunRepository,
+      documentVersionResolver: async (documentVersionId, orgId) => {
+        const { data, error } = await supabase.from("document_versions")
+          .select("id, document_id, organization_id")
+          .eq("id", documentVersionId).eq("organization_id", orgId).maybeSingle();
+        if (error) throw Object.assign(new Error("Document version lookup failed"), { code: "STORAGE_ERROR", status: 503 });
+        return data || null;
+      },
+    });
+    const result = await createContractRiskIntelligenceService({
+      metrics,
+      provider: createGatewayRiskProvider({ gateway: aiGateway, confirmation: req.body?.confirmation === true, metrics }),
+    }).runStage({
+      ...scope,
+      userId: req.user.id,
+      useAIFallback: req.body?.useAIFallback === true,
+    });
+    return res.status(201).json({
+      success: true,
+      ...result,
+      risks: (result.risks || []).map(sanitizeRisk),
+    });
+  } catch (error) {
+    return res.status(error.status || (error.code === "STORAGE_ERROR" ? 503 : 409)).json(normalizeAnalysisRunError(error));
+  }
+});
+
+router.get("/:id/risks", async (req, res) => {
+  try {
+    const risks = await readAnalysisRunRisks({
+      organizationId: req.organization.id,
+      analysisRunId: req.params.id,
+    });
+    return res.json({ success: true, risks });
+  } catch (error) {
+    return res.status(error.status || 404).json(normalizeAnalysisRunError(error));
+  }
+});
+
+router.get("/:id/evidence", async (req, res) => {
+  try {
+    const evidence = await readAnalysisRunEvidence({
+      organizationId: req.organization.id,
+      analysisRunId: req.params.id,
+    });
+    return res.json({ success: true, evidence });
+  } catch (error) {
+    return res.status(error.status || 404).json(normalizeAnalysisRunError(error));
+  }
+});
+
+router.post("/:id/assistant", async (req, res) => {
+  try {
+    const assistant = await answerAnalysisRunQuestion({
+      organizationId: req.organization.id,
+      analysisRunId: req.params.id,
+      question: req.body?.question,
+    });
+    return res.json({ success: true, assistant });
   } catch (error) {
     return res.status(error.status || 404).json(normalizeAnalysisRunError(error));
   }

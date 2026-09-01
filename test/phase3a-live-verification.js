@@ -285,6 +285,10 @@ async function applyMigrations(client, {
     "008_contract_upload_docx.sql",
     "009_document_structure_pages.sql",
     "010_semantic_obligation_fields.sql",
+    "011_deadline_temporal_intelligence.sql",
+    "012_contract_risk_intelligence.sql",
+    "013_nonproduction_validation_hardening.sql",
+    "014_durable_ai_state_hardening.sql",
   ];
 
   for (const filename of migrationFiles) {

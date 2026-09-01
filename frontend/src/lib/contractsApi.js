@@ -44,6 +44,13 @@ export function listAnalysisRunClauses(analysisRunId, organizationId) {
   return apiRequest(`/api/analysis-runs/${analysisRunId}/clauses`, { organizationId });
 }
 
+export function analyzeClauses(analysisRunId, organizationId) {
+  return apiRequest(`/api/analysis-runs/${analysisRunId}/clauses/analyze`, {
+    method: "POST",
+    organizationId,
+  });
+}
+
 export function listAnalysisRunObligations(analysisRunId, organizationId) {
   // GET /api/analysis-runs/:id/obligations -> { success, obligations }
   return apiRequest(`/api/analysis-runs/${analysisRunId}/obligations`, { organizationId });
@@ -58,6 +65,45 @@ export function analyzeObligations(analysisRunId, organizationId, confirmation =
     method: "POST",
     organizationId,
     body: { confirmation },
+  });
+}
+
+export function listAnalysisRunDeadlines(analysisRunId, organizationId) {
+  return apiRequest(`/api/analysis-runs/${analysisRunId}/deadlines`, { organizationId });
+}
+
+export function analyzeDeadlines(analysisRunId, organizationId) {
+  return apiRequest(`/api/analysis-runs/${analysisRunId}/deadlines/analyze`, {
+    method: "POST",
+    organizationId,
+  });
+}
+
+export function listAnalysisRunRisks(analysisRunId, organizationId) {
+  return apiRequest(`/api/analysis-runs/${analysisRunId}/risks`, { organizationId });
+}
+
+export function listAnalysisRunEvidence(analysisRunId, organizationId) {
+  return apiRequest(`/api/analysis-runs/${analysisRunId}/evidence`, { organizationId });
+}
+
+export function askContractAssistant(analysisRunId, organizationId, question) {
+  return apiRequest(`/api/analysis-runs/${analysisRunId}/assistant`, {
+    method: "POST",
+    organizationId,
+    body: { question },
+  });
+}
+
+export function getRiskEstimate(analysisRunId, organizationId) {
+  return apiRequest(`/api/analysis-runs/${analysisRunId}/risks/estimate`, { organizationId });
+}
+
+export function analyzeRisks(analysisRunId, organizationId, { useAIFallback = false, confirmation = false } = {}) {
+  return apiRequest(`/api/analysis-runs/${analysisRunId}/risks/analyze`, {
+    method: "POST",
+    organizationId,
+    body: { useAIFallback, confirmation },
   });
 }
 

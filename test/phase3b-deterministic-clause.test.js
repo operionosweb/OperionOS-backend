@@ -10,9 +10,14 @@ import {
   computeClauseIdentity,
 } from "../services/phase3/intelligence/deterministicClauseService.js";
 import { buildCanonicalPageSource } from "../services/phase3/source/deterministicSourcePageAdapter.js";
+import { createDocumentVersionSourceService } from "../services/phase3/source/documentVersionSourceService.js";
 import { createClauseRepository } from "../repositories/phase3/clauseRepository.js";
 
 const UUID_PLACEHOLDER = "11111111-1111-4111-8111-111111111111";
+
+test("document source service accepts the default null diagnostic", () => {
+  assert.doesNotThrow(() => createDocumentVersionSourceService());
+});
 
 function buildTestSource(text) {
   return {

@@ -85,7 +85,7 @@ function AnalysisContent({ contractId, organizationId }) {
 
         let nextAnalysisRunId = "";
         try {
-          nextAnalysisRunId = localStorage.getItem("operion.activeAnalysisRunId") || "";
+          nextAnalysisRunId = localStorage.getItem(`operion.activeAnalysisRunId.${contractId}`) || "";
         } catch {
           nextAnalysisRunId = "";
         }

@@ -88,8 +88,8 @@ test("Phase 3B migration harness safety helpers", async (suite) => {
     const output = [];
     const client = { query: async () => ({ rows: [] }) };
     await applyMigrations(client, { requireEnabled: false, log: (message) => output.push(message) });
-    assert.equal(output.filter((line) => line.includes("— START")).length, 10);
-    assert.equal(output.filter((line) => line.includes("— PASS —")).length, 10);
+    assert.equal(output.filter((line) => line.includes("— START")).length, 14);
+    assert.equal(output.filter((line) => line.includes("— PASS —")).length, 14);
   });
 
   await suite.test("migration failure is logged with a sanitized classification", async () => {

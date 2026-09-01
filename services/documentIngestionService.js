@@ -514,6 +514,14 @@ export async function ingestContractUpload({
       pageCount: parsed.pageCount,
     });
     context.documentVersionId = version.id;
+    const analysisRun = await createAnalysisRun({
+      organizationId,
+      contractId: createdContractId,
+      versionId: version.id,
+      userId,
+    });
+    analysisRunId = analysisRun.id;
+    context.analysisRunId = analysisRunId;
 
     await audit("document.uploaded", context, { sha256, file_size: validated.fileSize });
     await audit("document.version.created", context, { version_number: version.version_number, sha256 });

@@ -1,13 +1,8 @@
 import React, { useState } from "react";
 
-/**
- * Evidence is a foundation-level concept, not yet exposed by any backend
- * route (no GET endpoint for intelligence_evidence exists). This panel is
- * the UI boundary: it shows exactly what would be displayed, and is honest
- * that no live evidence can be fetched yet.
- */
-export default function EvidencePanel({ findingLabel }) {
+export default function EvidencePanel({ findingLabel, evidence = [] }) {
   const [open, setOpen] = useState(false);
+  const sources = evidence.map((item) => item?.source || item).filter((item) => item?.excerpt);
 
   return (
     <div>
@@ -16,8 +11,9 @@ export default function EvidencePanel({ findingLabel }) {
         onClick={() => setOpen((value) => !value)}
         className="op-badge"
         style={{ cursor: "pointer", border: "1px solid var(--op-border-strong)" }}
+        disabled={!sources.length}
       >
-        {open ? "Hide evidence" : "View evidence"}
+        {!sources.length ? "Evidence unavailable" : open ? "Hide evidence" : `View evidence (${sources.length})`}
       </button>
 
       {open && (
@@ -31,16 +27,15 @@ export default function EvidencePanel({ findingLabel }) {
             background: "var(--op-surface-raised)",
           }}
         >
-          <p className="op-body" style={{ marginBottom: "var(--op-space-2)" }}>
-            <strong style={{ color: "var(--op-text)" }}>{findingLabel}</strong> → Evidence → Source
-          </p>
-          <p className="op-body">
-            No evidence API is available yet — the backend has a verified
-            evidence data model (source excerpt, character offsets,
-            confidence, source locator), but no route currently exposes it
-            to the frontend. This panel is the integration boundary for that
-            endpoint once it exists.
-          </p>
+          <p className="op-kicker" style={{ marginBottom: "var(--op-space-3)" }}>{findingLabel} / source evidence</p>
+          {sources.map((source, index) => (
+            <blockquote key={source.id || source.evidence_id || index} style={{ margin: index ? "var(--op-space-4) 0 0" : 0, paddingLeft: "var(--op-space-3)", borderLeft: "3px solid var(--op-signal-info)" }}>
+              <p className="op-body-sm" style={{ marginBottom: "var(--op-space-2)" }}>{source.excerpt}</p>
+              <cite className="op-body-sm" style={{ fontStyle: "normal", color: "var(--op-color-text-muted)" }}>
+                {source.source_locator || (source.page_number ? `Page ${source.page_number}` : "Contract source")}
+              </cite>
+            </blockquote>
+          ))}
         </div>
       )}
     </div>

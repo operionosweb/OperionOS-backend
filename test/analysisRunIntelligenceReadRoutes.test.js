@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  answerAnalysisRunQuestion,
   readAnalysisRunClauses,
+  readAnalysisRunEvidence,
   readAnalysisRunObligations,
 } from "../routes/analysisRunRoutes.js";
 
@@ -152,4 +154,72 @@ test("readAnalysisRunObligations returns empty result when no obligations exist 
   });
 
   assert.deepEqual(result, []);
+});
+
+test("readAnalysisRunEvidence returns source detail without tenant or identity fields", async () => {
+  const result = await readAnalysisRunEvidence({
+    organizationId: ORG_ID,
+    analysisRunId: RUN_ID,
+    analysisRunRepository: createAnalysisRunRepository({ id: RUN_ID, organization_id: ORG_ID }),
+    evidenceRepository: {
+      async listByRun(scope) {
+        assert.deepEqual(scope, { organizationId: ORG_ID, analysisRunId: RUN_ID });
+        return [{
+          id: "evidence-1",
+          organization_id: ORG_ID,
+          contract_id: "contract-1",
+          document_id: "document-1",
+          document_version_id: DOCUMENT_VERSION_ID,
+          analysis_run_id: RUN_ID,
+          excerpt: "The Lessee shall maintain the Aircraft.",
+          page_number: 4,
+          source_locator: "page:4:char:120-160",
+          evidence_hash: "internal",
+        }];
+      },
+    },
+  });
+
+  assert.deepEqual(result, [{
+    id: "evidence-1",
+    analysis_run_id: RUN_ID,
+    excerpt: "The Lessee shall maintain the Aircraft.",
+    page_number: 4,
+    source_locator: "page:4:char:120-160",
+  }]);
+});
+
+test("readAnalysisRunEvidence rejects cross-tenant analysis runs", async () => {
+  await assert.rejects(() => readAnalysisRunEvidence({
+    organizationId: ORG_ID,
+    analysisRunId: RUN_ID,
+    analysisRunRepository: createAnalysisRunRepository({ id: RUN_ID, organization_id: OTHER_ORG_ID }),
+    evidenceRepository: { async listByRun() { throw new Error("must not query evidence"); } },
+  }), (error) => error.code === "ANALYSIS_RUN_NOT_FOUND");
+});
+
+test("analysis-run assistant passes the authoritative tenant scope to every reader", async () => {
+  const calls = [];
+  const reader = (name, result = []) => async (scope) => {
+    calls.push([name, scope]);
+    return result;
+  };
+  const source = { id: "evidence-1", excerpt: "Lessee shall maintain the Aircraft.", page_number: 7 };
+  const result = await answerAnalysisRunQuestion({
+    organizationId: ORG_ID,
+    analysisRunId: RUN_ID,
+    question: "Who is responsible for maintenance?",
+    readers: {
+      clauses: reader("clauses", [{ id: "clause-1", title: "Maintenance", source_text: source.excerpt }]),
+      obligations: reader("obligations"),
+      deadlines: reader("deadlines"),
+      risks: reader("risks"),
+      evidence: reader("evidence", [source]),
+    },
+  });
+
+  assert.equal(result.established, true);
+  assert.equal(calls.length, 5);
+  assert.ok(calls.every(([, scope]) => scope.organizationId === ORG_ID && scope.analysisRunId === RUN_ID));
+  assert.ok(calls.every(([, scope]) => !("organization_id" in scope)));
 });

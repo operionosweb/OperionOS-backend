@@ -60,6 +60,10 @@
         "/^cd \"c:/Users/meeli/Operion OS GitHub/OperionOS-backend\"; node --test test/analysisRunIntelligenceReadRoutes\\.test\\.js$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^node --test test/contract-risk-screening\\.test\\.js$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

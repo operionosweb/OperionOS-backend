@@ -15,7 +15,6 @@ export const CLAUSE_CATEGORIES = Object.freeze([
 ]);
 
 export const RISK_CATEGORIES = Object.freeze([
-  "liability",
   "indemnity",
   "insurance",
   "payment/commercial",
@@ -26,6 +25,15 @@ export const RISK_CATEGORIES = Object.freeze([
   "data protection/confidentiality",
   "service-level/performance",
   "missing protection",
+  "financial",
+  "operational",
+  "compliance",
+  "timing",
+  "liability",
+  "termination_default",
+  "commercial",
+  "dependency",
+  "data_information",
 ]);
 
 export const DEADLINE_TYPES = Object.freeze([
@@ -40,6 +48,13 @@ export const DEADLINE_TYPES = Object.freeze([
   "maintenance_deadline",
   "inspection_deadline",
   "cure_period",
+  "absolute",
+  "relative",
+  "recurring",
+  "event_based",
+  "conditional",
+  "ambiguous",
+  "non_computable",
 ]);
 
 export const RECOMMENDATION_TYPES = Object.freeze([

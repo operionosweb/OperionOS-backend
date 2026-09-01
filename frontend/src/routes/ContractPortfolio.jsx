@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Section, Container } from "../components/ui/Layout";
 import Reveal from "../components/ui/Reveal";
 import { LoadingState, ErrorState, EmptyState } from "../components/ui/States";
@@ -44,6 +44,7 @@ export default function ContractPortfolio() {
 }
 
 function PortfolioList({ organizationId }) {
+  const navigate = useNavigate();
   const [reloadToken, setReloadToken] = useState(0);
   const [state, setState] = useState("loading");
   const [contracts, setContracts] = useState([]);
@@ -93,8 +94,7 @@ function PortfolioList({ organizationId }) {
           <p className="op-kicker" style={{ marginBottom: "var(--op-space-2)" }}>Contextual layer</p>
           <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-2)" }}>Portfolio to workspace transition</h2>
           <p className="op-body-sm" style={{ marginBottom: "var(--op-space-4)" }}>
-            Select a contract to open document and extraction context. Clause, obligation,
-            and downstream evidence views remain explicitly unavailable in this layer.
+            Select a contract to open its document, analysis, intelligence, evidence, and assistant context.
           </p>
           <div className="op-spatial-stage">
             <span className="op-stage-chip op-stage-chip-active">Portfolio</span>
@@ -126,13 +126,23 @@ function PortfolioList({ organizationId }) {
         <p className="op-body-sm" style={{ marginBottom: "var(--op-space-4)" }}>
           Files are securely registered and prepared for later intelligence analysis. Uploading does not spend AI budget.
         </p>
-        <UploadContract organizationId={organizationId} onUploaded={() => setReloadToken((value) => value + 1)} />
+        <UploadContract organizationId={organizationId} onUploaded={(result) => {
+          setReloadToken((value) => value + 1);
+          if (result?.contractId) {
+            try {
+              if (result.analysisRunId) localStorage.setItem(`operion.activeAnalysisRunId.${result.contractId}`, result.analysisRunId);
+            } catch {
+              // Navigation still succeeds when browser storage is unavailable.
+            }
+            navigate(`/demo/contracts/${result.contractId}`);
+          }
+        }} />
       </Reveal>
 
       {!visible.length ? (
         <EmptyState
           title={contracts.length ? "No contracts match your search" : "No contracts yet"}
-          description={contracts.length ? "Try a different search term." : "Upload a contract from the Intelligence Hub to get started."}
+          description={contracts.length ? "Try a different search term." : "Upload a PDF or DOCX contract above to get started."}
         />
       ) : (
         <div className="op-flow-shell" style={{ alignItems: "start" }}>
@@ -211,10 +221,8 @@ function PortfolioList({ organizationId }) {
                     Open contract workspace, inspect current status
                   </p>
 
-                  <p className="op-kicker" style={{ marginBottom: "var(--op-space-1)" }}>Unavailable capabilities</p>
-                  <p className="op-body-sm">
-                    Clause-level and obligation-level views are not yet available in this route.
-                  </p>
+                  <p className="op-kicker" style={{ marginBottom: "var(--op-space-1)" }}>Workspace coverage</p>
+                  <p className="op-body-sm">Clauses, obligations, deadlines, risks, evidence, and contract questions.</p>
                 </>
               )}
             </div>

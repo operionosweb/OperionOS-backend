@@ -194,7 +194,10 @@ export function createObligationRepository(client = supabase, pgPool = defaultPg
             throw stageError("PRIMARY_EVIDENCE_REQUIRED", "Every obligation must include one primary evidence link", 422);
           }
 
-          const insertQuery = buildInsertQuery("obligations", obligationColumns, [obligation]);
+          const insertQuery = buildInsertQuery("obligations", obligationColumns, [{
+            ...obligation,
+            metadata: obligation.metadata ?? {},
+          }]);
           const { rows: insertedRows } = await pgClient.query(
             `${insertQuery.sql} on conflict (organization_id, analysis_run_id, clause_id, obligation_identity) do nothing returning *`,
             insertQuery.values

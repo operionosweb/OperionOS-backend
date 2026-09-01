@@ -49,8 +49,8 @@ export function buildSourceRepresentation({
 
 export function createDocumentVersionSourceService(client = supabase, diagnostic = null) {
   const diagnosticSink = typeof diagnostic === "function" ? diagnostic : diagnostic?.onEvent;
-  const expectedClient = typeof diagnostic === "object" ? diagnostic.expectedClient : null;
-  const diagnosticClientMarker = typeof diagnostic === "object" ? diagnostic.clientMarker : null;
+  const expectedClient = diagnostic && typeof diagnostic === "object" ? diagnostic.expectedClient : null;
+  const diagnosticClientMarker = diagnostic && typeof diagnostic === "object" ? diagnostic.clientMarker : null;
   const trace = (event, details) => {
     if (typeof diagnosticSink === "function") diagnosticSink({ event, ...details });
   };
