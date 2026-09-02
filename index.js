@@ -22,6 +22,7 @@ import authRoutes from "./routes/authRoutes.js";
 import foundationRoutes from "./routes/foundationRoutes.js";
 import documentRoutes from "./routes/documentRoutes.js";
 import analysisRunRoutes from "./routes/analysisRunRoutes.js";
+import aviationRoutes from "./routes/aviationRoutes.js";
 
 import copilotRoutes from "./routes/copilotRoutes.js";
 import operionRoutes from "./routes/operionRoutes.js";
@@ -108,6 +109,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/foundation", foundationRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/analysis-runs", analysisRunRoutes);
+app.use("/api/aviation", aviationRoutes);
 app.use("/api/media", mediaRoutes);
 app.use("/api/metrics", metricsRoutes);
 app.use("/api/dashboard", dashboardRoutes);

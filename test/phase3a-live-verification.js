@@ -289,6 +289,7 @@ async function applyMigrations(client, {
     "012_contract_risk_intelligence.sql",
     "013_nonproduction_validation_hardening.sql",
     "014_durable_ai_state_hardening.sql",
+    "015_aviation_intelligence_foundation.sql",
   ];
 
   for (const filename of migrationFiles) {

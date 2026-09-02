@@ -68,7 +68,7 @@ export default function ContractAssistantPanel({ analysisRunId, organizationId }
       {state === "error" && <p className="op-body-sm" style={{ color: "var(--op-signal-risk)", marginTop: "var(--op-space-4)" }}>{error}</p>}
       {result && (
         <div className="op-surface-inspector" aria-live="polite" style={{ padding: "var(--op-space-4)", marginTop: "var(--op-space-4)" }}>
-          <p className="op-kicker" style={{ marginBottom: "var(--op-space-2)" }}>{result.established ? "Evidence-backed answer" : "Not established"}</p>
+          <p className="op-kicker" style={{ marginBottom: "var(--op-space-2)" }}>{result.established ? "Evidence-backed answer" : "Insufficient evidence"}</p>
           <p className="op-body" style={{ marginBottom: "var(--op-space-4)" }}>{result.answer}</p>
           {result.findings?.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--op-space-2)", marginBottom: "var(--op-space-4)" }}>

@@ -23,6 +23,7 @@ const REQUIRED_MIGRATIONS = [
   "012_contract_risk_intelligence.sql",
   "013_nonproduction_validation_hardening.sql",
   "014_durable_ai_state_hardening.sql",
+  "015_aviation_intelligence_foundation.sql",
 ];
 
 const MIGRATION_SENTINELS = Object.freeze({
@@ -35,6 +36,7 @@ const MIGRATION_SENTINELS = Object.freeze({
   "012_contract_risk_intelligence.sql": ["column", "risks.risk_identity"],
   "013_nonproduction_validation_hardening.sql": ["policy", "ai_budget_member_select"],
   "014_durable_ai_state_hardening.sql": ["policy", "analysis_runs_member_select"],
+  "015_aviation_intelligence_foundation.sql": ["table", "aircraft_contract_relationships"],
 });
 
 const RLS_TABLES = Object.freeze([
@@ -47,6 +49,8 @@ const RLS_TABLES = Object.freeze([
   "recommendation_evidence", "party_evidence",
   "ai_intelligence_budgets", "ai_intelligence_jobs", "ai_intelligence_usage",
   "ai_intelligence_cache",
+  "aircraft", "aircraft_organization_relationships", "aviation_flights", "flight_positions",
+  "aircraft_contract_relationships",
 ]);
 
 function fail(code, message) {
@@ -91,7 +95,7 @@ async function migrationFiles() {
   }
   const requiredOrder = files.filter((file) => REQUIRED_MIGRATIONS.includes(file));
   if (JSON.stringify(requiredOrder) !== JSON.stringify(REQUIRED_MIGRATIONS)) {
-    fail("MIGRATION_ORDER_INVALID", "Migrations 006-014 are not ordered correctly");
+    fail("MIGRATION_ORDER_INVALID", "Migrations 006-015 are not ordered correctly");
   }
   return files;
 }
@@ -254,6 +258,8 @@ async function verifySchema(pool) {
     "clauses", "obligations", "deadlines", "risks", "recommendations", "contract_search_chunks",
     "contract_clauses", "contract_obligations", "clause_evidence", "obligation_evidence",
     "deadline_evidence", "risk_evidence", "recommendation_evidence", "party_evidence",
+    "aircraft", "aircraft_organization_relationships", "aviation_flights", "flight_positions",
+    "aircraft_contract_relationships",
   ];
   const broadServerOwnedPolicies = policies.rows.filter((policy) => policy.schemaname === "public"
     && serverOwnedTables.includes(policy.tablename) && policy.cmd !== "SELECT");

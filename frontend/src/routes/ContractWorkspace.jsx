@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Section, Container } from "../components/ui/Layout";
 import Reveal from "../components/ui/Reveal";
 import Button from "../components/ui/Button";
 import { LoadingState, ErrorState, EmptyState } from "../components/ui/States";
@@ -39,8 +38,6 @@ const INTELLIGENCE_SECTIONS = CONTRACT_INTELLIGENCE_HIERARCHY
     note: "No read endpoint is exposed for this layer in current frontend boundaries.",
   }));
 
-const HERO = "https://images.unsplash.com/photo-1569629743817-70d8db6c323b?auto=format&fit=crop&w=1800&q=82";
-
 function formatDeadlineTiming(deadline) {
   if (deadline.absolute_date) {
     return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })
@@ -60,27 +57,7 @@ export default function ContractDetail() {
   const { id } = useParams();
   const { organizationId } = useOrganization();
 
-  return (
-    <>
-      <section className="op-page-hero op-cinematic-hero" style={{ backgroundImage: `url(${HERO})` }}>
-        <div className="op-page-hero-overlay">
-          <Container>
-            <Reveal>
-              <p className="op-stitch-label">OPERION / CONTRACT WORKSPACE</p>
-              <h1>Contract workspace</h1>
-              <p>Open the document in a clean, full-height view starting from the top of the workspace.</p>
-            </Reveal>
-          </Container>
-        </div>
-      </section>
-
-      <Section>
-        <OrganizationGate>
-          <ContractWorkspace contractId={id} organizationId={organizationId} />
-        </OrganizationGate>
-      </Section>
-    </>
-  );
+  return <OrganizationGate><ContractWorkspace contractId={id} organizationId={organizationId} /></OrganizationGate>;
 }
 
 function ContractWorkspace({ contractId, organizationId }) {
@@ -340,19 +317,20 @@ function ContractWorkspace({ contractId, organizationId }) {
   };
 
   return (
-    <div>
-      <Reveal>
-        <p className="op-eyebrow">Contract</p>
-        <h1 className="op-heading-lg" style={{ marginBottom: "var(--op-space-2)" }}>
+    <div className="op-workspace-page">
+      <Reveal className="op-page-heading">
+        <div><span className="op-page-kicker">Contract workspace</span>
+        <h1>
           {contract.title}
         </h1>
-        <p className="op-body" style={{ marginBottom: "var(--op-space-6)" }}>
+        <p>
           Status: {contract.status} · Created {new Date(contract.created_at).toLocaleDateString()}
-        </p>
+        </p></div>
+        <span className={`op-status-badge${contract.status ? "" : " is-neutral"}`}>{contract.status || "Status unavailable"}</span>
       </Reveal>
 
-      <nav aria-label="Contract intelligence" className="op-surface-plane-secondary" style={{ position: "sticky", top: 12, zIndex: 5, display: "flex", flexWrap: "wrap", gap: "var(--op-space-2)", padding: "var(--op-space-3)", marginBottom: "var(--op-space-6)" }}>
-        {[["overview", "Overview"], ["clauses", "Clauses"], ["obligations", "Obligations"], ["deadlines", "Deadlines"], ["risks", "Risks"], ["assistant", "Assistant"]].map(([target, label]) => (
+      <nav aria-label="Contract intelligence" className="op-workspace-tabs">
+        {[["overview", "Overview"], ["clauses", "Clauses"], ["obligations", "Obligations"], ["deadlines", "Deadlines"], ["risks", "Risks"], ["evidence", "Evidence"], ["assistant", "Assistant"]].map(([target, label]) => (
           <a key={target} href={`#${target}`} className="op-btn op-btn-quiet">{label}</a>
         ))}
       </nav>
@@ -405,7 +383,7 @@ function ContractWorkspace({ contractId, organizationId }) {
               {analysisState === "processing" ? "Analysing clauses…" : "Analyse clauses"}
             </Button>}
             {analysisState === "error" && <p className="op-body-sm" style={{ color: "var(--op-signal-risk)", marginTop: "var(--op-space-3)" }}>{errorMessage}</p>}
-            <Button to={`/demo/contracts/${contractId}/analysis`} variant="secondary">View analysis</Button>
+            <Button to={`/app/contracts/${contractId}/analysis`} variant="secondary">View analysis</Button>
           </div>
         </div>
 
@@ -476,7 +454,7 @@ function ContractWorkspace({ contractId, organizationId }) {
         )}
       </Reveal>
 
-      <Reveal id="clauses" style={{ marginBottom: "var(--op-space-5)", scrollMarginTop: 90 }}>
+      <Reveal id="structure" style={{ marginBottom: "var(--op-space-5)", scrollMarginTop: 90 }}>
         <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-3)" }}>Structure</h2>
         {!structure.sections.length ? (
           <EmptyState title="No structural sections" description="The document has not produced structural records yet." />
@@ -493,7 +471,7 @@ function ContractWorkspace({ contractId, organizationId }) {
         )}
       </Reveal>
 
-      <Reveal style={{ marginBottom: "var(--op-space-5)" }}>
+      <Reveal id="clauses" style={{ marginBottom: "var(--op-space-5)", scrollMarginTop: 90 }}>
         <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-3)" }}>Clauses</h2>
         {!activeAnalysisRunId ? (
           <EmptyState title="No active analysis run selected" description="This contract has no active run selected, so no clause records can be shown yet." />
@@ -699,12 +677,32 @@ function ContractWorkspace({ contractId, organizationId }) {
         )}
       </Reveal>
 
+      <Reveal id="evidence" style={{ marginBottom: "var(--op-space-5)", scrollMarginTop: 90 }}>
+        <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-3)" }}>Evidence</h2>
+        {!activeAnalysisRunId ? (
+          <EmptyState title="No active analysis run selected" description="Evidence becomes available within a contract analysis run." />
+        ) : !evidence.length ? (
+          <EmptyState title="No evidence records available" description="The active analysis run has not returned persisted evidence records." />
+        ) : (
+          <div className="op-evidence-grid">
+            {evidence.map((item) => {
+              const source = item.source || item;
+              return <article className="op-evidence-card" key={item.id || item.evidence_id}>
+                <div className="op-row-between"><span className="op-page-kicker">Source evidence</span><span className="op-status-badge is-neutral">{source.page_number ? `Page ${source.page_number}` : "Page unavailable"}</span></div>
+                <strong>{source.source_locator || "Document location unavailable"}</strong>
+                <blockquote>{source.excerpt || "No excerpt is available for this evidence record."}</blockquote>
+              </article>;
+            })}
+          </div>
+        )}
+      </Reveal>
+
       <Reveal id="assistant" style={{ marginBottom: "var(--op-space-6)", scrollMarginTop: 90 }}>
         <ContractAssistantPanel analysisRunId={analysisRun?.id} organizationId={organizationId} />
       </Reveal>
 
       <Reveal>
-        <Link to="/demo/contracts" className="op-body" style={{ color: "var(--op-color-text-muted)" }}>
+        <Link to="/app/contracts" className="op-body" style={{ color: "var(--op-color-text-muted)" }}>
           ← Back to Contract Portfolio
         </Link>
       </Reveal>

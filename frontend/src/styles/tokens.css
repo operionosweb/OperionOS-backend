@@ -3,38 +3,38 @@
   color-scheme: light;
 
   /* Color roles */
-  --op-color-background: #f3f5f9;
+  --op-color-background: #f6f7fb;
   --op-color-surface: #ffffff;
-  --op-color-surface-raised: #f8f9fc;
-  --op-color-surface-overlay: rgba(255, 255, 255, 0.92);
-  --op-color-surface-inset: #eef2f8;
-  --op-color-text-primary: #11131a;
-  --op-color-text-secondary: #2b3446;
-  --op-color-text-muted: #53657a;
+  --op-color-surface-raised: #fbfbfe;
+  --op-color-surface-overlay: rgba(255, 255, 255, 0.9);
+  --op-color-surface-inset: #f0f2f9;
+  --op-color-text-primary: #11182c;
+  --op-color-text-secondary: #303a54;
+  --op-color-text-muted: #68718a;
   --op-color-text-inverse: #ffffff;
-  --op-color-border: #d7deea;
-  --op-color-border-strong: #bac5da;
-  --op-color-accent: #2468f2;
-  --op-color-accent-soft: rgba(36, 104, 242, 0.12);
-  --op-color-success: #12825f;
-  --op-color-warning: #a56c09;
-  --op-color-danger: #b03434;
-  --op-color-info: #2563eb;
+  --op-color-border: #e2e5ef;
+  --op-color-border-strong: #c8cede;
+  --op-color-accent: #6547ed;
+  --op-color-accent-soft: rgba(101, 71, 237, 0.1);
+  --op-color-success: #159769;
+  --op-color-warning: #c47a13;
+  --op-color-danger: #df3f53;
+  --op-color-info: #3975e8;
   --op-color-data-positive: #0f8c66;
   --op-color-data-negative: #cb3346;
-  --op-color-spatial-depth-1: #f7f8fc;
-  --op-color-spatial-depth-2: #e8edf8;
-  --op-color-spatial-depth-3: #dbe3f2;
-  --op-color-focus: #1d4ed8;
+  --op-color-spatial-depth-1: #fafaff;
+  --op-color-spatial-depth-2: #f0f1fb;
+  --op-color-spatial-depth-3: #e5e8f5;
+  --op-color-focus: #6547ed;
 
   /* Typography */
-  --op-font-display: "Segoe UI", "Inter", system-ui, -apple-system, sans-serif;
-  --op-font-heading: "Segoe UI", "Inter", system-ui, -apple-system, sans-serif;
-  --op-font-subheading: "Segoe UI", "Inter", system-ui, -apple-system, sans-serif;
-  --op-font-body: "Segoe UI", "Inter", system-ui, -apple-system, sans-serif;
-  --op-font-body-small: "Segoe UI", "Inter", system-ui, -apple-system, sans-serif;
-  --op-font-label: "Segoe UI", "Inter", system-ui, -apple-system, sans-serif;
-  --op-font-numeric: "Segoe UI", "Inter", system-ui, -apple-system, sans-serif;
+  --op-font-display: "Avenir Next", "Aptos Display", "Segoe UI", sans-serif;
+  --op-font-heading: "Avenir Next", "Aptos Display", "Segoe UI", sans-serif;
+  --op-font-subheading: "Avenir Next", "Aptos", "Segoe UI", sans-serif;
+  --op-font-body: "Avenir Next", "Aptos", "Segoe UI", sans-serif;
+  --op-font-body-small: "Avenir Next", "Aptos", "Segoe UI", sans-serif;
+  --op-font-label: "Avenir Next", "Aptos", "Segoe UI", sans-serif;
+  --op-font-numeric: "Avenir Next", "Aptos", "Segoe UI", sans-serif;
   --op-font-mono: "Cascadia Mono", "Consolas", "SFMono-Regular", Menlo, monospace;
   --op-font-evidence: "Cascadia Mono", "Consolas", "SFMono-Regular", Menlo, monospace;
 
@@ -62,15 +62,15 @@
   /* Radius semantics */
   --op-radius-tight: 8px;
   --op-radius-control: 12px;
-  --op-radius-panel: 18px;
-  --op-radius-shell: 24px;
+  --op-radius-panel: 14px;
+  --op-radius-shell: 18px;
   --op-radius-pill: 999px;
 
   /* Depth semantics */
   --op-depth-flat: none;
-  --op-depth-raised: 0 8px 24px rgba(20, 33, 61, 0.08);
-  --op-depth-floating: 0 18px 42px rgba(16, 28, 56, 0.14);
-  --op-depth-spatial: 0 26px 64px rgba(11, 20, 42, 0.2);
+  --op-depth-raised: 0 8px 24px rgba(27, 36, 72, 0.06);
+  --op-depth-floating: 0 18px 42px rgba(24, 30, 68, 0.11);
+  --op-depth-spatial: 0 26px 64px rgba(20, 25, 61, 0.16);
 
   /* Motion semantics */
   --op-motion-instant: 0ms;
@@ -102,7 +102,7 @@
   --op-text-faint: var(--op-color-text-secondary);
   --op-accent: var(--op-color-accent);
   --op-accent-soft: var(--op-color-accent-soft);
-  --op-accent-strong: #1856d7;
+  --op-accent-strong: #5135d5;
   --op-signal-risk: var(--op-color-danger);
   --op-signal-warn: var(--op-color-warning);
   --op-signal-good: var(--op-color-success);

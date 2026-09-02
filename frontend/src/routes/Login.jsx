@@ -32,7 +32,7 @@ export default function Login() {
       return;
     }
 
-    window.location.href = "/demo";
+    window.location.href = "/app";
   }
 
   return (
@@ -61,7 +61,7 @@ export default function Login() {
             </h1>
           </Reveal>
 
-          <Reveal as="form" onSubmit={handleSubmit} style={{ display: "grid", gap: "var(--op-space-3)" }}>
+          <Reveal as="form" className="op-login-form" onSubmit={handleSubmit} style={{ display: "grid", gap: "var(--op-space-3)" }}>
             <input
               type="email"
               required
@@ -93,6 +93,7 @@ export default function Login() {
 
             <button
               type="button"
+              className="op-login-mode-toggle"
               onClick={() => setMode(mode === "login" ? "signup" : "login")}
               style={{ background: "none", border: "none", color: "var(--op-text-muted)", cursor: "pointer", textAlign: "left" }}
             >

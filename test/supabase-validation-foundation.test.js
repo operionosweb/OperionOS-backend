@@ -45,9 +45,9 @@ test("migration-only mode rechecks emptiness, verifies schema, and skips fixture
   assert.doesNotMatch(migrationOnlyBranch, /runIntegration\s*\(/);
 });
 
-test("migration validation covers canonical migrations 006 through 014 in order", async () => {
+test("migration validation covers canonical migrations 006 through 015 in order", async () => {
   const harness = await read("test/supabase-validation.js");
-  const positions = Array.from({ length: 9 }, (_, index) => harness.indexOf(`\"${String(index + 6).padStart(3, "0")}`));
+  const positions = Array.from({ length: 10 }, (_, index) => harness.indexOf(`\"${String(index + 6).padStart(3, "0")}`));
   assert.ok(positions.every((position) => position >= 0));
   assert.deepEqual([...positions].sort((left, right) => left - right), positions);
 });
@@ -184,9 +184,9 @@ test("deadline and risk migrations preserve business days and prohibit probabili
   assert.match(risks, /affected_deadline_ids/);
 });
 
-test("clean database migration executor includes migrations 001 through 014", async () => {
+test("clean database migration executor includes migrations 001 through 015", async () => {
   const executor = await read("test/phase3a-live-verification.js");
-  const positions = Array.from({ length: 14 }, (_, index) => executor.indexOf(`\"${String(index + 1).padStart(3, "0")}`));
+  const positions = Array.from({ length: 15 }, (_, index) => executor.indexOf(`\"${String(index + 1).padStart(3, "0")}`));
   assert.ok(positions.every((position) => position >= 0));
   assert.deepEqual([...positions].sort((left, right) => left - right), positions);
 });
