@@ -14,12 +14,14 @@ import {
   listDocumentVersions,
   getDocumentStructure,
   getAnalysisRun,
+  processContractIntelligence,
+  getAnalysisRunProfile,
+  searchContractIntelligence,
   listAnalysisRunClauses,
   listAnalysisRunObligations,
   listAnalysisRunDeadlines,
   listAnalysisRunRisks,
   listAnalysisRunEvidence,
-  analyzeClauses,
   getObligationEstimate,
   getRiskEstimate,
   analyzeObligations,
@@ -66,13 +68,17 @@ function ContractWorkspace({ contractId, organizationId }) {
   const [documents, setDocuments] = useState([]);
   const [structure, setStructure] = useState({ pages: [], sections: [], chunks: [] });
   const [latestVersionId, setLatestVersionId] = useState("");
-  const [analysisState, setAnalysisState] = useState("idle");
   const [analysisRun, setAnalysisRun] = useState(null);
   const [clauses, setClauses] = useState([]);
   const [obligations, setObligations] = useState([]);
   const [deadlines, setDeadlines] = useState([]);
   const [risks, setRisks] = useState([]);
   const [evidence, setEvidence] = useState([]);
+  const [profile, setProfile] = useState(null);
+  const [processingState, setProcessingState] = useState("idle");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchState, setSearchState] = useState("idle");
   const [obligationEstimate, setObligationEstimate] = useState(null);
   const [riskEstimate, setRiskEstimate] = useState(null);
   const [obligationAnalysisState, setObligationAnalysisState] = useState("idle");
@@ -159,8 +165,9 @@ function ContractWorkspace({ contractId, organizationId }) {
           listAnalysisRunDeadlines(nextAnalysisRunId, organizationId),
           listAnalysisRunRisks(nextAnalysisRunId, organizationId),
           listAnalysisRunEvidence(nextAnalysisRunId, organizationId),
+          getAnalysisRunProfile(nextAnalysisRunId, organizationId).catch(() => null),
         ])
-          .then(([analysisRunResult, clausesResult, obligationsResult, deadlinesResult, risksResult, evidenceResult]) => {
+          .then(([analysisRunResult, clausesResult, obligationsResult, deadlinesResult, risksResult, evidenceResult, profileResult]) => {
             if (cancelled) return;
             setAnalysisRun(analysisRunResult?.analysisRun || null);
             setClauses(clausesResult?.clauses || []);
@@ -168,6 +175,7 @@ function ContractWorkspace({ contractId, organizationId }) {
             setDeadlines(deadlinesResult?.deadlines || []);
             setRisks(risksResult?.risks || []);
             setEvidence(evidenceResult?.evidence || []);
+            setProfile(profileResult?.profile || null);
             setState("ready");
           })
           .catch((error) => {
@@ -179,6 +187,7 @@ function ContractWorkspace({ contractId, organizationId }) {
             setDeadlines([]);
             setRisks([]);
             setEvidence([]);
+            setProfile(null);
             setState("error");
           });
       })
@@ -192,6 +201,59 @@ function ContractWorkspace({ contractId, organizationId }) {
       cancelled = true;
     };
   }, [contractId, organizationId]);
+
+  useEffect(() => {
+    if (processingState !== "processing" || !activeAnalysisRunId) return undefined;
+    const timer = window.setInterval(() => {
+      getAnalysisRun(activeAnalysisRunId, organizationId)
+        .then((result) => setAnalysisRun(result?.analysisRun || null))
+        .catch(() => {});
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [processingState, activeAnalysisRunId, organizationId]);
+
+  async function handleFullProcessing() {
+    if (!analysisRun?.id) return;
+    setProcessingState("processing");
+    setErrorMessage("");
+    try {
+      await processContractIntelligence(analysisRun.id, organizationId);
+      const [runResult, clausesResult, obligationsResult, deadlinesResult, risksResult, evidenceResult, profileResult] = await Promise.all([
+        getAnalysisRun(analysisRun.id, organizationId),
+        listAnalysisRunClauses(analysisRun.id, organizationId),
+        listAnalysisRunObligations(analysisRun.id, organizationId),
+        listAnalysisRunDeadlines(analysisRun.id, organizationId),
+        listAnalysisRunRisks(analysisRun.id, organizationId),
+        listAnalysisRunEvidence(analysisRun.id, organizationId),
+        getAnalysisRunProfile(analysisRun.id, organizationId),
+      ]);
+      setAnalysisRun(runResult?.analysisRun || null);
+      setClauses(clausesResult?.clauses || []);
+      setObligations(obligationsResult?.obligations || []);
+      setDeadlines(deadlinesResult?.deadlines || []);
+      setRisks(risksResult?.risks || []);
+      setEvidence(evidenceResult?.evidence || []);
+      setProfile(profileResult?.profile || null);
+      setProcessingState("ready");
+    } catch (error) {
+      setErrorMessage(error.message || "Contract intelligence processing failed.");
+      setProcessingState("error");
+    }
+  }
+
+  async function handleSearch(event) {
+    event.preventDefault();
+    if (!analysisRun?.id || !searchQuery.trim()) return;
+    setSearchState("loading");
+    try {
+      const result = await searchContractIntelligence(analysisRun.id, organizationId, searchQuery.trim());
+      setSearchResults(result?.results || []);
+      setSearchState("ready");
+    } catch (error) {
+      setErrorMessage(error.message || "Contract search failed.");
+      setSearchState("error");
+    }
+  }
 
   useEffect(() => {
     if (!analysisRun?.id || obligations.length) return undefined;
@@ -233,20 +295,6 @@ function ContractWorkspace({ contractId, organizationId }) {
     } catch (error) {
       setErrorMessage(error.message || "Obligation analysis could not be completed.");
       setObligationAnalysisState("error");
-    }
-  }
-
-  async function handleClauseAnalysis() {
-    if (!analysisRun?.id) return;
-    setAnalysisState("processing");
-    try {
-      const result = await analyzeClauses(analysisRun.id, organizationId);
-      setAnalysisRun(result?.analysisRun || analysisRun);
-      setClauses(result?.clauses || []);
-      setAnalysisState("ready");
-    } catch (error) {
-      setErrorMessage(error.message || "Clause analysis could not be completed.");
-      setAnalysisState("error");
     }
   }
 
@@ -379,10 +427,10 @@ function ContractWorkspace({ contractId, organizationId }) {
             <p className="op-body-sm" style={{ marginBottom: "var(--op-space-4)" }}>
               {analysisRun?.status ? `Active analysis run: ${analysisRun.status}` : "Clause analysis has not been requested for this document."}
             </p>
-            {analysisRun && !clauses.length && <Button type="button" variant="primary" onClick={handleClauseAnalysis} disabled={analysisState === "processing"}>
-              {analysisState === "processing" ? "Analysing clauses…" : "Analyse clauses"}
+            {analysisRun && analysisRun.status !== "completed" && <Button type="button" variant="primary" onClick={handleFullProcessing} disabled={processingState === "processing"}>
+              {processingState === "processing" ? "Understanding contract…" : analysisRun.status === "failed" ? "Retry processing" : "Process contract"}
             </Button>}
-            {analysisState === "error" && <p className="op-body-sm" style={{ color: "var(--op-signal-risk)", marginTop: "var(--op-space-3)" }}>{errorMessage}</p>}
+            {processingState === "error" && <p className="op-body-sm" style={{ color: "var(--op-signal-risk)", marginTop: "var(--op-space-3)" }}>{errorMessage}</p>}
             <Button to={`/app/contracts/${contractId}/analysis`} variant="secondary">View analysis</Button>
           </div>
         </div>
@@ -411,6 +459,44 @@ function ContractWorkspace({ contractId, organizationId }) {
           </div>
         </div>
       </Reveal>
+
+      {profile && (
+        <Reveal style={{ marginBottom: "var(--op-space-6)" }}>
+          <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-3)" }}>Grounded contract summary</h2>
+          <div className="op-surface-plane-primary" style={{ padding: "var(--op-space-5)" }}>
+            <p className="op-body" style={{ marginBottom: "var(--op-space-4)" }}>{profile.executive_summary}</p>
+            <div className="op-grid op-grid-3">
+              <div><span className="op-kicker">Type</span><p className="op-body-sm">{profile.metadata?.contractType?.replaceAll("_", " ") || "Not established"}</p></div>
+              <div><span className="op-kicker">Effective</span><p className="op-body-sm">{profile.metadata?.effectiveDate || "Not established"}</p></div>
+              <div><span className="op-kicker">Expires</span><p className="op-body-sm">{profile.metadata?.expirationDate || "Not established"}</p></div>
+              <div><span className="op-kicker">Governing law</span><p className="op-body-sm">{profile.metadata?.governingLaw || "Not established"}</p></div>
+              <div><span className="op-kicker">Currency</span><p className="op-body-sm">{profile.metadata?.currency || "Not established"}</p></div>
+              <div><span className="op-kicker">Confidence</span><p className="op-body-sm">{Math.round(Number(profile.confidence || 0) * 100)}%</p></div>
+            </div>
+          </div>
+        </Reveal>
+      )}
+
+      {analysisRun?.status === "completed" && (
+        <Reveal style={{ marginBottom: "var(--op-space-6)" }}>
+          <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-3)" }}>Search this contract</h2>
+          <form onSubmit={handleSearch} className="op-surface-plane-secondary" style={{ padding: "var(--op-space-4)" }}>
+            <div style={{ display: "flex", gap: "var(--op-space-2)", alignItems: "end", flexWrap: "wrap" }}>
+              <label className="op-body-sm" style={{ flex: "1 1 260px" }}>Contract text
+                <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search clauses and terms" style={{ width: "100%" }} />
+              </label>
+              <Button type="submit" variant="primary" disabled={searchState === "loading"}>{searchState === "loading" ? "Searching…" : "Search"}</Button>
+            </div>
+            {searchState === "ready" && !searchResults.length && <p className="op-body-sm" style={{ marginTop: "var(--op-space-3)" }}>No matching contract text was found.</p>}
+            {!!searchResults.length && <div className="op-list-table" style={{ marginTop: "var(--op-space-4)" }}>{searchResults.map((result) => (
+              <div key={result.id} className="op-list-row" style={{ gridTemplateColumns: "auto 1fr" }}>
+                <span className="op-badge">{result.page_start ? `Page ${result.page_start}` : "Page unavailable"}</span>
+                <span className="op-body-sm">{result.text_content}</span>
+              </div>
+            ))}</div>}
+          </form>
+        </Reveal>
+      )}
 
       <Reveal style={{ marginBottom: "var(--op-space-6)" }}>
         <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-3)" }}>Intelligence overview</h2>

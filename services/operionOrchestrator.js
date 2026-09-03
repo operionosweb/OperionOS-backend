@@ -1,5 +1,5 @@
-import clauseReasoningEngine from "../clauseReasoningEngine.js";
-import contractCopilotEngine from "../contractCopilotEngine.js";
+import clauseExtractionService from "./clauseExtractionService.js";
+import { generateContractCopilot } from "../contractCopilotEngine.js";
 
 class OperionOrchestrator {
   async analyzeContract(input) {
@@ -10,15 +10,15 @@ class OperionOrchestrator {
       // 1. CLAUSE EXTRACTION ONLY
       // =========================
       const clauses =
-        await clauseReasoningEngine.extractClauses(contract_text);
+        clauseExtractionService.extractClauses([contract_text]);
 
       // =========================
       // 2. SINGLE AI DECISION ENGINE
       // =========================
       const copilotResult =
-        await contractCopilotEngine.generateContractCopilot({
+        await generateContractCopilot({
           contract: { clauses },
-          company_context: context,
+          tenant: context,
         });
 
       // =========================

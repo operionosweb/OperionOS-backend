@@ -6,6 +6,8 @@ import {
   readAnalysisRunClauses,
   readAnalysisRunEvidence,
   readAnalysisRunObligations,
+  readAnalysisRunProfile,
+  searchAnalysisRun,
 } from "../routes/analysisRunRoutes.js";
 
 const ORG_ID = "11111111-1111-4111-8111-111111111111";
@@ -196,6 +198,44 @@ test("readAnalysisRunEvidence rejects cross-tenant analysis runs", async () => {
     analysisRunRepository: createAnalysisRunRepository({ id: RUN_ID, organization_id: OTHER_ORG_ID }),
     evidenceRepository: { async listByRun() { throw new Error("must not query evidence"); } },
   }), (error) => error.code === "ANALYSIS_RUN_NOT_FOUND");
+});
+
+test("profile and search readers are sanitized and tenant scoped", async () => {
+  const analysisRunRepository = createAnalysisRunRepository({ id: RUN_ID, organization_id: ORG_ID });
+  const profile = await readAnalysisRunProfile({
+    organizationId: ORG_ID,
+    analysisRunId: RUN_ID,
+    analysisRunRepository,
+    profileRepository: {
+      async getByRun(scope) {
+        assert.deepEqual(scope, { organizationId: ORG_ID, analysisRunId: RUN_ID });
+        return { id: "profile-1", organization_id: ORG_ID, contract_id: "contract-1", document_id: "document-1", document_version_id: DOCUMENT_VERSION_ID, executive_summary: "Grounded summary" };
+      },
+    },
+  });
+  assert.deepEqual(profile, { id: "profile-1", executive_summary: "Grounded summary" });
+
+  const results = await searchAnalysisRun({
+    organizationId: ORG_ID,
+    analysisRunId: RUN_ID,
+    query: "maintenance reserve",
+    limit: 5,
+    analysisRunRepository,
+    searchRepository: {
+      async search(input) {
+        assert.deepEqual(input, { organizationId: ORG_ID, analysisRunId: RUN_ID, query: "maintenance reserve", limit: 5 });
+        return [{ id: "chunk-1", page_start: 7 }];
+      },
+    },
+  });
+  assert.deepEqual(results, [{ id: "chunk-1", page_start: 7 }]);
+});
+
+test("profile and search readers reject foreign runs before downstream access", async () => {
+  const analysisRunRepository = createAnalysisRunRepository({ id: RUN_ID, organization_id: OTHER_ORG_ID });
+  const unreachable = new Proxy({}, { get() { return async () => { throw new Error("must not query downstream repository"); }; } });
+  await assert.rejects(() => readAnalysisRunProfile({ organizationId: ORG_ID, analysisRunId: RUN_ID, analysisRunRepository, profileRepository: unreachable }), (error) => error.code === "ANALYSIS_RUN_NOT_FOUND");
+  await assert.rejects(() => searchAnalysisRun({ organizationId: ORG_ID, analysisRunId: RUN_ID, query: "rent", analysisRunRepository, searchRepository: unreachable }), (error) => error.code === "ANALYSIS_RUN_NOT_FOUND");
 });
 
 test("analysis-run assistant passes the authoritative tenant scope to every reader", async () => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseDocumentStructure } from "../services/documentStructureService.js";
+import { buildAnalysisPageRows, parseDocumentStructure } from "../services/documentStructureService.js";
 
 test("document structure parser derives pages, sections, subsections, and chunks", () => {
   const text = [
@@ -42,4 +42,24 @@ test("document structure parser rejects missing text", () => {
     () => parseDocumentStructure({ text: "" }),
     (error) => error.code === "SOURCE_TEXT_UNAVAILABLE" && error.status === 422
   );
+});
+
+test("analysis page rows retain tenant, run, page, and character provenance", () => {
+  const structure = parseDocumentStructure({ text: "Page one\fPage two" });
+  const rows = buildAnalysisPageRows({
+    organizationId: "11111111-1111-4111-8111-111111111111",
+    contractId: "22222222-2222-4222-8222-222222222222",
+    documentId: "33333333-3333-4333-8333-333333333333",
+    documentVersionId: "44444444-4444-4444-8444-444444444444",
+    analysisRunId: "55555555-5555-4555-8555-555555555555",
+    pages: structure.pages,
+  });
+
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows.map((row) => row.page_number), [1, 2]);
+  assert.ok(rows.every((row) => row.organization_id === "11111111-1111-4111-8111-111111111111"));
+  assert.ok(rows.every((row) => row.analysis_run_id === "55555555-5555-4555-8555-555555555555"));
+  assert.equal(rows[1].text_content, "Page two");
+  assert.equal(rows[1].char_start, 9);
+  assert.match(rows[1].text_hash, /^[0-9a-f]{64}$/);
 });

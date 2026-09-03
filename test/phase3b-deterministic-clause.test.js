@@ -462,6 +462,9 @@ test("canonical source page adapter and atomic persistence boundaries", async (s
 
     assert.deepEqual(source.pages.map((page) => page.page_number), [1, 2]);
     assert.deepEqual(source.pages.map((page) => page.text_content), ["Page one", "Page two"]);
+    assert.equal(source.pageBoundaries, "explicit");
+    assert.equal(source.sourceStatus, "extracted");
+    assert.match(source.sourceLocator(10, text.length), /page:2:char:10-18$/);
   });
 
   await suite.test("runDeterministicClauseStage preserves atomic persistence contract", async () => {

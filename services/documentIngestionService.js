@@ -121,10 +121,34 @@ export function calculateSha256(buffer) {
   return crypto.createHash("sha256").update(buffer).digest("hex");
 }
 
+export async function renderPdfPage(pageData) {
+  const content = await pageData.getTextContent({
+    normalizeWhitespace: false,
+    disableCombineTextItems: false,
+  });
+  let previousY = null;
+  let pageText = "";
+  for (const item of content.items || []) {
+    const currentY = item.transform?.[5] ?? null;
+    const separator = pageText && previousY !== null && currentY !== previousY ? "\n" : pageText ? " " : "";
+    pageText += `${separator}${item.str || ""}`;
+    previousY = currentY;
+  }
+  return pageText;
+}
+
 async function parsePdf(buffer) {
   try {
-    const parsed = await pdfParse(buffer);
-    const text = typeof parsed.text === "string" ? parsed.text : "";
+    const pages = [];
+    const parsed = await pdfParse(buffer, {
+      pagerender: async (pageData) => {
+        const pageText = await renderPdfPage(pageData);
+        pages.push(pageText);
+        return pageText;
+      },
+    });
+    const fallbackText = typeof parsed.text === "string" ? parsed.text : "";
+    const text = pages.length ? pages.join("\f") : fallbackText;
     const pageCount = Number(parsed.numpages) || null;
 
     if (!pageCount) {
@@ -134,11 +158,17 @@ async function parsePdf(buffer) {
     return {
       pageCount,
       text,
+      pages: pages.map((pageText, index) => ({
+        pageNumber: index + 1,
+        text: pageText,
+      })),
       requiresOcr: text.trim().length < 20,
     };
   } catch (error) {
     if (error.code === "INVALID_PDF") throw error;
-    throw appError("INVALID_PDF", "The PDF could not be parsed");
+    const invalidPdf = appError("INVALID_PDF", "The PDF could not be parsed");
+    invalidPdf.cause = error;
+    throw invalidPdf;
   }
 }
 
@@ -584,6 +614,7 @@ export async function ingestContractUpload({
       contractId: createdContractId,
       documentId: createdDocumentId,
       documentVersionId: version.id,
+      analysisRunId,
       structure,
     });
     await updateStatus({

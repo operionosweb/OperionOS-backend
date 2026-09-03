@@ -17,7 +17,7 @@ test("upload hands the created contract identity back to the portfolio workflow"
   assert.match(portfolio, /navigate\(`\/demo\/contracts\/\$\{result\.contractId\}`\)/);
 });
 
-test("upload-created analysis selection is isolated per contract and used by deterministic clause analysis", async () => {
+test("upload-created analysis selection is isolated per contract and used by deterministic contract processing", async () => {
   const [portfolio, workspace, analysis, api] = await Promise.all([
     read("frontend/src/routes/ContractPortfolio.jsx"),
     read("frontend/src/routes/ContractWorkspace.jsx"),
@@ -26,8 +26,8 @@ test("upload-created analysis selection is isolated per contract and used by det
   ]);
   assert.match(workspace, /operion\.activeAnalysisRunId\.\$\{contractId\}/);
   assert.match(portfolio, /localStorage\.setItem\(`operion\.activeAnalysisRunId\.\$\{result\.contractId\}`, result\.analysisRunId\)/);
-  assert.match(api, /\/api\/analysis-runs\/\$\{analysisRunId\}\/clauses\/analyze/);
-  assert.match(workspace, /analyzeClauses\(analysisRun\.id, organizationId\)/);
+  assert.match(api, /\/api\/analysis-runs\/\$\{analysisRunId\}\/process/);
+  assert.match(workspace, /processContractIntelligence\(analysisRun\.id, organizationId\)/);
   assert.match(analysis, /operion\.activeAnalysisRunId\.\$\{contractId\}/);
   assert.doesNotMatch(workspace, /getItem\("operion\.activeAnalysisRunId"\)/);
   assert.doesNotMatch(workspace, /ContractSpatialBridge/);
@@ -39,7 +39,7 @@ test("contract workspace exposes the complete intelligence navigation", async ()
     assert.match(workspace, new RegExp(`\\["${target}", "${label}"\\]`));
     assert.match(workspace, new RegExp(`id="${target}"`));
   }
-  assert.match(workspace, /Analyse clauses/);
+  assert.match(workspace, /Process contract/);
   assert.match(workspace, /Analyse obligations/);
   assert.match(workspace, /Build deadline intelligence/);
   assert.match(workspace, /Analyse contractual risks/);

@@ -1,0 +1,36 @@
+SYNTHETIC AIRCRAFT LEASE AGREEMENT
+Agreement Number: SYN-LEASE-2026-001
+
+This synthetic test agreement is made between Northstar Aviation Leasing Ltd. (the "Lessor") and Example Airways Ltd. (the "Lessee").
+
+1. AIRCRAFT
+Aircraft Registration: G-SYN1
+Aircraft MSN: 98765
+
+2. TERM
+Effective Date: 1 January 2026.
+Expiration Date: 31 December 2031.
+
+3. RENT
+The Lessee shall pay monthly rent of USD 250,000 on the first business day of each month.
+
+4. MAINTENANCE AND AIRWORTHINESS
+The Lessee shall maintain the Aircraft in an airworthy condition and comply with the approved maintenance programme.
+
+5. INSURANCE
+The Lessee shall maintain hull and liability insurance throughout the Term and provide renewal evidence no later than 15 days before policy expiry.
+
+6. TECHNICAL RECORDS
+Within 10 business days after each shop visit, the Lessee shall provide complete maintenance records to the Lessor.
+
+7. RETURN CONDITIONS
+On the Expiration Date, the Lessee shall return the Aircraft with complete technical records and in the condition required by this Agreement.
+
+8. TERMINATION AND NOTICE
+The Lessor may terminate this Agreement following an uncured material default. Notice must be given within 30 days after the default notice.
+
+9. COMPLIANCE
+The Lessee shall operate the Aircraft in compliance with applicable aviation laws and airworthiness directives.
+
+10. GOVERNING LAW
+This Agreement is governed by the laws of England and Wales.

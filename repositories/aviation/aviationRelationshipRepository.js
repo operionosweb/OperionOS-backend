@@ -3,6 +3,44 @@ import { assertOrganizationScope, assertResourceId } from "../phase3/scope.js";
 
 export function createAviationRelationshipRepository(queryFn = query) {
   return {
+    async materializeContractRelationships({ organizationId, contractId, relationshipType, identifiers }) {
+      assertOrganizationScope(organizationId);
+      assertResourceId(contractId, "contractId");
+      const supported = (identifiers || []).filter((identifier) =>
+        ["AIRCRAFT_REGISTRATION", "AIRCRAFT_MSN"].includes(identifier.type)
+        && identifier.value
+        && identifier.evidence?.evidenceId
+      );
+      const relationships = [];
+      for (const identifier of supported) {
+        const aircraftColumn = identifier.type === "AIRCRAFT_REGISTRATION" ? "registration" : "serial_number";
+        const result = await queryFn(
+          `insert into aircraft_contract_relationships (
+             organization_id, aircraft_id, contract_id, relationship_type, active,
+             confidence, source_reference, source_identifier, source_evidence_id
+           )
+           select $1, aircraft.id, $2, $3, true, $4, $5, $6, $7
+           from aircraft
+           join aircraft_organization_relationships organization_relationship
+             on organization_relationship.aircraft_id = aircraft.id
+            and organization_relationship.organization_id = $1
+            and organization_relationship.active = true
+           where upper(aircraft.${aircraftColumn}) = upper($8)
+           on conflict (organization_id, aircraft_id, contract_id, relationship_type)
+           do update set active = true, confidence = excluded.confidence,
+             source_reference = excluded.source_reference,
+             source_identifier = excluded.source_identifier,
+             source_evidence_id = excluded.source_evidence_id
+           returning *`,
+          [organizationId, contractId, relationshipType, identifier.evidence.confidence || null,
+            identifier.evidence.sourceLocation || null, `${identifier.type}:${identifier.value}`,
+            identifier.evidence.evidenceId, identifier.value]
+        );
+        relationships.push(...result.rows);
+      }
+      return relationships;
+    },
+
     async listAircraftIdsByOrganization(organizationId) {
       assertOrganizationScope(organizationId);
       const result = await queryFn(

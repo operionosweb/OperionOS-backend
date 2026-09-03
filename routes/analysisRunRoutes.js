@@ -10,11 +10,14 @@ import { createObligationRepository } from "../repositories/phase3/obligationRep
 import { createDeadlineRepository } from "../repositories/phase3/deadlineRepository.js";
 import { createRiskRepository } from "../repositories/phase3/riskRepository.js";
 import { createEvidenceRepository } from "../repositories/phase3/evidenceRepository.js";
+import { createContractProfileRepository } from "../repositories/phase3/contractProfileRepository.js";
+import { createSearchChunkRepository } from "../repositories/phase3/searchChunkRepository.js";
 import { runDeterministicClauseStage } from "../services/phase3/intelligence/deterministicClauseService.js";
 import { createDeterministicObligationService, createGatewayObligationProvider } from "../services/phase3/intelligence/deterministicObligationService.js";
 import { createDeadlineIntelligenceService, createGatewayDeadlineProvider } from "../services/phase3/intelligence/deadlineIntelligenceService.js";
 import { createContractRiskIntelligenceService, createGatewayRiskProvider } from "../services/phase3/intelligence/contractRiskIntelligenceService.js";
 import { answerContractQuestion } from "../services/phase3/intelligence/contractAssistantService.js";
+import { createContractIntelligencePipeline } from "../services/phase3/analysis/contractIntelligencePipeline.js";
 import { aiGateway } from "../services/ai/aiGateway.js";
 import { assertOrganizationScope, assertResourceId } from "../repositories/phase3/scope.js";
 import supabase from "../config/supabase.js";
@@ -91,6 +94,18 @@ function sanitizeEvidence(row) {
     ...safeEvidence
   } = row;
   return safeEvidence;
+}
+
+function sanitizeProfile(row) {
+  if (!row) return null;
+  const {
+    organization_id: _organizationId,
+    contract_id: _contractId,
+    document_id: _documentId,
+    document_version_id: _documentVersionId,
+    ...safeProfile
+  } = row;
+  return safeProfile;
 }
 
 async function resolveAnalysisRunScope({ organizationId, analysisRunId, analysisRunRepository, documentVersionResolver }) {
@@ -245,6 +260,47 @@ export async function readAnalysisRunEvidence({
   return (await evidenceRepository.listByRun({ organizationId, analysisRunId })).map(sanitizeEvidence);
 }
 
+export async function processAnalysisRun({
+  organizationId,
+  analysisRunId,
+  userId = null,
+  pipeline = createContractIntelligencePipeline(),
+}) {
+  return pipeline.run({ organizationId, analysisRunId, userId });
+}
+
+export async function readAnalysisRunProfile({
+  organizationId,
+  analysisRunId,
+  analysisRunRepository = createAnalysisRunRepository(),
+  profileRepository = createContractProfileRepository(),
+}) {
+  assertOrganizationScope(organizationId);
+  assertResourceId(analysisRunId, "analysisRunId");
+  const run = await analysisRunRepository.getById(analysisRunId, organizationId);
+  if (!run || run.organization_id !== organizationId) throw Object.assign(new Error("Analysis run not found"), { code: "ANALYSIS_RUN_NOT_FOUND", status: 404 });
+  const profile = await profileRepository.getByRun({ organizationId, analysisRunId });
+  if (!profile) throw Object.assign(new Error("Contract profile not found"), { code: "CONTRACT_PROFILE_NOT_FOUND", status: 404 });
+  return sanitizeProfile(profile);
+}
+
+export async function searchAnalysisRun({
+  organizationId,
+  analysisRunId,
+  query,
+  limit,
+  analysisRunRepository = createAnalysisRunRepository(),
+  searchRepository = createSearchChunkRepository(),
+}) {
+  assertOrganizationScope(organizationId);
+  assertResourceId(analysisRunId, "analysisRunId");
+  const run = await analysisRunRepository.getById(analysisRunId, organizationId);
+  if (!run || run.organization_id !== organizationId) throw Object.assign(new Error("Analysis run not found"), { code: "ANALYSIS_RUN_NOT_FOUND", status: 404 });
+  const normalizedQuery = String(query || "").trim();
+  if (!normalizedQuery) throw Object.assign(new Error("Search query is required"), { code: "SEARCH_QUERY_REQUIRED", status: 400 });
+  return searchRepository.search({ organizationId, analysisRunId, query: normalizedQuery, limit });
+}
+
 export async function answerAnalysisRunQuestion({
   organizationId,
   analysisRunId,
@@ -283,6 +339,45 @@ router.get("/:id", async (req, res) => {
     return res.json({ success: true, analysisRun });
   } catch (error) {
     return res.status(error.status || (error.code === "STORAGE_ERROR" ? 503 : 404)).json(normalizeAnalysisRunError(error));
+  }
+});
+
+async function runContractIntelligence(req, res) {
+  try {
+    const result = await processAnalysisRun({
+      organizationId: req.organization.id,
+      analysisRunId: req.params.id,
+      userId: req.user.id,
+    });
+    return res.status(result.status === "already_processed" ? 200 : 201).json({ success: true, ...result });
+  } catch (error) {
+    return res.status(error.status || (error.code === "STORAGE_ERROR" ? 503 : 409)).json(normalizeAnalysisRunError(error));
+  }
+}
+
+router.post("/:id/process", requireOrganizationPermission("contract:write"), runContractIntelligence);
+router.post("/:id/retry", requireOrganizationPermission("contract:write"), runContractIntelligence);
+
+router.get("/:id/profile", async (req, res) => {
+  try {
+    const profile = await readAnalysisRunProfile({ organizationId: req.organization.id, analysisRunId: req.params.id });
+    return res.json({ success: true, profile });
+  } catch (error) {
+    return res.status(error.status || 404).json(normalizeAnalysisRunError(error));
+  }
+});
+
+router.get("/:id/search", async (req, res) => {
+  try {
+    const results = await searchAnalysisRun({
+      organizationId: req.organization.id,
+      analysisRunId: req.params.id,
+      query: req.query.q,
+      limit: req.query.limit,
+    });
+    return res.json({ success: true, results });
+  } catch (error) {
+    return res.status(error.status || 400).json(normalizeAnalysisRunError(error));
   }
 });
 

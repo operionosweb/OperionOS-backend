@@ -8,12 +8,14 @@ import { fileURLToPath } from "node:url";
 import {
   calculateSha256,
   extractPdfMetadata,
+  renderPdfPage,
   validateDocumentFile,
   validatePdfFile,
 } from "../services/documentIngestionService.js";
 import { buildDocumentStorageKey } from "../services/documentStorageService.js";
 
 const repositoryRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+
 test("PDF signature and metadata validation are server-controlled", () => {
   const buffer = Buffer.from("%PDF-1.7\nsource bytes");
   const file = validatePdfFile({
@@ -52,6 +54,31 @@ test("parseable image-like PDF is marked as requiring OCR", async () => {
 
   assert.ok(metadata.pageCount > 0);
   assert.equal(metadata.requiresOcr, true);
+});
+
+test("PDF extraction preserves real page boundaries and page order", async () => {
+  const metadata = await extractPdfMetadata(
+    await fs.readFile(path.join(repositoryRoot, "test.pdf"))
+  );
+
+  assert.equal(metadata.pageCount, 6);
+  assert.equal(metadata.pages.length, 6);
+  assert.deepEqual(metadata.pages.map((page) => page.pageNumber), [1, 2, 3, 4, 5, 6]);
+  assert.equal(metadata.text, metadata.pages.map((page) => page.text).join("\f"));
+});
+
+test("PDF page rendering preserves text order and line boundaries", async () => {
+  const pageText = await renderPdfPage({
+    getTextContent: async () => ({
+      items: [
+        { str: "2. MAINTENANCE", transform: [1, 0, 0, 1, 0, 720] },
+        { str: "The Lessee shall", transform: [1, 0, 0, 1, 0, 696] },
+        { str: "maintain the Aircraft.", transform: [1, 0, 0, 1, 120, 696] },
+      ],
+    }),
+  });
+
+  assert.equal(pageText, "2. MAINTENANCE\nThe Lessee shall maintain the Aircraft.");
 });
 
 test("renamed non-PDF, empty, and oversized files are rejected", () => {

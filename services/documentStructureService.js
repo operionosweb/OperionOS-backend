@@ -100,11 +100,31 @@ export function parseDocumentStructure({ text, chunkSize = DEFAULT_CHUNK_SIZE } 
   };
 }
 
-export async function persistDocumentStructure({ supabase, organizationId, contractId, documentId, documentVersionId, structure }) {
-  if (!supabase || !organizationId || !contractId || !documentId || !documentVersionId || !structure) throw new TypeError("Structure persistence context is incomplete");
+export function buildAnalysisPageRows({ organizationId, contractId, documentId, documentVersionId, analysisRunId, pages }) {
+  if (!organizationId || !contractId || !documentId || !documentVersionId || !analysisRunId || !Array.isArray(pages)) {
+    throw new TypeError("Analysis page persistence context is incomplete");
+  }
+  return pages.map((page) => ({
+    organization_id: organizationId,
+    contract_id: contractId,
+    document_id: documentId,
+    document_version_id: documentVersionId,
+    analysis_run_id: analysisRunId,
+    page_number: page.pageNumber,
+    text_content: page.text,
+    text_length: page.text.length,
+    char_start: page.charStart,
+    char_end: page.charEnd,
+    text_hash: crypto.createHash("sha256").update(page.text).digest("hex"),
+    extraction_status: "completed",
+  }));
+}
+
+export async function persistDocumentStructure({ supabase, organizationId, contractId, documentId, documentVersionId, analysisRunId, structure }) {
+  if (!supabase || !organizationId || !contractId || !documentId || !documentVersionId || !analysisRunId || !structure) throw new TypeError("Structure persistence context is incomplete");
   const sectionIds = [];
   if (structure.pages.length) {
-    const { error } = await supabase.from("contract_document_pages").insert(structure.pages.map((page) => ({
+    const documentPageRows = structure.pages.map((page) => ({
       organization_id: organizationId,
       contract_id: contractId,
       document_id: documentId,
@@ -115,8 +135,13 @@ export async function persistDocumentStructure({ supabase, organizationId, contr
       char_start: page.charStart,
       char_end: page.charEnd,
       text_hash: crypto.createHash("sha256").update(page.text).digest("hex"),
-    })));
-    if (error) throw Object.assign(new Error("Document page persistence failed"), { code: "STORAGE_ERROR" });
+    }));
+    const analysisPageRows = buildAnalysisPageRows({ organizationId, contractId, documentId, documentVersionId, analysisRunId, pages: structure.pages });
+    const [documentPagesResult, analysisPagesResult] = await Promise.all([
+      supabase.from("contract_document_pages").insert(documentPageRows),
+      supabase.from("document_version_pages").insert(analysisPageRows),
+    ]);
+    if (documentPagesResult.error || analysisPagesResult.error) throw Object.assign(new Error("Document page persistence failed"), { code: "STORAGE_ERROR" });
   }
   for (const [sectionIndex, section] of structure.sections.entries()) {
     const parentSectionId = section.parentIndex === null ? null : sectionIds[section.parentIndex] || null;

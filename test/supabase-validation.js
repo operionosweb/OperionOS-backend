@@ -24,7 +24,12 @@ const REQUIRED_MIGRATIONS = [
   "013_nonproduction_validation_hardening.sql",
   "014_durable_ai_state_hardening.sql",
   "015_aviation_intelligence_foundation.sql",
+  "016_contract_intelligence_core.sql",
 ];
+const NONEMPTY_ADDITIVE_MIGRATIONS = new Set([
+  "015_aviation_intelligence_foundation.sql",
+  "016_contract_intelligence_core.sql",
+]);
 
 const MIGRATION_SENTINELS = Object.freeze({
   "006_ai_intelligence_foundation.sql": ["table", "ai_intelligence_cache"],
@@ -37,6 +42,7 @@ const MIGRATION_SENTINELS = Object.freeze({
   "013_nonproduction_validation_hardening.sql": ["policy", "ai_budget_member_select"],
   "014_durable_ai_state_hardening.sql": ["policy", "analysis_runs_member_select"],
   "015_aviation_intelligence_foundation.sql": ["table", "aircraft_contract_relationships"],
+  "016_contract_intelligence_core.sql": ["table", "contract_intelligence_profiles"],
 });
 
 const RLS_TABLES = Object.freeze([
@@ -51,6 +57,7 @@ const RLS_TABLES = Object.freeze([
   "ai_intelligence_cache",
   "aircraft", "aircraft_organization_relationships", "aviation_flights", "flight_positions",
   "aircraft_contract_relationships",
+  "contract_intelligence_profiles",
 ]);
 
 function fail(code, message) {
@@ -69,7 +76,10 @@ function loadSafeConfig() {
   if (missing.length) fail("TEST_CONFIGURATION_MISSING", `Missing test configuration: ${missing.join(", ")}`);
   if (process.env.PHASE3_DB_TEST_ENABLED !== "1") fail("LIVE_TEST_DISABLED", "PHASE3_DB_TEST_ENABLED must equal 1");
   if (process.env.PHASE3_DB_ENV !== "non-production-test") fail("PRODUCTION_GUARD", "PHASE3_DB_ENV must equal non-production-test");
-  if (process.env.PHASE3_EMPTY_DATABASE !== "1") fail("EMPTY_DATABASE_GUARD", "PHASE3_EMPTY_DATABASE must equal 1");
+  const allowNonemptyAdditiveMigrations = process.env.PHASE3_ALLOW_NONEMPTY_ADDITIVE_MIGRATIONS === "1";
+  if (process.env.PHASE3_EMPTY_DATABASE !== "1" && !allowNonemptyAdditiveMigrations) {
+    fail("DATABASE_GUARD", "PHASE3_EMPTY_DATABASE or PHASE3_ALLOW_NONEMPTY_ADDITIVE_MIGRATIONS must equal 1");
+  }
   const projectRef = process.env.PHASE3_SUPABASE_PROJECT_REF;
   if (/(^|[-_])(prod|production)([-_]|$)/i.test(projectRef)) fail("PRODUCTION_GUARD", "Production-like project reference rejected");
   const supabaseUrl = new URL(process.env.SUPABASE_URL);
@@ -84,6 +94,7 @@ function loadSafeConfig() {
     databaseUrl: process.env.DATABASE_URL,
     applyMigrations: process.env.PHASE3_APPLY_MIGRATIONS === "1",
     runIntegration: process.env.PHASE3_RUN_INTEGRATION === "1",
+    allowNonemptyAdditiveMigrations,
   };
 }
 
@@ -95,7 +106,7 @@ async function migrationFiles() {
   }
   const requiredOrder = files.filter((file) => REQUIRED_MIGRATIONS.includes(file));
   if (JSON.stringify(requiredOrder) !== JSON.stringify(REQUIRED_MIGRATIONS)) {
-    fail("MIGRATION_ORDER_INVALID", "Migrations 006-015 are not ordered correctly");
+    fail("MIGRATION_ORDER_INVALID", "Migrations 006-016 are not ordered correctly");
   }
   return files;
 }
@@ -219,6 +230,17 @@ async function applyMissingMigrations(pool, sentinels) {
   return missing;
 }
 
+export async function assertNonemptyMigrationPlan(migrations, readMigration = async (migration) => fs.readFile(path.join(ROOT, "supabase", "migrations", migration), "utf8")) {
+  const unsupported = migrations.filter((migration) => !NONEMPTY_ADDITIVE_MIGRATIONS.has(migration));
+  if (unsupported.length) fail("NONEMPTY_MIGRATION_NOT_ALLOWED", `Non-empty migration plan is not allowlisted: ${unsupported.join(", ")}`);
+  for (const migration of migrations) {
+    const sql = await readMigration(migration);
+    if (/\b(drop\s+(table|column)|truncate|delete\s+from|update\s+\w+\s+set)\b/i.test(sql)) {
+      fail("DESTRUCTIVE_MIGRATION_REJECTED", `Non-empty migration contains a prohibited destructive statement: ${migration}`);
+    }
+  }
+}
+
 function migrationReadiness(sentinels, applyMigrations) {
   const missing = REQUIRED_MIGRATIONS.filter((migration) => !sentinels[migration]);
   if (!missing.length) return { state: "current", missing, applyEnabled: applyMigrations };
@@ -260,6 +282,7 @@ async function verifySchema(pool) {
     "deadline_evidence", "risk_evidence", "recommendation_evidence", "party_evidence",
     "aircraft", "aircraft_organization_relationships", "aviation_flights", "flight_positions",
     "aircraft_contract_relationships",
+    "contract_intelligence_profiles",
   ];
   const broadServerOwnedPolicies = policies.rows.filter((policy) => policy.schemaname === "public"
     && serverOwnedTables.includes(policy.tablename) && policy.cmd !== "SELECT");
@@ -274,7 +297,7 @@ async function verifySchema(pool) {
   }
 
   const constraints = await pool.query(
-    "select conname, contype from pg_constraint join pg_namespace on pg_namespace.oid = pg_constraint.connamespace where nspname = 'public'"
+    "select conname, contype, conrelid::regclass::text as table_name, pg_get_constraintdef(pg_constraint.oid) as definition from pg_constraint join pg_namespace on pg_namespace.oid = pg_constraint.connamespace where nspname = 'public'"
   );
   const constraintNames = new Set(constraints.rows.map((row) => row.conname));
   const requiredConstraints = [
@@ -282,6 +305,7 @@ async function verifySchema(pool) {
     "analysis_runs_contract_organization_fk", "analysis_runs_document_version_organization_fk",
     "deadlines_source_clause_fk", "deadlines_source_evidence_fk",
     "risks_probability_absent_check", "risks_contract_category_check",
+    "contracts_source_document_fk", "aircraft_contract_source_evidence_fk",
   ];
   const absentConstraints = requiredConstraints.filter((name) => !constraintNames.has(name));
   if (absentConstraints.length) fail("CONSTRAINT_MISSING", `Required constraints are missing: ${absentConstraints.join(", ")}`);
@@ -291,10 +315,35 @@ async function verifySchema(pool) {
   const requiredIndexes = [
     "ai_cache_identity_idx", "ai_jobs_active_request_uidx", "contract_sections_version_order_idx", "contract_document_pages_version_idx",
     "deadlines_identity_scope_uidx", "risks_identity_scope_uidx",
+    "contract_profiles_scope_idx", "contract_number_scope_idx", "aircraft_contract_identifier_idx",
+    "phase3_chunks_scope_idx", "phase3_chunks_search_idx",
   ];
   const absentIndexes = requiredIndexes.filter((name) => !indexNames.has(name));
   if (absentIndexes.length) fail("INDEX_MISSING", `Required indexes are missing: ${absentIndexes.join(", ")}`);
-  return { policyCount: policies.rows.length, rlsTableCount: RLS_TABLES.length };
+
+  const requiredColumns = {
+    contracts: ["contract_number", "contract_type_confidence", "renewal_date", "auto_renewal", "governing_law", "currency", "source_document_id", "metadata_confidence"],
+    contract_intelligence_profiles: ["organization_id", "contract_id", "document_id", "document_version_id", "analysis_run_id", "metadata", "classification", "executive_summary", "evidence_claims", "confidence"],
+    aircraft_contract_relationships: ["source_identifier", "source_evidence_id"],
+  };
+  const columnRows = await pool.query(
+    "select table_name, column_name from information_schema.columns where table_schema = 'public' and table_name = any($1)",
+    [Object.keys(requiredColumns)]
+  );
+  const columnSet = new Set(columnRows.rows.map((row) => `${row.table_name}.${row.column_name}`));
+  const missingColumns = Object.entries(requiredColumns).flatMap(([table, columns]) => columns.filter((column) => !columnSet.has(`${table}.${column}`)).map((column) => `${table}.${column}`));
+  if (missingColumns.length) fail("COLUMN_MISSING", `Contract intelligence columns are missing: ${missingColumns.join(", ")}`);
+
+  const profileRunUnique = constraints.rows.some((constraint) => constraint.table_name === "contract_intelligence_profiles"
+    && constraint.contype === "u"
+    && /organization_id, analysis_run_id/i.test(constraint.definition));
+  if (!profileRunUnique) fail("IDEMPOTENCY_CONSTRAINT_MISSING", "Contract profile tenant/run uniqueness constraint is missing");
+
+  const triggers = await pool.query("select trigger_name from information_schema.triggers where event_object_schema = 'public' and event_object_table = 'contract_intelligence_profiles'");
+  if (!triggers.rows.some((row) => row.trigger_name === "prevent_contract_profile_update")) {
+    fail("IMMUTABILITY_TRIGGER_MISSING", "Contract profile immutability trigger is missing");
+  }
+  return { policyCount: policies.rows.length, rlsTableCount: RLS_TABLES.length, verifiedContractIntelligenceColumns: columnSet.size, profileImmutable: true };
 }
 
 async function targetCounts(pool) {
@@ -708,12 +757,19 @@ async function main() {
       }, null, 2));
       return;
     }
-    if (Object.values(preMigrationCounts).some((count) => Number(count) !== 0)) {
-      fail("TARGET_NOT_EMPTY", "Migration execution requires zero organizations, users, contracts, and contract storage objects");
+    const targetIsEmpty = Object.values(preMigrationCounts).every((count) => Number(count) === 0);
+    if (!targetIsEmpty) {
+      if (!config.allowNonemptyAdditiveMigrations) {
+        fail("TARGET_NOT_EMPTY", "Migration execution on this target requires PHASE3_ALLOW_NONEMPTY_ADDITIVE_MIGRATIONS=1");
+      }
+      await assertNonemptyMigrationPlan(readiness.missing);
     }
     const applied = await applyMissingMigrations(pool, before);
     const schema = await verifySchema(pool);
     const counts = await targetCounts(pool);
+    if (!targetIsEmpty && JSON.stringify(counts) !== JSON.stringify(preMigrationCounts)) {
+      fail("TARGET_DATA_COUNTS_CHANGED", "Additive migration changed protected target record counts");
+    }
     if (migrateOnly) {
       console.log(JSON.stringify({
         status: "MIGRATION_VALIDATION_PASS",
@@ -722,6 +778,7 @@ async function main() {
         databaseIdentity: identity,
         migrationFiles: files.filter((file) => REQUIRED_MIGRATIONS.includes(file)),
         migrationsApplied: applied,
+        migrationMode: targetIsEmpty ? "empty_database" : "nonempty_additive",
         schema,
         counts,
       }, null, 2));

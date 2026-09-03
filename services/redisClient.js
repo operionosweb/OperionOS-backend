@@ -6,7 +6,13 @@ import Redis from "ioredis";
  * =========================================
  */
 
-const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
+const redisUrl = process.env.REDIS_URL;
+const redis = new Redis(redisUrl || "redis://localhost:6379", redisUrl ? {} : {
+  lazyConnect: true,
+  enableOfflineQueue: false,
+  maxRetriesPerRequest: 1,
+  retryStrategy: () => null,
+});
 
 redis.on("connect", () => {
   console.log("🟢 Redis connected");

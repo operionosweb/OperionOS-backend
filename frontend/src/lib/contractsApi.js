@@ -39,6 +39,19 @@ export function getAnalysisRun(analysisRunId, organizationId) {
   return apiRequest(`/api/analysis-runs/${analysisRunId}`, { organizationId });
 }
 
+export function processContractIntelligence(analysisRunId, organizationId) {
+  return apiRequest(`/api/analysis-runs/${analysisRunId}/process`, { method: "POST", organizationId });
+}
+
+export function getAnalysisRunProfile(analysisRunId, organizationId) {
+  return apiRequest(`/api/analysis-runs/${analysisRunId}/profile`, { organizationId });
+}
+
+export function searchContractIntelligence(analysisRunId, organizationId, query, limit = 20) {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  return apiRequest(`/api/analysis-runs/${analysisRunId}/search?${params}`, { organizationId });
+}
+
 export function listAnalysisRunClauses(analysisRunId, organizationId) {
   // GET /api/analysis-runs/:id/clauses -> { success, clauses }
   return apiRequest(`/api/analysis-runs/${analysisRunId}/clauses`, { organizationId });

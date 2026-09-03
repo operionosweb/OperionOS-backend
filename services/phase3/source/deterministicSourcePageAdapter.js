@@ -138,7 +138,8 @@ export function buildCanonicalPageSource({
     text_length: Number(page.text_length ?? Math.max(0, (page.char_end ?? text.length) - (page.char_start ?? 0))),
   }));
 
-  const pageBoundaries = "derived_unavailable";
+  const pageBoundaries = orderedPages.length ? "explicit" : "derived_unavailable";
+  const sourceStatus = orderedPages.length ? "extracted" : "derived_unavailable";
 
   return {
     organizationId: documentVersion.organization_id,
@@ -150,7 +151,12 @@ export function buildCanonicalPageSource({
     textTruncated: Boolean(extraction.text_truncated),
     pageBoundaries,
     pages: normalizedPages,
-    sourceStatus: "derived_unavailable",
-    sourceLocator: (charStart, charEnd) => `document_version:${documentVersion.id}:char:${charStart}-${charEnd}`,
+    sourceStatus,
+    sourceLocator: (charStart, charEnd) => {
+      const page = orderedPages.find((candidate) => charStart >= candidate.char_start && charStart <= candidate.char_end);
+      return page
+        ? `document_version:${documentVersion.id}:page:${page.page_number}:char:${charStart}-${charEnd}`
+        : `document_version:${documentVersion.id}:char:${charStart}-${charEnd}`;
+    },
   };
 }

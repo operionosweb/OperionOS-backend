@@ -6,7 +6,8 @@ function buildInsertQuery(table, columns, rows) {
   const values = [];
   const tuples = rows.map((row, rowIndex) => {
     const placeholders = columns.map((column, columnIndex) => {
-      values.push(row[column] === undefined ? null : row[column]);
+      const value = row[column] === undefined ? null : row[column];
+      values.push(column === "metadata" && value !== null ? JSON.stringify(value) : value);
       return `$${rowIndex * columns.length + columnIndex + 1}`;
     });
     return `(${placeholders.join(", ")})`;

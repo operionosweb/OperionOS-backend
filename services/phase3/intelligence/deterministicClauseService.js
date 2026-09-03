@@ -255,6 +255,9 @@ function classifyCategory(text) {
 
 function buildSegment({ source, start, end, heading, parentClauseNumber = null, isUnstructured = false }) {
   const sourceText = source.text.slice(start, end);
+  const sourcePage = source.pageBoundaries === "explicit"
+    ? source.pages?.find((page) => start >= page.char_start && start <= page.char_end)
+    : null;
   const category = classifyCategory(`${heading.title}\n${sourceText}`);
   const numbered = Boolean(heading.number);
   const confidence = isUnstructured ? 0.35 : category === "general" ? 0.45 : numbered ? 0.85 : 0.65;
@@ -292,8 +295,8 @@ function buildSegment({ source, start, end, heading, parentClauseNumber = null, 
       document_id: source.documentId,
       document_version_id: source.documentVersionId,
       analysis_run_id: source.analysisRunId,
-      page_id: null,
-      page_number: null,
+      page_id: sourcePage?.id || null,
+      page_number: sourcePage?.page_number || null,
       excerpt: sourceText,
       char_start: start,
       char_end: end,

@@ -3,9 +3,13 @@ import defaultPgPool from "../../db.js";
 import { assertOrganizationScope, assertResourceId } from "./scope.js";
 
 function insertQuery(table, columns, row) {
+  const jsonColumns = new Set(["structured_timing", "recurrence", "metadata"]);
   return {
     sql: `insert into ${table} (${columns.join(", ")}) values (${columns.map((_, index) => `$${index + 1}`).join(", ")})`,
-    values: columns.map((column) => row[column] === undefined ? null : row[column]),
+    values: columns.map((column) => {
+      const value = row[column] === undefined ? null : row[column];
+      return jsonColumns.has(column) && value !== null ? JSON.stringify(value) : value;
+    }),
   };
 }
 

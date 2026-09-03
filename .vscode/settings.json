@@ -64,6 +64,9 @@
         "/^node --test test/contract-risk-screening\\.test\\.js$/": {
             "approve": true,
             "matchCommandLine": true
-        }
+        },
+        "C:\\Progra~1\\nodejs\\node.exe": true,
+        "&": true,
+        "Set-Item": true
     }
 }

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import test from "node:test";
 
-import { hasDocxMigrationSemantics } from "./supabase-validation.js";
+import { assertNonemptyMigrationPlan, hasDocxMigrationSemantics } from "./supabase-validation.js";
 
 const read = (file) => fs.readFile(file, "utf8");
 
@@ -45,9 +45,9 @@ test("migration-only mode rechecks emptiness, verifies schema, and skips fixture
   assert.doesNotMatch(migrationOnlyBranch, /runIntegration\s*\(/);
 });
 
-test("migration validation covers canonical migrations 006 through 015 in order", async () => {
+test("migration validation covers canonical migrations 006 through 016 in order", async () => {
   const harness = await read("test/supabase-validation.js");
-  const positions = Array.from({ length: 10 }, (_, index) => harness.indexOf(`\"${String(index + 6).padStart(3, "0")}`));
+  const positions = Array.from({ length: 11 }, (_, index) => harness.indexOf(`\"${String(index + 6).padStart(3, "0")}`));
   assert.ok(positions.every((position) => position >= 0));
   assert.deepEqual([...positions].sort((left, right) => left - right), positions);
 });
@@ -116,6 +116,7 @@ test("live schema validation covers every server-owned intelligence table", asyn
     "contract_clauses", "contract_obligations", "clause_evidence", "obligation_evidence",
     "deadline_evidence", "risk_evidence", "recommendation_evidence", "party_evidence",
     "ai_intelligence_budgets", "ai_intelligence_jobs", "ai_intelligence_usage", "ai_intelligence_cache",
+    "contract_intelligence_profiles",
   ]) {
     assert.match(harness, new RegExp(`serverOwnedTables[\\s\\S]*[\"']${table}[\"']`, "i"));
   }
@@ -184,9 +185,9 @@ test("deadline and risk migrations preserve business days and prohibit probabili
   assert.match(risks, /affected_deadline_ids/);
 });
 
-test("clean database migration executor includes migrations 001 through 015", async () => {
+test("clean database migration executor includes migrations 001 through 016", async () => {
   const executor = await read("test/phase3a-live-verification.js");
-  const positions = Array.from({ length: 15 }, (_, index) => executor.indexOf(`\"${String(index + 1).padStart(3, "0")}`));
+  const positions = Array.from({ length: 16 }, (_, index) => executor.indexOf(`\"${String(index + 1).padStart(3, "0")}`));
   assert.ok(positions.every((position) => position >= 0));
   assert.deepEqual([...positions].sort((left, right) => left - right), positions);
 });
@@ -215,4 +216,19 @@ test("migration 008 detection distinguishes PDF-only migration 002 from DOCX-awa
     })),
   };
   assert.equal(hasDocxMigrationSemantics(pdfAndDocx), true);
+});
+
+test("non-empty migration mode allowlists additive migrations and rejects destructive SQL", async () => {
+  await assert.doesNotReject(() => assertNonemptyMigrationPlan(
+    ["015_aviation_intelligence_foundation.sql", "016_contract_intelligence_core.sql"],
+    async () => "create table if not exists safe_addition (id uuid); alter table contracts add column if not exists safe_value text;"
+  ));
+  await assert.rejects(
+    () => assertNonemptyMigrationPlan(["014_durable_ai_state_hardening.sql"], async () => "select 1"),
+    (error) => error.code === "NONEMPTY_MIGRATION_NOT_ALLOWED"
+  );
+  await assert.rejects(
+    () => assertNonemptyMigrationPlan(["016_contract_intelligence_core.sql"], async () => "drop table contracts"),
+    (error) => error.code === "DESTRUCTIVE_MIGRATION_REJECTED"
+  );
 });
