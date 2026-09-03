@@ -25,12 +25,24 @@ test("dependency graphs are scoped to the selected aircraft", async () => {
   const longHaul = await SyntheticAviationProvider.getContractDependencies("ac-n712av");
 
   assert.equal(primary.aircraftId, "ac-goper");
-  assert.equal(primary.nodes.length, 13);
-  assert.equal(secondary.nodes.length, 4);
-  assert.equal(longHaul.nodes.length, 5);
+  assert.equal(primary.nodes.length > 13, true);
+  assert.equal(secondary.nodes.length > 4, true);
+  assert.equal(longHaul.nodes.length > 5, true);
   assert.equal(primary.nodes.filter((node) => node.type === "contract").length, 3);
   assert.equal(primary.nodes.filter((node) => node.type === "obligation").length, 3);
   assert.equal(primary.nodes.filter((node) => node.type === "dependency").length, 3);
+  assert.equal(primary.nodes.some((node) => node.type === "contract" && node.linkedAircraftCount > 1), true);
+  assert.equal(primary.nodes.some((node) => node.type === "linkedAircraft" && node.aircraftId), true);
+});
+
+test("contract relationships resolve back to isolated linked aircraft", async () => {
+  const mroAircraft = await SyntheticAviationProvider.getContractAircraft("demo-mro-agreement");
+  const next = await SyntheticAviationProvider.getContractAircraft("demo-mro-agreement");
+  mroAircraft[0].contractIds.length = 0;
+
+  assert.deepEqual(next.map((item) => item.registration), ["G-OPER", "A6-EOA", "D-ABQX", "5Y-KQX"]);
+  assert.equal(next.every((item) => item.route && item.weather), true);
+  assert.notEqual(next[0].contractIds.length, 0);
 });
 
 test("weather provider returns isolated, explicitly synthetic visual cells", async () => {

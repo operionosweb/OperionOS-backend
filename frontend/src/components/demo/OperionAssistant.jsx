@@ -24,7 +24,7 @@ function resolveContext(location, contracts, primaryContract, aviationContext) {
   if (location.pathname.includes("live-tracking")) {
     const aircraft = aviationContext?.aircraft;
     const relatedContracts = aviationContext?.relatedContracts || [];
-    return { type: "AIRCRAFT", title: aircraft?.registration || "Aircraft intelligence", subtitle: aircraft ? `${aircraft.model} / ${aircraft.flightNumber}` : "Aviation intelligence ready", contract: relatedContracts[0] || contract, aircraft, relatedContracts, relationships: aviationContext?.relationships || [] };
+    return { type: "AIRCRAFT", title: aviationContext?.selectedContract?.title || aircraft?.registration || "Aircraft intelligence", subtitle: aviationContext?.selectedContract ? `${aviationContext.linkedAircraft?.length || 0} linked aircraft / ${aircraft?.registration}` : aircraft ? `${aircraft.model} / ${aircraft.flightNumber}` : "Aviation intelligence ready", contract: aviationContext?.selectedContract || relatedContracts[0] || contract, aircraft, relatedContracts, relationships: aviationContext?.relationships || [], selectedContract: aviationContext?.selectedContract, linkedAircraft: aviationContext?.linkedAircraft || [] };
   }
   if (contractId) {
     const labels = { risks: "Risk intelligence ready", obligations: "Obligation intelligence ready", deadlines: "Deadline intelligence ready", evidence: "Evidence intelligence ready", clauses: "Clause intelligence ready" };
@@ -68,6 +68,10 @@ function answerQuestion(question, context) {
   }
   if (/deadline|due|timing|trigger date|ambiguous/.test(normalized)) {
     return { ...base, type: "deadline", title: `${scopedDeadlines.length} deadline expressions found`, summary: "Operion distinguishes absolute, relative, recurring, and event-based timing without inventing missing dates.", confidence: 95, items: scopedDeadlines, evidence: evidenceFor(contract, contract.deadlines.map((item) => item.evidenceId)), recommendation: "Supply the insurance expiry and shop-visit dates to resolve conditional deadlines." };
+  }
+  if (/which aircraft|aircraft.*depend|aircraft.*affect|linked aircraft/.test(normalized) && context.selectedContract) {
+    const linkedAircraft = context.linkedAircraft || [];
+    return { ...base, type: "aircraft", title: `${linkedAircraft.length} aircraft depend on this contract`, summary: `${contract.title} is connected to ${linkedAircraft.map((item) => item.registration).join(", ") || "no established aircraft"} in the prepared aviation relationship model.`, confidence: linkedAircraft.length ? 96 : 0, items: linkedAircraft.map((item) => ({ id: item.id, title: item.registration, category: `${item.type} · ${item.origin} → ${item.destination}`, severity: item.status })), evidence: [], recommendation: "Select an affected aircraft in Live Tracking to review its route, weather, and wider contract context." };
   }
   if (/contract.*connect|contracts.*affect|related contract/.test(normalized)) return { ...base, type: "answer", title: `${scopedContracts.length} connected contract${scopedContracts.length === 1 ? "" : "s"}`, summary: `${context.aircraft?.registration || "The selected asset"} is connected to ${scopedContracts.map((item) => item.title).join(", ") || "no established contracts"}.`, confidence: scopedContracts.length ? 96 : 0, items: scopedContracts.map((item) => ({ id: item.id, title: item.title, category: item.type, severity: item.status })), evidence: evidenceFor(contract, contract.evidence.slice(0, 2).map((item) => item.id)), recommendation: "Open the connected contract to inspect its clauses and source evidence." };
   if (/aircraft|fleet|maintenance/.test(normalized)) {

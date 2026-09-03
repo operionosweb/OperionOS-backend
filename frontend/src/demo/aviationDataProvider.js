@@ -30,13 +30,14 @@ const weatherCells = [
 ];
 
 const relationshipTemplates = {
-  "demo-aircraft-lease": { category: "Aircraft Lease", supplier: "Aviation Partners Ltd.", relationship: "governed by", obligationIds: ["ob-return"], deadlineIds: ["dl-return"], riskIds: ["rk-return"] },
-  "demo-mro-agreement": { category: "Maintenance / MRO", supplier: "Rolls-Royce plc", relationship: "maintained under", obligationIds: ["ob-records"], deadlineIds: ["dl-records"], riskIds: ["rk-maint"] },
-  "demo-insurance-agreement": { category: "Insurance", supplier: "AIG Aviation", relationship: "insured under", obligationIds: ["ob-ins"], deadlineIds: ["dl-ins"], riskIds: ["rk-ins"] },
-  "demo-ground-handling": { category: "Ground Handling", supplier: "Dubai Aviation Services", relationship: "handled under", obligationIds: [], deadlineIds: [], riskIds: [] },
+  "demo-aircraft-lease": { title: "Aircraft Lease Agreement", category: "Aircraft Lease", supplier: "Aviation Partners Ltd.", relationship: "governed by", obligationIds: ["ob-return"], deadlineIds: ["dl-return"], riskIds: ["rk-return"] },
+  "demo-mro-agreement": { title: "Engine Maintenance Agreement", category: "Maintenance / MRO", supplier: "Rolls-Royce plc", relationship: "maintained under", obligationIds: ["ob-records"], deadlineIds: ["dl-records"], riskIds: ["rk-maint"] },
+  "demo-insurance-agreement": { title: "Aviation Hull Insurance Agreement", category: "Insurance", supplier: "AIG Aviation", relationship: "insured under", obligationIds: ["ob-ins"], deadlineIds: ["dl-ins"], riskIds: ["rk-ins"] },
+  "demo-ground-handling": { title: "Ground Handling Services Agreement", category: "Ground Handling", supplier: "Dubai Aviation Services", relationship: "handled under", obligationIds: [], deadlineIds: [], riskIds: [] },
 };
 
 const relationships = Object.fromEntries(aircraft.map((item) => [item.id, item.contractIds.map((contractId) => ({ contractId, ...relationshipTemplates[contractId] }))]));
+const contractAircraft = Object.fromEntries(Object.keys(relationshipTemplates).map((contractId) => [contractId, aircraft.filter((item) => item.contractIds.includes(contractId)).map((item) => item.id)]));
 
 function buildDependencyGraph(id) {
   const selected = aircraft.find((item) => item.id === id);
@@ -47,11 +48,18 @@ function buildDependencyGraph(id) {
     const contractNode = `contract-${index}`;
     const supplierNode = `supplier-${index}`;
     const dependencyNode = `dependency-${index}`;
-    nodes.push({ id: contractNode, type: "contract", contractId: link.contractId, label: link.category, subtitle: link.supplier, status: "Prepared relationship" });
+    const linkedAircraft = contractAircraft[link.contractId] || [];
+    nodes.push({ id: contractNode, type: "contract", contractId: link.contractId, label: link.title, subtitle: link.supplier, status: "Active relationship", linkedAircraftCount: linkedAircraft.length });
     nodes.push({ id: supplierNode, type: "supplier", label: link.supplier, subtitle: link.category, status: "Counterparty" });
     nodes.push({ id: dependencyNode, type: "dependency", label: `${link.category} continuity`, subtitle: "Operational dependency", status: "Monitored" });
     edges.push({ id: `aircraft-contract-${index}`, source: "aircraft", target: contractNode, relationship: link.relationship });
     edges.push({ id: `contract-supplier-${index}`, source: contractNode, target: supplierNode, relationship: "counterparty" });
+    linkedAircraft.filter((aircraftId) => aircraftId !== id).forEach((aircraftId, aircraftIndex) => {
+      const linked = aircraft.find((item) => item.id === aircraftId);
+      const linkedNode = `linked-aircraft-${index}-${aircraftIndex}`;
+      nodes.push({ id: linkedNode, type: "linkedAircraft", aircraftId, label: linked.registration, subtitle: `${linked.type} / ${linked.origin} → ${linked.destination}`, status: linked.status });
+      edges.push({ id: `contract-aircraft-${index}-${aircraftIndex}`, source: contractNode, target: linkedNode, relationship: "also affects" });
+    });
     if (link.obligationIds.length) {
       link.obligationIds.forEach((obligationId, obligationIndex) => {
         const obligationNode = `obligation-${index}-${obligationIndex}`;
@@ -89,6 +97,7 @@ export const SyntheticAviationProvider = {
   async getFlightById(id) { return cloneAircraft(aircraft.find((item) => item.id === id)); },
   async getAircraftContracts(id) { return [...(aircraft.find((item) => item.id === id)?.contractIds || [])]; },
   async getAircraftRelationships(id) { return (relationships[id] || []).map((item) => ({ ...item, obligationIds: [...item.obligationIds], deadlineIds: [...item.deadlineIds], riskIds: [...item.riskIds] })); },
+  async getContractAircraft(contractId) { return (contractAircraft[contractId] || []).map((id) => cloneAircraft(aircraft.find((item) => item.id === id))); },
   async getContractDependencies(id = "ac-goper") { return buildDependencyGraph(id); },
   async getWeather() { return { state: "synthetic", source: "Deterministic scenario weather", observedAt: "Scenario T+00:00", cells: weatherCells.map((cell) => ({ ...cell })), legend: ["Cloud", "Light rain", "Moderate rain", "Heavy rain", "Storm"] }; },
 };
