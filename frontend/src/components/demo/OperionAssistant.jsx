@@ -17,12 +17,14 @@ function restoreMessages() {
   }
 }
 
-function resolveContext(location, contracts, primaryContract) {
+function resolveContext(location, contracts, primaryContract, aviationContext) {
   const contractId = location.pathname.match(/^\/demo\/contracts\/([^/]+)/)?.[1];
   const contract = contracts.find((item) => item.id === contractId) || primaryContract;
   const section = location.pathname.split("/").at(-1);
   if (location.pathname.includes("live-tracking")) {
-    return { type: "AIRCRAFT", title: contract.aircraft?.registration || "Aircraft intelligence", subtitle: contract.aircraft ? `${contract.aircraft.model} / prepared relationship` : "Aviation intelligence ready", contract };
+    const aircraft = aviationContext?.aircraft;
+    const relatedContracts = aviationContext?.relatedContracts || [];
+    return { type: "AIRCRAFT", title: aircraft?.registration || "Aircraft intelligence", subtitle: aircraft ? `${aircraft.model} / ${aircraft.flightNumber}` : "Aviation intelligence ready", contract: relatedContracts[0] || contract, aircraft, relatedContracts, relationships: aviationContext?.relationships || [] };
   }
   if (contractId) {
     const labels = { risks: "Risk intelligence ready", obligations: "Obligation intelligence ready", deadlines: "Deadline intelligence ready", evidence: "Evidence intelligence ready", clauses: "Clause intelligence ready" };
@@ -47,26 +49,33 @@ function evidenceFor(contract, ids) {
 
 function answerQuestion(question, context) {
   const contract = context.contract;
+  const scopedContracts = context.relatedContracts?.length ? context.relatedContracts : [contract];
+  const relationshipFor = (item) => context.relationships?.find((relationship) => relationship.contractId === item.id);
+  const scopedRisks = scopedContracts.flatMap((item) => { const relationship = relationshipFor(item); return relationship ? item.risks.filter((risk) => relationship.riskIds.includes(risk.id)) : item.risks; });
+  const scopedObligations = scopedContracts.flatMap((item) => { const relationship = relationshipFor(item); return relationship ? item.obligations.filter((obligation) => relationship.obligationIds.includes(obligation.id)) : item.obligations; });
+  const scopedDeadlines = scopedContracts.flatMap((item) => { const relationship = relationshipFor(item); return relationship ? item.deadlines.filter((deadline) => relationship.deadlineIds.includes(deadline.id)) : item.deadlines; });
   const normalized = question.toLowerCase();
   const base = { id: `answer-${Date.now()}`, role: "assistant", question, contractId: contract.id };
   if (/late|return aircraft|redelivery/.test(normalized)) {
     return { ...base, type: "risk", title: "Late-return exposure identified", summary: "Late return may trigger a daily fee under Clause 22.4. Continued delay may also give the lessor termination rights after the stated period.", confidence: 96, items: contract.risks.filter((risk) => risk.id === "rk-return"), evidence: evidenceFor(contract, ["ev-return", "ev-termination"]), recommendation: "Confirm the contractual return date and prepare the redelivery evidence package before expiry." };
   }
   if (/risk|exposure|management review/.test(normalized)) {
-    return { ...base, type: "risk", title: `${contract.risks.length} material risks identified`, summary: "Operion ranked the prepared findings by contractual severity and retained their evidence lineage.", confidence: 94, items: contract.risks, evidence: evidenceFor(contract, contract.risks.flatMap((risk) => risk.evidenceIds).slice(0, 3)), recommendation: "Review critical return conditions before the high-severity maintenance records finding." };
+    return { ...base, type: "risk", title: `${scopedRisks.length} material risks identified`, summary: `Operion ranked the prepared findings linked to ${context.aircraft?.registration || contract.contractId} and retained their evidence lineage.`, confidence: 94, items: scopedRisks, evidence: evidenceFor(contract, contract.risks.flatMap((risk) => risk.evidenceIds).slice(0, 3)), recommendation: "Review critical return conditions before the high-severity maintenance records finding." };
   }
   if (/obligation|commitment|insurance/.test(normalized)) {
-    const items = /insurance/.test(normalized) ? contract.obligations.filter((item) => item.category === "Insurance") : contract.obligations;
+    const items = /insurance/.test(normalized) ? scopedObligations.filter((item) => item.category === "Insurance") : scopedObligations;
     return { ...base, type: "obligation", title: `${items.length} structured obligation${items.length === 1 ? "" : "s"} found`, summary: "Each obligation remains connected to its actor, timing, condition, clause, and source evidence.", confidence: 97, items, evidence: evidenceFor(contract, items.map((item) => item.evidenceId)), recommendation: "Validate trigger dates before treating relative deadlines as calendar dates." };
   }
   if (/deadline|due|timing|trigger date|ambiguous/.test(normalized)) {
-    return { ...base, type: "deadline", title: `${contract.deadlines.length} deadline expressions found`, summary: "Operion distinguishes absolute, relative, recurring, and event-based timing without inventing missing dates.", confidence: 95, items: contract.deadlines, evidence: evidenceFor(contract, contract.deadlines.map((item) => item.evidenceId)), recommendation: "Supply the insurance expiry and shop-visit dates to resolve conditional deadlines." };
+    return { ...base, type: "deadline", title: `${scopedDeadlines.length} deadline expressions found`, summary: "Operion distinguishes absolute, relative, recurring, and event-based timing without inventing missing dates.", confidence: 95, items: scopedDeadlines, evidence: evidenceFor(contract, contract.deadlines.map((item) => item.evidenceId)), recommendation: "Supply the insurance expiry and shop-visit dates to resolve conditional deadlines." };
   }
+  if (/contract.*connect|contracts.*affect|related contract/.test(normalized)) return { ...base, type: "answer", title: `${scopedContracts.length} connected contract${scopedContracts.length === 1 ? "" : "s"}`, summary: `${context.aircraft?.registration || "The selected asset"} is connected to ${scopedContracts.map((item) => item.title).join(", ") || "no established contracts"}.`, confidence: scopedContracts.length ? 96 : 0, items: scopedContracts.map((item) => ({ id: item.id, title: item.title, category: item.type, severity: item.status })), evidence: evidenceFor(contract, contract.evidence.slice(0, 2).map((item) => item.id)), recommendation: "Open the connected contract to inspect its clauses and source evidence." };
   if (/aircraft|fleet|maintenance/.test(normalized)) {
-    return { ...base, type: "aircraft", title: contract.aircraft ? "Aircraft relationship established" : "No aircraft relationship established", summary: contract.aircraft ? `${contract.aircraft.registration} / ${contract.aircraft.model} is linked to this prepared contract record.` : "The prepared contract has no aircraft association.", confidence: contract.aircraft ? 92 : 0, items: contract.aircraft ? [{ id: "aircraft", title: contract.aircraft.registration, category: contract.aircraft.model, severity: "Linked" }] : [], evidence: evidenceFor(contract, ["ev-maintenance"]), recommendation: contract.aircraft ? "Review linked maintenance and redelivery obligations." : "Add a verified aircraft-contract relationship before drawing operational conclusions." };
+    const aircraft = context.aircraft || contract.aircraft;
+    return { ...base, type: "aircraft", title: aircraft ? "Aircraft relationship established" : "No aircraft relationship established", summary: aircraft ? `${aircraft.registration} / ${aircraft.model} is linked to ${scopedContracts.length} prepared contract record${scopedContracts.length === 1 ? "" : "s"}.` : "The prepared contract has no aircraft association.", confidence: aircraft ? 92 : 0, items: aircraft ? [{ id: "aircraft", title: aircraft.registration, category: aircraft.model, severity: "Linked" }] : [], evidence: evidenceFor(contract, ["ev-maintenance"]), recommendation: aircraft ? "Review linked maintenance and redelivery obligations." : "Add a verified aircraft-contract relationship before drawing operational conclusions." };
   }
   if (/supplier|counterparty|dependency/.test(normalized)) {
-    return { ...base, type: "supplier", title: "Counterparty relationship identified", summary: `${contract.counterparty} is the counterparty represented by this prepared agreement. Broader supplier concentration is not established by the demo corpus.`, confidence: 88, items: [{ id: "counterparty", title: contract.counterparty, category: contract.type, severity: "Contractual" }], evidence: [], recommendation: "Review the agreement before inferring portfolio-level supplier dependency." };
+    return { ...base, type: "supplier", title: `${scopedContracts.length} counterparty relationship${scopedContracts.length === 1 ? "" : "s"} identified`, summary: `These counterparties are connected to ${context.aircraft?.registration || contract.contractId} through prepared agreements. Broader supplier concentration is not established.`, confidence: 88, items: scopedContracts.map((item) => ({ id: item.id, title: item.counterparty, category: item.type, severity: "Contractual" })), evidence: [], recommendation: "Review each agreement before inferring portfolio-level supplier dependency." };
   }
   if (/summar|contract/.test(normalized)) {
     return { ...base, type: "answer", title: contract.title, summary: `${contract.contractId} is a prepared ${contract.type.toLowerCase()} between ${contract.lessor} and ${contract.lessee}. Operion identified ${contract.clauses.length} clauses, ${contract.obligations.length} obligations, ${contract.deadlines.length} deadlines, and ${contract.risks.length} risks.`, confidence: 98, items: contract.risks.slice(0, 2), evidence: evidenceFor(contract, ["ev-return", "ev-insurance"]), recommendation: "Open the contract workspace to inspect each finding and its source." };
@@ -113,12 +122,13 @@ export default function OperionAssistant() {
   const [messages,setMessages]=useState(restoreMessages);
   const [processing,setProcessing]=useState(false);
   const [focused,setFocused]=useState(false);
-  const context=useMemo(()=>resolveContext(location,contracts,primaryContract),[location,contracts,primaryContract]);
+  const [aviationContext,setAviationContext]=useState(null);
+  const context=useMemo(()=>resolveContext(location,contracts,primaryContract,aviationContext),[location,contracts,primaryContract,aviationContext]);
   const suggestions=useMemo(()=>suggestionsFor(context),[context]);
 
   useEffect(()=>{sessionStorage.setItem("operion.demo.assistant",JSON.stringify(messages));},[messages]);
   useEffect(()=>{if(location.pathname.endsWith("/assistant"))setMode("full");},[location.pathname]);
-  useEffect(()=>{const open=(event)=>setMode(event.detail?.mode||"panel");window.addEventListener("operion:assistant",open);return()=>window.removeEventListener("operion:assistant",open);},[]);
+  useEffect(()=>{const open=(event)=>{if(event.detail?.aviation)setAviationContext(event.detail.aviation);setMode(event.detail?.mode||"panel");};const update=(event)=>setAviationContext(event.detail);window.addEventListener("operion:assistant",open);window.addEventListener("operion:aviation-context",update);return()=>{window.removeEventListener("operion:assistant",open);window.removeEventListener("operion:aviation-context",update);};},[]);
   useEffect(()=>{document.body.classList.toggle("oa-lock",mode==="full");return()=>document.body.classList.remove("oa-lock");},[mode]);
   useEffect(()=>{if(mode!=="closed")window.setTimeout(()=>panelRef.current?.querySelector("textarea")?.focus(),180);},[mode]);
   useEffect(()=>{const close=(event)=>{if(event.key==="Escape"&&mode!=="closed"){setMode(mode==="full"?"panel":"closed");bubbleRef.current?.focus();}};window.addEventListener("keydown",close);return()=>window.removeEventListener("keydown",close);},[mode]);

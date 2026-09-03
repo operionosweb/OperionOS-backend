@@ -28,7 +28,7 @@ const DemoDashboard = lazy(() => import("./routes/demo/DemoDashboard"));
 const DemoContracts = lazy(() => import("./routes/demo/DemoContracts"));
 const DemoUpload = lazy(() => import("./routes/demo/DemoUpload"));
 const DemoWorkspace = lazy(() => import("./routes/demo/DemoWorkspace"));
-const DemoLiveTracking = lazy(() => import("./routes/demo/DemoLiveTracking"));
+const DemoLiveTracking = lazy(() => import("./routes/demo/AviationIntelligenceMap"));
 const DemoIntelligence = lazy(() => import("./routes/demo/DemoIntelligence"));
 const DemoAdmin = lazy(() => import("./routes/demo/DemoAdmin"));
 
