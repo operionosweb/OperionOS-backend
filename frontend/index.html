@@ -3,31 +3,44 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Operion | Contract Intelligence &amp; Operational Intelligence</title>
-    <meta name="description" content="Operion connects contracts, operational events and financial exposure to help organisations understand risk, explore scenarios and make better decisions." />
+    <title>Operion | Aviation Contract Intelligence</title>
+    <meta name="description" content="Operion helps aviation organisations understand contracts, obligations, deadlines, risks, aircraft relationships, and the evidence behind every finding." />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
     <link rel="canonical" href="https://operionos.com/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Operion" />
-    <meta property="og:title" content="Operion | Contract Intelligence &amp; Operational Intelligence" />
-    <meta property="og:description" content="Operion connects contracts, operational events and financial exposure to help organisations understand risk, explore scenarios and make better decisions." />
+    <meta property="og:title" content="Operion | Aviation Contract Intelligence" />
+    <meta property="og:description" content="Operion helps aviation organisations understand contracts, obligations, deadlines, risks, aircraft relationships, and the evidence behind every finding." />
     <meta property="og:url" content="https://operionos.com/" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Operion | Contract Intelligence &amp; Operational Intelligence" />
-    <meta name="twitter:description" content="Operion connects contracts, operational events and financial exposure to help organisations understand risk, explore scenarios and make better decisions." />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Operion | Aviation Contract Intelligence" />
+    <meta name="twitter:description" content="Operion helps aviation organisations understand contracts, obligations, deadlines, risks, aircraft relationships, and the evidence behind every finding." />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@graph": [
           {
             "@type": "Organization",
+            "@id": "https://operionos.com/#organization",
             "name": "Operion",
-            "url": "https://operionos.com/"
+            "url": "https://operionos.com/",
+            "description": "Aviation contract intelligence across clauses, obligations, deadlines, risks, relationships, evidence, and recommended actions."
           },
           {
             "@type": "WebSite",
+            "@id": "https://operionos.com/#website",
             "name": "Operion",
             "url": "https://operionos.com/",
-            "description": "Contract Intelligence and Operational Intelligence for complex operational industries."
+            "publisher": { "@id": "https://operionos.com/#organization" }
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "Operion",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Web",
+            "url": "https://operionos.com/platform",
+            "description": "Operion turns aviation contracts into structured, evidence-backed intelligence.",
+            "publisher": { "@id": "https://operionos.com/#organization" }
           }
         ]
       }

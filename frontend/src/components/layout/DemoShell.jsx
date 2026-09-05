@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   Bell, Bot, BrainCircuit, CalendarClock, ChevronDown, FileCheck2, FileText,
   Gauge, Menu, Search, Settings, ShieldAlert, Upload, Users, X, Building2,
-  Radar, Scale, ListChecks,
+  Radar, Scale, ListChecks, CircleDollarSign,
 } from "lucide-react";
 import BrandMark from "../ui/BrandMark";
 import OperionAssistant from "../demo/OperionAssistant";
@@ -20,7 +20,8 @@ const mainNav = [
 const workspaceNav = [
   ["overview", "Overview", Gauge], ["clauses", "Clauses", Scale],
   ["obligations", "Obligations", ListChecks], ["deadlines", "Deadlines", CalendarClock],
-  ["risks", "Risks", ShieldAlert], ["evidence", "Evidence", FileCheck2], ["assistant", "Assistant", Bot],
+  ["risks", "Risks", ShieldAlert], ["evidence", "Evidence", FileCheck2],
+  ["financial-impact", "Financial Impact", CircleDollarSign], ["assistant", "Assistant", Bot],
 ];
 const adminNav = [
   ["/demo/organisation", "Organisation", Building2], ["/demo/users", "Users", Users], ["/demo/settings", "Settings", Settings],

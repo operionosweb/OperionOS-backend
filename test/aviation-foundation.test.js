@@ -56,6 +56,25 @@ test("aircraft relationship repository applies organization scope to every query
   for (const call of calls) assert.deepEqual(call.params, [organizationId, aircraftId]);
 });
 
+test("contract relationship reads require active tenant aircraft and contract scope", async () => {
+  const organizationId = "2ed941d7-21e1-4b98-a2a8-bf13fd34878a";
+  const contractId = "ae8c2f74-a905-4537-a207-4a839b23ccac";
+  const calls = [];
+  const repository = createAviationRelationshipRepository(async (sql, params) => {
+    calls.push({ sql, params });
+    return { rows: [{ id: "relationship-1", registration: "G-SYN1" }] };
+  });
+
+  const result = await repository.listByContract({ organizationId, contractId });
+
+  assert.deepEqual(result, [{ id: "relationship-1", registration: "G-SYN1" }]);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].params, [organizationId, contractId]);
+  assert.match(calls[0].sql, /organization_relationship\.organization_id = relationship\.organization_id/);
+  assert.match(calls[0].sql, /organization_relationship\.active = true/);
+  assert.match(calls[0].sql, /relationship\.organization_id = \$1[\s\S]*relationship\.contract_id = \$2[\s\S]*relationship\.active = true/);
+});
+
 test("contract relationship materialization requires evidence and active tenant aircraft", async () => {
   const organizationId = "2ed941d7-21e1-4b98-a2a8-bf13fd34878a";
   const contractId = "ae8c2f74-a905-4537-a207-4a839b23ccac";

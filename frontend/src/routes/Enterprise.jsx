@@ -124,7 +124,6 @@ export default function Enterprise() {
   const nodes = ["Contracts", "Operations", "Finance", "Suppliers", "Assets", "People", "External events"].map((label) => ({ id: label.toLowerCase().replaceAll(" ", "-"), label, availability: label === "Contracts" ? INTELLIGENCE_AVAILABILITY.AVAILABLE : INTELLIGENCE_AVAILABILITY.PENDING }));
   return (
     <>
-      <EnterpriseSeo />
       <section className="op-page-hero op-cinematic-hero" style={{ backgroundImage: `url(${HERO})` }}>
         <div className="op-page-hero-overlay">
           <Container>

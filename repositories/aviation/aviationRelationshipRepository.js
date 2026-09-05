@@ -50,6 +50,34 @@ export function createAviationRelationshipRepository(queryFn = query) {
       return result.rows.map((row) => row.aircraft_id);
     },
 
+    async listByContract({ organizationId, contractId }) {
+      assertOrganizationScope(organizationId);
+      assertResourceId(contractId, "contractId");
+      const result = await queryFn(
+        `select relationship.id, relationship.aircraft_id, relationship.relationship_type,
+                relationship.confidence, relationship.source_reference, relationship.source_identifier,
+                aircraft.registration, aircraft.serial_number, aircraft.aircraft_type,
+                aircraft.manufacturer, aircraft.model, aircraft.operator_name,
+                evidence.id as evidence_id, evidence.page_number, evidence.source_locator,
+                evidence.excerpt
+         from aircraft_contract_relationships relationship
+         join aircraft on aircraft.id = relationship.aircraft_id
+         join aircraft_organization_relationships organization_relationship
+           on organization_relationship.aircraft_id = relationship.aircraft_id
+          and organization_relationship.organization_id = relationship.organization_id
+          and organization_relationship.active = true
+         left join intelligence_evidence evidence
+           on evidence.id = relationship.source_evidence_id
+          and evidence.organization_id = relationship.organization_id
+         where relationship.organization_id = $1
+           and relationship.contract_id = $2
+           and relationship.active = true
+         order by aircraft.registration nulls last, aircraft.serial_number nulls last`,
+        [organizationId, contractId]
+      );
+      return result.rows;
+    },
+
     async getAircraftIntelligence({ organizationId, aircraftId }) {
       assertOrganizationScope(organizationId);
       assertResourceId(aircraftId, "aircraftId");

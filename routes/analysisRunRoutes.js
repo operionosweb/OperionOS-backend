@@ -12,12 +12,14 @@ import { createRiskRepository } from "../repositories/phase3/riskRepository.js";
 import { createEvidenceRepository } from "../repositories/phase3/evidenceRepository.js";
 import { createContractProfileRepository } from "../repositories/phase3/contractProfileRepository.js";
 import { createSearchChunkRepository } from "../repositories/phase3/searchChunkRepository.js";
+import { createAviationRelationshipRepository } from "../repositories/aviation/aviationRelationshipRepository.js";
 import { runDeterministicClauseStage } from "../services/phase3/intelligence/deterministicClauseService.js";
 import { createDeterministicObligationService, createGatewayObligationProvider } from "../services/phase3/intelligence/deterministicObligationService.js";
 import { createDeadlineIntelligenceService, createGatewayDeadlineProvider } from "../services/phase3/intelligence/deadlineIntelligenceService.js";
 import { createContractRiskIntelligenceService, createGatewayRiskProvider } from "../services/phase3/intelligence/contractRiskIntelligenceService.js";
 import { answerContractQuestion } from "../services/phase3/intelligence/contractAssistantService.js";
 import { createContractIntelligencePipeline } from "../services/phase3/analysis/contractIntelligencePipeline.js";
+import { buildFinancialImpact } from "../services/phase3/intelligence/financialImpactService.js";
 import { aiGateway } from "../services/ai/aiGateway.js";
 import { assertOrganizationScope, assertResourceId } from "../repositories/phase3/scope.js";
 import supabase from "../config/supabase.js";
@@ -284,6 +286,21 @@ export async function readAnalysisRunProfile({
   return sanitizeProfile(profile);
 }
 
+export async function readAnalysisRunRelationships({
+  organizationId,
+  analysisRunId,
+  analysisRunRepository = createAnalysisRunRepository(),
+  relationshipRepository = createAviationRelationshipRepository(),
+}) {
+  assertOrganizationScope(organizationId);
+  assertResourceId(analysisRunId, "analysisRunId");
+  const run = await analysisRunRepository.getById(analysisRunId, organizationId);
+  if (!run || run.organization_id !== organizationId) {
+    throw Object.assign(new Error("Analysis run not found"), { code: "ANALYSIS_RUN_NOT_FOUND", status: 404 });
+  }
+  return relationshipRepository.listByContract({ organizationId, contractId: run.contract_id });
+}
+
 export async function searchAnalysisRun({
   organizationId,
   analysisRunId,
@@ -324,6 +341,35 @@ export async function answerAnalysisRunQuestion({
   return answerContractQuestion({ question, clauses, obligations, deadlines, risks, evidence });
 }
 
+export async function readAnalysisRunFinancialImpact({
+  organizationId,
+  analysisRunId,
+  analysisRunRepository = createAnalysisRunRepository(),
+  readers = {
+    clauses: readAnalysisRunClauses,
+    obligations: readAnalysisRunObligations,
+    deadlines: readAnalysisRunDeadlines,
+    risks: readAnalysisRunRisks,
+    profile: readAnalysisRunProfile,
+  },
+}) {
+  assertOrganizationScope(organizationId);
+  assertResourceId(analysisRunId, "analysisRunId");
+  const analysisRun = await analysisRunRepository.getById(analysisRunId, organizationId);
+  if (!analysisRun || analysisRun.organization_id !== organizationId) {
+    throw Object.assign(new Error("Analysis run not found"), { code: "ANALYSIS_RUN_NOT_FOUND", status: 404 });
+  }
+  const scope = { organizationId, analysisRunId };
+  const [clauses, obligations, deadlines, risks, profile] = await Promise.all([
+    readers.clauses(scope),
+    readers.obligations(scope),
+    readers.deadlines(scope),
+    readers.risks(scope),
+    readers.profile(scope).catch((error) => error.code === "CONTRACT_PROFILE_NOT_FOUND" ? null : Promise.reject(error)),
+  ]);
+  return buildFinancialImpact({ contractId: analysisRun.contract_id, analysisRunId, clauses, obligations, deadlines, risks, profile });
+}
+
 router.use(
   authenticateUser,
   requireOrganizationMembership,
@@ -362,6 +408,24 @@ router.get("/:id/profile", async (req, res) => {
   try {
     const profile = await readAnalysisRunProfile({ organizationId: req.organization.id, analysisRunId: req.params.id });
     return res.json({ success: true, profile });
+  } catch (error) {
+    return res.status(error.status || 404).json(normalizeAnalysisRunError(error));
+  }
+});
+
+router.get("/:id/relationships", async (req, res) => {
+  try {
+    const relationships = await readAnalysisRunRelationships({ organizationId: req.organization.id, analysisRunId: req.params.id });
+    return res.json({ success: true, relationships });
+  } catch (error) {
+    return res.status(error.status || 404).json(normalizeAnalysisRunError(error));
+  }
+});
+
+router.get("/:id/financial-impact", async (req, res) => {
+  try {
+    const financialImpact = await readAnalysisRunFinancialImpact({ organizationId: req.organization.id, analysisRunId: req.params.id });
+    return res.json({ success: true, financialImpact });
   } catch (error) {
     return res.status(error.status || 404).json(normalizeAnalysisRunError(error));
   }

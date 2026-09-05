@@ -5,9 +5,9 @@ import Button from "../ui/Button";
 import EvidencePanel from "./EvidencePanel";
 
 const EXAMPLES = [
-  "What happens if we return the aircraft late?",
-  "Who is responsible for maintenance?",
-  "What notice period applies before termination?",
+  "What are the key obligations in this contract?",
+  "Which deadlines are approaching?",
+  "What should I review before renewal?",
 ];
 
 export default function ContractAssistantPanel({ analysisRunId, organizationId }) {

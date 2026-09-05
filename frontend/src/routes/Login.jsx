@@ -1,18 +1,25 @@
 import React, { useState } from "react";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { Section, Container } from "../components/ui/Layout";
 import Button from "../components/ui/Button";
 import Reveal from "../components/ui/Reveal";
 import Logo from "../components/ui/Logo";
+import { useAuth } from "../context/AuthContext";
 
 const HERO = "https://images.unsplash.com/photo-1542296332-2e4473faf563?auto=format&fit=crop&w=1800&q=82";
 
 export default function Login() {
+  const auth = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState("login");
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  if (!auth?.loading && auth?.isAuthenticated) return <Navigate to="/app/dashboard" replace />;
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -24,7 +31,7 @@ export default function Login() {
         ? supabase.auth.signUp({ email, password })
         : supabase.auth.signInWithPassword({ email, password });
 
-    const { error } = await action;
+    const { data, error } = await action;
     setSubmitting(false);
 
     if (error) {
@@ -32,7 +39,17 @@ export default function Login() {
       return;
     }
 
-    window.location.href = "/app";
+    if (mode === "signup" && !data?.session) {
+      setMessage("Check your email to confirm your account, then sign in.");
+      setMode("login");
+      return;
+    }
+
+    const requestedPath = location.state?.from?.pathname;
+    const destination = typeof requestedPath === "string" && requestedPath.startsWith("/app/")
+      ? `${requestedPath}${location.state?.from?.search || ""}${location.state?.from?.hash || ""}`
+      : "/app/dashboard";
+    navigate(destination, { replace: true });
   }
 
   return (

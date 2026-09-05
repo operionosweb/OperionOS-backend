@@ -23,7 +23,6 @@ export function AuthProvider({ children }) {
   async function logout() {
     await supabase.auth.signOut();
     setSession(null);
-    window.location.href = "/login";
   }
 
   const value = {

@@ -4,6 +4,7 @@ import { AuthProvider } from "./context/AuthContext";
 import { OrganizationProvider } from "./context/OrganizationContext";
 import CorporateLayout from "./components/layout/CorporateLayout";
 import RequireAuth from "./components/auth/RequireAuth";
+import RouteMetadata from "./components/seo/RouteMetadata";
 import { LoadingState } from "./components/ui/States";
 
 const ProductionLayout = lazy(() => import("./components/layout/ProductionLayout"));
@@ -92,13 +93,16 @@ export default function App() {
                 </RequireAuth>
               }
             >
-              <Route index element={<ProductionDashboard />} />
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<ProductionDashboard />} />
               <Route path="contracts" element={<ProductionContracts />} />
               <Route path="contracts/:id" element={<ContractWorkspace />} />
               <Route path="contracts/:id/analysis" element={<AnalysisView />} />
               <Route path="upload" element={<ProductionUpload />} />
-              <Route path="intelligence" element={<ProductionIntelligence />} />
+              <Route path="aviation" element={<ProductionIntelligence />} />
+              <Route path="intelligence" element={<Navigate to="../aviation" replace />} />
               <Route path="live-tracking" element={<ProductionLiveTracking />} />
+              <Route path="*" element={<Navigate to="dashboard" replace />} />
             </Route>
 
             <Route path="/demo" element={<DemoShell />}>
@@ -112,9 +116,10 @@ export default function App() {
               <Route path="intelligence" element={<DemoIntelligence />} />
               <Route path=":admin" element={<DemoAdmin />} />
             </Route>
-            <Route path="*" element={<Navigate to="/app" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           </Suspense>
+          <RouteMetadata />
         </BrowserRouter>
       </OrganizationProvider>
     </AuthProvider>

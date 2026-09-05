@@ -154,7 +154,6 @@ export default function Scenarios() {
 
   return (
     <>
-      <ScenariosSeo />
       <section className="op-page-hero op-cinematic-hero" style={{ backgroundImage: `url(${HERO})` }}>
         <div className="op-page-hero-overlay">
           <Container>

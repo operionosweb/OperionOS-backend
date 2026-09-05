@@ -7,6 +7,7 @@ import {
   readAnalysisRunEvidence,
   readAnalysisRunObligations,
   readAnalysisRunProfile,
+  readAnalysisRunRelationships,
   searchAnalysisRun,
 } from "../routes/analysisRunRoutes.js";
 
@@ -236,6 +237,44 @@ test("profile and search readers reject foreign runs before downstream access", 
   const unreachable = new Proxy({}, { get() { return async () => { throw new Error("must not query downstream repository"); }; } });
   await assert.rejects(() => readAnalysisRunProfile({ organizationId: ORG_ID, analysisRunId: RUN_ID, analysisRunRepository, profileRepository: unreachable }), (error) => error.code === "ANALYSIS_RUN_NOT_FOUND");
   await assert.rejects(() => searchAnalysisRun({ organizationId: ORG_ID, analysisRunId: RUN_ID, query: "rent", analysisRunRepository, searchRepository: unreachable }), (error) => error.code === "ANALYSIS_RUN_NOT_FOUND");
+});
+
+test("relationship reader resolves the authenticated run contract scope", async () => {
+  const relationships = [{
+    id: "relationship-1",
+    aircraft_id: "aircraft-1",
+    registration: "G-OPER",
+    relationship_type: "leased_under",
+    source_locator: "page:2",
+  }];
+  const result = await readAnalysisRunRelationships({
+    organizationId: ORG_ID,
+    analysisRunId: RUN_ID,
+    analysisRunRepository: createAnalysisRunRepository({
+      id: RUN_ID,
+      organization_id: ORG_ID,
+      contract_id: "contract-1",
+    }),
+    relationshipRepository: {
+      async listByContract(scope) {
+        assert.deepEqual(scope, { organizationId: ORG_ID, contractId: "contract-1" });
+        return relationships;
+      },
+    },
+  });
+
+  assert.deepEqual(result, relationships);
+});
+
+test("relationship reader rejects foreign runs before repository access", async () => {
+  let called = false;
+  await assert.rejects(() => readAnalysisRunRelationships({
+    organizationId: ORG_ID,
+    analysisRunId: RUN_ID,
+    analysisRunRepository: createAnalysisRunRepository({ id: RUN_ID, organization_id: OTHER_ORG_ID }),
+    relationshipRepository: { async listByContract() { called = true; } },
+  }), (error) => error.code === "ANALYSIS_RUN_NOT_FOUND");
+  assert.equal(called, false);
 });
 
 test("analysis-run assistant passes the authoritative tenant scope to every reader", async () => {

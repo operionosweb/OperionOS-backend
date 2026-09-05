@@ -5,9 +5,11 @@ import {
   BrainCircuit,
   CalendarClock,
   ChevronDown,
+  CircleDollarSign,
   FileCheck2,
   FileText,
   Gauge,
+  LogOut,
   Menu,
   Search,
   ShieldAlert,
@@ -20,11 +22,11 @@ import { useAuth } from "../../context/AuthContext";
 import { useOrganization } from "../../context/OrganizationContext";
 
 const PRIMARY_NAV = [
-  { to: "/app", label: "Dashboard", icon: Gauge, end: true },
+  { to: "/app/dashboard", label: "Dashboard", icon: Gauge, end: true },
   { to: "/app/contracts", label: "Contracts", icon: FileText },
   { to: "/app/upload", label: "Upload", icon: Upload },
+  { to: "/app/aviation", label: "Aviation Intelligence", icon: BrainCircuit },
   { to: "/app/live-tracking", label: "Live Tracking", icon: Radar },
-  { to: "/app/intelligence", label: "Intelligence", icon: BrainCircuit },
 ];
 
 const WORKSPACE_NAV = [
@@ -32,6 +34,7 @@ const WORKSPACE_NAV = [
   { hash: "obligations", label: "Obligations", icon: FileText },
   { hash: "deadlines", label: "Deadlines", icon: CalendarClock },
   { hash: "risks", label: "Risks", icon: ShieldAlert },
+  { hash: "financial-impact", label: "Financial Impact", icon: CircleDollarSign },
   { hash: "evidence", label: "Evidence", icon: FileCheck2 },
   { hash: "assistant", label: "Assistant", icon: Bot },
 ];
@@ -109,6 +112,7 @@ export default function ProductionLayout() {
           <span>Production mode</span>
           <small>{organizationId ? "Organisation scope verified by API" : "Organisation context required"}</small>
           <Link to="/demo" className="op-demo-boundary-link">Open clearly labelled Demo Mode</Link>
+          <button type="button" className="op-demo-boundary-link" onClick={auth.logout}><LogOut size={15} />Sign out</button>
         </div>
       </aside>
 
