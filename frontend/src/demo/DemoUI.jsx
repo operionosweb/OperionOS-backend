@@ -4,8 +4,8 @@ export function DemoBadge({ children = "DEMO DATA", tone = "demo" }) {
   return <span className={`od-badge od-badge-${tone}`}>{children}</span>;
 }
 
-export function PageHeader({ eyebrow, title, description, actions, children }) {
-  return <header className="od-page-header"><div><span className="od-eyebrow">{eyebrow}</span><h1>{title}</h1>{description && <p>{description}</p>}{children}</div>{actions && <div className="od-page-actions">{actions}</div>}</header>;
+export function PageHeader({ eyebrow, title, description, actions, children, headingLevel: Heading = "h1" }) {
+  return <header className="od-page-header"><div><span className="od-eyebrow">{eyebrow}</span><Heading>{title}</Heading>{description && <p>{description}</p>}{children}</div>{actions && <div className="od-page-actions">{actions}</div>}</header>;
 }
 
 export function GlassCard({ title, eyebrow, action, className = "", children }) {

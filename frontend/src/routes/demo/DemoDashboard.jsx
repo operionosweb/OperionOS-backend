@@ -4,13 +4,13 @@ import { Bot, CalendarClock, FileText, ListChecks, ShieldCheck, ShieldAlert } fr
 import { useDemoData } from "../../demo/DemoDataProvider";
 import { DemoBadge, GlassCard, MetricCard, PageHeader, RiskBadge } from "../../demo/DemoUI";
 
-export default function DemoDashboard() {
+export default function DemoDashboard({ headingLevel }) {
   const { primaryContract: contract } = useDemoData();
   const counts = { obligations: contract.obligations.length, deadlines: contract.deadlines.length, risks: contract.risks.length, documents: 1 };
   const severity = contract.risks.reduce((result, risk) => ({ ...result, [risk.severity]: (result[risk.severity] || 0) + 1 }), {});
 
   return <div className="od-dashboard-page">
-    <PageHeader eyebrow="Dashboard / contract intelligence" title="Good morning, John" description="Your aviation contract intelligence command centre." actions={<><DemoBadge>DEMO DATA</DemoBadge><Link className="od-button od-button-primary" to={`/demo/contracts/${contract.id}/assistant`}><Bot size={16}/>Ask Operion</Link></>} />
+    <PageHeader eyebrow="Dashboard / contract intelligence" title="Good morning, John" headingLevel={headingLevel} description="Your aviation contract intelligence command centre." actions={<><DemoBadge>DEMO DATA</DemoBadge><Link className="od-button od-button-primary" to={`/demo/contracts/${contract.id}/assistant`}><Bot size={16}/>Ask Operion</Link></>} />
     <div className="od-dashboard-layout od-dashboard-layout-wide">
       <div className="od-dashboard-center">
         <div className="od-metric-grid od-metric-grid-five">

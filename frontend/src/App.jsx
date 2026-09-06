@@ -5,6 +5,7 @@ import { OrganizationProvider } from "./context/OrganizationContext";
 import CorporateLayout from "./components/layout/CorporateLayout";
 import RequireAuth from "./components/auth/RequireAuth";
 import RouteMetadata from "./components/seo/RouteMetadata";
+import Analytics from "./components/analytics/Analytics";
 import { LoadingState } from "./components/ui/States";
 
 const ProductionLayout = lazy(() => import("./components/layout/ProductionLayout"));
@@ -13,8 +14,13 @@ const CorporateHome = lazy(() => import("./routes/CorporateHome"));
 const AnalysisView = lazy(() => import("./routes/AnalysisView"));
 const Login = lazy(() => import("./routes/Login"));
 const PlaceholderPage = lazy(() => import("./routes/PlaceholderPage"));
-const Platform = lazy(() => import("./routes/Platform"));
-const Aviation = lazy(() => import("./routes/Aviation"));
+const Product = lazy(() => import("./routes/Product"));
+const AviationCommercial = lazy(() => import("./routes/AviationCommercial"));
+const HowItWorks = lazy(() => import("./routes/HowItWorks"));
+const Security = lazy(() => import("./routes/Security"));
+const RequestDemo = lazy(() => import("./routes/RequestDemo"));
+const PrivacyPage = lazy(() => import("./routes/LegalPages").then((module) => ({ default: module.PrivacyPage })));
+const LegalPage = lazy(() => import("./routes/LegalPages").then((module) => ({ default: module.LegalPage })));
 const Scenarios = lazy(() => import("./routes/Scenarios"));
 const Enterprise = lazy(() => import("./routes/Enterprise"));
 const Solutions = lazy(() => import("./routes/Solutions"));
@@ -34,11 +40,15 @@ const DemoIntelligence = lazy(() => import("./routes/demo/DemoIntelligence"));
 const DemoAdmin = lazy(() => import("./routes/demo/DemoAdmin"));
 
 function ScrollToTop() {
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
 
   useEffect(() => {
+    if (hash) {
+      window.requestAnimationFrame(() => document.querySelector(hash)?.scrollIntoView({ behavior: "smooth" }));
+      return;
+    }
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  }, [pathname]);
+  }, [pathname, hash]);
 
   return null;
 }
@@ -53,8 +63,10 @@ export default function App() {
           <Routes>
             <Route element={<CorporateLayout />}>
               <Route path="/" element={<CorporateHome />} />
-              <Route path="/platform" element={<Platform />} />
-              <Route path="/industries/aviation" element={<Aviation />} />
+              <Route path="/product" element={<Product />} />
+              <Route path="/platform" element={<Navigate to="/product" replace />} />
+              <Route path="/aviation" element={<AviationCommercial />} />
+              <Route path="/industries/aviation" element={<Navigate to="/aviation" replace />} />
               <Route path="/scenarios" element={<Scenarios />} />
               <Route path="/enterprise" element={<Enterprise />} />
               <Route path="/solutions" element={<Solutions />} />
@@ -67,21 +79,13 @@ export default function App() {
                   />
                 }
               />
-              <Route
-                path="/product"
-                element={<Navigate to="/platform" replace />}
-              />
-              <Route path="/aviation" element={<Navigate to="/industries/aviation" replace />} />
-              <Route
-                path="/how-it-works"
-                element={
-                  <PlaceholderPage
-                    title="How it works"
-                    description="A walkthrough of the upload → analysis → intelligence pipeline is coming here."
-                  />
-                }
-              />
+              <Route path="/how-it-works" element={<HowItWorks />} />
+              <Route path="/security" element={<Security />} />
+              <Route path="/request-demo" element={<RequestDemo />} />
+              <Route path="/contact" element={<Navigate to="/request-demo" replace />} />
               <Route path="/about" element={<About />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/legal" element={<LegalPage />} />
               <Route path="/login" element={<Login />} />
             </Route>
 
@@ -120,6 +124,7 @@ export default function App() {
           </Routes>
           </Suspense>
           <RouteMetadata />
+          <Analytics />
         </BrowserRouter>
       </OrganizationProvider>
     </AuthProvider>

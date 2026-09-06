@@ -1,7 +1,7 @@
 services:
   - type: web
     name: operionos-backend
-    env: node
+    runtime: node
     plan: free
     buildCommand: npm install
     startCommand: node index.js
@@ -9,3 +9,7 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 20
+      - key: RESEND_API_KEY
+        sync: false
+      - key: CONTACT_FROM_EMAIL
+        sync: false

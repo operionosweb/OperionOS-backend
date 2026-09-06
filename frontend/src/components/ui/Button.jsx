@@ -12,7 +12,7 @@ export default function Button({ to, href, variant = "primary", children, onClic
 
   if (to) {
     return (
-      <Link to={to} className={className} aria-label={ariaLabel}>
+      <Link to={to} className={className} aria-label={ariaLabel} onClick={onClick}>
         {children}
       </Link>
     );
@@ -20,7 +20,7 @@ export default function Button({ to, href, variant = "primary", children, onClic
 
   if (href) {
     return (
-      <a href={href} className={className} aria-label={ariaLabel}>
+      <a href={href} className={className} aria-label={ariaLabel} onClick={onClick}>
         {children}
       </a>
     );

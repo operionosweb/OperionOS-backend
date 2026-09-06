@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
-import { Section, Container } from "../components/ui/Layout";
+import { Container } from "../components/ui/Layout";
 import Button from "../components/ui/Button";
 import Reveal from "../components/ui/Reveal";
 import Logo from "../components/ui/Logo";
 import { useAuth } from "../context/AuthContext";
+import { trackEvent } from "../components/analytics/Analytics";
 
 const HERO = "https://images.unsplash.com/photo-1542296332-2e4473faf563?auto=format&fit=crop&w=1800&q=82";
 
@@ -15,9 +16,10 @@ export default function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState("login");
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState("error");
   const [submitting, setSubmitting] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   if (!auth?.loading && auth?.isAuthenticated) return <Navigate to="/app/dashboard" replace />;
 
@@ -25,23 +27,14 @@ export default function Login() {
     event.preventDefault();
     setSubmitting(true);
     setMessage("");
+    trackEvent("login_click", { location: "login_form" });
 
-    const action =
-      mode === "signup"
-        ? supabase.auth.signUp({ email, password })
-        : supabase.auth.signInWithPassword({ email, password });
-
-    const { data, error } = await action;
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     setSubmitting(false);
 
     if (error) {
-      setMessage(error.message);
-      return;
-    }
-
-    if (mode === "signup" && !data?.session) {
-      setMessage("Check your email to confirm your account, then sign in.");
-      setMode("login");
+      setMessageTone("error");
+      setMessage("We could not sign you in. Check your details and try again.");
       return;
     }
 
@@ -52,82 +45,41 @@ export default function Login() {
     navigate(destination, { replace: true });
   }
 
+  async function handlePasswordReset() {
+    setMessage("");
+    if (!email) {
+      setMessageTone("error");
+      setMessage("Enter your business email to request a password reset.");
+      return;
+    }
+
+    setResetting(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/login`,
+    });
+    setResetting(false);
+    setMessageTone(error ? "error" : "success");
+    setMessage(error ? "We could not send the reset email. Please try again." : "Check your email for a password reset link.");
+  }
+
   return (
-    <>
-      <section className="op-page-hero op-cinematic-hero" style={{ backgroundImage: `url(${HERO})` }}>
-        <div className="op-page-hero-overlay">
-          <Container>
-            <Reveal>
-              <p className="op-stitch-label">OPERION / ACCOUNT ACCESS</p>
-              <h1>{mode === "login" ? "Sign in to Operion" : "Create an account"}</h1>
-              <p>Access the contract intelligence workspace and continue from the beginning of the journey.</p>
-            </Reveal>
-          </Container>
-        </div>
+    <main className="op-login-page">
+      <section className="op-login-hero op-cinematic-hero" style={{ backgroundImage: `linear-gradient(90deg, rgba(4, 22, 37, .94), rgba(4, 29, 45, .5)), url(${HERO})` }}>
+        <Container><div className="op-login-grid">
+          <Reveal className="op-login-copy"><p className="op-sales-label">OPERION / ACCOUNT ACCESS</p><h1>Access Operion.</h1><p>Sign in to access your Operion workspace and continue working with aviation contract intelligence.</p><Button to="/" variant="secondary">Back to Operion</Button></Reveal>
+          <Reveal as="form" className="op-login-panel" onSubmit={handleSubmit}>
+            <Logo size="sm" />
+            <p className="op-sales-label">SECURE WORKSPACE</p>
+            <h2>Sign in</h2>
+            <label>Business email<input type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+            <label>Password<input type="password" required autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+            <Button type="submit" disabled={submitting || resetting}>{submitting ? "Signing in…" : "Sign in"}</Button>
+            <button type="button" className="op-login-reset" onClick={handlePasswordReset} disabled={submitting || resetting}>{resetting ? "Sending reset link…" : "Forgot password?"}</button>
+            {message && <p className={`op-login-message is-${messageTone}`} role={messageTone === "error" ? "alert" : "status"}>{message}</p>}
+            <div className="op-login-demo-path"><p>Evaluating Operion?</p><Button to="/demo" variant="secondary" onClick={() => trackEvent("demo_access_click", { location: "login" })}>Access Demo</Button><Button to="/request-demo" variant="quiet">Request private access</Button></div>
+          </Reveal>
+        </div></Container>
       </section>
-
-      <Section>
-        <div style={{ maxWidth: 420, margin: "0 auto" }}>
-          <Reveal>
-            <div style={{ marginBottom: "var(--op-space-4)" }}>
-              <Logo />
-            </div>
-            <p className="op-eyebrow">Operion</p>
-            <h1 className="op-heading-lg" style={{ marginBottom: "var(--op-space-6)" }}>
-              {mode === "login" ? "Sign in to Operion" : "Create an account"}
-            </h1>
-          </Reveal>
-
-          <Reveal as="form" className="op-login-form" onSubmit={handleSubmit} style={{ display: "grid", gap: "var(--op-space-3)" }}>
-            <input
-              type="email"
-              required
-              placeholder="Email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className="op-surface"
-              style={{ padding: "12px 16px", color: "var(--op-text)", background: "transparent", border: "1px solid var(--op-border)" }}
-            />
-            <input
-              type="password"
-              required
-              placeholder="Password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="op-surface"
-              style={{ padding: "12px 16px", color: "var(--op-text)", background: "transparent", border: "1px solid var(--op-border)" }}
-            />
-
-            <Button type="submit" variant="primary" onClick={undefined}>
-              {submitting ? "Please wait…" : mode === "login" ? "Sign in" : "Sign up"}
-            </Button>
-
-            {message && (
-              <p className="op-body" style={{ color: "var(--op-signal-risk)" }}>
-                {message}
-              </p>
-            )}
-
-            <button
-              type="button"
-              className="op-login-mode-toggle"
-              onClick={() => setMode(mode === "login" ? "signup" : "login")}
-              style={{ background: "none", border: "none", color: "var(--op-text-muted)", cursor: "pointer", textAlign: "left" }}
-            >
-              {mode === "login" ? "Need an account? Sign up" : "Already have an account? Sign in"}
-            </button>
-
-            <div className="op-login-demo-path">
-              <p className="op-kicker">New visitors</p>
-              <h2 className="op-heading-md" style={{ margin: "var(--op-space-2) 0" }}>Explore Operion first</h2>
-              <p className="op-body-sm" style={{ marginBottom: "var(--op-space-3)" }}>
-                See Contract Intelligence in action using a controlled demonstration environment.
-              </p>
-              <Button to="/demo" variant="secondary">Explore the Demo</Button>
-            </div>
-          </Reveal>
-        </div>
-      </Section>
-    </>
+    </main>
   );
 }

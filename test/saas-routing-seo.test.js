@@ -9,9 +9,14 @@ const read = (relativePath) => fs.readFile(path.join(root, relativePath), "utf8"
 
 const publicRoutes = [
   "/",
-  "/platform",
+  "/product",
+  "/aviation",
+  "/how-it-works",
+  "/security",
+  "/request-demo",
+  "/privacy",
+  "/legal",
   "/solutions",
-  "/industries/aviation",
   "/scenarios",
   "/enterprise",
   "/about",
@@ -45,7 +50,8 @@ test("authentication restores safe app destinations and defaults to dashboard", 
   assert.match(guard, /state={{ from: location }}/);
   assert.match(login, /requestedPath\.startsWith\("\/app\/"\)/);
   assert.match(login, /"\/app\/dashboard"/);
-  assert.match(login, /mode === "signup" && !data\?\.session/);
+  assert.match(login, /resetPasswordForEmail/);
+  assert.doesNotMatch(login, /auth\.signUp/);
   assert.match(login, /<Navigate to="\/app\/dashboard" replace \/>/);
   assert.match(layout, /auth\.logout/);
   assert.doesNotMatch(layout, /meelis@operionos\.com/i);

@@ -23,6 +23,7 @@ import foundationRoutes from "./routes/foundationRoutes.js";
 import documentRoutes from "./routes/documentRoutes.js";
 import analysisRunRoutes from "./routes/analysisRunRoutes.js";
 import aviationRoutes from "./routes/aviationRoutes.js";
+import contactRoutes from "./routes/contactRoutes.js";
 
 import copilotRoutes from "./routes/copilotRoutes.js";
 import operionRoutes from "./routes/operionRoutes.js";
@@ -51,6 +52,7 @@ import { tenantContext } from "./middleware/tenantContext.js";
 dotenv.config();
 
 const app = express();
+app.set("trust proxy", 1);
 
 /**
  * =========================================
@@ -59,6 +61,12 @@ const app = express();
  */
 
 app.use(cors());
+
+app.use(
+  "/api/contact",
+  express.json({ limit: "16kb" }),
+  contactRoutes
+);
 
 app.use(
   express.json({

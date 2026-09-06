@@ -7,8 +7,8 @@ const diagnostics = new WeakMap();
 
 async function login(page, tenant) {
   await page.goto("/login");
-  await page.getByPlaceholder("Email").fill(tenant.user.email);
-  await page.getByPlaceholder("Password").fill(tenant.user.password);
+  await page.getByLabel("Business email").fill(tenant.user.email);
+  await page.getByLabel("Password").fill(tenant.user.password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.waitForURL(/\/app\/dashboard$/);
   await page.getByPlaceholder("Organization UUID").fill(tenant.organizationId);
@@ -57,26 +57,25 @@ test("unauthenticated users are redirected to login", async ({ page }) => {
   for (const path of ["/app", "/app/dashboard", "/app/contracts", "/app/upload", "/app/aviation", "/app/live-tracking", `/app/contracts/${state.contracts.completed.contractId}`]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/login$/);
-    await expect(page.getByRole("heading", { name: "Sign in to Operion" }).first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Access Operion." })).toBeVisible();
   }
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
 });
 
-test("registration handles confirmation-required accounts without creating a fake session", async ({ page }) => {
-  await page.route("**/auth/v1/signup", async (route) => {
+test("login offers password recovery without public self-registration", async ({ page }) => {
+  await page.route("**/auth/v1/recover**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ user: { id: "00000000-0000-4000-8000-000000000001" }, session: null }),
+      body: JSON.stringify({}),
     });
   });
   await page.goto("/login");
-  await page.getByRole("button", { name: "Need an account? Sign up", exact: true }).click();
-  await page.getByPlaceholder("Email").fill(`browser-signup-${Date.now()}@example.invalid`);
-  await page.getByPlaceholder("Password").fill("Browser-Test-Only-Password!1");
-  await page.getByRole("button", { name: "Sign up", exact: true }).click();
-  await expect(page.getByText("Check your email to confirm your account, then sign in.", { exact: true })).toBeVisible();
+  await page.getByLabel("Business email").fill(`browser-reset-${Date.now()}@example.invalid`);
+  await page.getByRole("button", { name: "Forgot password?", exact: true }).click();
+  await expect(page.getByText("Check your email for a password reset link.", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /sign up/i })).toHaveCount(0);
   await expect(page).toHaveURL(/\/login$/);
 });
 

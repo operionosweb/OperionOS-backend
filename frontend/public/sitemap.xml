@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://operionos.com/</loc><lastmod>2026-09-05</lastmod></url>
-  <url><loc>https://operionos.com/platform</loc><lastmod>2026-09-05</lastmod></url>
+  <url><loc>https://operionos.com/</loc><lastmod>2026-09-06</lastmod></url>
+  <url><loc>https://operionos.com/product</loc><lastmod>2026-09-06</lastmod></url>
+  <url><loc>https://operionos.com/aviation</loc><lastmod>2026-09-06</lastmod></url>
+  <url><loc>https://operionos.com/how-it-works</loc><lastmod>2026-09-06</lastmod></url>
+  <url><loc>https://operionos.com/security</loc><lastmod>2026-09-06</lastmod></url>
+  <url><loc>https://operionos.com/request-demo</loc><lastmod>2026-09-06</lastmod></url>
+  <url><loc>https://operionos.com/privacy</loc><lastmod>2026-09-06</lastmod></url>
+  <url><loc>https://operionos.com/legal</loc><lastmod>2026-09-06</lastmod></url>
   <url><loc>https://operionos.com/solutions</loc><lastmod>2026-09-05</lastmod></url>
-  <url><loc>https://operionos.com/industries/aviation</loc><lastmod>2026-09-05</lastmod></url>
   <url><loc>https://operionos.com/scenarios</loc><lastmod>2026-09-05</lastmod></url>
   <url><loc>https://operionos.com/enterprise</loc><lastmod>2026-09-05</lastmod></url>
   <url><loc>https://operionos.com/about</loc><lastmod>2026-09-05</lastmod></url>

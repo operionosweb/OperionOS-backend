@@ -2,29 +2,44 @@ import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 
 const SITE_URL = "https://operionos.com";
-const DEFAULT_TITLE = "Operion | Aviation Contract Intelligence";
-const DEFAULT_DESCRIPTION = "Operion turns aviation contracts into structured, evidence-backed intelligence across clauses, obligations, deadlines, risks, relationships, and recommended actions.";
+const DEFAULT_TITLE = "Operion | Contract Intelligence for Aviation";
+const DEFAULT_DESCRIPTION = "Operion transforms complex aviation contracts into operational, financial and risk intelligence — helping organisations identify exposure, predict impact and take action.";
 
 const PUBLIC_PAGES = {
   "/": {
-    title: "Operion | Aviation Contract Intelligence",
-    description: "Operion helps aviation organisations understand contracts, obligations, deadlines, risks, aircraft relationships, and the evidence behind every finding.",
+    title: DEFAULT_TITLE,
+    description: DEFAULT_DESCRIPTION,
     name: "Operion",
   },
-  "/platform": {
-    title: "Operion Platform | Aviation Contract Intelligence",
+  "/product": {
+    title: "Operion | Contract Intelligence for Aviation",
     description: "Explore how Operion structures aviation contracts into searchable clauses, obligations, deadlines, risks, relationships, evidence, and decision support.",
-    name: "Platform",
+    name: "Product",
   },
   "/solutions": {
     title: "Operion Solutions | Contract Intelligence for Aviation",
     description: "See how Operion supports airlines, aircraft lessors, MRO providers, ground handlers, airports, suppliers, and aviation advisers with contract intelligence.",
     name: "Solutions",
   },
-  "/industries/aviation": {
-    title: "Operion Aviation | Contract Intelligence for Aviation and Aerospace",
+  "/aviation": {
+    title: "Operion | Contract Intelligence for Aviation Organisations",
     description: "Operion connects aviation contracts, clauses, obligations, deadlines, risks, evidence, and aircraft relationships for complex aviation organisations.",
     name: "Aviation",
+  },
+  "/how-it-works": {
+    title: "How Operion Works | Contract Intelligence for Aviation",
+    description: "See how Operion turns aviation contract documents into structured intelligence, exposure context and recommended actions.",
+    name: "How Operion Works",
+  },
+  "/security": {
+    title: "Operion Security | Enterprise Contract Intelligence",
+    description: "Review Operion's current access, organisation-boundary, evidence and deployment security approach for sensitive aviation contract intelligence.",
+    name: "Security",
+  },
+  "/request-demo": {
+    title: "Request a Private Operion Demo",
+    description: "Request a private demonstration of Operion Contract Intelligence for your aviation organisation.",
+    name: "Request a Demo",
   },
   "/scenarios": {
     title: "Operion Scenarios | Aviation Contract Risk and Decision Intelligence",
@@ -37,9 +52,19 @@ const PUBLIC_PAGES = {
     name: "Enterprise",
   },
   "/about": {
-    title: "About Operion | Aviation Contract Intelligence",
+    title: "About Operion | Contract Intelligence for Aviation",
     description: "Learn why Operion is building an intelligence layer for aviation contracts, obligations, operational events, risks, relationships, and decisions.",
     name: "About Operion",
+  },
+  "/privacy": {
+    title: "Operion Privacy | Website and Demo Requests",
+    description: "Learn how the Operion website handles demo requests and consent-based analytics.",
+    name: "Privacy",
+  },
+  "/legal": {
+    title: "Operion Legal | Website Terms",
+    description: "Review the terms that apply to Operion website information, demonstrations and illustrative product material.",
+    name: "Legal",
   },
   "/demo/dashboard": {
     title: "Operion Demo | Aviation Contract Intelligence Dashboard",
@@ -81,10 +106,6 @@ const NON_INDEXED_PAGES = {
   "/industries": {
     title: "Operion Industries",
     description: "Operion's industry-specific contract intelligence experiences.",
-  },
-  "/how-it-works": {
-    title: "How Operion Works",
-    description: "An overview of Operion's contract ingestion and intelligence workflow.",
   },
 };
 
