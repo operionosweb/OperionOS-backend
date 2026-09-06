@@ -74,7 +74,7 @@ test("private routes are noindex in HTML policy, robots, and Vercel headers", as
   const [metadata, robots, vercelText] = await Promise.all([
     read("frontend/src/components/seo/RouteMetadata.jsx"),
     read("frontend/public/robots.txt"),
-    read("vercel.json"),
+    read("frontend/vercel.json"),
   ]);
   const vercel = JSON.parse(vercelText);
   assert.match(metadata, /pathname === "\/app" \|\| pathname\.startsWith\("\/app\/"\)/);
