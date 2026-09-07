@@ -10,6 +10,7 @@ export default defineConfig({
     react(),
     viteStaticCopy({
       targets: [
+        { src: '../public/videos/operion-contract-intelligence.mp4', dest: 'videos' },
         { src: 'node_modules/cesium/Build/Cesium/Workers', dest: 'cesium' },
         { src: 'node_modules/cesium/Build/Cesium/ThirdParty', dest: 'cesium' },
         { src: 'node_modules/cesium/Build/Cesium/Assets', dest: 'cesium' },

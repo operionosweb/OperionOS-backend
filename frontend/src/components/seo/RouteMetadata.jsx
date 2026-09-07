@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 
 const SITE_URL = "https://operionos.com";
-const DEFAULT_TITLE = "Operion | Contract Intelligence for Aviation";
+const DEFAULT_TITLE = "Operion | AI Contract Intelligence for Aviation";
 const DEFAULT_DESCRIPTION = "Operion transforms complex aviation contracts into operational, financial and risk intelligence — helping organisations identify exposure, predict impact and take action.";
 
 const PUBLIC_PAGES = {

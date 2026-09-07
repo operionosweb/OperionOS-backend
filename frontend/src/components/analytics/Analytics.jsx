@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 
 const MEASUREMENT_ID = "G-KJRS5DWVD4";
 const CONSENT_KEY = "operion-analytics-consent";
+let videoPlayTracked = false;
 
 function loadAnalytics() {
   if (document.querySelector("script[data-operion-ga4]")) return;
@@ -21,6 +22,10 @@ function loadAnalytics() {
 
 export function trackEvent(name, parameters = {}) {
   if (localStorage.getItem(CONSENT_KEY) !== "granted") return;
+  if (name === "video_play") {
+    if (videoPlayTracked) return;
+    videoPlayTracked = true;
+  }
   loadAnalytics();
   window.gtag("event", name, parameters);
 }
@@ -50,7 +55,7 @@ export default function Analytics() {
     });
     const activeVideo = document.querySelector(".op-intel-video-frame video");
     if (activeVideo && !activeVideo.paused && activeVideo.readyState >= 2) {
-      window.gtag("event", "video_play", { video_title: "Operion home" });
+      trackEvent("video_play", { video_title: "Operion home" });
     }
   }, [consent, pathname, search]);
 
