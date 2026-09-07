@@ -22,12 +22,12 @@ const PUBLIC_PAGES = {
     name: "Solutions",
   },
   "/aviation": {
-    title: "Operion | Contract Intelligence for Aviation Organisations",
+    title: "Operion | Aviation Contract Intelligence",
     description: "Operion connects aviation contracts, clauses, obligations, deadlines, risks, evidence, and aircraft relationships for complex aviation organisations.",
     name: "Aviation",
   },
   "/how-it-works": {
-    title: "How Operion Works | Contract Intelligence for Aviation",
+    title: "Operion | How Contract Intelligence Works",
     description: "See how Operion turns aviation contract documents into structured intelligence, exposure context and recommended actions.",
     name: "How Operion Works",
   },
@@ -37,7 +37,7 @@ const PUBLIC_PAGES = {
     name: "Security",
   },
   "/request-demo": {
-    title: "Request a Private Operion Demo",
+    title: "Operion | Request a Private Demo",
     description: "Request a private demonstration of Operion Contract Intelligence for your aviation organisation.",
     name: "Request a Demo",
   },

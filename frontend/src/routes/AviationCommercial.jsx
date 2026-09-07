@@ -5,16 +5,19 @@ import Reveal from "../components/ui/Reveal";
 
 const AVIATION_IMAGE = "https://images.unsplash.com/photo-1570710891163-6d3b5c47248b?auto=format&fit=crop&w=1800&q=84";
 const SEGMENTS = [
-  ["Airlines", ["Supplier obligations", "Fleet-related exposure", "SLA commitments", "MRO and ground handling agreements", "Financial exposure"]],
-  ["Aircraft Leasing Companies", ["Lease obligations", "Maintenance requirements", "Return conditions", "Commercial exposure", "Contractual dependencies"]],
-  ["MRO Organisations", ["Service-level commitments", "Supplier agreements", "Parts-related obligations", "Performance requirements", "Financial exposure"]],
-  ["Ground Handling & Aviation Services", ["Service obligations", "SLAs and penalty structures", "Operational dependencies", "Supplier and customer exposure"]],
+  ["Airlines", ["Aircraft leases", "Engine and maintenance agreements", "Supplier and airport contracts", "Ground handling", "Operational services"]],
+  ["Aircraft Leasing Companies", ["Lease agreements", "Maintenance obligations", "Return conditions", "Payment obligations", "Technical requirements"]],
+  ["MRO Organisations", ["Maintenance agreements", "Customer obligations", "Supplier contracts", "Turnaround commitments", "Service levels"]],
+  ["Ground Handling Providers", ["Service agreements", "Airport contracts", "SLA obligations", "Operational responsibilities", "Performance exposure"]],
+  ["Airport Operators", ["Airline agreements", "Concession agreements", "Ground service contracts", "Infrastructure obligations"]],
+  ["Aviation Consultancies", ["Accelerated contract review", "Aviation project risk", "Evidence-backed analysis", "Client decision support"]],
 ];
 const CONSEQUENCE_FLOW = ["External event", "Operational consequence", "Affected contracts", "Financial exposure", "Recommended action"];
+const LEASE_SCENARIO = ["Maintenance return clause", "Aircraft return obligation", "Condition not evidenced", "Contractual exposure", "Potential financial impact", "Review evidence and remedy options"];
 
 export default function AviationCommercial() {
   return <main className="op-sales-page">
-    <SalesHero eyebrow="AVIATION" title="Contract Intelligence for Aviation" copy="Built for organisations where contractual complexity directly affects operational performance and financial outcomes." image={AVIATION_IMAGE} imageAlt="Commercial aircraft operating within the aviation ecosystem" />
+    <SalesHero eyebrow="AVIATION" title="Contract Intelligence Built for Aviation" copy="Aviation contracts connect aircraft, operations, suppliers, maintenance, financing and financial exposure. Operion helps organisations understand those connections." image={AVIATION_IMAGE} imageAlt="Commercial aircraft operating within the aviation ecosystem" />
 
     <SalesSection eyebrow="WHO OPERION SERVES" title="One industry. Interconnected contractual complexity." copy="Operion is shaped around the agreements that keep aircraft, services and commercial relationships moving.">
       <Reveal className="op-sales-segment-grid">{SEGMENTS.map(([title, items]) => <article key={title}><Plane size={20} /><h3>{title}</h3><ul>{items.map((item) => <li key={item}><Check size={13} />{item}</li>)}</ul></article>)}</Reveal>
@@ -25,8 +28,8 @@ export default function AviationCommercial() {
       <p className="op-sales-disclosure">The event-to-contract connection represents Operion's direction toward Predictive Contract Intelligence. External integrations are not presented as universally live.</p>
     </SalesSection>
 
-    <SalesSection eyebrow="FINANCIAL EXPOSURE" title="Understand the financial consequences before they materialise." copy="A structured view helps decision-makers see the scale of potential exposure and the obligations that deserve attention.">
-      <Reveal className="op-sales-metric-panel"><p>Illustrative scenario · prepared data</p><div><article><strong>€2.4M</strong><span>Potential exposure</span></article><article><strong>18</strong><span>Contracts affected</span></article><article><strong>7</strong><span>High-risk obligations</span></article><article><strong>5</strong><span>Recommended actions</span></article></div></Reveal>
+    <SalesSection eyebrow="AVIATION-SPECIFIC EXAMPLE" title="An aircraft lease contains a maintenance return condition." copy="Operion helps a team follow the contractual requirement through the operational event, potential exposure and the action that should be considered next.">
+      <Reveal className="op-sales-lease-scenario">{LEASE_SCENARIO.map((item, index) => <div key={item}><span>{String(index + 1).padStart(2, "0")}</span><strong>{item}</strong></div>)}</Reveal>
     </SalesSection>
 
     <SalesSection eyebrow="AVIATION DECISION SUPPORT" title="See the relationship behind the risk." copy="Operion connects contractual evidence with obligations, potential consequences and the actions a team may consider.">

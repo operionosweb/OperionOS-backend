@@ -168,7 +168,7 @@ export default function Scenarios() {
       <Section className="op-scenario-hero">
         <Reveal>
           <p className="op-eyebrow">Scenario Intelligence</p>
-          <h1 className="op-heading-xl">What happens if the world changes tomorrow?</h1>
+          <h2 className="op-heading-xl">What happens if the world changes tomorrow?</h2>
           <p className="op-body-lg" style={{ marginTop: "var(--op-space-5)", maxWidth: 820 }}>
             Contracts are written for a defined set of conditions. Operations rarely stay that way. Operion is being developed to connect contracts with changing operational and external conditions — helping organisations understand which agreements could be affected, what the potential consequences could be and what actions may reduce exposure.
           </p>

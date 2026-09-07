@@ -1559,6 +1559,11 @@
 .op-sales-check-grid { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 48px; border-top: 1px solid #d4e2df; border-left: 1px solid #d4e2df; }
 .op-sales-check-grid span { display: flex; align-items: center; gap: 10px; min-height: 76px; padding: 18px; border-right: 1px solid #d4e2df; border-bottom: 1px solid #d4e2df; color: var(--sales-navy); font-weight: 600; }
 .op-sales-check-grid svg { color: var(--sales-blue); }
+.op-sales-capability-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; margin-top: 48px; border: 1px solid #d4e2df; background: #d4e2df; }
+.op-sales-capability-grid article { min-height: 230px; padding: 26px; background: #fff; }
+.op-sales-capability-grid svg { color: var(--sales-blue); }
+.op-sales-capability-grid h3 { margin-top: 32px; color: var(--sales-navy); font-size: 1rem; line-height: 1.35; }
+.op-sales-capability-grid p { margin-top: 13px; color: #607681; font-size: .78rem; line-height: 1.65; }
 .op-sales-flow { display: grid; grid-template-columns: repeat(5, 1fr); margin-top: 52px; border: 1px solid #d1dfdc; }
 .op-sales-flow article { min-height: 210px; padding: 24px 20px; border-right: 1px solid #d1dfdc; background: #fff; }
 .op-sales-flow article:last-child { border-right: 0; }
@@ -1575,6 +1580,9 @@
 .op-sales-impact-example ol { margin: 0; padding: 0; list-style: none; counter-reset: impact; }
 .op-sales-impact-example li { counter-increment: impact; padding: 15px 12px; border-bottom: 1px solid rgba(255,255,255,.16); color: #e1edf0; }
 .op-sales-impact-example li::before { content: counter(impact, decimal-leading-zero); margin-right: 16px; color: #55bfd1; font: .65rem var(--op-font-mono); }
+.op-sales-context-list { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 34px; }
+.op-sales-context-list span { display: inline-flex; gap: 8px; align-items: center; padding: 10px 13px; border: 1px solid rgba(255,255,255,.18); color: #d9e7eb; font-size: .72rem; }
+.op-sales-context-list svg { color: #55bfd1; }
 .op-sales-comparison { display: grid; grid-template-columns: .8fr 1.2fr; margin-top: 48px; border: 1px solid #d0dfdc; }
 .op-sales-comparison div { min-height: 160px; display: grid; align-content: center; padding: 28px; border-right: 1px solid #d0dfdc; }
 .op-sales-comparison div:last-child { border-right: 0; background: var(--sales-mist); }
@@ -1583,6 +1591,19 @@
 .op-sales-roadmap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin-top: 48px; border: 1px solid #d0dfdc; background: #d0dfdc; }
 .op-sales-roadmap p { min-height: 70px; display: grid; place-items: center; padding: 14px; background: #fff; color: #365564; font-size: .82rem; }
 .op-sales-roadmap span { grid-column: 1 / -1; padding: 16px; background: var(--sales-mist); color: var(--sales-blue); font: .63rem var(--op-font-mono); text-transform: uppercase; }
+.op-sales-intelligence-chain, .op-sales-pipeline { display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 48px; border: 1px solid #d0dfdc; }
+.op-sales-pipeline { grid-template-columns: repeat(6, 1fr); }
+.op-sales-intelligence-chain div, .op-sales-pipeline div { position: relative; display: grid; align-content: space-between; min-width: 0; min-height: 150px; padding: 22px 18px; border-right: 1px solid #d0dfdc; background: #fff; }
+.op-sales-intelligence-chain div:last-child, .op-sales-pipeline div:last-child { border-right: 0; background: var(--sales-mist); }
+.op-sales-intelligence-chain span, .op-sales-pipeline span { color: var(--sales-blue); font: 600 .62rem var(--op-font-mono); }
+.op-sales-intelligence-chain strong, .op-sales-pipeline strong { color: var(--sales-navy); font-size: .78rem; line-height: 1.4; }
+.op-sales-intelligence-chain svg, .op-sales-pipeline svg { position: absolute; z-index: 1; top: 50%; right: -8px; color: var(--sales-blue); background: #fff; }
+.op-sales-evolution { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; margin-top: 48px; border: 1px solid #d0dfdc; background: #d0dfdc; }
+.op-sales-evolution article { min-height: 220px; padding: 26px; background: #fff; }
+.op-sales-evolution span { color: var(--sales-blue); font: 600 .62rem var(--op-font-mono); letter-spacing: .08em; text-transform: uppercase; }
+.op-sales-evolution h3 { margin-top: 32px; color: var(--sales-navy); font-size: 1rem; }
+.op-sales-evolution p { margin-top: 13px; color: #607681; font-size: .78rem; line-height: 1.6; }
+.op-sales-roadmap-note { margin: 18px 0 0; color: #657b85; font-size: .72rem; line-height: 1.6; }
 .op-sales-segment-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; margin-top: 50px; }
 .op-sales-segment-grid article { min-height: 300px; padding: 28px; border: 1px solid #cfdfdc; border-radius: 4px; }
 .op-sales-segment-grid article > svg { color: var(--sales-blue); }
@@ -1590,6 +1611,11 @@
 .op-sales-segment-grid ul { display: grid; gap: 10px; margin: 30px 0 0; padding: 0; list-style: none; }
 .op-sales-segment-grid li { display: flex; align-items: center; gap: 8px; color: #5a727e; font-size: .82rem; }
 .op-sales-segment-grid li svg { color: var(--sales-blue); }
+.op-sales-lease-scenario { display: grid; grid-template-columns: repeat(6, 1fr); margin-top: 48px; border: 1px solid #d1dfdc; }
+.op-sales-lease-scenario div { min-height: 150px; display: grid; align-content: space-between; padding: 22px 18px; border-right: 1px solid #d1dfdc; background: #fff; }
+.op-sales-lease-scenario div:last-child { border-right: 0; background: var(--sales-mist); }
+.op-sales-lease-scenario span { color: var(--sales-blue); font: 600 .62rem var(--op-font-mono); }
+.op-sales-lease-scenario strong { color: var(--sales-navy); font-size: .78rem; line-height: 1.45; }
 .op-sales-disclosure { max-width: 760px; margin: 26px 0 0; color: #9eb5bf; font-size: .76rem; line-height: 1.6; }
 .op-sales-metric-panel { margin-top: 48px; padding: 30px; background: var(--sales-navy); }
 .op-sales-metric-panel > div { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 20px; border-top: 1px solid rgba(255,255,255,.18); }
@@ -1674,7 +1700,7 @@
   .op-sales-product-stage { grid-template-columns: 1fr; min-height: 700px; }
   .op-sales-product-stage-copy { min-height: 230px; }
   .op-sales-live-product { overflow-x: auto; }
-  .op-sales-check-grid, .op-sales-metric-panel > div { grid-template-columns: repeat(2, 1fr); }
+  .op-sales-check-grid, .op-sales-capability-grid, .op-sales-evolution, .op-sales-metric-panel > div { grid-template-columns: repeat(2, 1fr); }
   .op-sales-flow { grid-template-columns: repeat(2, 1fr); }
   .op-sales-flow article { border-bottom: 1px solid #d1dfdc; }
   .op-sales-flow article:nth-child(even) { border-right: 0; }
@@ -1682,6 +1708,10 @@
   .op-method-step { grid-template-columns: 70px 1fr; }
   .op-method-signals { grid-column: 2; }
   .op-request-grid { grid-template-columns: 1fr; }
+  .op-sales-intelligence-chain { grid-template-columns: repeat(4, 1fr); }
+  .op-sales-intelligence-chain div:nth-child(4), .op-sales-intelligence-chain div:last-child { border-right: 0; }
+  .op-sales-pipeline, .op-sales-lease-scenario { grid-template-columns: repeat(3, 1fr); }
+  .op-sales-pipeline div:nth-child(3), .op-sales-lease-scenario div:nth-child(3) { border-right: 0; }
 }
 
 @media (max-width: 700px) {
@@ -1695,10 +1725,14 @@
   .op-sales-product-stage { min-height: 530px; }
   .op-sales-product-stage-copy { min-height: 220px; padding: 34px 24px; }
   .op-sales-live-product { padding: 20px; }
-  .op-sales-check-grid, .op-sales-flow, .op-sales-impact-example, .op-sales-comparison, .op-sales-roadmap, .op-sales-segment-grid, .op-sales-metric-panel > div, .op-sales-evidence-strip { grid-template-columns: 1fr; }
+  .op-sales-check-grid, .op-sales-capability-grid, .op-sales-flow, .op-sales-impact-example, .op-sales-comparison, .op-sales-roadmap, .op-sales-evolution, .op-sales-segment-grid, .op-sales-metric-panel > div, .op-sales-evidence-strip, .op-sales-intelligence-chain, .op-sales-pipeline, .op-sales-lease-scenario { grid-template-columns: 1fr; }
   .op-sales-flow article, .op-sales-flow article:last-child { grid-column: auto; min-height: 145px; border-right: 0; }
   .op-sales-flow h3 { margin-top: 24px; }
   .op-sales-roadmap span { grid-column: auto; }
+  .op-sales-capability-grid article, .op-sales-evolution article { min-height: 0; }
+  .op-sales-intelligence-chain div, .op-sales-pipeline div, .op-sales-lease-scenario div { min-height: 105px; border-right: 0; border-bottom: 1px solid #d0dfdc; }
+  .op-sales-intelligence-chain div:last-child, .op-sales-pipeline div:last-child, .op-sales-lease-scenario div:last-child { border-bottom: 0; }
+  .op-sales-intelligence-chain svg, .op-sales-pipeline svg { top: auto; right: 18px; bottom: -8px; transform: rotate(90deg); }
   .op-sales-segment-grid article { min-height: 0; }
   .op-sales-metric-panel { padding: 22px; }
   .op-sales-metric-panel article, .op-sales-evidence-strip div { min-height: 110px; border-right: 0; border-bottom: 1px solid rgba(255,255,255,.18); }
