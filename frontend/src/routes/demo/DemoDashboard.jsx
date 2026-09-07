@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Bot, CalendarClock, FileText, ListChecks, ShieldCheck, ShieldAlert } from "lucide-react";
 import { useDemoData } from "../../demo/DemoDataProvider";
 import { DemoBadge, GlassCard, MetricCard, PageHeader, RiskBadge } from "../../demo/DemoUI";
+import { trackEvent } from "../../components/analytics/Analytics";
 
 export default function DemoDashboard({ headingLevel }) {
   const { primaryContract: contract } = useDemoData();
@@ -25,7 +26,7 @@ export default function DemoDashboard({ headingLevel }) {
             <div className="od-risk-visual"><div className="od-risk-donut"><div><strong>{contract.risks.length}</strong><span>Total risks</span></div></div><ul>{[["Critical",severity.Critical||0],["High",severity.High||0],["Medium",severity.Medium||0],["Low",severity.Low||0]].map(([label,value])=><li key={label}><i className={`is-${label.toLowerCase()}`}/><span>{label}</span><strong>{value}</strong></li>)}</ul></div>
           </GlassCard>
           <GlassCard title="Top Risk Areas" eyebrow="Evidence-linked" action={<Link to={`/demo/contracts/${contract.id}/risks`}>View all</Link>}>
-            <div className="od-risk-bars">{contract.risks.map((risk,index)=><Link to={`/demo/contracts/${contract.id}/risks`} key={risk.id}><span>{risk.category}</span><RiskBadge severity={risk.severity}/><i><b style={{width:`${88-index*16}%`}}/></i></Link>)}</div>
+            <div className="od-risk-bars">{contract.risks.map((risk,index)=><Link to={`/demo/contracts/${contract.id}/risks`} state={{ focusRiskId: risk.id, source: "dashboard" }} onClick={() => trackEvent("demo_risk_open", { contract_id: contract.id, risk_id: risk.id, source: "dashboard" })} key={risk.id}><span>{risk.category}</span><RiskBadge severity={risk.severity}/><i><b style={{width:`${88-index*16}%`}}/></i></Link>)}</div>
           </GlassCard>
         </div>
         <div className="od-grid-two">

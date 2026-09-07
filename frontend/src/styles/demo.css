@@ -15,3 +15,67 @@
 @media(max-width:680px){.od-main{padding:19px 13px 84px}.od-topbar{height:58px;padding:0 11px}.od-search-trigger{flex:1;width:auto}.od-search-trigger span{font-size:0}.od-search-trigger span:after{content:"Search";font-size:11px}.od-search-trigger kbd,.od-ask-button,.od-profile{display:none}.od-page-header{display:grid;margin-bottom:19px}.od-page-header h1{font-size:23px}.od-page-actions{flex-wrap:wrap}.od-bottom-nav{position:fixed;z-index:38;left:0;right:0;bottom:0;height:64px;padding:5px 5px max(5px,env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(5,1fr);background:#fff;border-top:1px solid var(--od-line)}.od-bottom-nav a{min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#7f8799;font-size:7px}.od-bottom-nav a.is-active{color:#6545d8}.od-metric-grid,.od-metric-grid-five,.od-metric-grid-four,.od-financial-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.od-metric{min-height:80px;padding:11px}.od-grid-two,.od-finding-grid,.od-evidence-explorer,.od-intelligence-categories,.od-answer-sources,.od-financial-list{grid-template-columns:1fr}.od-financial-card dl,.od-impact-variables{grid-template-columns:1fr}.od-value-flow{grid-template-columns:1fr}.od-financial-drawer{padding:18px}.od-risk-visual{grid-template-columns:120px 1fr}.od-risk-donut{width:110px;height:110px}.od-filter-bar{grid-template-columns:1fr 1fr}.od-filter-bar label{grid-column:1/-1}.od-contract-table-head{display:none}.od-contract-row{grid-template-columns:1fr auto auto;padding:13px}.od-contract-name{grid-column:1/-1}.od-contract-counterparty{grid-column:1/2}.od-row-action{grid-column:3;grid-row:2}.od-contract-meta{display:grid;grid-template-columns:1fr 1fr}.od-structured-grid,.od-detail-list{grid-template-columns:1fr}.od-section-title{flex-wrap:wrap}.od-aircraft-panel{display:block}.od-globe-panel{height:470px}.od-tracking-toolbar{overflow-x:auto}.od-tracking-toolbar button{white-space:nowrap}.od-section-heading{display:grid;gap:8px}.od-graph-wrap{height:650px}.od-intelligence-categories>a{grid-template-columns:36px 1fr auto}.od-popover{right:10px;top:52px;width:calc(100vw - 20px)}}
 @media(max-width:420px){.od-metric-grid,.od-metric-grid-five,.od-metric-grid-four,.od-financial-metrics{grid-template-columns:1fr}.od-globe-panel{height:420px}.od-contract-row{grid-template-columns:1fr auto}.od-contract-counterparty{grid-column:1}.od-contract-row>.od-badge{display:none}.od-row-action{grid-column:2}.od-risk-visual{grid-template-columns:1fr}.od-risk-donut{margin:auto}.od-workspace-tabs{margin-inline:-13px;padding-inline:7px}}
 @media(prefers-reduced-motion:reduce){.od-sidebar,.od-skeleton{transition:none;animation:none!important}}
+
+/* Evidence-linked contract investigation */
+.od-investigation{margin-bottom:var(--op-space-6);overflow:hidden;border:1px solid var(--op-color-border-strong);border-radius:var(--op-radius-tight);background:var(--op-color-surface)}
+.od-investigation-header{display:flex;justify-content:space-between;gap:var(--op-space-5);align-items:flex-start;padding:var(--op-space-5);border-bottom:1px solid var(--op-color-border);background:var(--op-color-surface-raised)}
+.od-investigation-header h2{margin:var(--op-space-2) 0 0;color:var(--op-color-text-primary);font:700 var(--op-type-subheading) var(--op-font-heading);letter-spacing:0}
+.od-investigation-header p{max-width:720px;margin:var(--op-space-2) 0 0;color:var(--op-color-text-muted);font-size:var(--op-type-body-small);line-height:1.55}
+.od-investigation-split{display:grid;grid-template-columns:minmax(300px,.82fr) minmax(0,1.18fr)}
+.od-contract-evidence{min-width:0;border-right:1px solid var(--op-color-border);background:var(--op-color-surface-inset)}
+.od-contract-evidence>header,.od-connected-intelligence>header{display:flex;justify-content:space-between;gap:var(--op-space-3);padding:var(--op-space-3) var(--op-space-4);border-bottom:1px solid var(--op-color-border);color:var(--op-color-text-muted);font:700 .65rem var(--op-font-label);text-transform:uppercase}
+.od-contract-evidence nav{display:grid;padding:var(--op-space-3);gap:var(--op-space-1)}
+.od-contract-evidence nav button{display:grid;gap:var(--op-space-1);padding:var(--op-space-3);border:0;border-left:3px solid transparent;border-radius:var(--op-radius-tight);background:transparent;color:var(--op-color-text-primary);text-align:left;cursor:pointer;transition:background var(--op-motion-interaction) var(--op-ease-standard),border-color var(--op-motion-interaction) var(--op-ease-standard),transform var(--op-motion-interaction) var(--op-ease-emphasis)}
+.od-contract-evidence nav button:hover{background:var(--op-color-surface)}
+.od-contract-evidence nav button.is-active{border-left-color:var(--op-color-accent);background:var(--op-color-surface)}
+.od-contract-evidence nav button span{color:var(--op-color-accent);font:700 .62rem var(--op-font-label);text-transform:uppercase}
+.od-contract-evidence nav button strong{font-size:.76rem;line-height:1.35}
+.od-contract-clause{margin:0 var(--op-space-4) var(--op-space-4);padding:var(--op-space-5);border:1px solid var(--op-color-border-strong);border-left:3px solid var(--op-color-accent);border-radius:var(--op-radius-tight);background:var(--op-color-surface);transition:box-shadow var(--op-motion-slow) var(--op-ease-emphasis),border-color var(--op-motion-normal) var(--op-ease-standard)}
+.od-contract-clause:focus{border-color:var(--op-color-accent);box-shadow:var(--op-depth-raised);outline:none}
+.od-contract-clause>div{display:flex;justify-content:space-between;gap:var(--op-space-3);align-items:center}
+.od-contract-clause>div>span{color:var(--op-color-accent);font:700 .66rem var(--op-font-label);text-transform:uppercase}
+.od-contract-clause h3{margin:var(--op-space-4) 0 var(--op-space-3);font-size:1rem;letter-spacing:0}
+.od-contract-clause p{color:var(--op-color-text-secondary);font:var(--op-type-body-small)/1.75 var(--op-font-evidence)}
+.od-contract-clause>button,.od-intelligence-detail>button{display:inline-flex;align-items:center;gap:var(--op-space-2);margin-top:var(--op-space-4);padding:0;border:0;background:transparent;color:var(--op-color-accent);font-size:.72rem;font-weight:700;cursor:pointer}
+.od-connected-intelligence{min-width:0;background:var(--op-color-surface)}
+.od-intelligence-chain{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));margin:0;padding:var(--op-space-4);list-style:none}
+.od-intelligence-chain li{position:relative;min-width:0;display:flex;align-items:center}
+.od-intelligence-chain li>svg{position:absolute;z-index:2;right:-6px;color:var(--op-color-accent);transform:rotate(-90deg)}
+.od-intelligence-chain button{width:100%;min-width:0;min-height:108px;display:grid;align-content:space-between;gap:var(--op-space-2);padding:var(--op-space-3);border:1px solid var(--op-color-border);background:var(--op-color-surface);color:var(--op-color-text-primary);text-align:left;cursor:pointer;transition:background var(--op-motion-interaction) var(--op-ease-standard),border-color var(--op-motion-interaction) var(--op-ease-standard),transform var(--op-motion-interaction) var(--op-ease-emphasis)}
+.od-intelligence-chain button:hover{transform:translateY(-2px);border-color:var(--op-color-border-strong)}
+.od-intelligence-chain button.is-active{border-color:var(--op-color-accent);background:var(--op-color-accent-soft)}
+.od-intelligence-chain button svg{color:var(--op-color-accent)}
+.od-intelligence-chain button span{color:var(--op-color-text-muted);font:700 .58rem var(--op-font-label);text-transform:uppercase}
+.od-intelligence-chain button strong{overflow-wrap:anywhere;font-size:.68rem;line-height:1.35}
+.od-intelligence-detail{min-height:210px;margin:0 var(--op-space-4);padding:var(--op-space-5);border-top:3px solid var(--op-color-accent);background:var(--op-color-surface-raised);animation:od-intelligence-detail-in var(--op-motion-slow) var(--op-ease-emphasis)}
+.od-intelligence-detail h4{margin:var(--op-space-2) 0 var(--op-space-3);color:var(--op-color-text-primary);font:700 1.2rem/1.3 var(--op-font-heading);letter-spacing:0}
+.od-intelligence-detail p{max-width:720px;color:var(--op-color-text-secondary);font-size:.8rem;line-height:1.65}
+.od-intelligence-detail>small{display:block;margin-top:var(--op-space-3);color:var(--op-color-text-muted);font-size:.66rem}
+.od-intelligence-detail dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--op-space-3);margin:var(--op-space-4) 0 0}
+.od-intelligence-detail dl div{min-width:0;padding:var(--op-space-3);border:1px solid var(--op-color-border);background:var(--op-color-surface)}
+.od-intelligence-detail dt{color:var(--op-color-text-muted);font:.6rem var(--op-font-label);text-transform:uppercase}
+.od-intelligence-detail dd{margin:var(--op-space-1) 0 0;color:var(--op-color-text-primary);font-size:.72rem;line-height:1.45}
+.od-intelligence-detail.is-action{border-top-color:var(--op-color-success);background:var(--op-color-surface-inset);box-shadow:inset 4px 0 0 var(--op-color-success)}
+.od-action-heading{display:flex;align-items:center;justify-content:space-between;gap:var(--op-space-3)}
+.od-action-heading>span:last-child{color:var(--op-color-text-muted);font-size:.68rem;font-weight:700}
+.od-investigation-risk-title{display:flex;align-items:center;justify-content:space-between;gap:var(--op-space-3)}
+.od-risk-card footer>div{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--op-space-3)}
+.od-investigation-breakdown{grid-template-columns:1fr!important}
+.od-investigation-breakdown div{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:var(--op-space-3)}
+.od-investigation-breakdown button{padding:0;border:0;background:transparent;color:var(--op-color-accent);font-size:.66rem;font-weight:800;cursor:pointer}
+.od-investigation-breakdown .is-total{border-top:2px solid var(--op-color-border-strong);font-weight:800}
+.od-investigation-breakdown .is-total{grid-template-columns:minmax(0,1fr) auto}
+.od-evidence-return{display:grid;gap:var(--op-space-3);margin-top:var(--op-space-6);padding-top:var(--op-space-5);border-top:1px solid var(--op-color-border)}
+.od-evidence-return .od-button{justify-content:center;width:100%}
+.od-evidence-drawer{overflow-y:auto}
+.od-decision-path{margin:var(--op-space-4);padding:var(--op-space-5);border-top:1px solid var(--op-color-border);background:var(--op-color-surface-inset)}
+.od-decision-path h3{margin:var(--op-space-2) 0 var(--op-space-4);font-size:.92rem;letter-spacing:0}
+.od-decision-path>div{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--op-space-2)}
+.od-decision-path button{min-height:44px;padding:var(--op-space-2) var(--op-space-3);border:1px solid var(--op-color-border-strong);border-radius:var(--op-radius-tight);background:var(--op-color-surface);color:var(--op-color-text-secondary);font-size:.68rem;font-weight:700;cursor:pointer;transition:border-color var(--op-motion-interaction) var(--op-ease-standard),color var(--op-motion-interaction) var(--op-ease-standard),background var(--op-motion-interaction) var(--op-ease-standard)}
+.od-decision-path button:hover,.od-decision-path button:focus-visible{border-color:var(--op-color-accent);background:var(--op-color-accent-soft);color:var(--op-color-accent)}
+.od-workspace-content>.od-financial-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+@keyframes od-intelligence-detail-in{from{opacity:.5;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media(max-width:1180px){.od-investigation-split{grid-template-columns:1fr}.od-contract-evidence{border-right:0;border-bottom:1px solid var(--op-color-border)}.od-contract-evidence nav{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:900px){.od-intelligence-chain{grid-template-columns:1fr;padding:var(--op-space-3)}.od-intelligence-chain li{display:grid}.od-intelligence-chain li>svg{position:static;justify-self:center;margin:var(--op-space-1);transform:none}.od-intelligence-chain button{min-height:74px;grid-template-columns:22px 70px minmax(0,1fr);align-items:center}}
+@media(max-width:680px){.od-investigation-header{display:grid;padding:var(--op-space-4)}.od-contract-evidence nav{grid-template-columns:1fr}.od-contract-clause{margin-inline:var(--op-space-3);padding:var(--op-space-4)}.od-intelligence-chain{grid-template-columns:1fr;padding:var(--op-space-3)}.od-intelligence-chain li{display:grid}.od-intelligence-chain li>svg{position:static;justify-self:center;margin:var(--op-space-1);transform:none}.od-intelligence-chain button{min-height:74px;grid-template-columns:22px 70px minmax(0,1fr);align-items:center}.od-intelligence-detail{min-height:0;margin-inline:var(--op-space-3);padding:var(--op-space-4)}.od-intelligence-detail dl{grid-template-columns:1fr}.od-decision-path{margin:var(--op-space-3);padding:var(--op-space-4)}.od-decision-path>div{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.od-contract-evidence nav button,.od-intelligence-chain button,.od-decision-path button{transition:none}.od-intelligence-chain button:hover{transform:none}.od-intelligence-detail{animation:none}}
