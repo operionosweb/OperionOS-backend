@@ -1,89 +1,53 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import React from "react";
 import Button from "../components/ui/Button";
 import Reveal from "../components/ui/Reveal";
 import { Container } from "../components/ui/Layout";
 
 const HERO = "https://images.unsplash.com/photo-1556388158-158ea5ccacbd?auto=format&fit=crop&w=2000&q=84";
-const AIRPORT = "https://images.unsplash.com/photo-1474302770737-173ee21bab63?auto=format&fit=crop&w=1800&q=84";
-const CHAPTERS = [
-  ["who", "Who we are"],
-  ["problem", "The problem"],
-  ["insight", "The insight"],
-  ["approach", "Our approach"],
-  ["story", "Our story"],
-  ["ecosystem", "The ecosystem"],
-  ["building", "What we are building"],
-  ["beliefs", "What we believe"],
-  ["future", "The future"],
+const CONTRACT_CONNECTIONS = [
+  "Operations", "Suppliers", "Aircraft", "Maintenance", "Financing", "Fuel",
+  "Currencies", "Interest rates", "Weather", "Geopolitical events", "Financial exposure",
 ];
-const APPROACH = [
-  ["01", "Connect", "Bring fragmented aviation information into a connected context."],
-  ["02", "Understand", "Transform complex contractual and operational information into intelligence."],
-  ["03", "Anticipate", "Surface emerging obligations, risks and exposure before they become expensive problems."],
-  ["04", "Act", "Turn intelligence into clear next actions for the people responsible."],
+const EVOLUTION = [
+  ["01", "Today", "Contract Intelligence", "Understand contracts, clauses, obligations, deadlines and risks."],
+  ["02", "Developing", "Aviation Intelligence", "Connect contractual obligations to aviation operations and financial exposure."],
+  ["03", "Next", "Predictive Risk Intelligence", "Develop an understanding of how external variables can affect contractual exposure."],
+  ["04", "Future", "Scenario Simulation", "Model alternative futures and ask what happens to contracts if the world changes tomorrow."],
 ];
-const STORY = [
-  ["THE BEGINNING", "Aviation complexity was becoming impossible to manage through disconnected information and reactive processes."],
-  ["THE FIRST INSIGHT", "Critical relationships existed across contracts, obligations, operational events and financial consequences, but rarely in one connected view."],
-  ["THE BUILD", "We began building an intelligence layer designed specifically around the way aviation organisations actually operate."],
-  ["TODAY", "Operion is shaping a clearer operating picture from contractual intelligence, with future layers developing toward risk, scenarios and action."],
-  ["WHAT IS NEXT", "Move from understanding what happened to anticipating what happens next, without losing the evidence underneath."],
+const AVIATION_AREAS = ["Airlines", "Aircraft leasing", "MRO", "Ground handling", "Airports", "Aviation services"];
+const PRINCIPLES = [
+  ["Understand before predicting.", "Reliable foresight begins with evidence and contractual meaning."],
+  ["Risk should lead to action.", "Intelligence is useful when it helps people decide what to do next."],
+  ["Financial exposure matters.", "Contractual risk becomes material through operational and financial consequences."],
+  ["AI should recommend, not merely describe.", "The objective is decision support grounded in the source agreement."],
+  ["The future of contract intelligence is predictive.", "The direction is from understanding today toward testing tomorrow."],
 ];
-const ECOSYSTEM = ["Airlines", "Aircraft leasing", "MRO", "Consultancies", "Ground handling", "Airport operators", "Suppliers", "Operational systems", "Financial stakeholders"];
-const BELIEFS = ["Complexity should become clarity.", "Intelligence should lead to action.", "Risk should be visible before it becomes expensive.", "Aviation deserves technology built around how it actually operates.", "The future of aviation will be increasingly connected."];
+const MATURITY = [
+  ["Current", "Contract Intelligence", ["Contract parsing", "Clause extraction", "Obligation extraction", "Deadline identification", "Risk identification", "Contract summaries", "Contract search", "Recommendations"]],
+  ["Next", "Predictive Risk Intelligence", ["External variables", "Financial exposure", "Risk forecasting"]],
+  ["Future", "Scenario Simulation", ["Economic changes", "Fuel shocks", "Weather disruption", "Supplier failures", "Geopolitical events", "Operational disruption"]],
+];
 
-function AboutSeo() {
-  useEffect(() => {
-    const previousTitle = document.title;
-    const title = "About Operion | Aviation Contract Intelligence";
-    const description = "Operion is building the intelligence layer that connects aviation contracts, obligations, events, risks and decisions.";
-    document.title = title;
-    let tag = document.head.querySelector('meta[name="description"]');
-    const isNew = !tag;
-    const previousDescription = tag?.content;
-    if (!tag) { tag = document.createElement("meta"); tag.name = "description"; document.head.appendChild(tag); }
-    tag.content = description;
-    return () => { document.title = previousTitle; if (isNew) tag.remove(); else tag.content = previousDescription || ""; };
-  }, []);
-  return null;
-}
-
-function AboutSection({ id, label, title, copy, children, dark = false, className = "" }) {
-  return <section id={id} className={`op-about-section${dark ? " op-about-dark" : ""} ${className}`.trim()}><Container><Reveal><p className="op-about-label">{label}</p><h2>{title}</h2>{copy && <p className="op-about-copy">{copy}</p>}</Reveal>{children}</Container></section>;
-}
-
-function ProgressNav({ active }) {
-  return <nav className="op-about-progress" aria-label="About page chapters">{CHAPTERS.map(([id, label], index) => <button key={id} type="button" className={active === id ? "op-about-progress-active" : ""} onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })}><span>0{index + 1}</span>{label}</button>)}</nav>;
-}
-
-function Chain({ items }) {
-  return <div className="op-about-chain" aria-label={items.join(" to ")}>{items.map((item, index) => <React.Fragment key={item}><div><span>0{index + 1}</span><strong>{item}</strong></div>{index < items.length - 1 && <b aria-hidden="true">↓</b>}</React.Fragment>)}</div>;
+function AboutSection({ label, title, copy, children, dark = false, className = "" }) {
+  return <section className={`op-about-section${dark ? " op-about-dark" : ""} ${className}`.trim()}><Container><Reveal className="op-about-intro"><p className="op-about-label">{label}</p><h2>{title}</h2>{copy && <p className="op-about-copy">{copy}</p>}</Reveal>{children}</Container></section>;
 }
 
 export default function About() {
-  const [active, setActive] = useState("who");
-  const sectionRefs = useRef([]);
+  return <main className="op-about-page">
+    <section className="op-about-hero op-cinematic-hero" style={{ backgroundImage: `url(${HERO})` }}><div className="op-about-hero-overlay"><Container><Reveal className="op-about-hero-content"><p className="op-about-label">ABOUT OPERION</p><h1>Building the intelligence layer for aviation contracts.</h1><p>Operion transforms complex aviation contracts into actionable intelligence, helping organisations understand obligations, identify risk, quantify exposure and make better decisions.</p><div className="op-about-actions"><Button to="/request-demo" variant="primary">Request a Demo</Button><Button to="/product" variant="secondary">Explore the Platform</Button></div></Reveal></Container></div></section>
 
-  useEffect(() => {
-    const observer = new IntersectionObserver((entries) => {
-      const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-      if (visible?.target.id) setActive(visible.target.id);
-    }, { rootMargin: "-30% 0px -55%", threshold: [0, .2, .5, 1] });
-    sectionRefs.current.forEach((section) => section && observer.observe(section));
-    return () => observer.disconnect();
-  }, []);
+    <AboutSection label="WHY OPERION EXISTS" title="Contracts contain the operating reality of aviation." copy="Aviation organisations depend on thousands of contractual relationships. Inside them sit financial commitments, operational obligations, deadlines, liabilities and dependencies. Traditional contract management can tell teams where documents are. Operion is being built to understand what those contracts mean, and eventually what happens when the world around them changes." className="op-about-story" />
 
-  return <div className="op-about-page">
-    <ProgressNav active={active} />
-    <section id="who" ref={(node) => { sectionRefs.current[0] = node; }} className="op-about-hero op-cinematic-hero" style={{ backgroundImage: `url(${HERO})` }}><div><Container><Reveal><p className="op-about-label">ABOUT OPERION / WHO WE ARE</p><h1>Making contracts intelligent.</h1><p>Complex aviation organisations depend on thousands of contractual relationships. Yet much of the intelligence inside those agreements remains trapped in documents.</p><div className="op-about-actions"><Button to="/product" variant="primary">Explore the Product <span aria-hidden="true">↗</span></Button><Button to="/request-demo" variant="secondary">Talk to Operion</Button></div></Reveal><span className="op-about-scroll-cue">Scroll to explore <b aria-hidden="true">↓</b></span></Container></div></section>
-    <AboutSection id="problem" label="01 / THE PROBLEM" title={<>Aviation does not lack data.<br />It lacks connected intelligence.</>} copy="Aviation organisations operate across contracts, leases, maintenance programmes, suppliers, operations, compliance, events, financial commitments and risk. The information exists. The critical relationships are simply difficult to see."><div className="op-about-fragments"><div className="op-about-fragment-lines" aria-hidden="true" />{["CONTRACT", "OBLIGATION", "EVENT", "RISK", "FINANCIAL EXPOSURE"].map((item, index) => <span key={item} className={`op-about-fragment op-about-fragment-${index + 1}`}>{item}</span>)}<strong>ONE CONNECTED<br />INTELLIGENCE LAYER</strong></div></AboutSection>
-    <AboutSection id="insight" label="02 / THE INSIGHT" title="Aviation intelligence should move at the speed of aviation itself." copy="The most valuable intelligence is not information sitting inside a system. It is the connection between what was agreed, what is happening, what could happen, what it means and what should happen next." dark><div className="op-about-insight-chain"><Chain items={["What was agreed", "What is happening", "What could happen", "What it means", "What happens next"]} /></div></AboutSection>
-    <AboutSection id="approach" label="03 / OUR MISSION" title="Turn contractual complexity into actionable intelligence." copy="Contract Intelligence is the foundation. The direction is Predictive Contract Intelligence, then Scenario Intelligence, with every stage grounded in evidence rather than unsupported certainty."><div className="op-about-approach">{APPROACH.map(([number, title, copy], index) => <Reveal key={title} className="op-about-approach-step" style={{ "--about-step": index }}><span>{number}</span><div><h3>{title}</h3><p>{copy}</p></div><b aria-hidden="true">→</b></Reveal>)}</div></AboutSection>
-    <AboutSection id="story" label="04 / OUR STORY" title="A company story still being written." copy="This is the shape of the journey so far. It describes the problem, insight and direction without inventing dates, milestones or claims that have not been established."><div className="op-about-timeline">{STORY.map(([phase, copy], index) => <Reveal key={phase} className="op-about-timeline-item" style={{ "--about-step": index }}><span>{String(index + 1).padStart(2, "0")}</span><div><p>{phase}</p><h3>{copy}</h3></div></Reveal>)}</div></AboutSection>
-    <section id="ecosystem" ref={(node) => { sectionRefs.current[5] = node; }} className="op-about-ecosystem" style={{ backgroundImage: `url(${AIRPORT})` }}><div><Container><Reveal><p className="op-about-label">05 / THE ECOSYSTEM</p><h2>We operate in the connections between aviation's participants.</h2><p>Airlines, lessors, MROs, consultancies, ground handlers, airports, suppliers and financial stakeholders each see a different part of the operating picture. Operion is being built around the relationships between them.</p></Reveal><div className="op-about-ecosystem-grid">{ECOSYSTEM.map((item, index) => <span key={item} className={`op-about-ecosystem-node op-about-ecosystem-node-${index + 1}`}>{item}</span>)}<strong>OPERION<br /><small>CONNECTED INTELLIGENCE</small></strong></div></Container></div></section>
-    <AboutSection id="building" label="06 / WHAT WE ARE BUILDING" title="From aviation data to aviation intelligence." copy="Our direction is a progressive intelligence layer: start with the contract, connect context, then develop toward prediction and action. Future layers are not represented as fully operational capabilities today."><div className="op-about-building"><div><span>01</span><strong>DATA</strong></div><b>↓</b><div><span>02</span><strong>CONTEXT</strong></div><b>↓</b><div><span>03</span><strong>INTELLIGENCE</strong></div><b>↓</b><div className="op-about-future-step"><span>04</span><strong>PREDICTION</strong><small>Our direction</small></div><b>↓</b><div className="op-about-future-step"><span>05</span><strong>ACTION</strong><small>Our direction</small></div></div></AboutSection>
-    <AboutSection id="beliefs" label="07 / WHAT WE BELIEVE" title="A short manifesto." dark><div className="op-about-beliefs">{BELIEFS.map((belief, index) => <Reveal key={belief}><span>0{index + 1}</span><h3>{belief}</h3></Reveal>)}</div></AboutSection>
-    <section id="future" ref={(node) => { sectionRefs.current[8] = node; }} className="op-about-future"><Container><Reveal><p className="op-about-label">08 / THE FUTURE</p><h2>The next era of aviation will be connected.</h2><p>Complexity becomes connection. Connection becomes intelligence. Intelligence becomes action. And action creates possibility.</p><div className="op-about-actions"><Button to="/aviation" variant="primary">Explore Aviation Intelligence <span aria-hidden="true">↗</span></Button><Button to="/request-demo" variant="secondary">Talk to us</Button></div></Reveal></Container></section>
-  </div>;
+    <AboutSection label="OUR CORE BELIEF" title="Contracts are not static documents." copy="They are connected to the assets, organisations, markets and events that shape operational and financial outcomes." dark className="op-about-connections"><Reveal className="op-about-connection-field">{CONTRACT_CONNECTIONS.map((item) => <span key={item}>{item}</span>)}<strong>The real value is not storing contracts.<br />It is understanding their impact.</strong></Reveal></AboutSection>
+
+    <AboutSection label="THE OPERION EVOLUTION" title="From understanding agreements to testing possible futures." copy="Each stage builds on the evidence beneath it. Current capabilities remain clearly separated from future development." className="op-about-evolution-section"><div className="op-about-evolution">{EVOLUTION.map(([number, stage, title, copy], index) => <Reveal key={title} className={`op-about-evolution-step${index > 1 ? " is-future" : ""}`}><div><span>{number}</span><small>{stage}</small></div><h3>{title}</h3><p>{copy}</p></Reveal>)}</div></AboutSection>
+
+    <AboutSection label="AVIATION FIRST" title="Built for aviation first." copy="Aviation is exceptionally contract-intensive and operationally complex. We start where contractual complexity is highest and where better intelligence can create measurable operational and financial value." className="op-about-aviation"><Reveal className="op-about-aviation-grid">{AVIATION_AREAS.map((area, index) => <div key={area}><span>0{index + 1}</span><strong>{area}</strong></div>)}</Reveal></AboutSection>
+
+    <AboutSection label="WHAT OPERION BELIEVES" title="Principles for useful intelligence." dark className="op-about-principles-section"><div className="op-about-principles">{PRINCIPLES.map(([title, copy], index) => <Reveal key={title}><span>0{index + 1}</span><div><h3>{title}</h3><p>{copy}</p></div></Reveal>)}</div></AboutSection>
+
+    <AboutSection label="CURRENT AND FUTURE" title="Clear about what exists today and what comes next." copy="Operion's direction is ambitious, but credibility depends on making capability maturity explicit." className="op-about-maturity-section"><div className="op-about-maturity">{MATURITY.map(([stage, title, items]) => <Reveal key={stage} className={stage === "Current" ? "is-current" : "is-future"}><span>{stage}</span><h3>{title}</h3><ul>{items.map((item) => <li key={item}>{item}</li>)}</ul></Reveal>)}</div></AboutSection>
+
+    <section className="op-about-cta"><Container><Reveal><p className="op-about-label">START WITH THE CONTRACT</p><h2>See what your contracts are really telling you.</h2><p>Discover how Operion turns complex aviation contracts into actionable intelligence.</p><Button to="/request-demo" variant="primary">Request a Demo</Button></Reveal></Container></section>
+  </main>;
 }

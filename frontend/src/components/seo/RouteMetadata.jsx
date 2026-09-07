@@ -52,8 +52,8 @@ const PUBLIC_PAGES = {
     name: "Enterprise",
   },
   "/about": {
-    title: "About Operion | Contract Intelligence for Aviation",
-    description: "Learn why Operion is building an intelligence layer for aviation contracts, obligations, operational events, risks, relationships, and decisions.",
+    title: "About Operion | AI Contract Intelligence for Aviation",
+    description: "Learn why Operion is building the intelligence layer between aviation contracts, operational reality, financial exposure, and future risk.",
     name: "About Operion",
   },
   "/privacy": {
