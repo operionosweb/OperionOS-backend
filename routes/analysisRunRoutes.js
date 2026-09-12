@@ -23,15 +23,15 @@ import { buildFinancialImpact } from "../services/phase3/intelligence/financialI
 import { aiGateway } from "../services/ai/aiGateway.js";
 import { assertOrganizationScope, assertResourceId } from "../repositories/phase3/scope.js";
 import supabase from "../config/supabase.js";
+import { toSafeHttpError } from "../utils/safeHttpError.js";
 
 const router = express.Router();
 
 function normalizeAnalysisRunError(error) {
-  return {
-    success: false,
-    code: error.code || "STORAGE_ERROR",
-    error: error.message || "Analysis run request failed",
-  };
+  return toSafeHttpError(error, {
+    code: "ANALYSIS_REQUEST_FAILED",
+    message: "The analysis request could not be completed",
+  }).body;
 }
 
 function sanitizeClause(row) {

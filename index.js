@@ -17,7 +17,6 @@ import blogRoutes from "./routes/blogRoutes.js";
 import healthRoutes from "./routes/healthRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import metricsRoutes from "./routes/metricsRoutes.js";
-import mediaRoutes from "./routes/mediaRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import foundationRoutes from "./routes/foundationRoutes.js";
 import documentRoutes from "./routes/documentRoutes.js";
@@ -118,7 +117,6 @@ app.use("/api/foundation", foundationRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/analysis-runs", analysisRunRoutes);
 app.use("/api/aviation", aviationRoutes);
-app.use("/api/media", mediaRoutes);
 app.use("/api/metrics", metricsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 

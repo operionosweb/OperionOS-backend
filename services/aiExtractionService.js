@@ -22,6 +22,7 @@ import { requestLegacyAI } from "./ai/legacyAIRequest.js";
  * MEMORY CACHE
  */
 const extractionCache = new Map();
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
  * HASH GENERATOR
@@ -31,6 +32,15 @@ function generateHash(text = "") {
     .createHash("sha256")
     .update(text)
     .digest("hex");
+}
+
+export function buildLegacyExtractionCacheKey(organizationId, text = "") {
+  if (!UUID_PATTERN.test(organizationId || "")) {
+    const error = new Error("Organization scope is required");
+    error.code = "ORGANIZATION_ACCESS_DENIED";
+    throw error;
+  }
+  return `${organizationId}:${generateHash(text)}`;
 }
 
 /**
@@ -145,19 +155,18 @@ export async function analyzeContractText(rawText = "", organizationId) {
      * HASH
      */
     const documentHash = generateHash(rawText);
+    const cacheKey = buildLegacyExtractionCacheKey(organizationId, rawText);
 
     /**
      * CACHE HIT
      */
-    if (extractionCache.has(documentHash)) {
-      console.log("⚡ CACHE HIT:", documentHash);
-
+    if (extractionCache.has(cacheKey)) {
       return {
         success: true,
         cached: true,
         cache_source: "memory_cache",
         document_hash: documentHash,
-        analysis: extractionCache.get(documentHash)
+        analysis: extractionCache.get(cacheKey)
       };
     }
 
@@ -165,8 +174,6 @@ export async function analyzeContractText(rawText = "", organizationId) {
      * CHUNKING
      */
     const chunks = chunkText(rawText);
-
-    console.log(`📄 Document chunked into ${chunks.length} chunks`);
 
     /**
      * AI PIPELINE
@@ -181,9 +188,7 @@ export async function analyzeContractText(rawText = "", organizationId) {
     /**
      * CACHE STORE
      */
-    extractionCache.set(documentHash, normalized);
-
-    console.log("✅ CACHE STORED:", documentHash);
+    extractionCache.set(cacheKey, normalized);
 
     /**
      * RESPONSE
@@ -197,11 +202,20 @@ export async function analyzeContractText(rawText = "", organizationId) {
       provider_used: aiResult?.provider || "unknown"
     };
   } catch (error) {
-    console.error("❌ analyzeContractText Error:", error);
+    if (error?.code === "ORGANIZATION_ACCESS_DENIED") {
+      return {
+        success: false,
+        error: "Organization scope is required"
+      };
+    }
+    console.error("Legacy contract analysis failed", {
+      organization_id: organizationId,
+      error_code: error?.code || "ANALYSIS_FAILED"
+    });
 
     return {
       success: false,
-      error: error.message || "Analysis failed"
+      error: "Contract analysis failed"
     };
   }
 }

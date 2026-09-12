@@ -10,6 +10,7 @@ import {
   getDocumentStructure,
 } from "../services/documentIngestionService.js";
 import { recordAuditEvent } from "../services/foundationAuditService.js";
+import { sendSafeHttpError } from "../utils/safeHttpError.js";
 
 const router = express.Router();
 
@@ -20,10 +21,10 @@ router.use(
 );
 
 function sendError(error, res) {
-  return res.status(error.status || (error.code === "STORAGE_ERROR" ? 503 : 404)).json({
-    success: false,
-    code: error.code || "STORAGE_ERROR",
-    error: error.message || "Document request failed",
+  return sendSafeHttpError(res, error, {
+    status: 500,
+    code: "DOCUMENT_REQUEST_FAILED",
+    message: "The document request could not be completed",
   });
 }
 

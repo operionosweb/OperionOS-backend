@@ -50,11 +50,8 @@ export function apiKeyMiddleware(req, res, next) {
 
     next();
 
-  } catch (error) {
-    console.error(
-      "apiKeyMiddleware error:",
-      error
-    );
+  } catch {
+    console.error("API key authentication failed");
 
     return res.status(500).json({
       success: false,

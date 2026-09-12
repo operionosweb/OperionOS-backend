@@ -21,14 +21,6 @@ router.get("/health", async (req, res) => {
           : "missing_key",
         region: "EU (France)",
       },
-
-      {
-        name: "uploadcare",
-        status: process.env.UPLOADCARE_PUBLIC_KEY
-          ? "configured"
-          : "missing_key",
-        region: "EU-friendly storage",
-      },
     ];
 
     const healthyProviders =
@@ -44,18 +36,12 @@ router.get("/health", async (req, res) => {
       timestamp: new Date().toISOString(),
     });
 
-  } catch (error) {
-
-    console.error(
-      "Provider health route error:",
-      error
-    );
+  } catch {
+    console.error("Provider health check failed");
 
     return res.status(500).json({
       success: false,
-      error:
-        error.message ||
-        "Provider health failed",
+      error: "Provider health check failed",
     });
   }
 });

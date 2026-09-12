@@ -1,13 +1,9 @@
 // middleware/authMiddleware.js
 
 export function apiKeyMiddleware(req, res, next) {
-  console.log("🔥 HEADERS RECEIVED:", req.headers);
-
   const apiKey =
     req.headers["x-api-key"] ||
     req.headers["authorization"];
-
-  console.log("🔑 Extracted API key:", apiKey);
 
   if (!process.env.INTERNAL_API_KEY) {
     return res.status(500).json({

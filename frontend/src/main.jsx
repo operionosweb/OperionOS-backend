@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./styles/global.css";
+import "./styles/home-story.css";
 import "./styles/production.css";
 import "./styles/demo.css";
 import "./styles/assistant.css";

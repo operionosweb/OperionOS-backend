@@ -53,7 +53,8 @@ export default function UploadContract({ organizationId, onUploaded }) {
 
   return (
     <div>
-      <div
+      <button
+        type="button"
         onDragOver={(event) => {
           event.preventDefault();
           setDragOver(true);
@@ -65,15 +66,8 @@ export default function UploadContract({ organizationId, onUploaded }) {
           handleFiles(event.dataTransfer.files);
         }}
         onClick={() => inputRef.current?.click()}
-        className="op-surface"
-        style={{
-          padding: "var(--op-space-7)",
-          textAlign: "center",
-          cursor: "pointer",
-          borderStyle: "dashed",
-          borderColor: dragOver ? "var(--op-accent)" : "var(--op-border-strong)",
-          transition: "border-color var(--op-duration-fast) var(--op-ease)",
-        }}
+        className={`op-upload-dropzone${dragOver ? " is-dragging" : ""}`}
+        aria-describedby="contract-upload-support"
       >
         <input
           ref={inputRef}
@@ -82,12 +76,12 @@ export default function UploadContract({ organizationId, onUploaded }) {
           hidden
           onChange={(event) => handleFiles(event.target.files)}
         />
-        <p className="op-heading-md" style={{ marginBottom: "var(--op-space-2)" }}>
+        <span className="op-heading-md">
           {file ? file.name : "Drop a contract PDF, or click to select"}
-        </p>
-        <p className="op-body">PDF or DOCX, up to {MAX_FILE_SIZE_LABEL}.</p>
-        {file && <p className="op-body-sm" style={{ marginTop: "var(--op-space-2)" }}>{(file.size / 1024 / 1024).toFixed(2)} MB selected</p>}
-      </div>
+        </span>
+        <span id="contract-upload-support" className="op-body">PDF or DOCX, up to {MAX_FILE_SIZE_LABEL}.</span>
+        {file && <span className="op-body-sm">{(file.size / 1024 / 1024).toFixed(2)} MB selected</span>}
+      </button>
 
       {error && (
         <p className="op-body" style={{ color: "var(--op-signal-risk)", marginTop: "var(--op-space-3)" }}>
@@ -109,7 +103,7 @@ export default function UploadContract({ organizationId, onUploaded }) {
           onClick={handleUpload}
           disabled={state === "uploading" || !organizationId}
         >
-          {state === "uploading" ? "Uploading…" : "Upload contract"}
+          {state === "uploading" ? "Securely uploading and structuring document…" : "Upload and continue"}
         </button>
       )}
     </div>

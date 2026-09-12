@@ -1,58 +1,114 @@
-import React, { useRef } from "react";
-import { ArrowDown, ArrowRight, Check, Search, ShieldCheck } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  ArrowDown, ArrowRight, Check, CloudRain, FileSearch, Fuel, Gauge,
+  Landmark, Plane, Radar, ShieldCheck, TrendingUp, Wind,
+} from "lucide-react";
 import { Container } from "../ui/Layout";
 import Button from "../ui/Button";
 import Reveal from "../ui/Reveal";
 import { trackEvent } from "../analytics/Analytics";
 
-const AIRCRAFT = "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=1800&q=82";
+const HERO_IMAGE = "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=2200&q=88";
+const AVIATION_IMAGE = "https://images.unsplash.com/photo-1540962351504-03099e0a754b?auto=format&fit=crop&w=1800&q=84";
+const FINAL_IMAGE = "https://images.unsplash.com/photo-1464037866556-6812c9d1c72e?auto=format&fit=crop&w=2000&q=86";
 const VIDEO_SRC = "/videos/operion-contract-intelligence.mp4";
-const INTELLIGENCE_FLOW = [
-  ["Understand", "Contracts are parsed and understood."],
-  ["Extract", "Clauses, obligations, deadlines, risks and financial terms are identified."],
-  ["Connect", "Contractual information is connected to operational and financial context."],
-  ["Assess", "Exposure and potential impact are evaluated."],
-  ["Act", "Operion recommends what should happen next."],
+const CONTRACTS = ["Aircraft leases", "MRO agreements", "Supplier contracts", "Fuel agreements", "Ground handling", "Insurance"];
+const VARIABLES = ["Fuel prices", "Interest rates", "Inflation", "Exchange rates", "Weather", "Geopolitics", "Supplier conditions"];
+const EXTRACTIONS = [
+  ["Clause 8.4", "Maintenance reserves", "High confidence"],
+  ["Obligation", "Return aircraft airworthy", "Lessee"],
+  ["Deadline", "60 days before redelivery", "Event-based"],
+  ["Risk", "Uncapped return exposure", "Review required"],
+];
+const SIGNALS = [
+  [Fuel, "Fuel", "+18%", "Commercial pressure"],
+  [TrendingUp, "FX", "EUR/USD -6%", "Lease cost movement"],
+  [Landmark, "Rates", "+1.2%", "Financing pressure"],
+  [CloudRain, "Weather", "Elevated", "Operational disruption"],
+  [Radar, "Supplier", "Watch", "SLA dependency"],
+];
+const SCENARIOS = [
+  { id: "baseline", label: "Baseline", fuel: 0, fx: 0, supplier: "Stable", exposure: 2.4, delta: 0, action: "Continue monitoring contractual thresholds." },
+  { id: "fuel", label: "Fuel +25%", fuel: 25, fx: 0, supplier: "Stable", exposure: 2.78, delta: 380, action: "Review fuel escalation and pass-through provisions." },
+  { id: "supplier", label: "Supplier disruption", fuel: 0, fx: 0, supplier: "Disrupted", exposure: 3.06, delta: 660, action: "Review SLA remedies and diversify critical supply exposure." },
+  { id: "combined", label: "Combined shock", fuel: 25, fx: -8, supplier: "Disrupted", exposure: 3.62, delta: 1220, action: "Escalate commercial review and model mitigation options." },
 ];
 const SEGMENTS = [
-  ["Airlines", "Understand exposure across fleets, suppliers and operational agreements."],
-  ["Aircraft Lessors", "Identify obligations, commercial exposure and dependencies across leasing relationships."],
-  ["MRO", "Monitor service agreements, SLAs, obligations, deadlines and supplier exposure."],
-  ["Ground Handling & Aviation Services", "Understand operational agreements, service obligations and financial consequences."],
+  ["Airlines", "Connect disruption to lease, supplier and service obligations."],
+  ["Aircraft lessors", "Track maintenance, payment and redelivery exposure."],
+  ["MRO organisations", "Monitor turnaround, service-level and parts commitments."],
+  ["Aviation consultancies", "Accelerate evidence-backed review across client portfolios."],
+  ["Ground handling providers", "Trace SLA thresholds, responsibilities and penalties."],
+  ["Airport operators", "Understand concession, infrastructure and service dependencies."],
 ];
-const RECOMMENDATIONS = ["Review a contractual clause", "Renegotiate a commercial term", "Address an upcoming obligation", "Mitigate supplier exposure", "Restructure a contract", "Diversify a critical dependency"];
-const USE_CASES = [
-  ["Lease obligations", "Track return conditions, maintenance reserves and time-critical obligations across aircraft leases."],
-  ["Supplier exposure", "Connect SLA failures, remedies and dependencies before operational disruption compounds."],
-  ["Commercial change", "Assess escalation clauses, volume commitments and renegotiation options as conditions shift."],
-  ["Executive review", "Trace material risks and recommended actions back to contract evidence."],
+const EVOLUTION = [
+  ["Available now", "Contract Intelligence", "Understand what is written."],
+  ["In development", "Predictive Risk Intelligence", "Understand what could happen."],
+  ["Roadmap", "Scenario Simulation", "Explore alternative futures."],
+  ["Roadmap", "Decision Support", "Know what to do next."],
 ];
-const EXECUTIVE_VALUE = ["Earlier visibility of exposure", "Faster evidence-backed decisions", "Clearer accountability for action"];
 
-function Section({ id, label, title, copy, children, dark = false, className = "" }) {
-  return <section id={id} className={`op-intel-section${dark ? " op-intel-section-dark" : ""} ${className}`.trim()}><Container><Reveal><p className="op-intel-label">{label}</p><h2>{title}</h2>{copy && <p className="op-intel-copy">{copy}</p>}</Reveal>{children}</Container></section>;
+function StoryHeading({ index, eyebrow, title, copy, inverse = false }) {
+  return <Reveal className={`op-story-heading${inverse ? " is-inverse" : ""}`}><p className="op-story-index">{index}</p><div><p className="op-story-eyebrow">{eyebrow}</p><h2>{title}</h2>{copy && <p className="op-story-copy">{copy}</p>}</div></Reveal>;
+}
+
+function IntelligencePulse() {
+  return <div className="op-story-pulse" aria-hidden="true"><i /><i /><i /></div>;
+}
+
+function StoryCta({ copy, location, inverse = false }) {
+  return <Reveal className={`op-story-inline-cta${inverse ? " is-inverse" : ""}`}><p>{copy}</p><Button to="/request-demo" onClick={() => trackEvent("request_demo_click", { location })}>Request a demo <ArrowRight size={16} /></Button></Reveal>;
 }
 
 export default function HomeSections() {
-  const videoRef = useRef(null);
-  const playVideo = () => {
-    if (!videoRef.current || !videoRef.current.paused) return;
-    videoRef.current.play().catch(() => {});
+  const [scenarioId, setScenarioId] = useState("baseline");
+  const productVideoRef = useRef(null);
+  const scenario = SCENARIOS.find((item) => item.id === scenarioId) || SCENARIOS[0];
+  useEffect(() => {
+    const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const syncPlayback = () => {
+      if (!productVideoRef.current) return;
+      productVideoRef.current.muted = true;
+      if (motionPreference.matches) productVideoRef.current.pause();
+      else productVideoRef.current.play().catch(() => {});
+    };
+    syncPlayback();
+    motionPreference.addEventListener("change", syncPlayback);
+    return () => motionPreference.removeEventListener("change", syncPlayback);
+  }, []);
+  const selectAdjacentScenario = (event, currentIndex) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? SCENARIOS.length - 1
+        : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + SCENARIOS.length) % SCENARIOS.length;
+    setScenarioId(SCENARIOS[nextIndex].id);
+    event.currentTarget.parentElement?.querySelectorAll('[role="tab"]')[nextIndex]?.focus();
   };
 
   return <>
-    <section className="op-intel-hero op-cinematic-hero" style={{ backgroundImage: `url(${AIRCRAFT})` }}><div className="op-intel-hero-overlay"><Container><Reveal className="op-intel-hero-content"><p className="op-intel-label">OPERION</p><h1>Contract Intelligence for Aviation</h1><p className="op-intel-hero-lead">Turn complex aviation contracts into operational, financial and risk intelligence.</p><p className="op-intel-hero-support">Operion transforms contracts into actionable intelligence, revealing obligations, exposure, risks and recommended actions before they become costly problems.</p><div className="op-intel-actions"><Button to="/request-demo" onClick={() => trackEvent("request_demo_click", { location: "hero" })}>Request a Private Demo <ArrowRight size={16} /></Button><a className="op-btn op-btn-secondary op-intel-hero-secondary" href="#how-it-works" onClick={() => trackEvent("how_it_works_click", { location: "hero" })}>See How Operion Works <ArrowDown size={16} /></a></div></Reveal></Container></div></section>
-    <section id="product" className="op-intel-section op-intel-video-section"><Container><Reveal><p className="op-intel-label">AVIATION → CONTRACTS → INTELLIGENCE → RISK &amp; EXPOSURE → FINANCIAL IMPACT → RECOMMENDED ACTION → PREDICTIVE INTELLIGENCE</p><h2>From contracts to intelligence.</h2><p className="op-intel-copy">Operion connects complex aviation contracts with the operational and financial realities that surround them.</p></Reveal></Container><Reveal className="op-intel-video-frame"><video ref={videoRef} autoPlay loop muted playsInline preload="metadata" poster={AIRCRAFT} onCanPlay={playVideo} onPlay={() => trackEvent("video_play", { video_title: "Operion home" })} aria-label="Operion aviation contract intelligence product film"><source src={VIDEO_SRC} type="video/mp4" /></video></Reveal></section>
-    <Section id="problem" label="THE BUSINESS PROBLEM" title="Your contracts contain more risk than your spreadsheets can show." copy="Aviation agreements contain obligations, deadlines, penalties, escalation clauses, service levels, volume commitments and dependencies. The information exists inside the contracts, but extracting its business impact manually is slow, fragmented and difficult to monitor continuously."><Reveal className="op-intel-problem-list">{["Obligations & deadlines", "Commercial penalties", "Supplier dependencies", "Financial exposure"].map((item) => <span key={item}><Check size={16} />{item}</span>)}</Reveal></Section>
-    <Section id="how-it-works" label="CONTRACT INTELLIGENCE" title="From agreement to action." copy="A structured intelligence process keeps every insight connected to the underlying contract."><Reveal className="op-intel-flow">{INTELLIGENCE_FLOW.map(([title, copy], index) => <article key={title}><span>{String(index + 1).padStart(2, "0")}</span><h3>{title}</h3><p>{copy}</p></article>)}</Reveal></Section>
-    <Section id="financial-impact" label="FINANCIAL IMPACT" title="Know what is at risk. Know what you can save." copy="Operion translates contractual risks into an economic decision path, so teams can see the potential consequence and the action available to them." dark><Reveal className="op-intel-exposure"><div className="op-intel-exposure-value"><span>Illustrative scenario</span><strong>€185,000</strong><p>Potential contractual exposure</p></div><div className="op-intel-impact-path">{["Supplier SLA breach", "Operational disruption", "Contractual exposure", "Potential financial impact", "Recommended action"].map((step) => <div key={step}>{step}<ArrowRight size={15} aria-hidden="true" /></div>)}</div></Reveal></Section>
-    <Section id="recommendations" label="DECISION SUPPORT" title="Operion doesn't just identify risk. It recommends what to do next." copy="Evidence-backed recommendations help executives move from risk detection to informed action. Decisions remain with your team."><Reveal className="op-intel-recommendations">{RECOMMENDATIONS.map((item) => <div key={item}><ArrowRight size={16} /><span>{item}</span></div>)}</Reveal></Section>
-    <Section id="predictive" label="STRATEGIC DIRECTION" title="What happens to your contracts when the world changes?" copy="Contracts do not exist in isolation. Operion is evolving from Contract Intelligence toward Predictive Contract Intelligence, helping organisations understand how changing conditions can affect contractual exposure."><Reveal className="op-intel-predictive"><div className="op-intel-event-list">Fuel prices · Interest rates · Inflation · Exchange rates · Weather · Supplier risk · Geopolitical events · Operational disruption</div><div className="op-intel-predictive-flow">{["External event", "Affected contracts", "Contractual exposure", "Financial impact", "Recommended action"].map((step) => <span key={step}>{step}</span>)}</div><p>Future direction</p></Reveal></Section>
-    <Section id="aviation" label="AVIATION FIRST" title="Built for the complexity of aviation." copy="Purpose-built intelligence for organisations operating across aviation's interconnected commercial and operational environment." className="op-intel-aviation"><Reveal className="op-intel-segments">{SEGMENTS.map(([title, copy]) => <article key={title}><h3>{title}</h3><p>{copy}</p></article>)}</Reveal></Section>
-    <Section id="use-cases" label="USE CASES" title="Where contract intelligence changes the decision." copy="Operion focuses attention on contractual situations where timing, evidence and financial consequence matter."><Reveal className="op-intel-use-cases">{USE_CASES.map(([title, copy], index) => <article key={title}><span>{String(index + 1).padStart(2, "0")}</span><div><h3>{title}</h3><p>{copy}</p></div></article>)}</Reveal></Section>
-    <Section id="executive-value" label="EXECUTIVE VALUE" title="A clearer view of risk, impact and action." copy="Operion gives leaders a connected view of what matters now, why it matters and what the organisation should consider next." dark><Reveal className="op-intel-executive-value">{EXECUTIVE_VALUE.map((value) => <div key={value}><Check size={18} /><strong>{value}</strong></div>)}</Reveal></Section>
-    <Section id="difference" label="THE DIFFERENCE" title="Not another contract repository." copy="Operion is designed to understand what contracts mean, what they expose your organisation to, and what actions should be considered next." dark><Reveal className="op-intel-comparison"><div><span>Traditional contract management</span><strong>Store → Search → Manage</strong></div><div><span>Operion</span><strong>Understand → Monitor → Assess → Predict → Recommend</strong></div></Reveal></Section>
-    <Section id="security" label="ENTERPRISE-READY" title="Designed for responsible enterprise use." copy="Organisation boundaries, access controls and evidence-linked review form the current foundation. Infrastructure, privacy and deployment requirements are assessed for each environment."><Reveal className="op-intel-trust"><ShieldCheck size={30} /><p>Security and governance are described without unsupported certification or uptime claims.</p></Reveal></Section>
-    <section className="op-intel-final"><Container><Reveal><Search size={28} /><h2>See what Operion could uncover in your contracts.</h2><p>Discover how Contract Intelligence can reveal obligations, exposure, risks and opportunities hidden inside complex aviation agreements.</p><div className="op-intel-actions"><Button to="/request-demo" onClick={() => trackEvent("request_demo_click", { location: "final_cta" })}>Request a Private Demo <ArrowRight size={16} /></Button><Button to="/request-demo" variant="secondary" onClick={() => trackEvent("contact_click", { location: "final_cta" })}>Talk to Operion</Button></div></Reveal></Container></section>
+    <section className="op-story-hero op-cinematic-hero" style={{ backgroundImage: `url(${HERO_IMAGE})` }}><div className="op-story-hero-shade"><Container className="op-story-hero-layout"><Reveal className="op-story-hero-copy"><p className="op-story-eyebrow">OPERION / AVIATION CONTRACT INTELLIGENCE</p><h1>Understand your contracts.<br /><span>See what&apos;s coming.</span></h1><p className="op-story-hero-lead">AI-powered Contract Intelligence for Aviation that reveals obligations, exposure and what to do next.</p><div className="op-story-actions"><Button to="/request-demo" onClick={() => trackEvent("request_demo_click", { location: "home_hero" })}>Request a demo <ArrowRight size={16} /></Button><a className="op-btn op-btn-secondary" href="#product">Explore the platform <ArrowDown size={16} /></a></div></Reveal><Reveal className="op-story-hero-system"><div className="op-story-system-top"><span>OPERION INTELLIGENCE / LIVE VIEW</span><b>CONTRACT INGESTED</b></div><div className="op-story-document-mini"><FileSearch size={20} /><div><strong>Aircraft Lease Agreement</strong><small>184 pages / source preserved</small></div><IntelligencePulse /></div><div className="op-story-system-flow">{["Clauses", "Obligations", "Deadlines", "Risks"].map((item, index) => <div key={item}><span>0{index + 1}</span><strong>{item}</strong><i /></div>)}</div><div className="op-story-system-foot"><span>Evidence linked</span><span>Human review visible</span></div></Reveal></Container><div className="op-story-hero-rail"><Container>{["CONTRACT", "UNDERSTANDING", "RISK", "CONTEXT", "SCENARIO", "ACTION"].map((item, index) => <span key={item}><b>0{index + 1}</b>{item}</span>)}</Container></div></div></section>
+
+    <section className="op-story-section op-story-isolation" id="intelligence"><Container><StoryHeading index="01" eyebrow="THE CORE IDEA" title="Contracts don't exist in isolation." copy="Aviation agreements define the rules. Markets, aircraft, suppliers and operational conditions determine when those rules matter. Operion is the intelligence layer between them." /><Reveal className="op-story-bridge"><div className="op-story-bridge-list"><p>CONTRACTS</p>{CONTRACTS.map((item) => <span key={item}>{item}</span>)}</div><div className="op-story-bridge-core"><div><Plane size={24} /><strong>OPERION</strong><small>INTELLIGENCE LAYER</small></div><span className="op-story-flight-path" /></div><div className="op-story-bridge-list is-world"><p>THE WORLD</p>{VARIABLES.map((item) => <span key={item}>{item}</span>)}</div></Reveal></Container></section>
+
+    <section className="op-story-section op-story-contract"><Container><StoryHeading index="02" eyebrow="CONTRACT INTELLIGENCE / AVAILABLE NOW" title="First, Operion understands the contract." copy="Operion turns dense aviation agreements into clauses, obligations, deadlines and risks, each linked to source evidence." /><Reveal className="op-story-contract-stage"><div className="op-story-paper"><div className="op-story-paper-head"><span>LEASE AGREEMENT</span><b>PAGE 47 / 184</b></div><h3>8.4 Maintenance &amp; Redelivery</h3><p>The Lessee shall maintain the Aircraft in an airworthy condition and deliver all technical records no later than sixty (60) days prior to the scheduled redelivery date...</p><p>The obligations set out herein survive any operational interruption unless otherwise agreed in writing.</p><span className="op-story-paper-highlight">SOURCE CLAUSE DETECTED</span></div><div className="op-story-transform" aria-hidden="true"><i /><ArrowRight size={22} /></div><div className="op-story-extractions"><div className="op-story-panel-label"><span>STRUCTURED INTELLIGENCE</span><b>4 FINDINGS</b></div>{EXTRACTIONS.map(([type, value, status], index) => <div key={type} className="op-story-extraction"><span>0{index + 1}</span><div><small>{type}</small><strong>{value}</strong></div><em>{status}</em></div>)}</div></Reveal><StoryCta copy="See how Operion works with your contracts." location="home_contract_value" /></Container></section>
+
+    <section className="op-story-section op-story-aviation"><div className="op-story-aviation-image" style={{ backgroundImage: `url(${AVIATION_IMAGE})` }} aria-hidden="true" /><Container><StoryHeading index="03" eyebrow="AVIATION CONTEXT / DIRECTION" title="Then it understands what surrounds it." copy="Operion is being built to connect contractual intelligence with the aviation variables that can change its significance. External feeds shown here represent product direction." inverse /><Reveal className="op-story-signal-grid">{SIGNALS.map(([Icon, label, value, meaning], index) => <div key={label} className={`op-story-signal signal-${index + 1}`}><Icon size={18} /><span>{label}</span><strong>{value}</strong><small>{meaning}</small></div>)}</Reveal></Container></section>
+
+    <section className="op-story-section op-story-risk"><Container><StoryHeading index="04" eyebrow="PREDICTIVE RISK / IN DEVELOPMENT" title="See risk before it becomes exposure." copy="Operion's direction goes beyond identifying a clause. It connects the contractual mechanism to changing conditions and shows the potential decision impact without presenting estimates as certainty." /><Reveal className="op-story-exposure-stage"><div className="op-story-exposure-contract"><span>AIRCRAFT LEASE</span><strong>Current exposure</strong><b>€2.40M</b><small>Illustrative contractual baseline</small></div><div className="op-story-exposure-conditions"><p>CHANGING CONDITIONS</p><div><Fuel size={17} /><span>Fuel</span><strong>+18%</strong></div><div><Wind size={17} /><span>EUR / USD</span><strong>-6%</strong></div><div><Landmark size={17} /><span>Interest rates</span><strong>+1.2%</strong></div></div><div className="op-story-exposure-result"><span>POTENTIAL EXPOSURE</span><strong>€3.08M</strong><p>+€680K modelled change</p><small>Illustrative scenario, not a forecast</small></div></Reveal></Container></section>
+
+    <section className="op-story-scenario" id="scenarios"><Container><StoryHeading index="05" eyebrow="SCENARIO SIMULATION / ROADMAP DEMONSTRATION" title="What happens if the world changes tomorrow?" copy="See how a change in operating conditions could alter contractual exposure and the action a team should consider. Illustrative roadmap demonstration, not a live forecast." inverse /><Reveal className="op-story-scenario-console"><div className="op-story-scenario-chain" aria-label="Scenario value chain"><span>Aircraft contract</span><ArrowRight aria-hidden="true" /><span>World changes</span><ArrowRight aria-hidden="true" /><span>Exposure changes</span><ArrowRight aria-hidden="true" /><span>Action recommended</span></div><div className="op-story-scenario-tabs" role="tablist" aria-label="Illustrative exposure scenarios">{SCENARIOS.map((item, index) => <button key={item.id} id={`scenario-tab-${item.id}`} type="button" role="tab" aria-controls="scenario-panel" aria-selected={item.id === scenarioId} tabIndex={item.id === scenarioId ? 0 : -1} onClick={() => setScenarioId(item.id)} onKeyDown={(event) => selectAdjacentScenario(event, index)}>{item.label}</button>)}</div><div id="scenario-panel" className="op-story-scenario-body" role="tabpanel" aria-live="polite" aria-labelledby={`scenario-tab-${scenario.id}`}><div className="op-story-variable-stack"><p>INPUT CONDITIONS</p><dl><div><dt>Fuel price</dt><dd className={scenario.fuel ? "is-alert" : ""}>{scenario.fuel ? `+${scenario.fuel}%` : "Baseline"}</dd></div><div><dt>FX movement</dt><dd className={scenario.fx ? "is-alert" : ""}>{scenario.fx ? `${scenario.fx}%` : "Baseline"}</dd></div><div><dt>Supplier state</dt><dd className={scenario.supplier === "Disrupted" ? "is-alert" : ""}>{scenario.supplier}</dd></div></dl></div><div className="op-story-scenario-gauge"><Gauge size={23} /><span>MODELLED EXPOSURE</span><strong>€{scenario.exposure.toFixed(2)}M</strong><div><i style={{ width: `${Math.min(100, (scenario.exposure / 4) * 100)}%` }} /></div><small>{scenario.delta ? `+€${scenario.delta.toLocaleString()}K from baseline` : "Current illustrative baseline"}</small></div><div className="op-story-recommended"><Check size={19} /><span>RECOMMENDED ACTION</span><strong>{scenario.action}</strong><small>Decision support only. Not legal advice.</small></div></div></Reveal><StoryCta copy="Explore how Operion can identify contractual exposure before it becomes a problem." location="home_scenario_value" inverse /></Container></section>
+
+    <section className="op-story-section op-story-action"><Container><StoryHeading index="06" eyebrow="DECISION SUPPORT" title={<>Don&apos;t just detect the risk.<br />Know what to do next.</>} copy="Every material insight should lead to a clear, evidence-backed decision path while keeping judgment with your team." /><Reveal className="op-story-action-path"><div><span>01</span><small>RISK</small><strong>Supplier concentration threatens SLA performance</strong></div><ArrowRight /><div><span>02</span><small>EVIDENCE</small><strong>Clause 12.2 / sole-source dependency</strong></div><ArrowRight /><div className="is-action"><span>03</span><small>ACTION</small><strong>Review SLA remedies and supplier diversification</strong></div></Reveal><Reveal className="op-story-action-list">{["Clause improvement", "Negotiation strategy", "Risk mitigation", "Contract restructuring", "Supplier diversification"].map((item) => <span key={item}><Check size={15} />{item}</span>)}</Reveal></Container></section>
+
+    <section className="op-story-product" id="product"><Container><StoryHeading index="07" eyebrow="THE OPERION PLATFORM / REAL PRODUCT" title="Intelligence you can inspect, not just accept." copy="Upload a contract. Extract clauses, obligations, deadlines and risks. Search the analysis and trace every important finding back to evidence." /></Container><Reveal className="op-story-product-frame"><video ref={productVideoRef} controls loop muted playsInline preload="metadata" aria-label="Operion contract intelligence product demonstration"><source src={VIDEO_SRC} type="video/mp4" /></video></Reveal></section>
+
+    <section className="op-story-section op-story-segments"><Container><StoryHeading index="08" eyebrow="AVIATION FIRST" title="Built for the complexity of aviation." copy="One Contract Intelligence foundation, shaped around six aviation operating environments." /><Reveal className="op-story-segment-system"><div className="op-story-segment-core"><Plane size={25} /><strong>OPERION</strong><small>AVIATION INTELLIGENCE</small></div>{SEGMENTS.map(([title, copy], index) => <div key={title} className={`op-story-segment segment-${index + 1}`}><span>0{index + 1}</span><strong>{title}</strong><p>{copy}</p></div>)}</Reveal></Container></section>
+
+    <section className="op-story-section op-story-evolution"><Container><StoryHeading index="09" eyebrow="THE OPERION DIFFERENCE" title="One foundation. A more intelligent future." copy="The roadmap is a progression, not a claim that every layer is live today." /><Reveal className="op-story-evolution-rail">{EVOLUTION.map(([status, title, copy], index) => <div key={title}><span>0{index + 1}</span><small>{status}</small><strong>{title}</strong><p>{copy}</p></div>)}</Reveal><Reveal className="op-story-trust"><ShieldCheck size={22} /><p>Current intelligence is evidence-linked and reviewable. Predictive and simulation layers are clearly identified as developing or roadmap capabilities.</p></Reveal></Container></section>
+
+    <section className="op-story-final" style={{ backgroundImage: `url(${FINAL_IMAGE})` }}><div><Container><Reveal><p className="op-story-eyebrow">OPERION / REQUEST A PRIVATE DEMONSTRATION</p><h2>Turn your contracts<br />into intelligence.</h2><p>Bring an aviation contract or a question about exposure. See how Operion structures the evidence and supports the decision.</p><div className="op-story-actions"><Button to="/request-demo" onClick={() => trackEvent("request_demo_click", { location: "home_final" })}>Request a demo <ArrowRight size={16} /></Button><Button to="/product" variant="secondary">Explore the platform</Button></div></Reveal></Container></div></section>
   </>;
 }

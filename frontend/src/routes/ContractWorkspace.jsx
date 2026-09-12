@@ -43,6 +43,16 @@ const INTELLIGENCE_SECTIONS = CONTRACT_INTELLIGENCE_HIERARCHY
     note: "No read endpoint is exposed for this layer in current frontend boundaries.",
   }));
 
+const PROCESSING_STAGES = {
+  queued: ["Document received", "Ready to build Contract Intelligence."],
+  processing: ["Validating document", "Confirming the secure document source and analysis scope."],
+  extracting: ["Identifying clauses", "Reading contract structure and preserving source evidence."],
+  analysing: ["Extracting contract intelligence", "Building obligations, deadlines, risks and the contract summary."],
+  indexing: ["Building searchable intelligence", "Preparing evidence-backed search across the contract."],
+  completed: ["Contract Intelligence ready", "Review the summary, risks, obligations, deadlines and source evidence below."],
+  failed: ["Analysis needs attention", "The previous processing attempt did not complete. You can retry safely."],
+};
+
 function formatDeadlineTiming(deadline) {
   if (deadline.absolute_date) {
     return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })
@@ -403,6 +413,7 @@ function ContractWorkspace({ contractId, organizationId }) {
   const parties = profile?.metadata?.parties || [];
   const aircraftIdentifiers = profile?.aircraft_identifiers || [];
   const recommendations = profile?.recommendations || [];
+  const processingStage = PROCESSING_STAGES[analysisRun?.status] || ["Document structured", "Contract Intelligence has not started yet."];
   const financialActionsByRisk = new Map((financialImpact?.actions || []).map((action) => [action.riskId, action]));
   const partyEvidence = normalizeProfileEvidence([profile?.evidence_claims?.find((claim) => claim.field === "parties")?.evidence].filter(Boolean));
   const evidenceFor = (item) => {
@@ -471,15 +482,16 @@ function ContractWorkspace({ contractId, organizationId }) {
           </div>
 
           <div className="op-surface-plane-secondary" style={{ padding: "var(--op-space-5)" }}>
-            <p className="op-kicker" style={{ marginBottom: "var(--op-space-2)" }}>Analysis</p>
-            <p className="op-body-sm" style={{ marginBottom: "var(--op-space-4)" }}>
-              {analysisRun?.status ? `Active analysis run: ${analysisRun.status}` : "Clause analysis has not been requested for this document."}
-            </p>
+            <p className="op-kicker" style={{ marginBottom: "var(--op-space-2)" }}>Contract Intelligence</p>
+            <div className={`op-processing-state is-${analysisRun?.status || "unavailable"}`} role={processingState === "processing" ? "status" : undefined} aria-live="polite">
+              <span>{processingStage[0]}</span>
+              <p>{processingStage[1]}</p>
+            </div>
             {analysisRun && analysisRun.status !== "completed" && <Button type="button" variant="primary" onClick={handleFullProcessing} disabled={processingState === "processing"}>
-              {processingState === "processing" ? "Understanding contract…" : analysisRun.status === "failed" ? "Retry processing" : "Process contract"}
+              {processingState === "processing" ? processingStage[0] : analysisRun.status === "failed" ? "Retry analysis" : "Analyse contract"}
             </Button>}
             {processingState === "error" && <p className="op-body-sm" style={{ color: "var(--op-signal-risk)", marginTop: "var(--op-space-3)" }}>{errorMessage}</p>}
-            <Button to={`/app/contracts/${contractId}/analysis`} variant="secondary">View analysis</Button>
+            {analysisRun?.status === "completed" && <Button to="#intelligence-summary" variant="secondary">Review intelligence</Button>}
           </div>
         </div>
 
@@ -563,7 +575,7 @@ function ContractWorkspace({ contractId, organizationId }) {
         <ContractAssistantPanel analysisRunId={analysisRun?.id} organizationId={organizationId} />
       </Reveal>
 
-      <Reveal style={{ marginBottom: "var(--op-space-6)" }}>
+      <Reveal id="intelligence-summary" style={{ marginBottom: "var(--op-space-6)", scrollMarginTop: 90 }}>
         <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-3)" }}>Intelligence overview</h2>
         <div className="op-grid op-grid-3">
           <div className="op-surface" style={{ padding: "var(--op-space-4)" }}>

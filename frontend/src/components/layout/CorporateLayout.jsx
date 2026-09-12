@@ -7,11 +7,11 @@ import { Container } from "../ui/Layout";
 import { openAnalyticsPreferences, trackEvent } from "../analytics/Analytics";
 
 const NAV_LINKS = [
-  { to: "/product", label: "Product" },
+  { to: "/product", label: "Platform" },
+  { to: "/#intelligence", label: "Intelligence" },
   { to: "/aviation", label: "Aviation" },
-  { to: "/how-it-works", label: "How It Works", event: "how_it_works_click" },
-  { to: "/security", label: "Security" },
-  { to: "/about", label: "About" },
+  { to: "/scenarios", label: "Scenarios" },
+  { to: "/about", label: "Resources" },
 ];
 
 export default function CorporateLayout() {
@@ -39,10 +39,10 @@ export default function CorporateLayout() {
   useEffect(() => {
     menuRef.current?.toggleAttribute("inert", !menuOpen);
     if (!menuOpen) return undefined;
+    const focusable = menuRef.current?.querySelectorAll("a, button");
     const closeOnEscape = (event) => {
       if (event.key === "Escape") setMenuOpen(false);
       if (event.key === "Tab") {
-        const focusable = menuRef.current?.querySelectorAll("a, button");
         if (!focusable?.length) return;
         const first = focusable[0];
         const last = focusable[focusable.length - 1];
@@ -57,7 +57,7 @@ export default function CorporateLayout() {
     };
     document.addEventListener("keydown", closeOnEscape);
     document.body.style.overflow = "hidden";
-    menuRef.current?.focus();
+    focusable?.[0]?.focus();
     return () => {
       document.removeEventListener("keydown", closeOnEscape);
       document.body.style.overflow = "";

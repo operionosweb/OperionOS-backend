@@ -2,7 +2,6 @@ import express from "express";
 import multer from "multer";
 
 import {
-  createContract,
   getAllContracts,
   getContractById,
   updateContract,
@@ -17,6 +16,7 @@ import { authenticateUser } from "../middleware/userAuthMiddleware.js";
 import { requireOrganizationMembership } from "../middleware/organizationMiddleware.js";
 import { requireOrganizationPermission } from "../middleware/authorizationMiddleware.js";
 import { analyzeContractClauses } from "../services/clauseIntelligenceService.js";
+import { sendSafeHttpError } from "../utils/safeHttpError.js";
 
 const router = express.Router();
 const uploadLimit = Number(process.env.CONTRACT_UPLOAD_MAX_BYTES || 20 * 1024 * 1024);
@@ -46,11 +46,10 @@ function receiveUpload(req, res, next) {
 }
 
 function sendIngestionError(error, res) {
-  const status = error.status || (error.code === "STORAGE_ERROR" ? 503 : 400);
-  return res.status(status).json({
-    success: false,
-    code: error.code || "STORAGE_ERROR",
-    error: error.message || "Document request failed",
+  return sendSafeHttpError(res, error, {
+    status: 500,
+    code: "DOCUMENT_REQUEST_FAILED",
+    message: "The document request could not be completed",
   });
 }
 
@@ -83,27 +82,6 @@ router.post(
       return res.status(201).json(result);
     } catch (error) {
       return sendIngestionError(error, res);
-    }
-  }
-);
-
-// Legacy JSON contract path remains protected but is not used by Phase 2 upload.
-router.post(
-  "/",
-  requireOrganizationPermission("contract:write"),
-  async (req, res) => {
-    try {
-      const result = await createContract({
-        ...req.body,
-        organizationId: req.organization.id,
-        userId: req.user.id,
-      });
-      return res.status(201).json(result);
-    } catch (error) {
-      return res.status(500).json({
-        success: false,
-        error: "Contract creation failed",
-      });
     }
   }
 );

@@ -139,6 +139,34 @@ test("organization membership binds the query to both user and organization", as
   assert.equal(request.auth.organizationId, organizationId);
 });
 
+test("organization membership ignores manipulated body identities", async () => {
+  const organizationId = "11111111-1111-4111-8111-111111111111";
+  const request = {
+    user: { id: "authenticated-user" },
+    body: {
+      organization_id: "22222222-2222-4222-8222-222222222222",
+      user_id: "attacker-selected-user",
+    },
+    requestId: "request-1",
+    get: () => organizationId,
+    auth: {},
+  };
+  const response = responseDouble();
+  let queryParameters;
+  const requireMembership = createOrganizationMiddleware(async (_sql, params) => {
+    queryParameters = params;
+    return {
+      rows: [{ id: organizationId, name: "Organization A", slug: "organization-a", role: "member" }],
+    };
+  });
+
+  await requireMembership(request, response, () => {});
+
+  assert.deepEqual(queryParameters, [organizationId, "authenticated-user"]);
+  assert.equal(request.organization.id, organizationId);
+  assert.equal(request.auth.organizationId, organizationId);
+});
+
 test("organization membership denies a user with no membership in the requested organization", async () => {
   const response = responseDouble();
   const requireMembership = createOrganizationMiddleware(async () => ({ rows: [] }));
