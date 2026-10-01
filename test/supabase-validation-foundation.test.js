@@ -45,9 +45,9 @@ test("migration-only mode rechecks emptiness, verifies schema, and skips fixture
   assert.doesNotMatch(migrationOnlyBranch, /runIntegration\s*\(/);
 });
 
-test("migration validation covers canonical migrations 006 through 016 in order", async () => {
+test("migration validation covers canonical migrations 006 through 018 in order", async () => {
   const harness = await read("test/supabase-validation.js");
-  const positions = Array.from({ length: 11 }, (_, index) => harness.indexOf(`\"${String(index + 6).padStart(3, "0")}`));
+  const positions = Array.from({ length: 13 }, (_, index) => harness.indexOf(`\"${String(index + 6).padStart(3, "0")}`));
   assert.ok(positions.every((position) => position >= 0));
   assert.deepEqual([...positions].sort((left, right) => left - right), positions);
 });
@@ -185,9 +185,9 @@ test("deadline and risk migrations preserve business days and prohibit probabili
   assert.match(risks, /affected_deadline_ids/);
 });
 
-test("clean database migration executor includes migrations 001 through 016", async () => {
+test("clean database migration executor includes migrations 001 through 018", async () => {
   const executor = await read("test/phase3a-live-verification.js");
-  const positions = Array.from({ length: 16 }, (_, index) => executor.indexOf(`\"${String(index + 1).padStart(3, "0")}`));
+  const positions = Array.from({ length: 18 }, (_, index) => executor.indexOf(`\"${String(index + 1).padStart(3, "0")}`));
   assert.ok(positions.every((position) => position >= 0));
   assert.deepEqual([...positions].sort((left, right) => left - right), positions);
 });
@@ -220,7 +220,7 @@ test("migration 008 detection distinguishes PDF-only migration 002 from DOCX-awa
 
 test("non-empty migration mode allowlists additive migrations and rejects destructive SQL", async () => {
   await assert.doesNotReject(() => assertNonemptyMigrationPlan(
-    ["015_aviation_intelligence_foundation.sql", "016_contract_intelligence_core.sql"],
+    ["015_aviation_intelligence_foundation.sql", "016_contract_intelligence_core.sql", "017_platform_identity_foundation.sql", "018_commercial_intelligence_mvp.sql"],
     async () => "create table if not exists safe_addition (id uuid); alter table contracts add column if not exists safe_value text;"
   ));
   await assert.rejects(

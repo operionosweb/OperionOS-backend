@@ -67,6 +67,11 @@
         },
         "C:\\Progra~1\\nodejs\\node.exe": true,
         "&": true,
-        "Set-Item": true
+        "Set-Item": true,
+        "/^node --test \"c:\\\\Users\\\\meeli\\\\Operion OS GitHub\\\\OperionOS-backend\\\\test\\\\contract-profile-service\\.test\\.js\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "C:\\Progra~1\\Git\\cmd\\git.exe": true
     }
 }

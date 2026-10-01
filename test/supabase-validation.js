@@ -25,10 +25,14 @@ const REQUIRED_MIGRATIONS = [
   "014_durable_ai_state_hardening.sql",
   "015_aviation_intelligence_foundation.sql",
   "016_contract_intelligence_core.sql",
+  "017_platform_identity_foundation.sql",
+  "018_commercial_intelligence_mvp.sql",
 ];
 const NONEMPTY_ADDITIVE_MIGRATIONS = new Set([
   "015_aviation_intelligence_foundation.sql",
   "016_contract_intelligence_core.sql",
+  "017_platform_identity_foundation.sql",
+  "018_commercial_intelligence_mvp.sql",
 ]);
 
 const MIGRATION_SENTINELS = Object.freeze({
@@ -43,7 +47,14 @@ const MIGRATION_SENTINELS = Object.freeze({
   "014_durable_ai_state_hardening.sql": ["policy", "analysis_runs_member_select"],
   "015_aviation_intelligence_foundation.sql": ["table", "aircraft_contract_relationships"],
   "016_contract_intelligence_core.sql": ["table", "contract_intelligence_profiles"],
+  "017_platform_identity_foundation.sql": ["table", "platform_user_roles"],
+  "018_commercial_intelligence_mvp.sql": ["table", "commercial_opportunities"],
 });
+
+const INTERNAL_DENY_ALL_TABLES = Object.freeze([
+  "commercial_companies", "commercial_sources", "commercial_people", "commercial_signals",
+  "commercial_opportunities", "commercial_evidence_links",
+]);
 
 const RLS_TABLES = Object.freeze([
   "contracts", "documents", "document_versions", "document_version_extractions", "analysis_runs",
@@ -58,6 +69,8 @@ const RLS_TABLES = Object.freeze([
   "aircraft", "aircraft_organization_relationships", "aviation_flights", "flight_positions",
   "aircraft_contract_relationships",
   "contract_intelligence_profiles",
+  "platform_user_roles",
+  ...INTERNAL_DENY_ALL_TABLES,
 ]);
 
 function fail(code, message) {
@@ -106,7 +119,7 @@ async function migrationFiles() {
   }
   const requiredOrder = files.filter((file) => REQUIRED_MIGRATIONS.includes(file));
   if (JSON.stringify(requiredOrder) !== JSON.stringify(REQUIRED_MIGRATIONS)) {
-    fail("MIGRATION_ORDER_INVALID", "Migrations 006-016 are not ordered correctly");
+    fail("MIGRATION_ORDER_INVALID", "Migrations 006-017 are not ordered correctly");
   }
   return files;
 }
@@ -270,7 +283,7 @@ async function verifySchema(pool) {
     [RLS_TABLES]
   );
   const policyTables = new Set(policies.rows.filter((row) => row.schemaname === "public").map((row) => row.tablename));
-  const missingPolicies = RLS_TABLES.filter((table) => !policyTables.has(table));
+  const missingPolicies = RLS_TABLES.filter((table) => !INTERNAL_DENY_ALL_TABLES.includes(table) && !policyTables.has(table));
   if (missingPolicies.length) fail("RLS_POLICY_MISSING", `No RLS policy exists for: ${missingPolicies.join(", ")}`);
   const serverOwnedTables = [
     "document_version_extractions", "analysis_runs",

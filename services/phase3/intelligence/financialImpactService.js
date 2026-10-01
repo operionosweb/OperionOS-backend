@@ -30,6 +30,17 @@ function directEvidence(risk) {
   })).filter((item) => item.evidenceId || item.excerpt);
 }
 
+function profileEvidence(finding) {
+  const evidence = finding?.evidence;
+  if (!evidence) return [];
+  return [{
+    evidenceId: evidence.evidenceId || null,
+    excerpt: evidence.evidenceText || null,
+    sourceLocator: evidence.sourceLocation || null,
+    pageNumber: evidence.pageNumber || null,
+  }].filter((item) => item.evidenceId || item.excerpt);
+}
+
 function addAmount(totals, currency, amount) {
   if (amount === null || !currency) return;
   totals[currency] = Number(((totals[currency] || 0) + amount).toFixed(2));
@@ -61,7 +72,7 @@ export function buildFinancialImpact({ contractId, analysisRunId, clauses = [], 
   const recommendationByRisk = new Map(recommendations.filter((item) => item.riskId || item.risk_id).map((item) => [item.riskId || item.risk_id, item]));
   const totals = { currentContractual: {}, eventDriven: {}, potentialAvoidable: {}, protectedValue: {}, totalQuantified: {} };
 
-  const impacts = risks.map((risk) => {
+  const riskImpacts = risks.map((risk) => {
     const financial = risk.financial_exposure || {};
     const baseAmount = financial.type === "quantified" ? asMoney(financial.amount) : null;
     const currency = baseAmount === null ? null : String(financial.currency || "").toUpperCase() || null;
@@ -125,6 +136,54 @@ export function buildFinancialImpact({ contractId, analysisRunId, clauses = [], 
     return item;
   });
 
+  const commercialTerms = profile?.metadata?.leaseIntelligence?.commercialTerms
+    || profile?.metadata?.lease_intelligence?.commercial_terms
+    || {};
+  const profileTerms = [
+    commercialTerms.baseRent && { key: "base-rent", category: "base_rent", description: "Base rent", finding: commercialTerms.baseRent, frequency: commercialTerms.baseRent.frequency, aggregationEligible: false, nature: "explicit_contractual_amount" },
+    commercialTerms.securityDeposit && { key: "security-deposit", category: "security", description: "Security deposit", finding: commercialTerms.securityDeposit, aggregationEligible: true, nature: "explicit_contractual_amount" },
+    commercialTerms.rentEscalation && { key: "rent-escalation", category: "escalation_indexation", description: "Rent escalation mechanism", finding: commercialTerms.rentEscalation, aggregationEligible: false, nature: "contractual_formula" },
+    ...(commercialTerms.maintenanceReserves || []).map((reserve, index) => ({ key: `maintenance-reserve-${index}`, category: "maintenance_reserve", description: `${reserve.coveredComponent || "Component"} maintenance reserve`, finding: { ...reserve.rate, evidence: reserve.evidence }, frequency: reserve.paymentFrequency, unit: reserve.rate?.unit, aggregationEligible: false, nature: "explicit_contractual_rate", conditions: reserve.reimbursementMechanics || null })),
+  ].filter(Boolean);
+  const profileImpacts = profileTerms.map((term) => {
+    const amount = asMoney(term.finding.amount);
+    const currency = amount === null ? null : String(term.finding.currency || "").toUpperCase() || null;
+    const formula = term.finding.formula || null;
+    const evidence = profileEvidence(term.finding);
+    const resultLabel = amount === null
+      ? formula || "Amount not quantified"
+      : `${moneyLabel(amount, currency)}${term.frequency ? ` / ${term.frequency}` : term.unit ? ` / ${term.unit.replaceAll("_", " ")}` : ""}`;
+    const item = {
+      id: `financial-impact:profile:${term.key}`,
+      contractId, analysisRunId, sourceRiskId: null,
+      sourceClauseId: term.finding.evidence?.clauseId || null,
+      sourceClauseNumber: term.finding.evidence?.clauseNumber || null,
+      sourceObligationIds: [], sourceDeadlineIds: [],
+      sourceEvidenceIds: evidence.map((item) => item.evidenceId).filter(Boolean),
+      category: term.category, exposureType: "current_contractual", financialNature: term.nature,
+      description: term.description, baseAmount: amount, currency,
+      frequency: term.frequency || null, unit: term.unit || null, conditions: term.conditions || null,
+      aggregationEligible: term.aggregationEligible,
+      calculationMethod: formula ? "contractual_formula_requires_inputs" : amount === null ? "not_quantifiable_from_available_evidence" : term.aggregationEligible ? "direct_contract_amount" : "direct_contract_rate",
+      calculation: formula || (amount !== null ? `${resultLabel} stated in the evidence-linked contract profile` : null),
+      assumptions: term.aggregationEligible ? ["The amount is stated directly in the contract."] : ["The stated rate is not converted into total exposure because the required duration or usage inputs are not established."],
+      probability: null, confidence: term.finding.evidence?.confidence ?? null,
+      timeHorizon: null, triggerEvent: null, consequence: null,
+      mitigationAction: null, recommendationId: null,
+      currentExposure: term.aggregationEligible ? amount : null, potentialEventExposure: null,
+      estimatedExposureAfterMitigation: null, estimatedProtectedValue: null,
+      resultLabel, remainingExposureLabel: "Remaining exposure not quantified", protectedValueLabel: "Protected value not quantified",
+      provenance: { clause: null, obligations: [], deadlines: [], evidence },
+    };
+    item.path = buildPath(item);
+    if (term.aggregationEligible) {
+      addAmount(totals.totalQuantified, currency, amount);
+      addAmount(totals.currentContractual, currency, amount);
+    }
+    return item;
+  });
+  const impacts = [...profileImpacts, ...riskImpacts];
+
   const quantified = impacts.filter((item) => item.baseAmount !== null && item.currency);
   const unquantified = impacts.filter((item) => item.baseAmount === null);
   return {
@@ -144,6 +203,7 @@ export function buildFinancialImpact({ contractId, analysisRunId, clauses = [], 
     })),
     missingInputs: [
       !quantified.length && "No evidence-backed monetary amount was found in quantified risk findings.",
+      profileImpacts.some((item) => !item.aggregationEligible && item.baseAmount !== null) && "Recurring rates are shown but not aggregated without evidence-backed duration or usage inputs.",
       impacts.some((item) => item.mitigationAction && item.estimatedProtectedValue === null) && "Post-mitigation amounts are not present, so potential protected value cannot be calculated.",
       impacts.some((item) => item.exposureType === "event_driven" && item.probability === null) && "Event probabilities are unavailable; event-driven exposure is not probability-weighted.",
     ].filter(Boolean),

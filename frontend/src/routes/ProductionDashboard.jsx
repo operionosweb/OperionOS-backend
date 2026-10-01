@@ -5,8 +5,9 @@ import OrganizationGate from "../components/demo/OrganizationGate";
 import { EmptyState, ErrorState } from "../components/ui/States";
 import { useOrganization } from "../context/OrganizationContext";
 import { listContracts } from "../lib/contractsApi";
+import { ORGANIZATION_PERMISSIONS } from "../lib/permissions";
 
-function DashboardContent({ organizationId }) {
+function DashboardContent({ organizationId, canWrite }) {
   const [state, setState] = useState("loading");
   const [contracts, setContracts] = useState([]);
   const [error, setError] = useState("");
@@ -41,7 +42,7 @@ function DashboardContent({ organizationId }) {
   }
   if (state === "error") return <ErrorState message={error} />;
   if (!contracts.length) {
-    return <EmptyState title="Your contract intelligence workspace is ready" description="Upload your first aviation contract to begin deterministic document processing and contract intelligence analysis." action={<Link to="/app/upload" className="op-primary-action"><Upload size={17} />Upload contract</Link>} />;
+    return <EmptyState title="Your contract intelligence workspace is ready" description="No aviation contracts are currently available to this organisation." action={canWrite ? <Link to="/app/upload" className="op-primary-action"><Upload size={17} />Upload contract</Link> : null} />;
   }
 
   const metrics = [
@@ -84,6 +85,7 @@ function DashboardContent({ organizationId }) {
 }
 
 export default function ProductionDashboard() {
-  const { organizationId } = useOrganization();
-  return <><header className="op-page-heading"><div><span className="op-page-kicker">Contract intelligence</span><h1>Good morning</h1><p>What in your contract portfolio needs attention?</p></div><div className="op-page-actions"><Link className="op-secondary-action" to="/app/contracts">View contracts</Link><Link className="op-primary-action" to="/app/upload"><Upload size={17} />Upload</Link></div></header><OrganizationGate><DashboardContent organizationId={organizationId} /></OrganizationGate></>;
+  const organization = useOrganization();
+  const canWrite = organization.hasOrganizationPermission(ORGANIZATION_PERMISSIONS.CONTRACT_WRITE);
+  return <><header className="op-page-heading"><div><span className="op-page-kicker">Contract intelligence</span><h1>Good morning</h1><p>What in your contract portfolio needs attention?</p></div><div className="op-page-actions"><Link className="op-secondary-action" to="/app/contracts">View contracts</Link>{canWrite && <Link className="op-primary-action" to="/app/upload"><Upload size={17} />Upload</Link>}</div></header><OrganizationGate><DashboardContent organizationId={organization.organizationId} canWrite={canWrite} /></OrganizationGate></>;
 }

@@ -9,6 +9,7 @@ import IntelligenceStatus from "../components/intelligence/IntelligenceStatus";
 import FinancialImpactSection from "../components/intelligence/FinancialImpactSection";
 import OrganizationGate from "../components/demo/OrganizationGate";
 import { useOrganization } from "../context/OrganizationContext";
+import { ORGANIZATION_PERMISSIONS } from "../lib/permissions";
 import {
   getContract,
   listContractDocuments,
@@ -18,6 +19,7 @@ import {
   processContractIntelligence,
   getAnalysisRunProfile,
   getAnalysisRunFinancialImpact,
+  getAnalysisRunRoleIntelligence,
   listAnalysisRunRelationships,
   searchContractIntelligence,
   listAnalysisRunClauses,
@@ -42,6 +44,22 @@ const INTELLIGENCE_SECTIONS = CONTRACT_INTELLIGENCE_HIERARCHY
     state: deriveAvailabilityState({ isExposed: false }),
     note: "No read endpoint is exposed for this layer in current frontend boundaries.",
   }));
+
+const WORKSPACE_SECTIONS = Object.freeze({
+  overview: "Overview",
+  relationships: "Parties & Aircraft",
+  "commercial-terms": "Commercial Terms",
+  obligations: "Obligations",
+  deadlines: "Key Dates",
+  "financial-impact": "Financial Exposure",
+  risks: "Risks",
+  "missing-terms": "Missing / Unclear",
+  actions: "Actions",
+  evidence: "Evidence",
+  assistant: "Q&A",
+  clauses: "Clauses",
+  search: "Search",
+});
 
 const PROCESSING_STAGES = {
   queued: ["Document received", "Ready to build Contract Intelligence."],
@@ -77,6 +95,19 @@ function formatFinancialAmount(amount, currency) {
   return new Intl.NumberFormat("en-GB", { style: "currency", currency, maximumFractionDigits: 2 }).format(amount);
 }
 
+const NOT_ESTABLISHED = "Not established from the contract.";
+
+function formatCommercialTerm(term) {
+  const value = term?.value || {};
+  if (Number.isFinite(value.amount) && value.currency) {
+    const amount = formatFinancialAmount(value.amount, value.currency);
+    return `${amount}${value.frequency ? ` / ${value.frequency}` : value.unit ? ` / ${String(value.unit).replaceAll("_", " ")}` : ""}`;
+  }
+  if (Number.isFinite(value.ratePercent)) return `${value.ratePercent}% - ${value.formula || "contractual adjustment formula"}`;
+  if (value.rate && Number.isFinite(value.rate.amount)) return `${formatFinancialAmount(value.rate.amount, value.rate.currency)} / ${String(value.rate.unit || "stated unit").replaceAll("_", " ")}`;
+  return typeof value === "string" ? value : NOT_ESTABLISHED;
+}
+
 function normalizeProfileEvidence(items = []) {
   return items.map((item) => ({
     id: item.evidenceId,
@@ -88,12 +119,13 @@ function normalizeProfileEvidence(items = []) {
 
 export default function ContractDetail() {
   const { id } = useParams();
-  const { organizationId } = useOrganization();
+  const organization = useOrganization();
+  const { organizationId } = organization;
 
-  return <OrganizationGate><ContractWorkspace contractId={id} organizationId={organizationId} /></OrganizationGate>;
+  return <OrganizationGate><ContractWorkspace contractId={id} organizationId={organizationId} canAnalyze={organization.hasOrganizationPermission(ORGANIZATION_PERMISSIONS.CONTRACT_ANALYZE)} /></OrganizationGate>;
 }
 
-function ContractWorkspace({ contractId, organizationId }) {
+function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
   const [state, setState] = useState("loading");
   const [contract, setContract] = useState(null);
   const [documents, setDocuments] = useState([]);
@@ -106,6 +138,7 @@ function ContractWorkspace({ contractId, organizationId }) {
   const [risks, setRisks] = useState([]);
   const [evidence, setEvidence] = useState([]);
   const [profile, setProfile] = useState(null);
+  const [roleIntelligence, setRoleIntelligence] = useState(null);
   const [relationships, setRelationships] = useState([]);
   const [financialImpact, setFinancialImpact] = useState(null);
   const [financialImpactState, setFinancialImpactState] = useState("loading");
@@ -188,6 +221,7 @@ function ContractWorkspace({ contractId, organizationId }) {
           setObligations([]);
           setDeadlines([]);
           setRisks([]);
+          setRoleIntelligence(null);
           setRelationships([]);
           setFinancialImpact(null);
           setFinancialImpactState("ready");
@@ -205,19 +239,23 @@ function ContractWorkspace({ contractId, organizationId }) {
           getAnalysisRunProfile(nextAnalysisRunId, organizationId).catch(() => null),
           listAnalysisRunRelationships(nextAnalysisRunId, organizationId).catch(() => ({ relationships: [] })),
           getAnalysisRunFinancialImpact(nextAnalysisRunId, organizationId).catch(() => null),
+          getAnalysisRunRoleIntelligence(nextAnalysisRunId, organizationId).catch(() => null),
         ])
-          .then(([analysisRunResult, clausesResult, obligationsResult, deadlinesResult, risksResult, evidenceResult, profileResult, relationshipsResult, financialImpactResult]) => {
+          .then(([analysisRunResult, clausesResult, obligationsResult, deadlinesResult, risksResult, evidenceResult, profileResult, relationshipsResult, financialImpactResult, roleIntelligenceResult]) => {
             if (cancelled) return;
+            const nextRoleIntelligence = roleIntelligenceResult?.intelligence || null;
+            const nextFinancialImpact = nextRoleIntelligence?.financialImpact || financialImpactResult?.financialImpact || null;
             setAnalysisRun(analysisRunResult?.analysisRun || null);
             setClauses(clausesResult?.clauses || []);
-            setObligations(obligationsResult?.obligations || []);
-            setDeadlines(deadlinesResult?.deadlines || []);
-            setRisks(risksResult?.risks || []);
+            setObligations(nextRoleIntelligence?.obligations || obligationsResult?.obligations || []);
+            setDeadlines(nextRoleIntelligence?.deadlines || deadlinesResult?.deadlines || []);
+            setRisks(nextRoleIntelligence?.risks || risksResult?.risks || []);
             setEvidence(evidenceResult?.evidence || []);
             setProfile(profileResult?.profile || null);
+            setRoleIntelligence(nextRoleIntelligence);
             setRelationships(relationshipsResult?.relationships || []);
-            setFinancialImpact(financialImpactResult?.financialImpact || null);
-            setFinancialImpactState(financialImpactResult ? "ready" : "unavailable");
+            setFinancialImpact(nextFinancialImpact);
+            setFinancialImpactState(nextFinancialImpact ? "ready" : "unavailable");
             setState("ready");
           })
           .catch((error) => {
@@ -230,6 +268,7 @@ function ContractWorkspace({ contractId, organizationId }) {
             setRisks([]);
             setEvidence([]);
             setProfile(null);
+            setRoleIntelligence(null);
             setRelationships([]);
             setFinancialImpact(null);
             setFinancialImpactState("unavailable");
@@ -413,6 +452,15 @@ function ContractWorkspace({ contractId, organizationId }) {
   const parties = profile?.metadata?.parties || [];
   const aircraftIdentifiers = profile?.aircraft_identifiers || [];
   const recommendations = profile?.recommendations || [];
+  const leaseIntelligence = profile?.metadata?.leaseIntelligence || profile?.metadata?.lease_intelligence || {};
+  const keyCommercialTerms = profile?.key_commercial_terms || [];
+  const operationalTerms = profile?.key_operational_terms || [];
+  const missingTerms = profile?.unusual_or_missing_terms || [];
+  const executiveSynthesis = profile?.metadata?.executiveSynthesis || {};
+  const workspaceSectionOrder = [...new Set([
+    ...(roleIntelligence?.sectionOrder || []),
+    ...Object.keys(WORKSPACE_SECTIONS),
+  ])].filter((sectionId) => WORKSPACE_SECTIONS[sectionId]);
   const processingStage = PROCESSING_STAGES[analysisRun?.status] || ["Document structured", "Contract Intelligence has not started yet."];
   const financialActionsByRisk = new Map((financialImpact?.actions || []).map((action) => [action.riskId, action]));
   const partyEvidence = normalizeProfileEvidence([profile?.evidence_claims?.find((claim) => claim.field === "parties")?.evidence].filter(Boolean));
@@ -436,9 +484,24 @@ function ContractWorkspace({ contractId, organizationId }) {
         <span className={`op-status-badge${contract.status ? "" : " is-neutral"}`}>{contract.status || "Status unavailable"}</span>
       </Reveal>
 
+      {roleIntelligence && <Reveal className="op-page-heading" aria-label="Role-based intelligence summary">
+        <div>
+          <span className="op-page-kicker">{roleIntelligence.profile.roleName} intelligence</span>
+          <h2>{roleIntelligence.summary.question}</h2>
+          <p>{roleIntelligence.summary.headline}</p>
+        </div>
+        {roleIntelligence.alerts.length > 0 && <div aria-label="Priority alerts">
+          {roleIntelligence.alerts.slice(0, 3).map((alert) => (
+            <span key={alert.id} className="op-status-badge" style={{ marginInlineStart: "var(--op-space-2)" }}>
+              {alert.rolePresentation?.headline || alert.title}
+            </span>
+          ))}
+        </div>}
+      </Reveal>}
+
       <nav aria-label="Contract intelligence" className="op-workspace-tabs">
-        {[["overview", "Overview"], ["clauses", "Clauses"], ["obligations", "Obligations"], ["deadlines", "Deadlines"], ["risks", "Risks"], ["relationships", "Relationships"], ["evidence", "Evidence"], ["financial-impact", "Financial Impact"], ["search", "Search"], ["assistant", "Assistant"], ["actions", "Actions"]].map(([target, label]) => (
-          <a key={target} href={`#${target}`} className="op-btn op-btn-quiet">{label}</a>
+        {workspaceSectionOrder.map((target) => (
+          <a key={target} href={`#${target}`} className="op-btn op-btn-quiet">{WORKSPACE_SECTIONS[target]}</a>
         ))}
       </nav>
 
@@ -487,7 +550,7 @@ function ContractWorkspace({ contractId, organizationId }) {
               <span>{processingStage[0]}</span>
               <p>{processingStage[1]}</p>
             </div>
-            {analysisRun && analysisRun.status !== "completed" && <Button type="button" variant="primary" onClick={handleFullProcessing} disabled={processingState === "processing"}>
+            {canAnalyze && analysisRun && analysisRun.status !== "completed" && <Button type="button" variant="primary" onClick={handleFullProcessing} disabled={processingState === "processing"}>
               {processingState === "processing" ? processingStage[0] : analysisRun.status === "failed" ? "Retry analysis" : "Analyse contract"}
             </Button>}
             {processingState === "error" && <p className="op-body-sm" style={{ color: "var(--op-signal-risk)", marginTop: "var(--op-space-3)" }}>{errorMessage}</p>}
@@ -527,12 +590,15 @@ function ContractWorkspace({ contractId, organizationId }) {
             <p className="op-body" style={{ marginBottom: "var(--op-space-4)" }}>{profile.executive_summary}</p>
             <div className="op-contract-profile-grid">
               <div><span className="op-kicker">Type</span><p className="op-body-sm">{formatIntelligenceLabel(profile.metadata?.contractType)}</p></div>
-              <div><span className="op-kicker">Contract number</span><p className="op-body-sm">{profile.metadata?.contractNumber || "Not established"}</p></div>
-              <div><span className="op-kicker">Effective</span><p className="op-body-sm">{profile.metadata?.effectiveDate || "Not established"}</p></div>
-              <div><span className="op-kicker">Expires</span><p className="op-body-sm">{profile.metadata?.expirationDate || "Not established"}</p></div>
-              <div><span className="op-kicker">Renewal</span><p className="op-body-sm">{profile.metadata?.renewalDate || (profile.metadata?.autoRenewal === true ? "Automatic renewal identified" : "Not established")}</p></div>
-              <div><span className="op-kicker">Governing law</span><p className="op-body-sm">{profile.metadata?.governingLaw || "Not established"}</p></div>
-              <div><span className="op-kicker">Currency</span><p className="op-body-sm">{profile.metadata?.currency || "Not established"}</p></div>
+              <div><span className="op-kicker">Contract number</span><p className="op-body-sm">{profile.metadata?.contractNumber || NOT_ESTABLISHED}</p></div>
+              <div><span className="op-kicker">Effective</span><p className="op-body-sm">{profile.metadata?.effectiveDate || NOT_ESTABLISHED}</p></div>
+              <div><span className="op-kicker">Executed</span><p className="op-body-sm">{profile.metadata?.executionDate || NOT_ESTABLISHED}</p></div>
+              <div><span className="op-kicker">Commencement</span><p className="op-body-sm">{profile.metadata?.commencementDate || NOT_ESTABLISHED}</p></div>
+              <div><span className="op-kicker">Expires</span><p className="op-body-sm">{profile.metadata?.expirationDate || NOT_ESTABLISHED}</p></div>
+              <div><span className="op-kicker">Renewal</span><p className="op-body-sm">{profile.metadata?.renewalDate || (profile.metadata?.autoRenewal === true ? "Automatic renewal identified" : NOT_ESTABLISHED)}</p></div>
+              <div><span className="op-kicker">Governing law</span><p className="op-body-sm">{profile.metadata?.governingLaw || NOT_ESTABLISHED}</p></div>
+              <div><span className="op-kicker">Jurisdiction</span><p className="op-body-sm">{profile.metadata?.jurisdiction || NOT_ESTABLISHED}</p></div>
+              <div><span className="op-kicker">Currency</span><p className="op-body-sm">{profile.metadata?.currency || NOT_ESTABLISHED}</p></div>
               <div><span className="op-kicker">Confidence</span><p className="op-body-sm">{Math.round(Number(profile.confidence || 0) * 100)}%</p></div>
             </div>
             <div className="op-contract-context-grid">
@@ -546,9 +612,52 @@ function ContractWorkspace({ contractId, organizationId }) {
                 {aircraftIdentifiers.length ? aircraftIdentifiers.map((identifier) => <div className="op-profile-identifier" key={`${identifier.type}-${identifier.value}`}><p className="op-body-sm"><strong>{identifier.value}</strong> · {formatIntelligenceLabel(identifier.type)}</p><EvidencePanel findingLabel={`${identifier.value} identifier`} evidence={normalizeProfileEvidence([identifier.evidence].filter(Boolean))} /></div>) : <p className="op-body-sm">No aircraft or engine identifier was established.</p>}
               </section>
             </div>
+            <div className="op-grid op-grid-3" style={{ marginTop: "var(--op-space-4)" }}>
+              <section className="op-surface-plane-secondary" style={{ padding: "var(--op-space-4)" }}>
+                <p className="op-kicker">Material exposures</p>
+                {executiveSynthesis.materialExposures?.length ? executiveSynthesis.materialExposures.slice(0, 3).map((item, index) => <button key={item.id || index} type="button" className="op-list-row" style={{ width: "100%", textAlign: "left" }} onClick={() => item.id && document.getElementById(`risk-${item.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}><span className="op-body-sm">{item.title}</span></button>) : <p className="op-body-sm">{NOT_ESTABLISHED}</p>}
+              </section>
+              <section className="op-surface-plane-secondary" style={{ padding: "var(--op-space-4)" }}>
+                <p className="op-kicker">Critical dates / triggers</p>
+                {executiveSynthesis.criticalDates?.length ? executiveSynthesis.criticalDates.slice(0, 3).map((item, index) => <button key={item.id || index} type="button" className="op-list-row" style={{ width: "100%", textAlign: "left" }} onClick={() => item.id && document.getElementById(`deadline-${item.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}><span className="op-body-sm">{item.date || item.trigger || NOT_ESTABLISHED}</span></button>) : <p className="op-body-sm">{NOT_ESTABLISHED}</p>}
+              </section>
+              <section className="op-surface-plane-secondary" style={{ padding: "var(--op-space-4)" }}>
+                <p className="op-kicker">Recommended next actions</p>
+                {executiveSynthesis.recommendedActions?.length ? executiveSynthesis.recommendedActions.slice(0, 3).map((item, index) => <button key={`${item.riskId || "action"}-${index}`} type="button" className="op-list-row" style={{ width: "100%", textAlign: "left" }} onClick={() => document.getElementById("actions")?.scrollIntoView({ behavior: "smooth", block: "start" })}><span className="op-body-sm">{item.action}</span></button>) : <p className="op-body-sm">{NOT_ESTABLISHED}</p>}
+              </section>
+            </div>
           </div>
         </Reveal>
       )}
+
+      <Reveal id="commercial-terms" style={{ marginBottom: "var(--op-space-5)", scrollMarginTop: 90 }}>
+        <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-3)" }}>Commercial terms and return exposure</h2>
+        {!profile ? (
+          <EmptyState title="Commercial terms unavailable" description="Complete the contract profile before reviewing evidence-backed lease economics." />
+        ) : (
+          <div className="op-grid op-grid-2">
+            <section className="op-surface-plane-primary" style={{ padding: "var(--op-space-4)" }}>
+              <p className="op-kicker">Evidence-backed commercial terms</p>
+              {!keyCommercialTerms.length ? <p className="op-body-sm">{NOT_ESTABLISHED}</p> : keyCommercialTerms.map((term, index) => (
+                <article className="op-relationship-item" key={`${term.type || "term"}-${index}`}>
+                  <div><strong className="op-body">{term.title || formatIntelligenceLabel(term.type)}</strong><p className="op-body-sm">{formatCommercialTerm(term)}</p></div>
+                  <EvidencePanel findingLabel={term.title || "Commercial term"} evidence={normalizeProfileEvidence([term.evidence].filter(Boolean))} />
+                </article>
+              ))}
+              {leaseIntelligence.commercialTerms?.baseRent && !profile.metadata?.expirationDate && <p className="op-body-sm op-relationship-boundary">Monthly rent established; total contractual rent exposure cannot be established from the available contract data.</p>}
+            </section>
+            <section className="op-surface-plane-secondary" style={{ padding: "var(--op-space-4)" }}>
+              <p className="op-kicker">Redelivery, insurance and operational conditions</p>
+              {!operationalTerms.length ? <p className="op-body-sm">{NOT_ESTABLISHED}</p> : operationalTerms.map((term, index) => (
+                <article className="op-relationship-item" key={`${term.category || "requirement"}-${index}`}>
+                  <div><strong className="op-body">{formatIntelligenceLabel(term.category)}</strong><p className="op-body-sm">{term.requirement}</p>{term.important && <span className="op-status-badge">Important</span>}</div>
+                  <EvidencePanel findingLabel={formatIntelligenceLabel(term.category)} evidence={normalizeProfileEvidence([term.evidence].filter(Boolean))} />
+                </article>
+              ))}
+            </section>
+          </div>
+        )}
+      </Reveal>
 
       {analysisRun?.status === "completed" && (
         <Reveal id="search" style={{ marginBottom: "var(--op-space-6)", scrollMarginTop: 90 }}>
@@ -665,9 +774,9 @@ function ContractWorkspace({ contractId, organizationId }) {
               Extract actionable commitments from validated clauses using deterministic analysis. This consumes zero AI Intelligence Budget.
             </p>
             {obligationEstimate && <p className="op-body-sm" style={{ marginBottom: "var(--op-space-3)" }}>Estimated Intelligence Budget: {obligationEstimate.estimatedIntelligence} · Remaining: {obligationEstimate.budget?.remaining ?? "unknown"}</p>}
-            <Button type="button" variant="primary" onClick={handleObligationAnalysis} disabled={obligationAnalysisState === "processing"}>
+            {canAnalyze && <Button type="button" variant="primary" onClick={handleObligationAnalysis} disabled={obligationAnalysisState === "processing"}>
               {obligationAnalysisState === "processing" ? "Analysing obligations…" : "Analyse obligations"}
-            </Button>
+            </Button>}
             {obligationAnalysisState === "error" && <p className="op-body-sm" style={{ color: "var(--op-signal-risk)", marginTop: "var(--op-space-3)" }}>{errorMessage}</p>}
           </div>
         )}
@@ -699,9 +808,9 @@ function ContractWorkspace({ contractId, organizationId }) {
             <p className="op-body-sm" style={{ marginBottom: "var(--op-space-3)" }}>
               Build temporal intelligence from existing obligations. Deterministic interpretation consumes zero AI Intelligence Budget.
             </p>
-            <Button type="button" variant="primary" onClick={handleDeadlineAnalysis} disabled={deadlineAnalysisState === "processing"}>
+            {canAnalyze && <Button type="button" variant="primary" onClick={handleDeadlineAnalysis} disabled={deadlineAnalysisState === "processing"}>
               {deadlineAnalysisState === "processing" ? "Building deadline intelligence…" : "Build deadline intelligence"}
-            </Button>
+            </Button>}
             {deadlineAnalysisState === "error" && <p className="op-body-sm" style={{ color: "var(--op-signal-risk)", marginTop: "var(--op-space-3)" }}>{errorMessage}</p>}
           </div>
         )}
@@ -753,9 +862,9 @@ function ContractWorkspace({ contractId, organizationId }) {
                 Estimated Intelligence Budget per candidate batch: {riskEstimate.estimatedIntelligence} · Remaining: {riskEstimate.budget?.remaining ?? "unknown"}
               </p>
             )}
-            <Button type="button" variant="primary" onClick={handleRiskAnalysis} disabled={riskAnalysisState === "processing"}>
+            {canAnalyze && <Button type="button" variant="primary" onClick={handleRiskAnalysis} disabled={riskAnalysisState === "processing"}>
               {riskAnalysisState === "processing" ? "Analysing contractual risks…" : "Analyse contractual risks"}
-            </Button>
+            </Button>}
             {riskAnalysisState === "error" && <p className="op-body-sm" style={{ color: "var(--op-signal-risk)", marginTop: "var(--op-space-3)" }}>{errorMessage}</p>}
             {riskAnalysisState === "partial" && <p className="op-body-sm" style={{ marginTop: "var(--op-space-3)" }}>Materialized risks were retained; some semantic candidates require review or retry.</p>}
           </div>
@@ -880,6 +989,25 @@ function ContractWorkspace({ contractId, organizationId }) {
         )}
       </Reveal>
 
+      <Reveal id="missing-terms" style={{ marginBottom: "var(--op-space-5)", scrollMarginTop: 90 }}>
+        <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-3)" }}>Missing or unclear terms</h2>
+        {!profile ? (
+          <EmptyState title="Missing-term review unavailable" description="A completed aircraft lease profile is required." />
+        ) : !missingTerms.length ? (
+          <EmptyState title="No material checklist gaps identified" description="The aircraft lease checklist has evidence-backed coverage across its material areas. This is not a legal completeness opinion." />
+        ) : (
+          <div className="op-list-table">{missingTerms.map((item) => (
+            <article className="op-list-row" key={item.field} style={{ display: "block", padding: "var(--op-space-4)" }}>
+              <span className="op-status-badge is-neutral">Requires review</span>
+              <h3 className="op-heading-sm">{item.what || `${formatIntelligenceLabel(item.field)} not established from the contract.`}</h3>
+              <p className="op-body-sm"><strong>Why it matters:</strong> {item.whyItMatters}</p>
+              <p className="op-body-sm"><strong>Basis:</strong> {item.basis}</p>
+              <p className="op-body-sm"><strong>Recommended review:</strong> {item.recommendedReview}</p>
+            </article>
+          ))}</div>
+        )}
+      </Reveal>
+
       <Reveal id="actions" style={{ marginBottom: "var(--op-space-5)", scrollMarginTop: 90 }}>
         <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-3)" }}>Recommended actions</h2>
         {!profile ? (
@@ -894,6 +1022,9 @@ function ContractWorkspace({ contractId, organizationId }) {
                   <span className="op-kicker">Grounded recommendation {index + 1}</span>
                   <h3 className="op-heading-sm">{recommendation.title}</h3>
                   <p className="op-body">{recommendation.action}</p>
+                  {recommendation.reason && <p className="op-body-sm"><strong>Reason:</strong> {recommendation.reason}</p>}
+                  <p className="op-body-sm"><strong>Owner:</strong> {recommendation.suggestedOwner ? formatIntelligenceLabel(recommendation.suggestedOwner) : NOT_ESTABLISHED} · <strong>Priority:</strong> {recommendation.priority || NOT_ESTABLISHED}</p>
+                  {recommendation.triggerDeadline && <p className="op-body-sm"><strong>Trigger / deadline:</strong> {recommendation.triggerDeadline}</p>}
                   <p className="op-body-sm">{recommendation.disclaimer}</p>
                   {recommendation.riskId && financialActionsByRisk.has(recommendation.riskId) && (() => {
                     const actionValue = financialActionsByRisk.get(recommendation.riskId);

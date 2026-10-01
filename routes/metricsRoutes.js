@@ -2,8 +2,12 @@
 
 import express from "express";
 import { getMetrics } from "../services/aiTelemetry.js";
+import { authenticateUser } from "../middleware/userAuthMiddleware.js";
+import { requireSuperAdmin } from "../middleware/superAdminMiddleware.js";
 
 const router = express.Router();
+
+router.use(authenticateUser, requireSuperAdmin);
 
 /**
  * -----------------------------------------

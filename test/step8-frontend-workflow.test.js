@@ -35,11 +35,12 @@ test("upload-created analysis selection is isolated per contract and used by det
 
 test("contract workspace exposes the complete intelligence navigation", async () => {
   const workspace = await read("frontend/src/routes/ContractWorkspace.jsx");
-  for (const [target, label] of [["overview", "Overview"], ["clauses", "Clauses"], ["obligations", "Obligations"], ["deadlines", "Deadlines"], ["risks", "Risks"], ["assistant", "Assistant"]]) {
-    assert.match(workspace, new RegExp(`\\["${target}", "${label}"\\]`));
+  for (const [target, label] of [["overview", "Overview"], ["relationships", "Parties & Aircraft"], ["commercial-terms", "Commercial Terms"], ["obligations", "Obligations"], ["deadlines", "Key Dates"], ["financial-impact", "Financial Exposure"], ["risks", "Risks"], ["missing-terms", "Missing / Unclear"], ["actions", "Actions"], ["assistant", "Q&A"], ["clauses", "Clauses"]]) {
+    assert.match(workspace, new RegExp(`(?:"${target}"|${target}): "${label}"`));
     assert.match(workspace, new RegExp(`id="${target}"`));
   }
-  assert.match(workspace, /Process contract/);
+  assert.match(workspace, /roleIntelligence\?\.sectionOrder/);
+  assert.match(workspace, /Analyse contract/);
   assert.match(workspace, /Analyse obligations/);
   assert.match(workspace, /Build deadline intelligence/);
   assert.match(workspace, /Analyse contractual risks/);

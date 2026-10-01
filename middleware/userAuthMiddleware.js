@@ -49,6 +49,7 @@ export function createUserAuthMiddleware(verifyToken = verifySupabaseToken) {
           user.app_metadata?.role ||
           user.user_metadata?.role ||
           "authenticated",
+        rbiProfileId: user.app_metadata?.rbi_profile || null,
       };
       req.auth = {
         type: "supabase_user_token",

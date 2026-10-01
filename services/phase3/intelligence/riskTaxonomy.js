@@ -1,4 +1,4 @@
-export const RISK_TAXONOMY_VERSION = "aviation-contract-risk-v1";
+export const RISK_TAXONOMY_VERSION = "aviation-contract-risk-v2";
 
 export const RISK_TAXONOMY = Object.freeze({
   financial: Object.freeze([
@@ -8,6 +8,7 @@ export const RISK_TAXONOMY = Object.freeze({
   operational: Object.freeze([
     "operational_constraint", "service_level_exposure", "turnaround_exposure",
     "maintenance_exposure", "availability_exposure", "operational_dependency",
+    "redelivery_condition_exposure", "records_redelivery_exposure",
   ]),
   compliance: Object.freeze([
     "regulatory_compliance", "reporting_compliance", "certification_exposure",
@@ -19,13 +20,14 @@ export const RISK_TAXONOMY = Object.freeze({
   ]),
   liability: Object.freeze([
     "broad_indemnity", "third_party_liability", "uncapped_liability", "insurance_gap",
+    "insurance_compliance_exposure",
   ]),
   termination_default: Object.freeze([
     "termination_exposure", "default_exposure", "cure_period_exposure", "cross_default",
   ]),
   commercial: Object.freeze([
     "restrictive_terms", "unfavorable_renewal", "automatic_renewal",
-    "pricing_exposure", "volume_commitment",
+    "pricing_exposure", "volume_commitment", "renewal_pricing_uncertainty",
   ]),
   dependency: Object.freeze([
     "single_supplier_dependency", "third_party_dependency", "external_event_dependency",

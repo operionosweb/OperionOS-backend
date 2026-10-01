@@ -6,6 +6,11 @@ This synthetic test agreement is made between Northstar Aviation Leasing Ltd. (t
 1. AIRCRAFT
 Aircraft Registration: G-SYN1
 Aircraft MSN: 98765
+Manufacturer: Airbus
+Model: A320-214
+Aircraft Type: A320
+Engine Serial Number: ESN-445566
+Delivery Date: 15 January 2026.
 
 2. TERM
 Effective Date: 1 January 2026.
@@ -13,24 +18,34 @@ Expiration Date: 31 December 2031.
 
 3. RENT
 The Lessee shall pay monthly rent of USD 250,000 on the first business day of each month.
+Rent shall commence on the Delivery Date. On each anniversary of the Delivery Date, Base Rent shall increase by 2.5 percent.
+
+3.1 SECURITY
+The Lessee shall pay a security deposit of USD 750,000 before Delivery.
+
+3.2 MAINTENANCE RESERVES
+The Lessee shall pay an airframe maintenance reserve of USD 300 per flight hour monthly. Reimbursement requires paid invoices and complete shop visit records. Unclaimed reserves remain with the Lessor at the end of the Term.
 
 4. MAINTENANCE AND AIRWORTHINESS
 The Lessee shall maintain the Aircraft in an airworthy condition and comply with the approved maintenance programme.
 
 5. INSURANCE
-The Lessee shall maintain hull and liability insurance throughout the Term and provide renewal evidence no later than 15 days before policy expiry.
+The Lessee shall maintain hull all risks insurance of not less than USD 45,000,000 and aviation liability insurance throughout the Term. The Lessor and Owner shall be named as additional insureds. The policy shall include a waiver of subrogation. The Lessee shall provide renewal evidence no later than 15 days before policy expiry.
 
 6. TECHNICAL RECORDS
 Within 10 business days after each shop visit, the Lessee shall provide complete maintenance records to the Lessor.
 
 7. RETURN CONDITIONS
-On the Expiration Date, the Lessee shall return the Aircraft with complete technical records and in the condition required by this Agreement.
+On the Expiration Date, the Lessee shall return the Aircraft to London Heathrow Airport in an airworthy condition, free of liens, with complete technical records, current maintenance status and all installed parts. Each engine shall have at least 3,000 cycles remaining on each life limited part. The Aircraft shall be clean and painted in white livery. The Lessor may inspect the Aircraft during the 30 days before redelivery. Missing records shall be replaced at the Lessee's cost.
 
 8. TERMINATION AND NOTICE
-The Lessor may terminate this Agreement following an uncured material default. Notice must be given within 30 days after the default notice.
+Failure to pay Rent within 5 business days after notice, failure to maintain insurance, insolvency, or material breach of the maintenance obligations constitutes an Event of Default. The Lessor may terminate this Agreement following an uncured Event of Default and may repossess the Aircraft. Notice must be given within 30 days after the default notice.
+
+8.1 EXTENSION OPTION
+The Lessee may extend the Term for 12 months by giving the Lessor not less than 180 days' written notice before the Expiration Date. Rent during the extension shall be agreed by the parties.
 
 9. COMPLIANCE
 The Lessee shall operate the Aircraft in compliance with applicable aviation laws and airworthiness directives.
 
 10. GOVERNING LAW
-This Agreement is governed by the laws of England and Wales.
+This Agreement is governed by the laws of England and Wales. The courts of England and Wales shall have exclusive jurisdiction.

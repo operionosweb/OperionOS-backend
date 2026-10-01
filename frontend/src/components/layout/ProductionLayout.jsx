@@ -20,6 +20,7 @@ import {
 import Logo from "../ui/Logo";
 import { useAuth } from "../../context/AuthContext";
 import { useOrganization } from "../../context/OrganizationContext";
+import { ORGANIZATION_PERMISSIONS, PLATFORM_PERMISSIONS } from "../../lib/permissions";
 
 const PRIMARY_NAV = [
   { to: "/app/dashboard", label: "Dashboard", icon: Gauge, end: true },
@@ -55,7 +56,8 @@ function NavItem({ to, label, icon: Icon, end, onNavigate }) {
 
 export default function ProductionLayout() {
   const auth = useAuth();
-  const { organizationId } = useOrganization();
+  const organization = useOrganization();
+  const { organizationId } = organization;
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -92,7 +94,14 @@ export default function ProductionLayout() {
 
         <nav className="op-product-nav" aria-label="Production navigation">
           <span className="op-product-nav-label">Main</span>
-          {PRIMARY_NAV.map((item) => <NavItem key={item.to} {...item} />)}
+          {PRIMARY_NAV.filter((item) => item.to !== "/app/upload" || organization.hasOrganizationPermission(ORGANIZATION_PERMISSIONS.CONTRACT_WRITE)).map((item) => <NavItem key={item.to} {...item} />)}
+
+          {auth.hasPlatformPermission(PLATFORM_PERMISSIONS.COMMERCIAL_INTELLIGENCE_READ) && (
+            <>
+              <span className="op-product-nav-label">Operion internal</span>
+              <NavItem to="/app/internal/commercial-intelligence" label="Commercial Intelligence" icon={BrainCircuit} />
+            </>
+          )}
 
           {contractPath && (
             <>

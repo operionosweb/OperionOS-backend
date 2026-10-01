@@ -23,6 +23,8 @@ import documentRoutes from "./routes/documentRoutes.js";
 import analysisRunRoutes from "./routes/analysisRunRoutes.js";
 import aviationRoutes from "./routes/aviationRoutes.js";
 import contactRoutes from "./routes/contactRoutes.js";
+import platformRoutes from "./routes/platformRoutes.js";
+import commercialIntelligenceRoutes from "./routes/commercialIntelligenceRoutes.js";
 
 import copilotRoutes from "./routes/copilotRoutes.js";
 import operionRoutes from "./routes/operionRoutes.js";
@@ -117,6 +119,8 @@ app.use("/api/foundation", foundationRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/analysis-runs", analysisRunRoutes);
 app.use("/api/aviation", aviationRoutes);
+app.use("/api/platform", platformRoutes);
+app.use("/api/intelligence", commercialIntelligenceRoutes);
 app.use("/api/metrics", metricsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 

@@ -2,7 +2,7 @@ import express from "express";
 
 import { authenticateUser } from "../middleware/userAuthMiddleware.js";
 import { requireOrganizationMembership } from "../middleware/organizationMiddleware.js";
-import { requireOrganizationPermission } from "../middleware/authorizationMiddleware.js";
+import { getOrganizationPermissions, requireOrganizationPermission } from "../middleware/authorizationMiddleware.js";
 import { getAnalysisRunById } from "../services/documentIngestionService.js";
 import { createAnalysisRunRepository } from "../repositories/phase3/analysisRunRepository.js";
 import { createClauseRepository } from "../repositories/phase3/clauseRepository.js";
@@ -20,6 +20,7 @@ import { createContractRiskIntelligenceService, createGatewayRiskProvider } from
 import { answerContractQuestion } from "../services/phase3/intelligence/contractAssistantService.js";
 import { createContractIntelligencePipeline } from "../services/phase3/analysis/contractIntelligencePipeline.js";
 import { buildFinancialImpact } from "../services/phase3/intelligence/financialImpactService.js";
+import { buildRoleBasedIntelligence, resolveUserIntelligenceContext } from "../services/phase3/intelligence/roleIntelligenceService.js";
 import { aiGateway } from "../services/ai/aiGateway.js";
 import { assertOrganizationScope, assertResourceId } from "../repositories/phase3/scope.js";
 import supabase from "../config/supabase.js";
@@ -322,6 +323,7 @@ export async function answerAnalysisRunQuestion({
   organizationId,
   analysisRunId,
   question,
+  intelligenceContext = null,
   readers = {
     clauses: readAnalysisRunClauses,
     obligations: readAnalysisRunObligations,
@@ -338,7 +340,15 @@ export async function answerAnalysisRunQuestion({
     readers.risks(scope),
     readers.evidence(scope),
   ]);
-  return answerContractQuestion({ question, clauses, obligations, deadlines, risks, evidence });
+  return answerContractQuestion({
+    question,
+    clauses,
+    obligations,
+    deadlines,
+    risks,
+    evidence,
+    rbiProfile: intelligenceContext?.rbiProfile || null,
+  });
 }
 
 export async function readAnalysisRunFinancialImpact({
@@ -368,6 +378,46 @@ export async function readAnalysisRunFinancialImpact({
     readers.profile(scope).catch((error) => error.code === "CONTRACT_PROFILE_NOT_FOUND" ? null : Promise.reject(error)),
   ]);
   return buildFinancialImpact({ contractId: analysisRun.contract_id, analysisRunId, clauses, obligations, deadlines, risks, profile });
+}
+
+export async function readAnalysisRunRoleIntelligence({
+  organizationId,
+  analysisRunId,
+  intelligenceContext,
+  readers = {
+    risks: readAnalysisRunRisks,
+    obligations: readAnalysisRunObligations,
+    deadlines: readAnalysisRunDeadlines,
+    profile: readAnalysisRunProfile,
+    financialImpact: readAnalysisRunFinancialImpact,
+  },
+}) {
+  const scope = { organizationId, analysisRunId };
+  const [risks, obligations, deadlines, profile, financialImpact] = await Promise.all([
+    readers.risks(scope),
+    readers.obligations(scope),
+    readers.deadlines(scope),
+    readers.profile(scope).catch((error) => error.code === "CONTRACT_PROFILE_NOT_FOUND" ? null : Promise.reject(error)),
+    readers.financialImpact(scope),
+  ]);
+  return buildRoleBasedIntelligence({
+    context: intelligenceContext,
+    risks,
+    obligations,
+    deadlines,
+    recommendations: profile?.recommendations || [],
+    financialImpact,
+  });
+}
+
+function resolveRequestIntelligenceContext(req) {
+  return resolveUserIntelligenceContext({
+    userId: req.user.id,
+    organizationId: req.organization.id,
+    organizationRole: req.auth.organizationRole,
+    permissions: getOrganizationPermissions(req.auth.organizationRole),
+    rbiProfileId: req.user.rbiProfileId,
+  });
 }
 
 router.use(
@@ -401,8 +451,8 @@ async function runContractIntelligence(req, res) {
   }
 }
 
-router.post("/:id/process", requireOrganizationPermission("contract:write"), runContractIntelligence);
-router.post("/:id/retry", requireOrganizationPermission("contract:write"), runContractIntelligence);
+router.post("/:id/process", requireOrganizationPermission("contract:analyze"), runContractIntelligence);
+router.post("/:id/retry", requireOrganizationPermission("contract:analyze"), runContractIntelligence);
 
 router.get("/:id/profile", async (req, res) => {
   try {
@@ -426,6 +476,19 @@ router.get("/:id/financial-impact", async (req, res) => {
   try {
     const financialImpact = await readAnalysisRunFinancialImpact({ organizationId: req.organization.id, analysisRunId: req.params.id });
     return res.json({ success: true, financialImpact });
+  } catch (error) {
+    return res.status(error.status || 404).json(normalizeAnalysisRunError(error));
+  }
+});
+
+router.get("/:id/role-intelligence", async (req, res) => {
+  try {
+    const intelligence = await readAnalysisRunRoleIntelligence({
+      organizationId: req.organization.id,
+      analysisRunId: req.params.id,
+      intelligenceContext: resolveRequestIntelligenceContext(req),
+    });
+    return res.json({ success: true, intelligence });
   } catch (error) {
     return res.status(error.status || 404).json(normalizeAnalysisRunError(error));
   }
@@ -457,7 +520,7 @@ router.get("/:id/clauses", async (req, res) => {
   }
 });
 
-router.post("/:id/clauses/analyze", requireOrganizationPermission("contract:write"), async (req, res) => {
+router.post("/:id/clauses/analyze", requireOrganizationPermission("contract:analyze"), async (req, res) => {
   const analysisRunRepository = createAnalysisRunRepository();
   try {
     const analysisRun = await analysisRunRepository.getById(req.params.id, req.organization.id);
@@ -516,7 +579,7 @@ router.get("/:id/obligations/estimate", requireOrganizationPermission("contract:
   }
 });
 
-router.post("/:id/obligations/analyze", requireOrganizationPermission("contract:write"), async (req, res) => {
+router.post("/:id/obligations/analyze", requireOrganizationPermission("contract:analyze"), async (req, res) => {
   const metrics = {};
   try {
     const analysisRun = await getAnalysisRunById(req.params.id, req.organization.id);
@@ -574,7 +637,7 @@ router.get("/:id/obligations", async (req, res) => {
   }
 });
 
-router.post("/:id/deadlines/analyze", requireOrganizationPermission("contract:write"), async (req, res) => {
+router.post("/:id/deadlines/analyze", requireOrganizationPermission("contract:analyze"), async (req, res) => {
   const metrics = {};
   try {
     const analysisRunRepository = createAnalysisRunRepository();
@@ -664,7 +727,7 @@ router.get("/:id/risks/estimate", async (req, res) => {
   }
 });
 
-router.post("/:id/risks/analyze", requireOrganizationPermission("contract:write"), async (req, res) => {
+router.post("/:id/risks/analyze", requireOrganizationPermission("contract:analyze"), async (req, res) => {
   const metrics = {};
   try {
     const analysisRunRepository = createAnalysisRunRepository();
@@ -728,6 +791,7 @@ router.post("/:id/assistant", async (req, res) => {
       organizationId: req.organization.id,
       analysisRunId: req.params.id,
       question: req.body?.question,
+      intelligenceContext: resolveRequestIntelligenceContext(req),
     });
     return res.json({ success: true, assistant });
   } catch (error) {

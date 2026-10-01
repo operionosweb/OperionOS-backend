@@ -1,6 +1,10 @@
 import express from "express";
+import { authenticateUser } from "../middleware/userAuthMiddleware.js";
+import { requireSuperAdmin } from "../middleware/superAdminMiddleware.js";
 
 const router = express.Router();
+
+router.use(authenticateUser, requireSuperAdmin);
 
 router.get(
   "/dashboard",

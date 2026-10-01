@@ -65,6 +65,23 @@ test("financial impact reports empty and unquantified states honestly", () => {
   assert.match(result.missingInputs[0], /No evidence-backed monetary amount/);
 });
 
+test("financial impact exposes lease commitments without inventing total recurring exposure", () => {
+  const result = buildFinancialImpact(fixture({
+    risks: [],
+    profile: { metadata: { leaseIntelligence: { commercialTerms: {
+      baseRent: { amount: 250000, currency: "USD", frequency: "monthly", evidence: { evidenceId: "rent-evidence", evidenceText: "monthly rent of USD 250,000", sourceLocation: "clause:3", confidence: 0.98 } },
+      securityDeposit: { amount: 750000, currency: "USD", evidence: { evidenceId: "security-evidence", evidenceText: "security deposit of USD 750,000", sourceLocation: "clause:3.1", confidence: 0.98 } },
+      rentEscalation: { ratePercent: 2.5, formula: "Base Rent shall increase by 2.5 percent", evidence: { evidenceId: "escalation-evidence", evidenceText: "Base Rent shall increase by 2.5 percent", sourceLocation: "clause:3" } },
+      maintenanceReserves: [{ coveredComponent: "airframe", rate: { amount: 300, currency: "USD", unit: "flight_hour" }, paymentFrequency: "monthly", evidence: { evidenceId: "reserve-evidence", evidenceText: "USD 300 per flight hour", sourceLocation: "clause:3.2" } }],
+    } } } },
+  }));
+  assert.equal(result.status, "partial");
+  assert.match(result.impacts.find((item) => item.category === "base_rent").resultLabel, /250,000(?:\.00)? \/ monthly/);
+  assert.equal(result.impacts.find((item) => item.category === "maintenance_reserve").unit, "flight_hour");
+  assert.deepEqual(result.summary.currentContractual, { USD: 750000 });
+  assert.match(result.missingInputs.join(" "), /Recurring rates are shown but not aggregated/);
+});
+
 test("financial impact maps aviation late-return exposure without changing the amount", () => {
   const input = fixture();
   input.risks[0].title = "Late aircraft return";

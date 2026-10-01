@@ -55,6 +55,10 @@ export function getAnalysisRunFinancialImpact(analysisRunId, organizationId) {
   return apiRequest(`/api/analysis-runs/${analysisRunId}/financial-impact`, { organizationId });
 }
 
+export function getAnalysisRunRoleIntelligence(analysisRunId, organizationId) {
+  return apiRequest(`/api/analysis-runs/${analysisRunId}/role-intelligence`, { organizationId });
+}
+
 export function searchContractIntelligence(analysisRunId, organizationId, query, limit = 20) {
   const params = new URLSearchParams({ q: query, limit: String(limit) });
   return apiRequest(`/api/analysis-runs/${analysisRunId}/search?${params}`, { organizationId });

@@ -95,3 +95,19 @@ test("deadline ambiguity is consumed without rewriting the contractual fact", ()
   assert.equal(risk.affected_deadline_ids[0], deadline.id);
   assert.doesNotMatch(JSON.stringify(risk), /\b\d+\s+(calendar|business)?\s*days?\b/i);
 });
+
+test("aircraft lease screening identifies bounded redelivery, insurance, reserve, and extension exposure", () => {
+  const risks = screenDeterministicRiskCandidates({ clauses: [
+    clause("The Lessee shall return the Aircraft in an airworthy condition with complete technical records and each life limited part having 3,000 cycles remaining."),
+    clause("The Lessee shall maintain hull insurance of not less than USD 45,000,000, name the Lessor as additional insured, and provide renewal evidence."),
+    clause("The Lessee shall pay an airframe maintenance reserve of USD 300 per flight hour monthly."),
+    clause("The Lessee may extend the Term for 12 months, with Rent during the extension to be agreed by the parties."),
+  ] });
+
+  assert.deepEqual(risks.map((risk) => risk.risk_type).sort(), [
+    "insurance_compliance_exposure", "redelivery_condition_exposure", "renewal_pricing_uncertainty", "reserve_exposure",
+  ]);
+  assert.ok(risks.every((risk) => risk.evidence.length === 1));
+  assert.equal(risks.find((risk) => risk.risk_type === "reserve_exposure").financial_exposure.amount, null);
+  assert.equal(risks.find((risk) => risk.risk_type === "renewal_pricing_uncertainty").status, "requires_review");
+});

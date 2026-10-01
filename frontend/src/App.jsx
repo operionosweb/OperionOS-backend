@@ -4,9 +4,12 @@ import { AuthProvider } from "./context/AuthContext";
 import { OrganizationProvider } from "./context/OrganizationContext";
 import CorporateLayout from "./components/layout/CorporateLayout";
 import RequireAuth from "./components/auth/RequireAuth";
+import RequirePlatformPermission from "./components/auth/RequirePlatformPermission";
+import RequireOrganizationPermission from "./components/auth/RequireOrganizationPermission";
 import RouteMetadata from "./components/seo/RouteMetadata";
 import Analytics from "./components/analytics/Analytics";
 import { LoadingState } from "./components/ui/States";
+import { ORGANIZATION_PERMISSIONS, PLATFORM_PERMISSIONS } from "./lib/permissions";
 
 const ProductionLayout = lazy(() => import("./components/layout/ProductionLayout"));
 const DemoShell = lazy(() => import("./components/layout/DemoShell"));
@@ -31,6 +34,7 @@ const ProductionUpload = lazy(() => import("./routes/ProductionUpload"));
 const ProductionIntelligence = lazy(() => import("./routes/ProductionIntelligence"));
 const ContractWorkspace = lazy(() => import("./routes/ContractWorkspace"));
 const ProductionLiveTracking = lazy(() => import("./routes/ProductionLiveTracking"));
+const CommercialIntelligenceBoundary = lazy(() => import("./routes/CommercialIntelligenceBoundary"));
 const DemoDashboard = lazy(() => import("./routes/demo/DemoDashboard"));
 const DemoContracts = lazy(() => import("./routes/demo/DemoContracts"));
 const DemoUpload = lazy(() => import("./routes/demo/DemoUpload"));
@@ -54,6 +58,7 @@ function ScrollToTop() {
 }
 
 export default function App() {
+  const isCommercialIntelligenceHost = window.location.hostname.toLowerCase() === "intelligence.operionos.com";
   return (
     <AuthProvider>
       <OrganizationProvider>
@@ -62,7 +67,7 @@ export default function App() {
           <Suspense fallback={<div style={{ padding: 32 }}><LoadingState label="Preparing Operion…" /></div>}>
           <Routes>
             <Route element={<CorporateLayout />}>
-              <Route path="/" element={<CorporateHome />} />
+              <Route path="/" element={isCommercialIntelligenceHost ? <Navigate to="/app/internal/commercial-intelligence" replace /> : <CorporateHome />} />
               <Route path="/product" element={<Product />} />
               <Route path="/platform" element={<Navigate to="/product" replace />} />
               <Route path="/aviation" element={<AviationCommercial />} />
@@ -102,8 +107,14 @@ export default function App() {
               <Route path="contracts" element={<ProductionContracts />} />
               <Route path="contracts/:id" element={<ContractWorkspace />} />
               <Route path="contracts/:id/analysis" element={<AnalysisView />} />
-              <Route path="upload" element={<ProductionUpload />} />
+              <Route path="upload" element={<RequireOrganizationPermission permission={ORGANIZATION_PERMISSIONS.CONTRACT_WRITE}><ProductionUpload /></RequireOrganizationPermission>} />
               <Route path="aviation" element={<ProductionIntelligence />} />
+              <Route path="internal/commercial-intelligence" element={<RequirePlatformPermission permission={PLATFORM_PERMISSIONS.COMMERCIAL_INTELLIGENCE_READ}><CommercialIntelligenceBoundary /></RequirePlatformPermission>} />
+              <Route path="internal/commercial-intelligence/companies" element={<RequirePlatformPermission permission={PLATFORM_PERMISSIONS.COMMERCIAL_INTELLIGENCE_READ}><CommercialIntelligenceBoundary page="companies" /></RequirePlatformPermission>} />
+              <Route path="internal/commercial-intelligence/companies/:companyId" element={<RequirePlatformPermission permission={PLATFORM_PERMISSIONS.COMMERCIAL_INTELLIGENCE_READ}><CommercialIntelligenceBoundary page="company" /></RequirePlatformPermission>} />
+              <Route path="internal/commercial-intelligence/opportunities" element={<RequirePlatformPermission permission={PLATFORM_PERMISSIONS.COMMERCIAL_INTELLIGENCE_READ}><CommercialIntelligenceBoundary page="opportunities" /></RequirePlatformPermission>} />
+              <Route path="internal/commercial-intelligence/opportunities/:opportunityId" element={<RequirePlatformPermission permission={PLATFORM_PERMISSIONS.COMMERCIAL_INTELLIGENCE_READ}><CommercialIntelligenceBoundary page="opportunity" /></RequirePlatformPermission>} />
+              <Route path="internal/commercial-intelligence/people" element={<RequirePlatformPermission permission={PLATFORM_PERMISSIONS.COMMERCIAL_INTELLIGENCE_READ}><CommercialIntelligenceBoundary page="people" /></RequirePlatformPermission>} />
               <Route path="intelligence" element={<Navigate to="../aviation" replace />} />
               <Route path="live-tracking" element={<ProductionLiveTracking />} />
               <Route path="*" element={<Navigate to="dashboard" replace />} />

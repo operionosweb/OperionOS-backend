@@ -1,3 +1,5 @@
+import { classifyIntelligenceDomains } from "./roleIntelligenceService.js";
+
 const STOP_WORDS = new Set([
   "a", "an", "and", "are", "as", "at", "be", "before", "by", "can", "do", "does",
   "for", "from", "how", "i", "if", "in", "is", "it", "me", "of", "on", "our", "the",
@@ -84,20 +86,28 @@ function evidenceForFinding(finding, allEvidence) {
   return publicEvidence(ranked[0]?.source);
 }
 
-export function answerContractQuestion({ question, clauses = [], obligations = [], deadlines = [], risks = [], evidence = [] }) {
+export function answerContractQuestion({ question, clauses = [], obligations = [], deadlines = [], risks = [], evidence = [], rbiProfile = null }) {
   const normalizedQuestion = String(question || "").trim();
   if (normalizedQuestion.length < 3 || normalizedQuestion.length > 500) {
     throw Object.assign(new Error("Question must contain between 3 and 500 characters"), { code: "INVALID_ASSISTANT_QUESTION", status: 400 });
   }
 
   const queryTokens = tokens(normalizedQuestion);
+  const genericPriorityQuestion = /\b(biggest|key|priority|priorities|important|attention)\b/i.test(normalizedQuestion);
   const findings = [
     ...clauses.map((item) => ({ type: "clause", item })),
     ...obligations.map((item) => ({ type: "obligation", item })),
     ...deadlines.map((item) => ({ type: "deadline", item })),
     ...risks.map((item) => ({ type: "risk", item })),
-  ].map((finding) => ({ ...finding, score: score(queryTokens, textFor(finding.type, finding.item)) }))
-    .filter((finding) => finding.score > 0)
+  ].map((finding) => {
+    const queryScore = score(queryTokens, textFor(finding.type, finding.item));
+    const roleScore = rbiProfile ? classifyIntelligenceDomains(finding.item).reduce((total, domain) => {
+      const position = rbiProfile.intelligenceDomains.indexOf(domain);
+      return total + (position < 0 ? 0 : rbiProfile.intelligenceDomains.length - position);
+    }, 0) : 0;
+    return { ...finding, queryScore, score: queryScore * 100 + roleScore };
+  })
+    .filter((finding) => finding.queryScore > 0 || (genericPriorityQuestion && finding.type !== "clause"))
     .sort((left, right) => right.score - left.score)
     .slice(0, 4);
 
@@ -138,5 +148,10 @@ export function answerContractQuestion({ question, clauses = [], obligations = [
     evidence: uniqueEvidence,
     source: "structured_intelligence",
     intelligenceConsumption: 0,
+    roleContext: rbiProfile ? {
+      profileId: rbiProfile.roleId,
+      profileName: rbiProfile.roleName,
+      focus: rbiProfile.summaryPrompt,
+    } : null,
   };
 }

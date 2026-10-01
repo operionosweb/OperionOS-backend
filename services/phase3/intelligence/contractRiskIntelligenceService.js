@@ -94,6 +94,45 @@ function clauseCandidates(clause, obligations, deadlines, allClauses) {
   const candidates = [];
   const amount = moneyFrom(text);
 
+  const redeliveryConditions = /\b(?:return|redeliver)\s+the\s+aircraft\b/i.test(text)
+    && /\b(?:airworthy|technical records|life limited part|llp|maintenance status|inspection|livery)\b/i.test(text);
+  if (redeliveryConditions) {
+    candidates.push(makeCandidate({
+      clause, obligations: linkedObligations, deadlines: linkedDeadlines,
+      category: "operational", riskType: "redelivery_condition_exposure", title: "Detailed aircraft redelivery conditions",
+      description: "The redelivery clause states multiple technical, records, condition, or inspection requirements.",
+      rationale: "These express conditions require coordinated technical preparation and evidence before aircraft return; this finding does not assume non-compliance.",
+      severity: "high", confidence: 0.98,
+      consequence: "Failure to satisfy a stated return condition may activate the contractual remedies or cost allocation described by the agreement.",
+      condition: "The cited requirements apply at or before contractual redelivery.",
+    }));
+  }
+
+  if (/\b(?:hull|aviation liability|liability) insurance\b/i.test(text)
+    && /\b(?:not less than|additional insured|waiver of subrogation|renewal evidence|certificate)\b/i.test(text)) {
+    candidates.push(makeCandidate({
+      clause, obligations: linkedObligations, deadlines: linkedDeadlines,
+      category: "liability", riskType: "insurance_compliance_exposure", title: "Aircraft insurance compliance requirements",
+      description: "The clause states specific coverage, insured-party, waiver, or evidence requirements.",
+      rationale: "The express insurance conditions require ownership and deadline monitoring; this finding does not assert a coverage gap or breach.",
+      severity: "high", confidence: 0.98,
+      consequence: "Failure to maintain or evidence the stated insurance may create the default or liability consequences described by the agreement.",
+      condition: "The cited insurance requirements apply throughout the stated contractual period.",
+    }));
+  }
+
+  if (/\bmaintenance reserve\b/i.test(text) && /\bper\s+(?:flight hour|flight cycle|cycle|calendar month)\b/i.test(text)) {
+    candidates.push(makeCandidate({
+      clause, obligations: linkedObligations, deadlines: linkedDeadlines,
+      category: "financial", riskType: "reserve_exposure", title: "Usage-based maintenance reserve commitment",
+      description: "The lease requires a maintenance reserve payment calculated using a stated operational unit.",
+      rationale: "The payment varies with usage and may also depend on reimbursement and end-of-term mechanics stated in the clause.",
+      severity: "medium", confidence: 0.99,
+      consequence: "Reserve cash requirements will vary with the stated usage measure; total exposure is not calculated without supported usage inputs.",
+      financialExposure: { type: "unquantified", amount: null, currency: amount?.currency || null, rate: amount },
+    }));
+  }
+
   if (/\b(late fee|late payment|penalty|liquidated damages)\b/i.test(text) && amount) {
     candidates.push(makeCandidate({
       clause, obligations: linkedObligations, deadlines: linkedDeadlines,
@@ -163,6 +202,17 @@ function clauseCandidates(clause, obligations, deadlines, allClauses) {
       rationale: "Failure to use the contractual notice window may result in renewal for the stated term.",
       severity: "medium", confidence: 0.99,
       consequence: "The contract may renew under its express renewal mechanism.",
+    }));
+  }
+
+  if (/\bextend\s+the\s+term\b/i.test(text) && /\brent\b[^.]{0,80}\bagreed by the parties\b/i.test(text)) {
+    candidates.push(makeCandidate({
+      clause, obligations: linkedObligations, deadlines: linkedDeadlines,
+      category: "commercial", riskType: "renewal_pricing_uncertainty", title: "Extension pricing requires future agreement",
+      description: "The extension option states that rent is to be agreed rather than fixing a price or formula in the analysed clause.",
+      rationale: "The extension right may require a future commercial agreement before its financial effect can be established.",
+      severity: "medium", confidence: 0.97,
+      consequence: "Extension-period rent exposure cannot be quantified from the current contract text.", status: "requires_review",
     }));
   }
 
