@@ -96,6 +96,45 @@ test("deadline materialization is idempotent and preserves obligation evidence p
   assert.equal(repository.rows[0].source_evidence_id, source.evidence[0].evidence_id);
 });
 
+test("termination obligations select an explicit default cure period from clause context", async () => {
+  const source = obligation("The Lessor may terminate the Agreement following an uncured Event of Default.");
+  const repository = inMemoryRepository({
+    obligations: [source],
+    clauses: [{
+      id: source.clause_id,
+      source_text: "Failure to pay Rent within 7 business days after notice constitutes an Event of Default. The Lessor may terminate the Agreement following an uncured Event of Default. Notice must be given within 45 days after the default notice.",
+    }],
+  });
+  const result = await createDeadlineIntelligenceService({ repository }).runStage(SCOPE);
+  const deadline = result.deadlines[0];
+
+  assert.equal(deadline.amount, 7);
+  assert.equal(deadline.unit, "business_days");
+  assert.equal(deadline.direction, "after");
+  assert.equal(deadline.anchor_reference, "notice constitutes an event of default");
+  assert.equal(deadline.status, "awaiting_trigger");
+  assert.match(deadline.timing_expression, /7 business days after notice/i);
+  assert.doesNotMatch(deadline.timing_expression, /45 days/i);
+  assert.equal(deadline.source_clause_id, source.clause_id);
+  assert.equal(deadline.source_evidence_id, source.evidence[0].evidence_id);
+});
+
+test("Expiration Date materialization preserves its unresolved anchor and evidence", async () => {
+  const source = obligation("The Lessee shall return the Aircraft on the Expiration Date.");
+  const repository = inMemoryRepository({ obligations: [source] });
+  const result = await createDeadlineIntelligenceService({ repository }).runStage(SCOPE);
+  const deadline = result.deadlines[0];
+
+  assert.equal(deadline.deadline_type, "event_based");
+  assert.equal(deadline.anchor_reference, "expiration date");
+  assert.equal(deadline.direction, "upon");
+  assert.equal(deadline.computability, "relative_event");
+  assert.equal(deadline.absolute_date, null);
+  assert.equal(deadline.status, "awaiting_trigger");
+  assert.equal(deadline.source_evidence_id, source.evidence[0].evidence_id);
+  assert.deepEqual(deadline.evidence, source.evidence);
+});
+
 test("Effective Date definitions resolve deterministically with auditable anchor source", async () => {
   const definitionClauseId = crypto.randomUUID();
   const definitionEvidenceId = crypto.randomUUID();
@@ -122,6 +161,30 @@ test("unresolved and complex timing remains non-computable without invoking AI",
   assert.equal(result.deadlines[0].absolute_date, null);
   assert.equal(result.aiFallbackAnalyses, 0);
   assert.equal(result.aiIntelligenceConsumed, 0);
+});
+
+test("non-temporal obligations are skipped while service failure timing preserves evidence", async () => {
+  const serviceFailure = obligation("The Operator shall provide the report following a service failure.");
+  const repository = inMemoryRepository({
+    obligations: [
+      obligation("The Supplier shall maintain all required technical records."),
+      obligation("The Operator shall maintain insurance coverage."),
+      serviceFailure,
+    ],
+  });
+  const result = await createDeadlineIntelligenceService({ repository }).runStage(SCOPE);
+
+  assert.equal(result.deadlines.length, 1);
+  assert.equal(result.deadlines[0].deadline_type, "event_based");
+  assert.equal(result.deadlines[0].timing_expression, "following a service failure");
+  assert.equal(result.deadlines[0].anchor_reference, "service failure");
+  assert.equal(result.deadlines[0].direction, "after");
+  assert.equal(result.deadlines[0].computability, "relative_event");
+  assert.equal(result.deadlines[0].status, "awaiting_trigger");
+  assert.equal(result.deadlines[0].absolute_date, null);
+  assert.equal(result.deadlines[0].source_evidence_id, serviceFailure.evidence[0].evidence_id);
+  assert.deepEqual(result.deadlines[0].evidence, serviceFailure.evidence);
+  assert.equal(result.aiFallbackAnalyses, 0);
 });
 
 test("version scopes do not share deadline intelligence", async () => {

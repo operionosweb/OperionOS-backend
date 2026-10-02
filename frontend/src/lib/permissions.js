@@ -11,16 +11,18 @@ export const ORGANIZATION_PERMISSIONS = Object.freeze({
 });
 
 const ORGANIZATION_ROLE_PERMISSIONS = Object.freeze({
+  CUSTOMER_USER: new Set(["organization:read", "contract:read", "audit:read"]),
+  CUSTOMER_ADMIN: new Set(["organization:read", "organization:write", "contract:read", "contract:write", "contract:analyze", "audit:read"]),
   VIEWER: new Set(["organization:read", "contract:read", "audit:read"]),
   ANALYST: new Set(["organization:read", "contract:read", "contract:analyze", "audit:read"]),
   CONTRACT_MANAGER: new Set(["organization:read", "contract:read", "contract:write", "contract:analyze", "audit:read"]),
-  ORG_ADMIN: new Set(["organization:read", "organization:write", "contract:read", "contract:write", "contract:analyze", "audit:read", "audit:export"]),
+  ORG_ADMIN: new Set(["organization:read", "organization:write", "contract:read", "contract:write", "contract:analyze", "audit:read"]),
 });
 
 const LEGACY_ORGANIZATION_ROLES = Object.freeze({
-  member: "VIEWER",
+  member: "CUSTOMER_USER",
   manager: "CONTRACT_MANAGER",
-  admin: "ORG_ADMIN",
+  admin: "CUSTOMER_ADMIN",
   owner: "ORG_ADMIN",
 });
 

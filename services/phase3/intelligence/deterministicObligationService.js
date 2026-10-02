@@ -67,13 +67,26 @@ function extractParty(text) {
 }
 
 function extractAction(text) {
-  return text.match(/\b(pay|reimburse|fund|maintain|inspect|repair|overhaul|provide|operate|comply|obtain|notify|report|deliver|accept|redeliver|indemnify|cooperate|obtain consent)\b/i)?.[1] || null;
+  if (/\b(?:(?:shall|must|will|may|can)(?:\s+not)?|required to|is required to|agree to|agrees to)\s+return\b/i.test(text)) return "return";
+  if (/\b(?:(?:shall|must|will|may|can)(?:\s+not)?|required to|is required to|agree to|agrees to)\s+extend\b/i.test(text)) return "extend";
+  const match = text.match(/\b(pay|reimburse|fund|maintain|inspect|repair|overhaul|provid(?:e|es)|operate|comply|obtain|notify|report|deliver|accept|redeliver|indemnif(?:y|ies)|cooperate|obtain consent|terminat(?:e|es|ed|ing))\b/i)?.[1] || null;
+  if (/^indemnif/i.test(match || "")) return "indemnify";
+  if (/^provid/i.test(match || "")) return "provide";
+  return match && /^terminat/i.test(match) ? "terminate" : match;
 }
 
 function extractObject(text, action) {
   if (!action) return null;
-  const match = text.match(new RegExp(`\\b${action}\\b(?:\\s+the)?\\s+([^,.]+)`, "i"));
-  return match?.[1]?.trim() || null;
+  const actionPattern = action === "terminate" ? "terminat(?:e|es|ed|ing)"
+    : action === "indemnify" ? "indemnif(?:y|ies)"
+      : action === "provide" ? "provid(?:e|es)"
+      : action === "return" ? "(?:(?:shall|must|will|may|can)(?:\\s+not)?|required to|is required to|agree to|agrees to)\\s+return"
+        : action === "extend" ? "(?:(?:shall|must|will|may|can)(?:\\s+not)?|required to|is required to|agree to|agrees to)\\s+extend"
+      : action;
+  const match = text.match(new RegExp(`\\b${actionPattern}\\b(?:\\s+the)?\\s+([^,.]+)`, "i"));
+  const object = match?.[1]?.trim() || null;
+  if (action === "terminate" && /^(?:following|after|upon|before|within|on)\b/i.test(object || "")) return "Agreement";
+  return object;
 }
 
 function extractTiming(text) {
@@ -160,7 +173,7 @@ function extractObligationSentence(sourceText) {
   const cleaned = normalizeWhitespace(sourceText);
   if (!cleaned) return null;
 
-  const obligationSignal = /\b(shall|must|required to|is required to|agree to|agrees to|will)\b/i;
+  const obligationSignal = /\b(?:shall|must|required to|is required to|agree to|agrees to|will|(?:may|can)\s+(?:terminate|return|extend)|(?:lessor|lessee|airline|mro provider|supplier|airport|ground handler|manufacturer|insurer)\s+(?:terminates|indemnifies|provides\s+notice))\b/i;
   if (!obligationSignal.test(cleaned)) return null;
 
   const parts = cleaned
@@ -169,7 +182,9 @@ function extractObligationSentence(sourceText) {
     .filter(Boolean);
 
   const match = parts.find((part) => obligationSignal.test(part));
-  return normalizeWhitespace(match || cleaned);
+  const description = normalizeWhitespace(match || cleaned);
+  const conditionalNotice = description.match(/\b(?:if|unless|provided that|when)\s+((?:the\s+)?(?:lessor|lessee|airline|mro provider|supplier|airport|ground handler|manufacturer|insurer)\s+provides\s+notice\b[^.]*)/i);
+  return normalizeWhitespace(conditionalNotice?.[1] || description);
 }
 
 export function buildDeterministicObligationCandidate(clause) {
@@ -178,6 +193,8 @@ export function buildDeterministicObligationCandidate(clause) {
   if (!description) return null;
   const actor = extractParty(description);
   const action = extractAction(description);
+  const conditionalNotice = /\b(?:if|unless|provided that|when)\s+(?:the\s+)?(?:lessor|lessee|airline|mro provider|supplier|airport|ground handler|manufacturer|insurer)\s+provides\s+notice\b/i.test(sourceText);
+  const condition = conditionalNotice ? null : extractCondition(sourceText);
 
   return {
     description,
@@ -186,11 +203,11 @@ export function buildDeterministicObligationCandidate(clause) {
     action: action || undefined,
     object: extractObject(description, action) || undefined,
     beneficiary: undefined,
-    condition: extractCondition(description) || undefined,
+    condition: condition || undefined,
     trigger_expression: extractTiming(description) || undefined,
     timing_expression: extractTiming(description) || undefined,
     consequence: extractConsequence(description) || undefined,
-    modality: /\b(may|can)\b/i.test(description) ? "discretionary" : /\b(shall not|must not)\b/i.test(description) ? "prohibited" : /\b(if|unless|provided that|when)\b/i.test(description) ? "conditional" : "mandatory",
+    modality: /\b(may|can)\b/i.test(description) ? "discretionary" : /\b(shall not|must not)\b/i.test(description) ? "prohibited" : conditionalNotice || condition ? "conditional" : "mandatory",
     frequency: extractFrequency(description) || undefined,
     priority: undefined,
     status: undefined,

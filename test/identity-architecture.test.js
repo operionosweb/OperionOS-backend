@@ -6,12 +6,18 @@ const read = (path) => fs.readFile(path, "utf8");
 
 test("platform roles are stored separately from organization memberships", async () => {
   const migration = await read("supabase/migrations/017_platform_identity_foundation.sql");
+  const customerRoleMigration = await read("supabase/migrations/019_customer_role_foundation.sql");
   const membershipChange = migration.slice(0, migration.indexOf("create table if not exists public.platform_user_roles"));
   assert.match(migration, /create table if not exists public\.platform_user_roles/);
   assert.match(migration, /'SUPERADMIN', 'OPERION_ADMIN', 'OPERION_ANALYST'/);
   assert.match(membershipChange, /'VIEWER', 'ANALYST', 'CONTRACT_MANAGER', 'ORG_ADMIN'/);
   assert.doesNotMatch(membershipChange, /SUPERADMIN/);
   assert.match(migration, /revoke all on public\.platform_user_roles from anon, authenticated/);
+  assert.match(customerRoleMigration, /'CUSTOMER_ADMIN', 'CUSTOMER_USER'/);
+  assert.doesNotMatch(customerRoleMigration, /SUPERADMIN/);
+  assert.match(customerRoleMigration, /create policy contracts_member_select/);
+  assert.match(customerRoleMigration, /drop policy if exists contract_storage_member_insert/);
+  assert.doesNotMatch(customerRoleMigration, /for all/);
 });
 
 test("platform-internal APIs use authentication and the centralized SUPERADMIN guard", async () => {
@@ -54,6 +60,9 @@ test("frontend restores authoritative roles and protects the internal route", as
   assert.match(intelligence, /Priority Opportunities/);
   assert.match(intelligence, /Build grounded reasoning/);
   assert.match(intelligence, /No sources linked\. Claims remain unverified/);
+
+  const platformGuard = await read("frontend/src/components/auth/RequirePlatformPermission.jsx");
+  assert.match(platformGuard, /403 Forbidden: Superadmin access is required/);
 });
 
 test("customer write and analysis controls are permission gated", async () => {

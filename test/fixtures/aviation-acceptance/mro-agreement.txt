@@ -1,0 +1,19 @@
+MRO AGREEMENT
+
+1. MAINTENANCE SERVICES
+The MRO Provider shall overhaul Engine ESN-TEST-100 and deliver the serviceable engine within 30 days after acceptance.
+
+2. PAYMENT
+The Airline shall pay the fixed shop visit fee of USD 80,000 on 15 March 2027.
+
+3. MAINTENANCE RECORDS
+The MRO Provider shall provide complete shop visit records within 5 business days after redelivery.
+
+4. LIABILITY AND INDEMNITY
+The MRO Provider indemnifies the Airline for all losses arising from negligent maintenance.
+
+5. DELAY PENALTIES
+Late delivery incurs liquidated damages of EUR 100,000.
+
+6. REGULATORY COMPLIANCE
+The MRO Provider shall comply with applicable EASA requirements annually.

@@ -37,6 +37,26 @@ test("relative units and directions support weeks, months, years and before", ()
   assert.equal(parseTemporalExpression("10 days prior to redelivery").direction, "before");
 });
 
+test("explicit notice periods take precedence over term durations", () => {
+  const mixed = parseTemporalExpression("The Lessee may extend the Term for 12 months by giving the Lessor not less than 180 days' written notice before the Expiration Date.");
+  assert.equal(mixed.amount, 180);
+  assert.equal(mixed.unit, "days");
+  assert.equal(mixed.direction, "before");
+  assert.equal(mixed.anchor_reference, "expiration date");
+  assert.equal(mixed.status, "awaiting_trigger");
+  assert.match(mixed.timing_expression, /180 days' written notice/i);
+  assert.doesNotMatch(mixed.timing_expression, /12 months/i);
+
+  const termOnly = parseTemporalExpression("The extension lasts for 12 months.");
+  assert.equal(termOnly.amount, 12);
+  assert.equal(termOnly.unit, "months");
+
+  const noticeOnly = parseTemporalExpression("The Lessee shall give 90 days' notice before the Expiration Date.");
+  assert.equal(noticeOnly.amount, 90);
+  assert.equal(noticeOnly.unit, "days");
+  assert.equal(noticeOnly.anchor_reference, "expiration date");
+});
+
 test("recurring aviation timing stores rules without generating occurrences", () => {
   for (const [text, frequency] of [
     ["Rent shall be paid monthly.", "monthly"],
@@ -62,6 +82,49 @@ test("event-based and aviation-specific anchors remain awaiting triggers", () =>
     assert.equal(result.status, "awaiting_trigger");
     assert.equal(result.absolute_date, null);
   }
+});
+
+test("Expiration Date uses the existing unresolved named-event representation", () => {
+  const onExpiration = parseTemporalExpression("The Lessee shall return the Aircraft on the Expiration Date.");
+  assert.equal(onExpiration.deadline_type, "event_based");
+  assert.equal(onExpiration.timing_expression, "on the Expiration Date");
+  assert.equal(onExpiration.anchor_reference, "expiration date");
+  assert.equal(onExpiration.trigger_expression, "expiration date");
+  assert.equal(onExpiration.direction, "upon");
+  assert.equal(onExpiration.computability, "relative_event");
+  assert.equal(onExpiration.status, "awaiting_trigger");
+  assert.equal(onExpiration.absolute_date, null);
+
+  const priorToExpiration = parseTemporalExpression("The Lessee shall provide notice prior to the Expiration Date.");
+  assert.equal(priorToExpiration.anchor_reference, "expiration date");
+  assert.equal(priorToExpiration.direction, "before");
+
+  for (const text of ["throughout the Term", "during the extension"]) {
+    assert.equal(parseTemporalExpression(text).deadline_type, "non_computable");
+  }
+  const unrelatedExpiration = parseTemporalExpression("The report describes component expiration procedures.");
+  assert.equal(unrelatedExpiration.deadline_type, "non_computable");
+  assert.equal(unrelatedExpiration.anchor_reference, undefined);
+});
+
+test("explicit service failure timing uses the existing event representation", () => {
+  for (const text of [
+    "following a service failure",
+    "following the service failure",
+    "after the service failure",
+  ]) {
+    const result = parseTemporalExpression(text);
+    assert.equal(result.deadline_type, "event_based");
+    assert.equal(result.anchor_reference, "service failure");
+    assert.equal(result.trigger_expression, "service failure");
+    assert.equal(result.direction, "after");
+    assert.equal(result.computability, "relative_event");
+    assert.equal(result.status, "awaiting_trigger");
+    assert.equal(result.absolute_date, null);
+  }
+
+  assert.equal(parseTemporalExpression("The agreement addresses service failure responsibilities."), null);
+  assert.equal(parseTemporalExpression("The service provider reports failures."), null);
 });
 
 test("conditions remain separate from their attached deadline", () => {

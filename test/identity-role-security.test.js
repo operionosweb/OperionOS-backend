@@ -53,6 +53,8 @@ function createTestApp(roleState) {
 
 test("customer organization roles have the minimum required permissions", () => {
   const expected = {
+    [ORGANIZATION_ROLES.CUSTOMER_ADMIN]: [true, true, true],
+    [ORGANIZATION_ROLES.CUSTOMER_USER]: [true, false, false],
     [ORGANIZATION_ROLES.ORG_ADMIN]: [true, true, true],
     [ORGANIZATION_ROLES.CONTRACT_MANAGER]: [true, true, true],
     [ORGANIZATION_ROLES.ANALYST]: [true, false, true],
@@ -80,6 +82,8 @@ test("legacy organization roles retain conservative permission aliases", () => {
 test("only SUPERADMIN can cross the Commercial Intelligence API boundary", async () => {
   const roles = new Map([
     ["superadmin", [PLATFORM_ROLES.SUPERADMIN]],
+    ["customer-admin", []],
+    ["customer-user", []],
     ["org-admin", []],
     ["contract-manager", []],
     ["analyst", []],
@@ -103,7 +107,7 @@ test("only SUPERADMIN can cross the Commercial Intelligence API boundary", async
     assert.equal(companies.status, 200);
     assert.deepEqual((await companies.json()).companies, []);
 
-    for (const userId of ["org-admin", "contract-manager", "analyst", "viewer"]) {
+    for (const userId of ["customer-admin", "customer-user", "org-admin", "contract-manager", "analyst", "viewer"]) {
       const response = await fetch(`${baseUrl}/api/intelligence/access`, {
         headers: { Authorization: `Bearer ${userId}` },
       });

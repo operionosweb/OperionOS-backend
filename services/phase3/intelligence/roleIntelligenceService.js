@@ -217,9 +217,16 @@ export function resolveUserIntelligenceContext({
   permissions = [],
   rbiProfileId = null,
 } = {}) {
+  const organizationProfile = {
+    CUSTOMER_ADMIN: "CONTRACT_MANAGER",
+    CUSTOMER_USER: "VIEWER",
+    CONTRACT_MANAGER: "CONTRACT_MANAGER",
+    ANALYST: "ANALYST",
+    VIEWER: "VIEWER",
+  }[String(organizationRole || "").toUpperCase()];
   const inferredProfile = rbiProfileId
     || (platformRoles.includes("SUPERADMIN") && !organizationId ? "OPERION_INTERNAL" : null)
-    || (["CONTRACT_MANAGER", "ANALYST", "VIEWER"].includes(String(organizationRole || "").toUpperCase()) ? organizationRole : null);
+    || organizationProfile;
   const rbiProfile = getRoleIntelligenceProfile(inferredProfile);
   return Object.freeze({
     userId,

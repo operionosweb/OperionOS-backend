@@ -123,8 +123,9 @@ function findRelative(text) {
   const number = "(\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|ninety)(?:[- ](one|two|three|four|five|six|seven|eight|nine))?";
   const unit = "(business\\s+days?|calendar\\s+days?|hours?|days?|weeks?|months?|years?|flight\\s+hours?|flight\\s+cycles?|cycles?)";
   const direction = "(after|following|from|before|prior to)";
+  const noticeRegex = new RegExp(`\\b(?:not\\s+less\\s+than\\s+|at\\s+least\\s+|no\\s+fewer\\s+than\\s+)?${number}\\s+${unit}(?:['’]s?)?\\s+(?:prior\\s+)?(?:written\\s+)?notice(?:\\s+${direction}\\s+(?:the\\s+)?([^,.;]+))?`, "i");
   const regex = new RegExp(`\\b(?:within\\s+|no later than\\s+|not later than\\s+)?${number}\\s+${unit}(?:\\s+${direction}\\s+([^,.;]+))?`, "i");
-  const match = text.match(regex);
+  const match = text.match(noticeRegex) || text.match(regex);
   if (!match) return null;
 
   const amountText = match[2] ? `${match[1]} ${match[2]}` : match[1];
@@ -147,6 +148,27 @@ function findRelative(text) {
 }
 
 function findEvent(text) {
+  const expirationDate = text.match(/\b(?:(on|at|upon|before|prior to|after|following)\s+)?(?:the\s+)?(Expiration Date)\b/i);
+  if (expirationDate) {
+    const relationship = expirationDate[1]?.toLowerCase();
+    return {
+      expression: expirationDate[0],
+      direction: relationship === "before" || relationship === "prior to"
+        ? "before"
+        : relationship === "after" || relationship === "following" ? "after" : "upon",
+      anchor: normalizeAnchor(expirationDate[2]),
+    };
+  }
+
+  const serviceFailure = text.match(/\b(following|after)\s+(?:a|the)\s+(service failure)\b/i);
+  if (serviceFailure) {
+    return {
+      expression: serviceFailure[0],
+      direction: "after",
+      anchor: normalizeAnchor(serviceFailure[2]),
+    };
+  }
+
   const match = text.match(/\b(upon|at|before|after|following)\s+(delivery|redelivery|acceptance|termination|execution|signing|lease expiry|expiry of the term|maintenance event|an? [ac]-check|grounding|material damage|regulatory action)\b/i);
   if (!match) return null;
   return {
@@ -154,6 +176,21 @@ function findEvent(text) {
     direction: match[1].toLowerCase() === "before" ? "before" : match[1].toLowerCase() === "after" || match[1].toLowerCase() === "following" ? "after" : "upon",
     anchor: normalizeAnchor(match[2]),
   };
+}
+
+function hasUnresolvedTemporalSignal(text) {
+  return /\b(?:before|after|following|upon|during|until|throughout|within|prior to)\b/i.test(text)
+    || /\b(?:deadline|due|expiry|expiration|effective date|termination date|delivery date|notice period|timing|schedule|window|period|term|anniversary)\b/i.test(text);
+}
+
+function findCurePeriodSource(obligationDescription, clauseText) {
+  if (!/\b(?:terminat\w*|uncured\s+(?:event of )?default|event of default)\b/i.test(obligationDescription || "")) return null;
+
+  return normalizeWhitespace(clauseText)
+    .split(/(?<=[.!?])\s+/)
+    .find((sentence) => /\bfailure to\b/i.test(sentence)
+      && /\bconstitutes?\s+(?:an?\s+)?(?:event of\s+)?default\b/i.test(sentence)
+      && findRelative(sentence)) || null;
 }
 
 export class BusinessCalendar {
@@ -198,10 +235,11 @@ export function calculateDeadline({ anchorDate, amount, unit, direction = "after
 export function parseTemporalExpression(expression, options = {}) {
   const originalExpression = normalizeWhitespace(expression);
   if (!originalExpression) return null;
-  const condition = options.condition ? normalizeWhitespace(options.condition) : extractCondition(originalExpression);
-  const temporalText = condition && originalExpression.startsWith(condition)
-    ? normalizeWhitespace(originalExpression.slice(condition.length).replace(/^,\s*/, ""))
-    : originalExpression;
+  const selectedExpression = findCurePeriodSource(originalExpression, options.clauseText) || originalExpression;
+  const condition = options.condition ? normalizeWhitespace(options.condition) : extractCondition(selectedExpression);
+  const temporalText = condition && selectedExpression.startsWith(condition)
+    ? normalizeWhitespace(selectedExpression.slice(condition.length).replace(/^,\s*/, ""))
+    : selectedExpression;
   const ambiguous = AMBIGUOUS_PATTERNS.find((pattern) => pattern.test(originalExpression));
   if (ambiguous) {
     return {
@@ -302,6 +340,8 @@ export function parseTemporalExpression(expression, options = {}) {
     };
   }
 
+  if (!hasUnresolvedTemporalSignal(originalExpression)) return null;
+
   return {
     deadline_type: "non_computable",
     timing_expression: originalExpression,
@@ -389,15 +429,16 @@ export function createDeadlineIntelligenceService({ repository = createDeadlineR
       let aiFallbackAnalyses = 0;
 
       for (const obligation of obligations) {
+        const clause = clausesById.get(obligation.clause_id);
         const sourceExpression = obligation.description || obligation.timing_expression || obligation.frequency || obligation.trigger_expression;
         if (!sourceExpression || !obligation.evidence?.length) continue;
-        let interpretation = parseTemporalExpression(sourceExpression, { condition: obligation.condition });
+        let interpretation = parseTemporalExpression(sourceExpression, { condition: obligation.condition, clauseText: clause?.source_text });
+        if (!interpretation) continue;
         const definition = interpretation?.anchor_reference ? definitions.get(interpretation.anchor_reference.toLowerCase()) : null;
-        if (definition) interpretation = parseTemporalExpression(sourceExpression, { condition: obligation.condition, anchorDate: definition.date });
+        if (definition) interpretation = parseTemporalExpression(sourceExpression, { condition: obligation.condition, clauseText: clause?.source_text, anchorDate: definition.date });
         const primaryEvidence = obligation.evidence.find((link) => link.is_primary) || obligation.evidence[0];
         if (interpretation.deadline_type === "non_computable" && useAIFallback) {
           if (!provider?.analyzeStructured) throw Object.assign(new Error("Deadline AI fallback is not configured"), { code: "PROVIDER_NOT_CONFIGURED", status: 422 });
-          const clause = clausesById.get(obligation.clause_id);
           interpretation = await provider.analyzeStructured({
             organization_id: scope.organizationId,
             user_id: userId,

@@ -636,6 +636,37 @@ Either party may terminate upon default.`
     assert.equal(clauses[0].category, "termination/default");
   });
 
+  await suite.test("recognized headings take precedence over conflicting body keywords", () => {
+    const source = buildTestSource(
+      `1. TERMINATION
+Payment, fees and maintenance obligations survive termination.
+
+2. NOTICE
+The notice may refer to termination, renewal or payment.
+
+3. EXTENSION
+Rent and fees apply during the extended term.
+
+4. AIRPORT CHARGES
+Operational runway access is included in the charges.
+
+5. RUNWAY SERVICES
+The service fee is payable monthly.
+
+6. MAINTENANCE
+The maintenance provider shall submit an invoice.`
+    );
+    const clauses = segmentDeterministicClauses(source);
+    assert.deepEqual(clauses.map(({ category }) => category), [
+      "termination/default",
+      "renewal/notice",
+      "renewal/notice",
+      "commercial/payment",
+      "operations/service levels",
+      "maintenance",
+    ]);
+  });
+
   await suite.test("category defaults to general with low confidence", () => {
     const source = buildTestSource(
       `2. Miscellaneous

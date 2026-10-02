@@ -57,14 +57,14 @@ const PUBLIC_PAGES = {
     name: "About Operion",
   },
   "/privacy": {
-    title: "Operion Privacy | Website and Demo Requests",
-    description: "Learn how the Operion website handles demo requests and consent-based analytics.",
-    name: "Privacy",
+    title: "Privacy Policy | Operion",
+    description: "Read how Operion handles website, account, organisation and customer contract information, including consent-based analytics and AI-assisted processing.",
+    name: "Privacy Policy",
   },
   "/legal": {
-    title: "Operion Legal | Website Terms",
-    description: "Review the terms that apply to Operion website information, demonstrations and illustrative product material.",
-    name: "Legal",
+    title: "Legal and Terms of Use | Operion",
+    description: "Review the terms for the Operion website, prepared demonstrations and contract-intelligence platform evaluation.",
+    name: "Legal and Terms of Use",
   },
   "/demo/dashboard": {
     title: "Operion Demo | Aviation Contract Intelligence Dashboard",

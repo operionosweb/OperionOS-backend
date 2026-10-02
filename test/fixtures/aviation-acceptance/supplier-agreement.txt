@@ -1,0 +1,19 @@
+AVIATION COMPONENT SUPPLIER AGREEMENT
+
+1. COMPONENT DELIVERY
+The Supplier shall deliver the component within 10 days after acceptance.
+
+2. PAYMENT
+The Airline shall pay the invoice on the first Business Day of each month.
+
+3. COMPONENT INSPECTION
+The Manufacturer shall inspect the component every 500 flight cycles.
+
+4. LIABILITY
+The Supplier's liability shall be capped at EUR 1 million except for fraud, confidentiality and indemnification.
+
+5. DELIVERY PENALTY
+Late delivery incurs a penalty of EUR 120,000.
+
+6. TERMINATION
+The Supplier may terminate following an uncured payment default after 10 days.

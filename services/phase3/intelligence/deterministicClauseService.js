@@ -24,6 +24,28 @@ const CATEGORY_RULES = [
   ["governing law/dispute resolution", ["governing law", "jurisdiction", "arbitration", "dispute"]],
 ];
 
+const HEADING_CATEGORY_ALIASES = new Map([
+  ["commercial/payment", ["charge", "charges", "penalty", "penalties", "security", "maintenance reserve", "maintenance reserves"]],
+  ["delivery/redelivery", ["return", "return conditions"]],
+  ["operations/service levels", ["service", "services", "operations"]],
+  ["renewal/notice", ["extension"]],
+]);
+
+const HEADING_CATEGORY_PRECEDENCE = [
+  "pricing/escalation",
+  "commercial/payment",
+  "maintenance",
+  "delivery/redelivery",
+  "insurance",
+  "liability/indemnity",
+  "termination/default",
+  "compliance/sanctions",
+  "operations/service levels",
+  "confidentiality/data protection",
+  "renewal/notice",
+  "governing law/dispute resolution",
+];
+
 const SENTENCE_STARTERS = new Set([
   "on",
   "in",
@@ -253,12 +275,28 @@ function classifyCategory(text) {
   return match?.[0] || "general";
 }
 
+function classifyHeadingCategory(title) {
+  const normalized = title.toLowerCase().replace(/\s+/g, " ").trim();
+  if (!normalized || /\bagreement$/.test(normalized)) return null;
+
+  for (const category of HEADING_CATEGORY_PRECEDENCE) {
+    const baseKeywords = CATEGORY_RULES.find(([candidate]) => candidate === category)?.[1] || [];
+    const keywords = [...baseKeywords, ...(HEADING_CATEGORY_ALIASES.get(category) || [])];
+    if (keywords.some((keyword) => {
+      const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+      return new RegExp(`(?:^|[^a-z0-9])${escaped}(?:$|[^a-z0-9])`, "i").test(normalized);
+    })) return category;
+  }
+
+  return null;
+}
+
 function buildSegment({ source, start, end, heading, parentClauseNumber = null, isUnstructured = false }) {
   const sourceText = source.text.slice(start, end);
   const sourcePage = source.pageBoundaries === "explicit"
     ? source.pages?.find((page) => start >= page.char_start && start <= page.char_end)
     : null;
-  const category = classifyCategory(`${heading.title}\n${sourceText}`);
+  const category = classifyHeadingCategory(heading.title) || classifyCategory(sourceText);
   const numbered = Boolean(heading.number);
   const confidence = isUnstructured ? 0.35 : category === "general" ? 0.45 : numbered ? 0.85 : 0.65;
   const reviewStatus = isUnstructured || category === "general" || !numbered ? "requires_review" : "pending";

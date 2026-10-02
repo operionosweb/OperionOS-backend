@@ -61,6 +61,11 @@ test("unknown and absent profiles fall back to neutral contract intelligence", (
   assert.equal(context(null).rbiProfile.roleId, "VIEWER");
 });
 
+test("canonical customer roles resolve customer intelligence profiles", () => {
+  assert.equal(resolveUserIntelligenceContext({ organizationRole: "CUSTOMER_ADMIN" }).rbiProfile.roleId, "CONTRACT_MANAGER");
+  assert.equal(resolveUserIntelligenceContext({ organizationRole: "CUSTOMER_USER" }).rbiProfile.roleId, "VIEWER");
+});
+
 test("internal RBI is inferred only for a platform superadmin outside organization scope", () => {
   const platform = resolveUserIntelligenceContext({ platformRoles: ["SUPERADMIN"], permissions: ["platform:admin"] });
   const customer = resolveUserIntelligenceContext({

@@ -4,14 +4,21 @@ import test from "node:test";
 
 import {
   assertOpportunityTransition,
+  buildEntityMatchProposal,
   buildGroundedOpportunityReasoning,
+  classifySourceDuplicate,
   generateGroundedOpportunityReasoning,
+  extractSignalFromSource,
+  normalizeSourceUrl,
   prioritizeCommercialIntelligence,
+  sourceFingerprint,
   validateCompanyInput,
   validateOpportunityInput,
   validatePersonInput,
   validateSignalInput,
   validateSourceInput,
+  validateSourceReviewInput,
+  validateRecommendedActionInput,
 } from "../services/commercialIntelligenceService.js";
 import { resolveUserIntelligenceContext } from "../services/phase3/intelligence/roleIntelligenceService.js";
 
@@ -39,8 +46,8 @@ const verifiedSource = {
 };
 
 test("commercial schema is platform owned and inaccessible through authenticated table grants", async () => {
-  const migration = await fs.readFile(new URL("../supabase/migrations/018_commercial_intelligence_mvp.sql", import.meta.url), "utf8");
-  for (const table of ["commercial_companies", "commercial_people", "commercial_signals", "commercial_opportunities", "commercial_sources", "commercial_evidence_links"]) {
+  const migration = `${await fs.readFile(new URL("../supabase/migrations/018_commercial_intelligence_mvp.sql", import.meta.url), "utf8")}\n${await fs.readFile(new URL("../supabase/migrations/020_superadmin_intelligence_core.sql", import.meta.url), "utf8")}\n${await fs.readFile(new URL("../supabase/migrations/021_supervised_source_ingestion.sql", import.meta.url), "utf8")}`;
+  for (const table of ["commercial_companies", "commercial_people", "commercial_signals", "commercial_opportunities", "commercial_sources", "commercial_evidence_links", "commercial_recommended_actions", "commercial_ai_proposals", "commercial_entity_match_proposals", "commercial_review_decisions"]) {
     assert.match(migration, new RegExp(`alter table public\\.${table} enable row level security`, "i"));
   }
   assert.match(migration, /revoke all[\s\S]+from anon, authenticated/i);
@@ -51,10 +58,59 @@ test("commercial schema is platform owned and inaccessible through authenticated
 test("manual company, person, signal, opportunity, and source inputs are aviation bounded", () => {
   assert.equal(validateCompanyInput({ name: "Aero Lease Ltd", aviationSegment: "Aircraft Leasing" }).normalizedName, "aero lease");
   assert.equal(validatePersonInput({ companyId: "company-1", roleTitle: "Chief Financial Officer", roleCategory: "CFO" }).verificationStatus, "UNVERIFIED_SIGNAL");
-  assert.equal(validateSignalInput({ companyId: "company-1", signalType: "FLEET_EXPANSION", description: "Expansion announced" }).origin, "MANUAL");
-  assert.equal(validateOpportunityInput({ companyId: "company-1", title: "Lease intelligence", opportunityType: "CONTRACT_INTELLIGENCE" }).status, "IDENTIFIED");
+  assert.equal(validateSignalInput({ companyId: "company-1", signalType: "FLEET_EXPANSION", title: "Fleet expansion", description: "Expansion announced" }).origin, "MANUAL");
+  assert.equal(validateOpportunityInput({ companyId: "company-1", signalId: "signal-1", title: "Lease intelligence", opportunityType: "CONTRACT_INTELLIGENCE" }).status, "IDENTIFIED");
   assert.equal(validateSourceInput({ title: "Company announcement", sourceType: "COMPANY_WEBSITE" }).verificationStatus, "UNVERIFIED_SIGNAL");
   assert.throws(() => validateCompanyInput({ name: "Generic Co", aviationSegment: "Retail" }), /not supported/);
+});
+
+test("source URLs are normalized conservatively while meaningful parameters remain", () => {
+  assert.equal(
+    normalizeSourceUrl("http://EXAMPLE.com/news/fleet/?utm_source=email&aircraft=A320#details"),
+    "https://example.com/news/fleet?aircraft=A320"
+  );
+  assert.equal(normalizeSourceUrl("https://example.com/a/?b=2&a=1"), "https://example.com/a?a=1&b=2");
+  assert.throws(() => normalizeSourceUrl("javascript:alert(1)"), (error) => error.code === "INVALID_SOURCE_URL");
+});
+
+test("source duplicate detection distinguishes exact, normalized, and possible duplicates", () => {
+  const exact = sourceFingerprint({ sourceUrl: "https://example.com/news" });
+  assert.equal(classifySourceDuplicate({ ...exact, title: "Fleet news" }, [{ id: "source-1", original_url_hash: exact.originalUrlHash }]).status, "DUPLICATE");
+
+  const normalized = sourceFingerprint({ sourceUrl: "http://example.com/news/?utm_source=email" });
+  const existingNormalized = sourceFingerprint({ sourceUrl: "https://example.com/news" });
+  const normalizedMatch = classifySourceDuplicate({ ...normalized, title: "Fleet news" }, [{ id: "source-2", normalized_url_hash: existingNormalized.normalizedUrlHash }]);
+  assert.equal(normalizedMatch.status, "DUPLICATE");
+  assert.match(normalizedMatch.reason, /Normalized/);
+
+  const content = sourceFingerprint({ sourceUrl: "https://wire.example/item", excerpt: "The airline ordered twenty aircraft." });
+  const possible = classifySourceDuplicate({ ...content, title: "Airline aircraft order" }, [{ id: "source-3", content_hash: content.contentHash }]);
+  assert.equal(possible.status, "POSSIBLE_DUPLICATE");
+  assert.equal(possible.duplicateOfSourceId, "source-3");
+});
+
+test("source quality metadata and review edits are explicit", () => {
+  const source = validateSourceInput({
+    title: "Regulatory filing", sourceType: "REGULATORY", publisher: "CAA",
+    sourceUrl: "https://caa.example/filing", publishedAt: "2026-10-01",
+    excerpt: "The filing records the operator certificate.",
+  });
+  assert.equal(source.domain, "caa.example");
+  assert.equal(source.qualityConfidence, 1);
+  assert.throws(() => validateSourceReviewInput({ decision: "EDIT" }), (error) => error.code === "REVIEW_CHANGES_REQUIRED");
+  assert.deepEqual(validateSourceReviewInput({ decision: "EDIT", changes: { publisher: "CAA Ireland" } }).changes, { publisher: "CAA Ireland" });
+});
+
+test("entity resolution proposes evidence-aware matches without merging candidates", () => {
+  const proposal = buildEntityMatchProposal({
+    entityType: "COMPANY", sourceId: "source-1",
+    proposedEntity: { name: "Aero Lease", website: "https://aero.example", country: "Ireland" },
+    candidates: [{ id: "company-1", name: "Aero Lease Ltd", normalized_name: "aero lease", website: "https://aero.example", country: "Ireland" }],
+  });
+  assert.equal(proposal.candidateEntityId, "company-1");
+  assert.equal(proposal.confidence, 1);
+  assert.deepEqual(proposal.matchEvidence.map((item) => item.field), ["name", "website", "country"]);
+  assert.equal(proposal.status, "NEW");
 });
 
 test("opportunity reasoning preserves evidence and explains priority factors", () => {
@@ -134,4 +190,32 @@ test("AI reasoning is accepted only when every citation references stored eviden
   const fallback = await generateGroundedOpportunityReasoning({ company, signal, sources: [verifiedSource], provider: inventedCitationProvider });
   assert.equal(fallback.reasoningMethod, "DETERMINISTIC");
   assert.doesNotMatch(fallback.whyCompany, /Unsupported/);
+});
+
+test("verified people, verified signals, opportunities, and actions require evidence", () => {
+  assert.throws(() => validatePersonInput({ companyId: "company-1", roleTitle: "Fleet Director", roleCategory: "FLEET_DIRECTOR", verificationStatus: "VERIFIED_FACT" }), (error) => error.code === "VERIFIED_PERSON_SOURCE_REQUIRED");
+  assert.throws(() => validateSignalInput({ companyId: "company-1", signalType: "FLEET_EXPANSION", title: "Fleet expansion", description: "Expansion announced", verificationStatus: "VERIFIED_FACT" }), (error) => error.code === "VERIFIED_SIGNAL_SOURCE_REQUIRED");
+  assert.throws(() => validateOpportunityInput({ companyId: "company-1", title: "Lease intelligence", opportunityType: "CONTRACT_INTELLIGENCE" }), (error) => error.code === "OPPORTUNITY_EVIDENCE_REQUIRED");
+  assert.throws(() => validateRecommendedActionInput({ opportunityId: "opportunity-1", actionType: "CONTACT_PERSON", actionText: "Contact procurement", reason: "Fleet expansion" }), /evidenceSourceId is required/);
+  assert.equal(validateRecommendedActionInput({ opportunityId: "opportunity-1", actionType: "CONTACT_PERSON", actionText: "Contact procurement", reason: "Fleet expansion", evidenceSourceId: "source-1" }).status, "NEW");
+});
+
+test("AI signal extraction separates sourced fact from interpretation and requires the stored citation", async () => {
+  const provider = { generate: async () => ({ output: JSON.stringify({
+    signalType: "AIRCRAFT_ACQUISITION", title: "Twenty-aircraft order",
+    extractedFact: "The airline announced an order for 20 aircraft.",
+    aiInterpretation: "This may increase leasing, maintenance, and supplier contract activity.",
+    relevance: "Fleet growth can increase contract volume.",
+    operionImplication: "Investigate contract-management complexity.",
+    confidence: 0.85, detectedDate: "2026-09-20", evidenceSourceId: "source-1",
+  }) }) };
+  const extracted = await extractSignalFromSource({ company, source: verifiedSource, provider });
+  assert.equal(extracted.extractedFact, "The airline announced an order for 20 aircraft.");
+  assert.match(extracted.aiInterpretation, /may increase/);
+  assert.equal(extracted.sourceId, "source-1");
+  assert.equal(extracted.origin, "AI_ENRICHED");
+  assert.equal(extracted.reviewStatus, "NEW");
+
+  const ungrounded = { generate: async () => ({ output: JSON.stringify({ ...extracted, evidenceSourceId: "invented-source" }) }) };
+  await assert.rejects(() => extractSignalFromSource({ company, source: verifiedSource, provider: ungrounded }), (error) => error.code === "UNGROUNDED_SIGNAL_EXTRACTION");
 });

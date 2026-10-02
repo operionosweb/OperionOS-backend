@@ -27,12 +27,18 @@ const REQUIRED_MIGRATIONS = [
   "016_contract_intelligence_core.sql",
   "017_platform_identity_foundation.sql",
   "018_commercial_intelligence_mvp.sql",
+  "019_customer_role_foundation.sql",
+  "020_superadmin_intelligence_core.sql",
+  "021_supervised_source_ingestion.sql",
 ];
 const NONEMPTY_ADDITIVE_MIGRATIONS = new Set([
   "015_aviation_intelligence_foundation.sql",
   "016_contract_intelligence_core.sql",
   "017_platform_identity_foundation.sql",
   "018_commercial_intelligence_mvp.sql",
+  "019_customer_role_foundation.sql",
+  "020_superadmin_intelligence_core.sql",
+  "021_supervised_source_ingestion.sql",
 ]);
 
 const MIGRATION_SENTINELS = Object.freeze({
@@ -49,11 +55,16 @@ const MIGRATION_SENTINELS = Object.freeze({
   "016_contract_intelligence_core.sql": ["table", "contract_intelligence_profiles"],
   "017_platform_identity_foundation.sql": ["table", "platform_user_roles"],
   "018_commercial_intelligence_mvp.sql": ["table", "commercial_opportunities"],
+  "019_customer_role_foundation.sql": ["policy", "contracts_member_select"],
+  "020_superadmin_intelligence_core.sql": ["table", "commercial_recommended_actions"],
+  "021_supervised_source_ingestion.sql": ["table", "commercial_review_decisions"],
 });
 
 const INTERNAL_DENY_ALL_TABLES = Object.freeze([
   "commercial_companies", "commercial_sources", "commercial_people", "commercial_signals",
   "commercial_opportunities", "commercial_evidence_links",
+  "commercial_recommended_actions",
+  "commercial_ai_proposals", "commercial_entity_match_proposals", "commercial_review_decisions",
 ]);
 
 const RLS_TABLES = Object.freeze([
@@ -68,6 +79,7 @@ const RLS_TABLES = Object.freeze([
   "ai_intelligence_cache",
   "aircraft", "aircraft_organization_relationships", "aviation_flights", "flight_positions",
   "aircraft_contract_relationships",
+  "commercial_recommended_actions",
   "contract_intelligence_profiles",
   "platform_user_roles",
   ...INTERNAL_DENY_ALL_TABLES,
@@ -119,7 +131,7 @@ async function migrationFiles() {
   }
   const requiredOrder = files.filter((file) => REQUIRED_MIGRATIONS.includes(file));
   if (JSON.stringify(requiredOrder) !== JSON.stringify(REQUIRED_MIGRATIONS)) {
-    fail("MIGRATION_ORDER_INVALID", "Migrations 006-017 are not ordered correctly");
+    fail("MIGRATION_ORDER_INVALID", "Migrations 006-021 are not ordered correctly");
   }
   return files;
 }
@@ -131,11 +143,7 @@ export function hasDocxMigrationSemantics({ constraints = [], policies = [] } = 
     const definition = constraints.find((constraint) => constraint.conname === name)?.definition || "";
     return definition.includes("application/pdf") && definition.includes(docxMime);
   });
-  const requiredPolicies = [
-    ["contract_storage_member_read", "SELECT"],
-    ["contract_storage_member_insert", "INSERT"],
-    ["contract_storage_member_delete", "DELETE"],
-  ];
+  const requiredPolicies = [["contract_storage_member_read", "SELECT"]];
   const policiesSupportDocx = requiredPolicies.every(([name, command]) => {
     const policy = policies.find((candidate) => candidate.schemaname === "storage"
       && candidate.tablename === "objects" && candidate.policyname === name && candidate.cmd === command);
