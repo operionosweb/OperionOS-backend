@@ -9,7 +9,7 @@
     "test:supabase": "node test/supabase-validation.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.0",
