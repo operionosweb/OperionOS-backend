@@ -41,7 +41,7 @@ export default function ContractAssistantPanel({ analysisRunId, organizationId }
       <p className="op-kicker" style={{ marginBottom: "var(--op-space-2)" }}>Contract assistant</p>
       <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-3)" }}>Ask this contract</h2>
       <p className="op-body-sm" style={{ marginBottom: "var(--op-space-4)" }}>
-        Answers are limited to this analysis run and require supporting contract evidence.
+        Answers are limited to this analysis run and require supporting contract evidence. They are decision support, not legal advice.
       </p>
 
       {!analysisRunId ? (
@@ -68,8 +68,9 @@ export default function ContractAssistantPanel({ analysisRunId, organizationId }
       {state === "error" && <p className="op-body-sm" style={{ color: "var(--op-signal-risk)", marginTop: "var(--op-space-4)" }}>{error}</p>}
       {result && (
         <div className="op-surface-inspector" aria-live="polite" style={{ padding: "var(--op-space-4)", marginTop: "var(--op-space-4)" }}>
-          <p className="op-kicker" style={{ marginBottom: "var(--op-space-2)" }}>{result.established ? "Evidence-backed answer" : "Not established"}</p>
+          <p className="op-kicker" style={{ marginBottom: "var(--op-space-2)" }}>{result.established ? "Answer supported by contract evidence" : "Not established from this contract"}</p>
           <p className="op-body" style={{ marginBottom: "var(--op-space-4)" }}>{result.answer}</p>
+          {!result.established && <p className="op-body-sm" style={{ marginBottom: "var(--op-space-4)" }}>Do not treat this response as confirmation that the requested fact or obligation exists.</p>}
           {result.findings?.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--op-space-2)", marginBottom: "var(--op-space-4)" }}>
               {result.findings.map((finding) => (

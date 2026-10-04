@@ -1,48 +1,53 @@
 import React from "react";
 import { useOrganization } from "../../context/OrganizationContext";
+import { ErrorState, LoadingState } from "../ui/States";
 
-/**
- * No endpoint exists to list a user's organizations yet, so the
- * organization id is entered directly. This is the integration boundary
- * documented for the future organization-selector endpoint.
- */
 export default function OrganizationGate({ children }) {
-  const { organizationId, setOrganizationId } = useOrganization();
+  const {
+    organizationId,
+    setOrganizationId,
+    organizations,
+    organizationState,
+    organizationError,
+  } = useOrganization();
 
-  if (organizationId) return children;
+  if (organizationState === "loading" || organizationState === "idle") {
+    return <LoadingState label="Loading your organization access…" />;
+  }
+  if (organizationState === "error") return <ErrorState message={organizationError} />;
+  if (organizationId && organizations.some((organization) => organization.id === organizationId)) return children;
+
+  if (!organizations.length) {
+    return (
+      <div className="op-surface" role="status" style={{ padding: "var(--op-space-6)", maxWidth: 560 }}>
+        <h3 className="op-heading-md" style={{ marginBottom: "var(--op-space-2)" }}>Organization access required</h3>
+        <p className="op-body">
+          Your account does not have an active Operion organization membership. Ask your pilot administrator to confirm your access.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="op-surface" style={{ padding: "var(--op-space-6)", maxWidth: 480 }}>
       <h3 className="op-heading-md" style={{ marginBottom: "var(--op-space-2)" }}>
-        Set your organization
+        Choose your organization
       </h3>
       <p className="op-body" style={{ marginBottom: "var(--op-space-4)" }}>
-        Every request is organization-scoped. No organization directory
-        endpoint exists yet, so enter your organization ID to continue.
+        Your account belongs to more than one organization. Select the workspace you want to open.
       </p>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          const value = new FormData(event.currentTarget).get("organizationId");
-          if (value) setOrganizationId(String(value).trim());
-        }}
-        style={{ display: "flex", gap: "var(--op-space-2)" }}
-      >
-        <input
-          name="organizationId"
-          required
-          placeholder="Organization UUID"
-          style={{
-            flex: 1,
-            padding: "10px 14px",
-            background: "transparent",
-            border: "1px solid var(--op-border)",
-            borderRadius: "var(--op-radius-sm)",
-            color: "var(--op-text)",
-          }}
-        />
-        <button type="submit" className="op-btn op-btn-primary">Continue</button>
-      </form>
+      <div className="op-stack" style={{ gap: "var(--op-space-2)" }}>
+        {organizations.map((organization) => (
+          <button
+            key={organization.id}
+            type="button"
+            className="op-btn op-btn-secondary"
+            onClick={() => setOrganizationId(organization.id)}
+          >
+            {organization.name}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

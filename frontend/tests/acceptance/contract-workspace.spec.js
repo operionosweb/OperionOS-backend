@@ -11,8 +11,7 @@ async function login(page, tenant) {
   await page.getByLabel("Password").fill(tenant.user.password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.waitForURL(/\/app\/dashboard$/);
-  await page.getByPlaceholder("Organization UUID").fill(tenant.organizationId);
-  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByText("Organisation scope verified by API", { exact: true })).toBeVisible();
 }
 
 async function selectRunAndOpenWorkspace(page, contract) {

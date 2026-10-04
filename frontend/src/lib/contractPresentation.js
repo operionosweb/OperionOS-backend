@@ -34,10 +34,23 @@ export function getContractClassificationPresentation(contract, profile = null) 
     || contract?.contract_type;
   const confidence = profile?.classification?.confidence
     ?? contract?.contract_type_confidence;
+  const confidenceValue = Number(confidence);
+  const normalizedType = type ? String(type).trim().toUpperCase().replaceAll(/[\s-]+/g, "_") : "";
+  const requiresReview = Boolean(type) && (
+    normalizedType === "MRO"
+    || !Number.isFinite(confidenceValue)
+    || confidenceValue < 0.85
+  );
 
   return {
     type: formatContractType(type),
     confidence: formatClassificationConfidence(confidence),
     isEstablished: Boolean(type && String(type).trim()),
+    requiresReview,
+    reviewLabel: requiresReview
+      ? normalizedType === "MRO"
+        ? "MRO classification requires human confirmation"
+        : "Classification requires human review"
+      : null,
   };
 }

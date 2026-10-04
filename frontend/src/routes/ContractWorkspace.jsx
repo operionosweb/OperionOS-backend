@@ -77,7 +77,12 @@ function formatDeadlineTiming(deadline) {
     return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })
       .format(new Date(`${deadline.absolute_date}T00:00:00.000Z`));
   }
-  if (deadline.deadline_type === "ambiguous") return `${deadline.timing_expression} - exact timing cannot be determined`;
+  if (deadline.computability === "non_computable") {
+    return `${deadline.timing_expression || "Contractual timing"} - no calculable date was established`;
+  }
+  if (deadline.deadline_type === "ambiguous" || deadline.computability === "ambiguous") {
+    return `${deadline.timing_expression || "Contractual timing"} - exact timing requires human review`;
+  }
   if (deadline.amount && deadline.unit) {
     const unit = deadline.unit.replaceAll("_", " ");
     return `${deadline.amount} ${unit} ${deadline.direction || "after"}${deadline.anchor_reference ? ` ${deadline.anchor_reference}` : ""}`;
@@ -89,6 +94,20 @@ function formatDeadlineTiming(deadline) {
 
 function formatIntelligenceLabel(value) {
   return value ? String(value).replaceAll("_", " ").toLowerCase() : "Not established";
+}
+
+function getFindingReviewLabel(item, incomplete = false) {
+  const confidence = Number(item?.confidence);
+  if (
+    incomplete
+    || item?.review_status === "requires_review"
+    || item?.status === "requires_review"
+    || Number.isFinite(confidence) && confidence < 0.85
+  ) {
+    return "Human review required";
+  }
+  if (["reviewed", "approved", "confirmed"].includes(item?.review_status)) return "Reviewed";
+  return "Evidence review pending";
 }
 
 function formatFinancialAmount(amount, currency) {
@@ -484,6 +503,7 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
           <strong>{contractClassification.type}</strong>
           {contractClassification.confidence && <span> · {contractClassification.confidence}</span>}
         </p>
+        {contractClassification.reviewLabel && <p className="op-body-sm">{contractClassification.reviewLabel}. Confirm the type against the source contract before relying on it.</p>}
         <p>
           Status: {contract.status} · Created {new Date(contract.created_at).toLocaleDateString()}
         </p></div>
@@ -595,7 +615,7 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
           <div className="op-surface-plane-primary" style={{ padding: "var(--op-space-5)" }}>
             <p className="op-body" style={{ marginBottom: "var(--op-space-4)" }}>{profile.executive_summary}</p>
             <div className="op-contract-profile-grid">
-              <div><span className="op-kicker">Type</span><p className="op-body-sm">{contractClassification.type}</p></div>
+              <div><span className="op-kicker">Detected type</span><p className="op-body-sm">{contractClassification.type}</p>{contractClassification.reviewLabel && <p className="op-body-sm">{contractClassification.reviewLabel}</p>}</div>
               <div><span className="op-kicker">Contract number</span><p className="op-body-sm">{profile.metadata?.contractNumber || NOT_ESTABLISHED}</p></div>
               <div><span className="op-kicker">Effective</span><p className="op-body-sm">{profile.metadata?.effectiveDate || NOT_ESTABLISHED}</p></div>
               <div><span className="op-kicker">Executed</span><p className="op-body-sm">{profile.metadata?.executionDate || NOT_ESTABLISHED}</p></div>
@@ -764,7 +784,7 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
                 <span className="op-body-sm">{clause.clause_number || "Clause"}</span>
                 <span className="op-body-sm">{clause.title || "Untitled clause"}</span>
                 <span className="op-body-sm">{clause.category || "uncategorized"}</span>
-                <span className="op-badge">{clause.review_status || "unknown"}</span>
+                <div><span className="op-badge">{getFindingReviewLabel(clause)}</span>{clause.confidence != null && <p className="op-body-sm" style={{ marginTop: "var(--op-space-1)" }}>{Math.round(clause.confidence * 100)}% confidence</p>}</div>
                 <EvidencePanel findingLabel={clause.title || clause.clause_number || "Clause"} evidence={evidenceFor(clause)} />
               </div>
             ))}
@@ -799,7 +819,7 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
                 <div><span className="op-body-sm">{obligation.description || "Untitled obligation"}</span><p className="op-body-sm" style={{ margin: "var(--op-space-1) 0 0" }}>{obligation.actor || "Actor unclear"} · {obligation.action || "Action unclear"} · {obligation.object || "Object unclear"}</p></div>
                 <span className="op-body-sm">{obligation.obligation_type || "unspecified"}</span>
                 <span className="op-body-sm">{obligation.timing_expression || obligation.frequency || "Timing not stated"}</span>
-                <span className="op-badge">{obligation.confidence != null ? `${Math.round(obligation.confidence * 100)}%` : "unknown"}</span>
+                <div><span className="op-badge">{getFindingReviewLabel(obligation, !obligation.actor || !obligation.action || !obligation.object)}</span>{obligation.confidence != null && <p className="op-body-sm" style={{ marginTop: "var(--op-space-1)" }}>{Math.round(obligation.confidence * 100)}% confidence</p>}</div>
                 <EvidencePanel findingLabel={obligation.description || "Obligation"} evidence={evidenceFor(obligation)} />
               </div>
             ))}
@@ -842,7 +862,7 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
                     {calculation?.result && <p className="op-body-sm" style={{ margin: "var(--op-space-1) 0 0" }}>Calculated from {deadline.anchor_reference || "anchor"} {deadline.direction} {deadline.amount} {deadline.unit?.replaceAll("_", " ")}.</p>}
                     {!deadline.absolute_date && deadline.condition && <p className="op-body-sm" style={{ margin: "var(--op-space-1) 0 0" }}>Condition: {deadline.condition}</p>}
                   </div>
-                  <div><span className="op-badge">{deadline.deadline_type?.replaceAll("_", " ")}</span><p className="op-body-sm" style={{ margin: "var(--op-space-1) 0 0" }}>{deadline.status?.replaceAll("_", " ")}</p></div>
+                  <div><span className="op-badge">{deadline.deadline_type?.replaceAll("_", " ")}</span><p className="op-body-sm" style={{ margin: "var(--op-space-1) 0 0" }}>{getFindingReviewLabel(deadline, ["non_computable", "ambiguous"].includes(deadline.computability))}</p>{deadline.confidence != null && <p className="op-body-sm">{Math.round(deadline.confidence * 100)}% confidence</p>}</div>
                   <button type="button" className="op-body-sm" onClick={() => document.getElementById(`clause-${deadline.source_clause_id}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}>View source</button>
                   <EvidencePanel findingLabel={deadline.timing_expression || "Deadline"} evidence={evidenceFor(deadline)} />
                 </div>
@@ -854,6 +874,9 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
 
       <Reveal id="risks" style={{ marginBottom: "var(--op-space-5)", scrollMarginTop: 90 }}>
         <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-3)" }}>Risks</h2>
+        <p className="op-body-sm" style={{ marginBottom: "var(--op-space-4)", maxWidth: 760 }}>
+          Risk findings are evidence-linked screening signals, not confirmed legal conclusions. Review low-confidence findings and cure or notice periods against the source clause.
+        </p>
         {analysisRun && clauses.length > 0 && !risks.length && (
           <div className="op-surface-plane-secondary" style={{ padding: "var(--op-space-4)", marginBottom: "var(--op-space-4)" }}>
             <p className="op-body-sm" style={{ marginBottom: "var(--op-space-3)" }}>
@@ -884,7 +907,7 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
         ) : (
           <>
             <div className="op-surface-plane-primary" style={{ padding: "var(--op-space-4)", marginBottom: "var(--op-space-4)" }}>
-              <strong className="op-heading-sm">{risks.length} contractual risk{risks.length === 1 ? "" : "s"} identified</strong>
+              <strong className="op-heading-sm">{risks.length} potential contractual risk finding{risks.length === 1 ? "" : "s"}</strong>
               <p className="op-body-sm" style={{ marginTop: "var(--op-space-2)" }}>
                 {(["critical", "high", "medium", "low"]).filter((severity) => severityCounts[severity]).map((severity) => `${severityCounts[severity]} ${severity}`).join(" · ")}
               </p>
@@ -926,7 +949,7 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
                       <strong className="op-body-sm">{risk.title}</strong>
                       <span className="op-body-sm">{risk.risk_category?.replaceAll("_", " ")}</span>
                       <span className="op-badge">{risk.severity}</span>
-                      <span className="op-body-sm">{Math.round(Number(risk.confidence || 0) * 100)}%</span>
+                      <span className="op-body-sm">{getFindingReviewLabel(risk)} · {Math.round(Number(risk.confidence || 0) * 100)}%</span>
                     </summary>
                     <div style={{ marginTop: "var(--op-space-4)" }}>
                       <p className="op-kicker">Why it matters</p>
@@ -976,7 +999,7 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
             <section className="op-surface-plane-secondary" style={{ padding: "var(--op-space-4)" }}>
               <p className="op-kicker">Contract parties / dependencies</p>
               {parties.length ? parties.map((party) => <div className="op-relationship-item" key={`${party.role}-${party.name}`}><div><strong className="op-body">{party.name}</strong><p className="op-body-sm">{formatIntelligenceLabel(party.role)}</p></div></div>) : <p className="op-body-sm">No counterparty was established from the available evidence.</p>}
-              <p className="op-body-sm op-relationship-boundary">Supplier dependency is shown only when a supplier party is explicitly extracted; no operational dependency is inferred from a name alone.</p>
+              <p className="op-body-sm op-relationship-boundary">Party and actor roles are extracted from contract wording and require human confirmation where the airport, operator, supplier, or service provider role is not explicit. No operational dependency is inferred from a name alone.</p>
             </section>
           </div>
         )}
@@ -1016,6 +1039,7 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
 
       <Reveal id="actions" style={{ marginBottom: "var(--op-space-5)", scrollMarginTop: 90 }}>
         <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-3)" }}>Recommended actions</h2>
+        <p className="op-body-sm" style={{ marginBottom: "var(--op-space-4)", maxWidth: 760 }}>These are operational review suggestions derived from identified contract findings. They are not extracted contractual requirements and should be approved by the responsible contract owner.</p>
         {!profile ? (
           <EmptyState title="Recommendations unavailable" description="Recommendations require a completed contract profile and evidence-backed risks." />
         ) : !recommendations.length ? (

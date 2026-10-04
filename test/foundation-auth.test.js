@@ -4,6 +4,7 @@ import test from "node:test";
 import { createUserAuthMiddleware } from "../middleware/userAuthMiddleware.js";
 import {
   createOrganizationMiddleware,
+  listUserOrganizations,
 } from "../middleware/organizationMiddleware.js";
 import {
   hasOrganizationPermission,
@@ -90,6 +91,25 @@ test("organization membership rejects malformed organization identifiers", async
 
   assert.equal(response.statusCode, 400);
   assert.equal(response.body.error, "x-org-id must be a valid organization UUID");
+});
+
+test("organization discovery returns only active memberships for the authenticated user", async () => {
+  const organizationId = "11111111-1111-4111-8111-111111111111";
+  let queryParameters;
+  const organizations = await listUserOrganizations("user-a", async (sql, params) => {
+    queryParameters = params;
+    assert.match(sql, /om\.user_id = \$1/);
+    assert.match(sql, /o\.status = 'active'/);
+    assert.match(sql, /om\.status = 'active'/);
+    return {
+      rows: [{ id: organizationId, name: "Pilot Airline", slug: "pilot-airline", role: "CUSTOMER_ADMIN" }],
+    };
+  });
+
+  assert.deepEqual(queryParameters, ["user-a"]);
+  assert.deepEqual(organizations, [
+    { id: organizationId, name: "Pilot Airline", slug: "pilot-airline", role: "CUSTOMER_ADMIN" },
+  ]);
 });
 
 test("organization permissions come from the membership role", () => {

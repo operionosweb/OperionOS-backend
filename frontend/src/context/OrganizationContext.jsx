@@ -6,11 +6,8 @@ import { hasOrganizationPermission } from "../lib/permissions";
 const STORAGE_KEY = "operion.organizationId";
 
 /**
- * Organization/tenant context foundation. Holds the currently selected
- * organization id so the API client and future screens can scope requests.
- * No organization-listing endpoint exists yet, so the id is entered once
- * and persisted locally — this is an explicit integration boundary, not a
- * fabricated organization list.
+ * Organization/tenant context foundation. Resolves active memberships for the
+ * authenticated user and persists a valid selection for scoped API requests.
  */
 const OrganizationContext = createContext();
 
@@ -19,6 +16,9 @@ export function OrganizationProvider({ children }) {
   const [organizationId, setOrganizationIdState] = useState(
     () => localStorage.getItem(STORAGE_KEY) || ""
   );
+  const [organizations, setOrganizations] = useState([]);
+  const [organizationState, setOrganizationState] = useState("idle");
+  const [organizationError, setOrganizationError] = useState("");
   const [organizationRole, setOrganizationRole] = useState(null);
   const [authorizationLoading, setAuthorizationLoading] = useState(false);
 
@@ -29,7 +29,40 @@ export function OrganizationProvider({ children }) {
 
   useEffect(() => {
     let active = true;
-    if (!organizationId || !auth?.isAuthenticated) {
+    if (!auth?.isAuthenticated) {
+      setOrganizations([]);
+      setOrganizationState("idle");
+      setOrganizationError("");
+      setOrganizationRole(null);
+      return () => { active = false; };
+    }
+
+    setOrganizationState("loading");
+    setOrganizationError("");
+    apiRequest("/api/foundation/organizations")
+      .then((result) => {
+        if (!active) return;
+        const nextOrganizations = result?.organizations || [];
+        setOrganizations(nextOrganizations);
+        setOrganizationIdState((current) => {
+          if (nextOrganizations.some((organization) => organization.id === current)) return current;
+          return nextOrganizations.length === 1 ? nextOrganizations[0].id : "";
+        });
+        setOrganizationState("ready");
+      })
+      .catch((error) => {
+        if (!active) return;
+        setOrganizations([]);
+        setOrganizationError(error.message || "Your organizations could not be loaded.");
+        setOrganizationState("error");
+      });
+
+    return () => { active = false; };
+  }, [auth?.isAuthenticated]);
+
+  useEffect(() => {
+    let active = true;
+    if (!organizationId || !auth?.isAuthenticated || organizationState !== "ready") {
       setOrganizationRole(null);
       setAuthorizationLoading(false);
       return () => { active = false; };
@@ -40,17 +73,20 @@ export function OrganizationProvider({ children }) {
       .catch(() => active && setOrganizationRole(null))
       .finally(() => active && setAuthorizationLoading(false));
     return () => { active = false; };
-  }, [auth?.isAuthenticated, organizationId]);
+  }, [auth?.isAuthenticated, organizationId, organizationState]);
 
   const value = useMemo(
     () => ({
       organizationId,
       setOrganizationId: setOrganizationIdState,
+      organizations,
+      organizationState,
+      organizationError,
       organizationRole,
       authorizationLoading,
       hasOrganizationPermission: (permission) => hasOrganizationPermission(organizationRole, permission),
     }),
-    [authorizationLoading, organizationId, organizationRole]
+    [authorizationLoading, organizationError, organizationId, organizationRole, organizations, organizationState]
   );
 
   return (

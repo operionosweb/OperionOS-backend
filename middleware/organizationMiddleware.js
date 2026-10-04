@@ -3,6 +3,25 @@ import { query } from "../db.js";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+export async function listUserOrganizations(userId, queryFn = query) {
+  if (!userId) throw new TypeError("Authenticated user required");
+
+  const result = await queryFn(
+    `
+    SELECT o.id, o.name, o.slug, om.role
+    FROM organizations o
+    JOIN organization_memberships om ON om.organization_id = o.id
+    WHERE om.user_id = $1
+      AND o.status = 'active'
+      AND om.status = 'active'
+    ORDER BY o.name, o.id
+    `,
+    [userId]
+  );
+
+  return result.rows;
+}
+
 export function createOrganizationMiddleware(queryFn = query) {
   return async function requireOrganizationMembership(req, res, next) {
     if (!req.user?.id) {

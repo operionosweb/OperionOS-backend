@@ -77,8 +77,9 @@ test("assistant interaction is analysis-run scoped and handles missing intellige
   assert.match(api, /\/api\/analysis-runs\/\$\{analysisRunId\}\/assistant/);
   assert.match(api, /body: \{ question \}/);
   assert.match(assistant, /askContractAssistant\(analysisRunId, organizationId, question\.trim\(\)\)/);
-  assert.match(assistant, /Evidence-backed answer/);
-  assert.match(assistant, /Not established/);
+  assert.match(assistant, /Answer supported by contract evidence/);
+  assert.match(assistant, /Not established from this contract/);
+  assert.match(assistant, /decision support, not legal advice/);
   assert.match(service, /intelligenceConsumption: 0/);
   assert.match(service, /does not establish an evidence-backed answer/);
 });
