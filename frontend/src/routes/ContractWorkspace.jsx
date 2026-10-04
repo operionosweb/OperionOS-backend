@@ -10,6 +10,7 @@ import FinancialImpactSection from "../components/intelligence/FinancialImpactSe
 import OrganizationGate from "../components/demo/OrganizationGate";
 import { useOrganization } from "../context/OrganizationContext";
 import { ORGANIZATION_PERMISSIONS } from "../lib/permissions";
+import { getContractClassificationPresentation } from "../lib/contractPresentation";
 import {
   getContract,
   listContractDocuments,
@@ -457,6 +458,7 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
   const operationalTerms = profile?.key_operational_terms || [];
   const missingTerms = profile?.unusual_or_missing_terms || [];
   const executiveSynthesis = profile?.metadata?.executiveSynthesis || {};
+  const contractClassification = getContractClassificationPresentation(contract, profile);
   const workspaceSectionOrder = [...new Set([
     ...(roleIntelligence?.sectionOrder || []),
     ...Object.keys(WORKSPACE_SECTIONS),
@@ -478,6 +480,10 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
         <h1>
           {contract.title}
         </h1>
+        <p className={`op-contract-type-summary${contractClassification.isEstablished ? "" : " is-neutral"}`}>
+          <strong>{contractClassification.type}</strong>
+          {contractClassification.confidence && <span> · {contractClassification.confidence}</span>}
+        </p>
         <p>
           Status: {contract.status} · Created {new Date(contract.created_at).toLocaleDateString()}
         </p></div>
@@ -589,7 +595,7 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
           <div className="op-surface-plane-primary" style={{ padding: "var(--op-space-5)" }}>
             <p className="op-body" style={{ marginBottom: "var(--op-space-4)" }}>{profile.executive_summary}</p>
             <div className="op-contract-profile-grid">
-              <div><span className="op-kicker">Type</span><p className="op-body-sm">{formatIntelligenceLabel(profile.metadata?.contractType)}</p></div>
+              <div><span className="op-kicker">Type</span><p className="op-body-sm">{contractClassification.type}</p></div>
               <div><span className="op-kicker">Contract number</span><p className="op-body-sm">{profile.metadata?.contractNumber || NOT_ESTABLISHED}</p></div>
               <div><span className="op-kicker">Effective</span><p className="op-body-sm">{profile.metadata?.effectiveDate || NOT_ESTABLISHED}</p></div>
               <div><span className="op-kicker">Executed</span><p className="op-body-sm">{profile.metadata?.executionDate || NOT_ESTABLISHED}</p></div>

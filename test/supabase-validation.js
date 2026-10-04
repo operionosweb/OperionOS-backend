@@ -65,6 +65,7 @@ const INTERNAL_DENY_ALL_TABLES = Object.freeze([
   "commercial_opportunities", "commercial_evidence_links",
   "commercial_recommended_actions",
   "commercial_ai_proposals", "commercial_entity_match_proposals", "commercial_review_decisions",
+  "platform_user_roles",
 ]);
 
 const RLS_TABLES = Object.freeze([
@@ -285,6 +286,14 @@ async function verifySchema(pool) {
   const rlsByTable = new Map(rls.rows.map((row) => [row.relname, row.relrowsecurity]));
   const unprotected = RLS_TABLES.filter((table) => rlsByTable.get(table) !== true);
   if (unprotected.length) fail("RLS_NOT_ENABLED", `RLS is not enabled for: ${unprotected.join(", ")}`);
+  const storageRls = await pool.query(
+    "select c.relrowsecurity from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'storage' and c.relname = 'objects'"
+  );
+  if (storageRls.rows[0]?.relrowsecurity !== true) fail("RLS_NOT_ENABLED", "RLS is not enabled for storage.objects");
+  const contractBucket = await pool.query(
+    "select public from storage.buckets where id = 'contract-documents'"
+  );
+  if (contractBucket.rows[0]?.public !== false) fail("STORAGE_BUCKET_PUBLIC", "The contract-documents bucket is missing or public");
 
   const policies = await pool.query(
     "select schemaname, tablename, policyname, cmd, roles, qual, with_check from pg_policies where (schemaname = 'public' and tablename = any($1)) or (schemaname = 'storage' and tablename = 'objects') order by schemaname, tablename, policyname",
@@ -311,10 +320,17 @@ async function verifySchema(pool) {
     fail("SERVER_OWNED_WRITE_POLICY", `Authenticated write policies exist for server-owned tables: ${[...new Set(broadServerOwnedPolicies.map((policy) => policy.tablename))].join(", ")}`);
   }
   const storagePolicies = policies.rows.filter((row) => row.schemaname === "storage" && row.tablename === "objects");
-  for (const operation of ["SELECT", "INSERT", "DELETE"]) {
+  for (const operation of ["SELECT", "INSERT"]) {
     if (!storagePolicies.some((policy) => policy.cmd === operation && `${policy.qual || ""} ${policy.with_check || ""}`.includes("is_organization_member"))) {
       fail("STORAGE_POLICY_MISSING", `Organization-scoped storage ${operation} policy is missing`);
     }
+  }
+  const directStorageDeletePolicies = storagePolicies.filter((policy) => (
+    ["DELETE", "ALL"].includes(policy.cmd)
+    && (policy.roles || []).some((role) => ["authenticated", "public"].includes(role))
+  ));
+  if (directStorageDeletePolicies.length) {
+    fail("STORAGE_CLIENT_DELETE_POLICY", `Direct authenticated storage DELETE policies are not allowed: ${directStorageDeletePolicies.map((policy) => policy.policyname).join(", ")}`);
   }
 
   const constraints = await pool.query(

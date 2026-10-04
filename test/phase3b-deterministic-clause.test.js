@@ -111,12 +111,39 @@ function createFakeTransactionalPgPool() {
 
         if (normalized.startsWith("insert into intelligence_evidence")) {
           const rows = parseInsertRows(sql, values);
-          rows.forEach((row) => {
+          const persistedRows = [];
+          for (const row of rows) {
+            const existing = [...committed.intelligence_evidence, ...pending.intelligence_evidence].find(
+              (evidence) =>
+                evidence.document_version_id === row.document_version_id &&
+                evidence.analysis_run_id === row.analysis_run_id &&
+                evidence.evidence_hash === row.evidence_hash
+            );
+            if (existing) {
+              if (normalized.includes("on conflict")) continue;
+              const error = new Error("duplicate key value violates unique constraint on intelligence_evidence identity");
+              error.code = "23505";
+              throw error;
+            }
             idCounter += 1;
             row.id = `evidence-${idCounter}`;
-          });
-          pending.intelligence_evidence.push(...rows);
-          return { rows };
+            pending.intelligence_evidence.push(row);
+            persistedRows.push(row);
+          }
+          return { rows: persistedRows };
+        }
+
+        if (normalized.startsWith("select * from intelligence_evidence")) {
+          const [organizationId, documentVersionId, analysisRunId, evidenceHashes] = values;
+          return {
+            rows: [...committed.intelligence_evidence, ...pending.intelligence_evidence].filter(
+              (row) =>
+                row.organization_id === organizationId &&
+                row.document_version_id === documentVersionId &&
+                row.analysis_run_id === analysisRunId &&
+                evidenceHashes.includes(row.evidence_hash)
+            ),
+          };
         }
 
         if (normalized.startsWith("insert into clause_evidence")) {
@@ -226,6 +253,39 @@ test("clauseRepository.persistDeterministicClauseStage real transaction boundary
     assert.deepEqual(pgPool.log.slice(0, 1), ["begin"]);
     assert.ok(pgPool.log.includes("commit"));
     assert.ok(!pgPool.log.includes("rollback"));
+  });
+
+  await suite.test("duplicate evidence identity is persisted once and linked to each clause", async () => {
+    const pgPool = createFakeTransactionalPgPool();
+    const repository = createClauseRepository({}, pgPool);
+    const clause1 = buildClausePlan({ clauseNumber: null, title: "AIRCRAFT", sourceText: "AIRCRAFT", charStart: 10, charEnd: 18 });
+    const clause2 = buildClausePlan({ clauseNumber: null, title: "AIRCRAFT", sourceText: "AIRCRAFT", charStart: 30, charEnd: 38 });
+    const clause3 = buildClausePlan({ clauseNumber: null, title: "LEASE", sourceText: "LEASE", charStart: 50, charEnd: 55 });
+    const result = await repository.persistDeterministicClauseStage({
+      organizationId: UUID_PLACEHOLDER,
+      contractId: UUID_PLACEHOLDER,
+      documentId: UUID_PLACEHOLDER,
+      documentVersionId: UUID_PLACEHOLDER,
+      analysisRunId: UUID_PLACEHOLDER,
+      clauses: [clause1, clause2, clause3],
+      evidenceRows: [
+        buildEvidencePlan(clause1, { charStart: 10, charEnd: 18 }),
+        buildEvidencePlan(clause2, { charStart: 30, charEnd: 38 }),
+        buildEvidencePlan(clause3, { charStart: 50, charEnd: 55 }),
+      ],
+    });
+
+    assert.equal(pgPool.committed.intelligence_evidence.length, 2);
+    assert.equal(result.evidence.length, 3);
+    assert.equal(result.evidence[0].id, result.evidence[1].id);
+    assert.notEqual(result.evidence[0].id, result.evidence[2].id);
+    assert.equal(pgPool.committed.clause_evidence.length, 3);
+    for (const [index, clause] of result.clauses.entries()) {
+      const link = pgPool.committed.clause_evidence.find((row) => row.clause_id === clause.id);
+      assert.ok(link, `Clause ${index} should have an evidence relationship`);
+      assert.equal(link.evidence_id, result.evidence[index].id);
+      assert.ok(pgPool.committed.intelligence_evidence.some((row) => row.id === link.evidence_id));
+    }
   });
 
   await suite.test("pre-insert clause IDs preserve root and nested parent relationships", () => {

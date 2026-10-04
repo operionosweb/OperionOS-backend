@@ -58,6 +58,25 @@ function relationshipTypeFor(contractType) {
   return "governed_by";
 }
 
+function safePostgresIdentifier(value) {
+  return typeof value === "string" && /^[a-z_][a-z0-9_]*$/i.test(value) ? value : null;
+}
+
+function safePostgresDetail(value) {
+  if (typeof value !== "string") return null;
+  const match = value.match(/^Key \(([^()\r\n]+)\)=\(([^()\r\n]*)\) already exists\.$/);
+  if (!match) return "[redacted]";
+
+  const columns = match[1].split(", ");
+  if (!columns.every((column) => /^[a-z_][a-z0-9_]*$/i.test(column))) return "[redacted]";
+  const values = match[2].split(", ");
+  const safeValues = values.length === columns.length
+    && values.every((item) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item)
+      || /^[0-9a-f]{64}$/i.test(item));
+
+  return `Key (${columns.join(", ")})=(${safeValues ? values.join(", ") : values.map(() => "[redacted]").join(", ")}) already exists.`;
+}
+
 export function createContractIntelligencePipeline({
   analysisRunRepository = createAnalysisRunRepository(),
   profileRepository = createContractProfileRepository(),
@@ -79,6 +98,8 @@ export function createContractIntelligencePipeline({
         return { status: "already_processed", analysisRun: run, profile: await profileRepository.getByRun({ organizationId, analysisRunId }) };
       }
       const startedAt = run.started_at || new Date().toISOString();
+      let pipelineStage = "analysis_run_state";
+      let persistenceOperation = "analysisRunRepository.updateStatus";
       try {
         if (["queued", "failed"].includes(run.status)) {
           run = await analysisRunRepository.updateStatus({ analysisRunId, organizationId, status: "processing", startedAt });
@@ -86,6 +107,8 @@ export function createContractIntelligencePipeline({
         if (run.status === "processing") {
           run = await analysisRunRepository.updateStatus({ analysisRunId, organizationId, status: "extracting", startedAt });
         }
+        pipelineStage = "source_loading";
+        persistenceOperation = "documentVersionSourceService.load";
         const source = await sourceService.load({ documentVersionId: run.document_version_id, analysisRunId, organizationId });
         const scope = {
           organizationId,
@@ -94,12 +117,22 @@ export function createContractIntelligencePipeline({
           documentVersionId: run.document_version_id,
           analysisRunId,
         };
+        pipelineStage = "deterministic_clause_stage";
+        persistenceOperation = "clauseStage";
         const clauseResult = await clauseStage(scope);
         if (run.status === "extracting") {
+          pipelineStage = "analysis_run_state";
+          persistenceOperation = "analysisRunRepository.updateStatus";
           run = await analysisRunRepository.updateStatus({ analysisRunId, organizationId, status: "analysing", startedAt });
         }
+        pipelineStage = "deterministic_obligation_stage";
+        persistenceOperation = "obligationService.runStage";
         const obligationResult = await obligationService.runStage({ ...scope, userId, useProviderNormalization: false });
+        pipelineStage = "deterministic_deadline_stage";
+        persistenceOperation = "deadlineService.runStage";
         const deadlineResult = await deadlineService.runStage({ ...scope, userId, useAIFallback: false });
+        pipelineStage = "deterministic_risk_stage";
+        persistenceOperation = "riskService.runStage";
         const riskResult = await riskService.runStage({ ...scope, userId, useAIFallback: false });
         const persistedClauses = clauseResult.evidence?.length
           ? withClauseEvidence(clauseResult.clauses || [], clauseResult.evidence, clauseResult.clauseEvidence || [])
@@ -112,16 +145,26 @@ export function createContractIntelligencePipeline({
           deadlines: deadlineResult.deadlines || [],
           risks: riskResult.risks || [],
         });
+        pipelineStage = "contract_profile_persistence";
+        persistenceOperation = "profileRepository.persist";
         const persistedProfile = await profileRepository.persist({ scope, profile });
+        pipelineStage = "aviation_relationship_materialization";
+        persistenceOperation = "aviationRelationshipRepository.materializeContractRelationships";
         const relationships = await aviationRelationshipRepository.materializeContractRelationships({
           organizationId,
           contractId: scope.contractId,
           relationshipType: relationshipTypeFor(profile.classification.type),
           identifiers: profile.aircraftIdentifiers,
         });
+        pipelineStage = "analysis_run_state";
+        persistenceOperation = "analysisRunRepository.updateStatus";
         run = await analysisRunRepository.updateStatus({ analysisRunId, organizationId, status: "indexing", startedAt });
+        pipelineStage = "search_index_persistence";
+        persistenceOperation = "searchRepository.replaceForRun";
         const chunks = buildSearchChunks({ scope, clauses, evidence });
         await searchRepository.replaceForRun({ organizationId, analysisRunId, chunks });
+        pipelineStage = "analysis_run_state";
+        persistenceOperation = "analysisRunRepository.updateStatus";
         run = await analysisRunRepository.updateStatus({ analysisRunId, organizationId, status: "completed", startedAt, completedAt: new Date().toISOString() });
         console.info("contract_intelligence_processing_completed", { organizationId, analysisRunId, contractId: scope.contractId, clauses: clauses.length, obligations: obligationResult.obligations?.length || 0, deadlines: deadlineResult.deadlines?.length || 0, risks: riskResult.risks?.length || 0 });
         return { status: "completed", analysisRun: run, profile: persistedProfile, counts: { clauses: clauses.length, obligations: obligationResult.obligations?.length || 0, deadlines: deadlineResult.deadlines?.length || 0, risks: riskResult.risks?.length || 0, searchChunks: chunks.length, aircraftRelationships: relationships.length } };
@@ -129,7 +172,19 @@ export function createContractIntelligencePipeline({
         try {
           await analysisRunRepository.updateStatus({ analysisRunId, organizationId, status: "failed", startedAt, completedAt: new Date().toISOString(), errorCode: error.code || "PROCESSING_FAILED", errorMessage: "Contract intelligence processing failed" });
         } catch {}
-        console.warn("contract_intelligence_processing_failed", { organizationId, analysisRunId, errorCode: error.code || "PROCESSING_FAILED" });
+        const postgresCode = typeof error.code === "string" && /^[0-9A-Z]{5}$/i.test(error.code) ? error.code : null;
+        console.warn("contract_intelligence_processing_failed", {
+          organizationId,
+          analysisRunId,
+          errorCode: error.code || "PROCESSING_FAILED",
+          pipelineStage,
+          persistenceOperation,
+          postgresCode,
+          postgresConstraint: safePostgresIdentifier(error.constraint),
+          postgresDetail: safePostgresDetail(error.detail),
+          postgresSchema: safePostgresIdentifier(error.schema),
+          postgresTable: safePostgresIdentifier(error.table),
+        });
         throw error;
       }
     },

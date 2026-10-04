@@ -20,10 +20,10 @@ function buildInsertQuery(table, columns, rows) {
   };
 }
 
-async function insertRowsInTransaction(pgClient, table, columns, rows) {
+async function insertRowsInTransaction(pgClient, table, columns, rows, conflictClause = "") {
   if (!rows.length) return [];
   const { sql, values } = buildInsertQuery(table, columns, rows);
-  const { rows: returned } = await pgClient.query(sql, values);
+  const { rows: returned } = await pgClient.query(`${sql.replace(" returning *", "")}${conflictClause} returning *`, values);
   return returned;
 }
 
@@ -180,12 +180,35 @@ export function createClauseRepository(client = supabase, pgPool = defaultPgPool
         });
 
         const evidenceInsertRows = evidenceRows.map((row) => ({ ...row, organization_id: organizationId }));
-        const insertedEvidence = await insertRowsInTransaction(pgClient, "intelligence_evidence", evidenceColumns, evidenceInsertRows);
+        await insertRowsInTransaction(
+          pgClient,
+          "intelligence_evidence",
+          evidenceColumns,
+          evidenceInsertRows,
+          " on conflict (document_version_id, analysis_run_id, evidence_hash) do nothing"
+        );
+        const evidenceHashes = [...new Set(evidenceRows.map((row) => row.evidence_hash))];
+        const { rows: persistedEvidence } = await pgClient.query(
+          `select * from intelligence_evidence
+            where organization_id = $1
+              and document_version_id = $2
+              and analysis_run_id = $3
+              and evidence_hash = any($4::text[])`,
+          [organizationId, documentVersionId, analysisRunId, evidenceHashes]
+        );
+        const evidenceByHash = new Map(persistedEvidence.map((row) => [row.evidence_hash, row]));
+        const orderedEvidenceRows = evidenceRows.map((evidence) => {
+          const row = evidenceByHash.get(evidence.evidence_hash);
+          if (!row) {
+            throw new Error(`Persisted evidence missing for evidence_hash ${evidence.evidence_hash}`);
+          }
+          return row;
+        });
 
         const clauseEvidenceLinks = orderedClauseRows.map((clauseRow, index) => ({
           organization_id: organizationId,
           clause_id: clauseRow.id,
-          evidence_id: insertedEvidence[index].id,
+          evidence_id: orderedEvidenceRows[index].id,
           rank: 1,
           support_type: "supports",
           is_primary: true,
@@ -196,7 +219,7 @@ export function createClauseRepository(client = supabase, pgPool = defaultPgPool
 
         return {
           clauses: orderedClauseRows,
-          evidence: insertedEvidence,
+          evidence: orderedEvidenceRows,
           clauseEvidence: insertedClauseEvidence,
         };
       } catch (error) {
