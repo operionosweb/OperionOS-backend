@@ -1,0 +1,201 @@
+/*
+ * Platform-wide readability floor.
+ * Imported last so current product, demo, map, and assistant styles retain
+ * their hierarchy while legacy compact type cannot fall below readable sizes.
+ */
+
+:is(.op-shell, .op-product-shell, .od-shell, .oa-root) {
+  font-size: var(--op-type-body);
+  line-height: 1.55;
+}
+
+:is(.op-shell, .op-product-shell, .od-shell, .oa-root)
+  :where(p, li, dd, blockquote, input, select, textarea) {
+  font-size: max(1em, var(--op-type-body)) !important;
+  line-height: 1.6;
+}
+
+:is(.op-shell, .op-product-shell, .od-shell, .oa-root)
+  :where(label, small, dt, cite, figcaption, caption, kbd) {
+  font-size: max(1em, var(--op-type-body-small)) !important;
+  line-height: 1.5;
+}
+
+:is(.op-shell, .op-product-shell, .od-shell, .oa-root) label {
+  font-size: max(1em, 0.9375rem) !important;
+}
+
+:is(.op-shell, .op-product-shell, .od-shell, .oa-root)
+  :where(button, .op-btn, [role="button"]) {
+  font-size: max(1em, 0.9375rem) !important;
+  line-height: 1.35;
+}
+
+:is(.op-shell, .op-product-shell, .od-shell, .oa-root)
+  :where(td, th, .op-list-row) {
+  font-size: max(1em, 0.9375rem) !important;
+  line-height: 1.55;
+}
+
+:is(.op-shell, .op-product-shell, .od-shell, .oa-root)
+  :where(.op-badge, .op-kicker, .op-eyebrow, [class*="-badge"], [class*="-eyebrow"], [class*="-kicker"]) {
+  font-size: max(1em, 0.8125rem) !important;
+  line-height: 1.35;
+}
+
+:is(.op-shell, .op-product-shell, .od-shell, .oa-root)
+  :where(.op-body-sm, [class*="-meta"], [class*="-helper"], [class*="-caption"]) {
+  font-size: max(1em, var(--op-type-body-small)) !important;
+  line-height: 1.55;
+}
+
+:is(.op-shell, .op-product-shell, .od-shell, .oa-root)
+  :where(.op-body, .op-evidence-excerpt, [class*="-excerpt"], [class*="-description"]) {
+  font-size: max(1em, var(--op-type-body)) !important;
+  line-height: 1.65;
+}
+
+:is(.op-shell, .op-product-shell, .od-shell, .oa-root)
+  :where(.op-heading-lg, .op-page-heading h1, .od-page-header h1) {
+  font-size: clamp(1.75rem, 3vw, 2rem) !important;
+  line-height: 1.2;
+}
+
+:is(.op-shell, .op-product-shell, .od-shell, .oa-root)
+  :where(.op-heading-md, .op-section-heading h2, .op-card-heading h2, .od-card-header h2) {
+  font-size: clamp(1.25rem, 2vw, 1.5rem) !important;
+  line-height: 1.3;
+}
+
+:is(.op-shell, .op-product-shell, .od-shell, .oa-root)
+  :where(input, select, textarea) {
+  min-height: 44px;
+}
+
+:is(.op-shell, .op-product-shell, .od-shell, .oa-root)
+  :where(button, a, input, select, textarea):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--op-color-focus) 35%, transparent);
+  outline-offset: 2px;
+}
+
+:is(.op-shell, .op-product-shell, .od-shell, .oa-root)
+  :where(p, li, dd, td, th, label, small, span, strong, em, a, button) {
+  overflow-wrap: anywhere;
+}
+
+:is(.op-list-table, .od-table-wrap, .od-data-table, .od-portfolio-table) {
+  overflow-x: auto;
+}
+
+/* The legacy demo shell uses spans and strong elements for most metadata. */
+.op-shell :where(a, span, em),
+.od-shell :where(span, em) {
+  font-size: max(1em, var(--op-type-body-small)) !important;
+  line-height: 1.45;
+}
+
+.op-shell strong,
+.od-shell strong {
+  font-size: max(1em, 0.9375rem) !important;
+  line-height: 1.4;
+}
+
+.op-story-system-top b,
+.op-story-paper-head b,
+.op-story-panel-label b {
+  font-size: 0.8125rem !important;
+  line-height: 1.35;
+}
+
+.op-solutions-ecosystem-node b {
+  font-size: 0.8125rem !important;
+  line-height: 1.35;
+}
+
+.op-shell code {
+  font-size: var(--op-type-body-small) !important;
+  line-height: 1.5;
+}
+
+.op-corporate-footer h3 {
+  font-size: var(--op-type-body-small) !important;
+  line-height: 1.4;
+}
+
+.od-shell a {
+  font-size: max(1em, var(--op-type-body-small)) !important;
+}
+
+.od-shell i {
+  font-size: max(1em, 0.8125rem) !important;
+}
+
+.od-contract-meta b {
+  font-size: var(--op-type-body-small) !important;
+  line-height: 1.4;
+}
+
+.od-evidence h3 {
+  font-size: var(--op-type-body) !important;
+  line-height: 1.45;
+}
+
+.od-shell :where(.od-nav-link, .od-search-trigger, .od-button, .od-ask-button) {
+  font-size: max(1em, 0.9375rem) !important;
+}
+
+.od-shell :where(.od-main, .od-card-body, .od-selected-flight, .od-contract-preview) {
+  min-width: 0;
+}
+
+/* Assistant copy was originally optimized for a compact concept mock-up. */
+.oa-root :where(span, small, em) {
+  font-size: max(1em, var(--op-type-body-small)) !important;
+  line-height: 1.5;
+}
+
+.oa-root :where(strong, .oa-quick-list button) {
+  font-size: max(1em, 0.9375rem) !important;
+  line-height: 1.45;
+}
+
+.oa-panel,
+.oa-workspace {
+  min-width: 0;
+}
+
+/* Dense operational maps retain compact geometry but not unreadable labels. */
+.od-aviation-workspace :where(button, label, input, small, span, strong) {
+  font-size: max(1em, 0.8125rem) !important;
+  line-height: 1.4;
+}
+
+.od-aviation-workspace :where(.od-selected-flight p, .od-contract-preview p) {
+  font-size: max(1em, var(--op-type-body-small)) !important;
+  line-height: 1.55;
+}
+
+.op-consent :where(p, strong) {
+  font-size: var(--op-type-body-small) !important;
+  line-height: 1.5;
+}
+
+.op-consent button {
+  font-size: 0.9375rem !important;
+}
+
+@media (max-width: 760px) {
+  :is(.op-shell, .op-product-shell, .od-shell, .oa-root)
+    :where(.op-heading-lg, .op-page-heading h1, .od-page-header h1) {
+    font-size: 1.75rem !important;
+  }
+
+  :is(.op-shell, .op-product-shell, .od-shell, .oa-root)
+    :where(.op-list-row, .od-card-header, .od-page-header, .op-page-heading) {
+    gap: var(--op-space-3);
+  }
+
+  .oa-panel {
+    width: min(100% - 24px, 438px);
+  }
+}

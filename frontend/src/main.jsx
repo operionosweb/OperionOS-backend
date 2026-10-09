@@ -8,6 +8,7 @@ import "./styles/demo.css";
 import "./styles/assistant.css";
 import "./styles/aviation-map.css";
 import "./styles/aviation-map-v2.css";
+import "./styles/readability.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>

@@ -38,7 +38,7 @@ export default function AviationSection() {
                 }}
               >
                 <span>{segment}</span>
-                <span style={{ color: "var(--op-text-faint)", fontSize: "0.85rem" }}>Aviation first</span>
+                <span style={{ color: "var(--op-text-faint)", fontSize: "var(--op-type-body-small)" }}>Aviation first</span>
               </div>
             ))}
           </div>
