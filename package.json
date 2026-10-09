@@ -7,6 +7,8 @@
     "start": "node index.js",
     "test": "node --test test/*.test.js",
     "test:supabase": "node test/supabase-validation.js",
+    "test:migrations:clean-room": "node test/clean-room-migration-rehearsal.js",
+    "test:supabase:local": "node test/local-supabase-rehearsal.js",
     "recovery:audit": "node scripts/offline-recovery-audit.js"
   },
   "engines": {
