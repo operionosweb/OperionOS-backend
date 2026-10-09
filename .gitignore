@@ -8,3 +8,5 @@ build
 test-results
 playwright-report
 .DS_Store
+/recovery/source/
+/recovery/reports/
