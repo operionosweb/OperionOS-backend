@@ -14,7 +14,6 @@ import { ORGANIZATION_PERMISSIONS, PLATFORM_PERMISSIONS } from "./lib/permission
 const ProductionLayout = lazy(() => import("./components/layout/ProductionLayout"));
 const DemoShell = lazy(() => import("./components/layout/DemoShell"));
 const CorporateHome = lazy(() => import("./routes/CorporateHome"));
-const AnalysisView = lazy(() => import("./routes/AnalysisView"));
 const Login = lazy(() => import("./routes/Login"));
 const PlaceholderPage = lazy(() => import("./routes/PlaceholderPage"));
 const Product = lazy(() => import("./routes/Product"));
@@ -106,7 +105,7 @@ export default function App() {
               <Route path="dashboard" element={<ProductionDashboard />} />
               <Route path="contracts" element={<ProductionContracts />} />
               <Route path="contracts/:id" element={<ContractWorkspace />} />
-              <Route path="contracts/:id/analysis" element={<AnalysisView />} />
+              <Route path="contracts/:id/analysis" element={<Navigate to=".." relative="path" replace />} />
               <Route path="upload" element={<RequireOrganizationPermission permission={ORGANIZATION_PERMISSIONS.CONTRACT_WRITE}><ProductionUpload /></RequireOrganizationPermission>} />
               <Route path="aviation" element={<ProductionIntelligence />} />
               <Route path="internal/commercial-intelligence" element={<RequirePlatformPermission permission={PLATFORM_PERMISSIONS.COMMERCIAL_INTELLIGENCE_READ}><CommercialIntelligenceBoundary /></RequirePlatformPermission>} />

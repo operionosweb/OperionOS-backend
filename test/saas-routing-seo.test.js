@@ -34,6 +34,8 @@ test("authenticated SaaS routes use canonical app paths and real components", as
   assert.match(app, /<Route path="dashboard" element={<ProductionDashboard \/>} \/>/);
   assert.match(app, /<Route path="contracts" element={<ProductionContracts \/>} \/>/);
   assert.match(app, /<Route path="contracts\/:id" element={<ContractWorkspace \/>} \/>/);
+  assert.match(app, /<Route path="contracts\/:id\/analysis" element={<Navigate to="\.\." relative="path" replace \/>} \/>/);
+  assert.doesNotMatch(app, /import\("\.\/routes\/AnalysisView"\)/);
   assert.match(app, /<Route path="upload" element={<RequireOrganizationPermission permission=\{ORGANIZATION_PERMISSIONS\.CONTRACT_WRITE\}><ProductionUpload \/><\/RequireOrganizationPermission>} \/>/);
   assert.match(app, /<Route path="internal\/commercial-intelligence" element={<RequirePlatformPermission permission=\{PLATFORM_PERMISSIONS\.COMMERCIAL_INTELLIGENCE_READ\}><CommercialIntelligenceBoundary \/><\/RequirePlatformPermission>} \/>/);
   assert.match(app, /<Route path="aviation" element={<ProductionIntelligence \/>} \/>/);
