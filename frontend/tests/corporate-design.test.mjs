@@ -27,6 +27,7 @@ async function createPage(width = 1440) {
     status: 200, contentType: "application/json", body: JSON.stringify({ configured: false }),
   }));
   page.setDefaultTimeout(10000);
+  page.setDefaultNavigationTimeout(30000);
   return { context, page };
 }
 
@@ -421,7 +422,7 @@ test("all demo page titles stay between 24px and 28px on desktop and mobile", { 
   } finally { await context.close(); }
 });
 
-test("Xweather layers are individually selectable on every shared Cesium globe without client credentials", { timeout: 120000 }, async () => {
+test("Xweather layers are individually selectable on every shared Cesium globe without client credentials", { timeout: 180000 }, async () => {
   const { context, page } = await createPage();
   const requests = [];
   try {
@@ -442,14 +443,16 @@ test("Xweather layers are individually selectable on every shared Cesium globe w
     });
     for (const route of ["/product", "/demo/dashboard", "/demo/live-tracking"]) {
       await page.goto(`${target.origin}${route}`, { waitUntil: "domcontentloaded" });
+      await page.locator(".od-cesium-globe canvas").scrollIntoViewIfNeeded();
+      await page.locator('.od-cesium-globe[data-aircraft-models-ready="12"]').waitFor({ timeout: 30000 });
       await page.locator(".od-real-weather-layers summary").click();
       const filters = page.getByRole("region", { name: "Provider weather layer filters" });
       for (const label of ["Radar (regional coverage)", "Satellite / clouds (GeoColor)", "Surface wind speed (10 m)", "Administrative boundaries"]) {
         const button = filters.getByRole("button", { name: label, exact: true });
-        await button.click();
+        await button.click({ timeout: 20000 });
         assert.equal(await button.getAttribute("aria-pressed"), "true", `${route}: ${label}`);
       }
-      await filters.getByRole("button", { name: "Radar (regional coverage)", exact: true }).click();
+      await filters.getByRole("button", { name: "Radar (regional coverage)", exact: true }).click({ timeout: 20000 });
       assert.equal(await filters.getByRole("button", { name: "Radar (regional coverage)", exact: true }).getAttribute("aria-pressed"), "false");
       assert.equal(await filters.getByRole("button", { name: "Surface wind speed (10 m)", exact: true }).getAttribute("aria-pressed"), "true");
       await page.waitForTimeout(300);

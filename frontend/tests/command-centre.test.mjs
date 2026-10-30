@@ -125,13 +125,15 @@ for (const width of [1440, 390, 320]) {
         const globe = page.locator(".od-cesium-shell");
         const canvas = globe.locator("canvas");
         await canvas.waitFor();
+        await page.waitForFunction(() => Number(document.querySelector(".od-cesium-globe")?.dataset.aircraftModelsReady) > 0);
         const popup = globe.getByRole("dialog", { name: "G-OPER", exact: true });
         await popup.waitFor();
         await popup.getByRole("button", { name: "Close aircraft infocard", exact: true }).click();
         assert.equal(await globe.getByRole("dialog").count(), 0);
         await canvas.scrollIntoViewIfNeeded();
         // The selected aircraft is centred by the real Cesium camera. Click its
-        // rendered marker, exercising Cesium picking rather than a React handler.
+        // rendered status silhouette, exercising actual model picking rather
+        // than a React handler or a separate invisible selection marker.
         const position = await canvas.evaluate((element) => {
           const gl = element.getContext("webgl2") || element.getContext("webgl");
           const pixels = new Uint8Array(element.width * element.height * 4);
@@ -150,6 +152,7 @@ for (const width of [1440, 390, 320]) {
         assert.ok(position, `${route}: the actual selected aircraft marker is rendered`);
         await canvas.click({ position });
         await popup.waitFor();
+        assert.equal(await globe.locator(".cesium-widget-errorPanel, .od-globe-control-error").count(), 0, "Models render without Cesium or asset errors");
         const bounds = await popup.boundingBox();
         const mapBounds = await globe.boundingBox();
         assert.ok(bounds.x >= mapBounds.x && bounds.y >= mapBounds.y, "Popup starts within the globe");
@@ -171,6 +174,7 @@ for (const width of [1440, 390, 320]) {
           await page.getByRole("button", { name: "Exit full screen", exact: true }).click();
           await page.getByRole("button", { name: "Full screen", exact: true }).waitFor();
         }
+
         const dimensions = await page.evaluate(() => ({ viewport: innerWidth, content: document.documentElement.scrollWidth }));
         assert.ok(dimensions.content <= dimensions.viewport + 1);
       }
@@ -178,3 +182,15 @@ for (const width of [1440, 390, 320]) {
     } finally { await context.close(); }
   });
 }
+
+test("missing 3D asset is reported explicitly without breaking aircraft details", async () => {
+  const { context, page } = await createPage();
+  try {
+    await page.route("**/models/operion-airliner.glb", (route) => route.fulfill({ status: 404, body: "Not found" }));
+    await page.goto(`${origin}/demo/dashboard`, { waitUntil: "domcontentloaded" });
+    await page.getByText("3D aircraft are unavailable. Select aircraft from the fleet list to inspect their details.", { exact: true }).waitFor();
+    assert.equal(await page.locator(".od-cesium-globe").getAttribute("data-aircraft-models-ready"), "0");
+    await page.locator(".od-dashboard-aircraft-list button").nth(1).click();
+    await page.getByRole("dialog", { name: "G-OPRA", exact: true }).waitFor();
+  } finally { await context.close(); }
+});

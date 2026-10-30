@@ -80,7 +80,7 @@ function airfoil(stations, side, material) {
   return new Mesh(geometry, material);
 }
 
-function buildAircraft() {
+export function buildAircraft() {
   const aircraft = new Group();
   const white = new MeshStandardMaterial({ color: "#eff4fa", roughness: 0.3, metalness: 0.22, side: DoubleSide });
   const blue = new MeshStandardMaterial({ color: "#0066f5", roughness: 0.33, metalness: 0.18, side: DoubleSide });

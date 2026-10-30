@@ -29,6 +29,21 @@ remain separate.
   Aircraft and weather come from the existing deterministic synthetic provider.
   External base-map imagery retains its provider attribution; it is not flight
   or forecast data.
+- Every globe renders the same detailed Home airliner as a local, embedded-texture
+  glTF model, not a camera-facing icon. Rebuild it after changing `buildAircraft`
+  with `npm run build:aircraft-model` (uses the installed Vite, Playwright and
+  Three.js tooling). Five material batches share the original fuselage, wings,
+  engine fans and glazing. Model tint and outline preserve the five flight-status
+  colours. Geographic orientation follows each prepared heading; camera orbit
+  changes the actual 3D perspective without changing that heading.
+  Airport-to-aircraft-to-destination lines sample geodesics above the ellipsoid;
+  the selected route labels its origin and destination. Model size is exaggerated
+  at overview zoom levels for visibility. All fleet entries use this illustrative
+  airliner, **not** type-exact or verified airframe geometry. Model failures are
+  reported explicitly; the fleet list and aircraft details remain available.
+  Cesium 1.132 and Widgets 13.0 are pinned together so the viewer, route
+  primitives and packaged workers use one Engine 19 renderer, rather than loading
+  incompatible nested engines.
 - Resources and Intelligence are public routes built from existing workflows,
   demo links and maturity disclosures. Platform remains an alias for Product.
   All public routes share Home's hero, typography, blue/cyan tokens, card,

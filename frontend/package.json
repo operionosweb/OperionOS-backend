@@ -6,16 +6,19 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:aircraft-model": "node scripts/export-aircraft-model.mjs",
     "preview": "vite preview",
     "test:corporate": "node --test tests/corporate-design.test.mjs",
     "test:acceptance": "node tests/acceptance/run.mjs",
     "test:acceptance:install": "playwright install chromium"
   },
   "dependencies": {
+    "@cesium/engine": "19.0.0",
+    "@cesium/widgets": "13.0.0",
     "@supabase/supabase-js": "^2.57.0",
     "@xyflow/react": "^12.8.4",
     "@zip.js/zip.js": "2.7.70",
-    "cesium": "^1.132.0",
+    "cesium": "1.132.0",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
