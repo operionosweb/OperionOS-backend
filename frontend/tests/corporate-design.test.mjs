@@ -331,7 +331,8 @@ test("Home video spans the viewport and aviation sectors form an orderly six-car
       await page.setViewportSize({ width, height: 1000 });
       await page.goto(target.origin);
       const video = await page.locator(".op-story-product-frame").boundingBox();
-      assert.ok(Math.abs(video.x) <= 1 && Math.abs(video.width - width) <= 1, "Video is edge-to-edge");
+      const gutter = width <= 900 ? 2 : 0;
+      assert.ok(Math.abs(video.x - gutter) <= 1 && Math.abs(video.width - (width - gutter * 2)) <= 1, "Video fills the screen with only the required mobile gutters");
       const cards = page.locator(".oaero-sector-card");
       assert.equal(await cards.count(), 6);
       const boxes = await cards.evaluateAll((elements) => elements.map((el) => {

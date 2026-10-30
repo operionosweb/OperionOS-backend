@@ -158,7 +158,8 @@ for (const width of [1440, 390, 320]) {
         assert.ok(bounds.x >= mapBounds.x && bounds.y >= mapBounds.y, "Popup starts within the globe");
         assert.ok(bounds.x + bounds.width <= mapBounds.x + mapBounds.width + 1 && bounds.y + bounds.height <= mapBounds.y + mapBounds.height + 1, "Popup stays inside the globe on desktop/mobile");
         const controls = await globe.locator(".od-map-controls").boundingBox();
-        assert.ok(bounds.x + bounds.width <= controls.x, "Popup leaves map controls accessible");
+        if (width < 768) assert.ok(controls.y + controls.height <= bounds.y, "Full-width mobile popup leaves map controls accessible above it");
+        else assert.ok(bounds.x + bounds.width <= controls.x, "Popup leaves map controls accessible");
         assert.equal(await page.locator(".od-dashboard-flight-inspector .od-dashboard-flight-details").count(), 0, "No duplicate infocard below the globe");
         assert.match(await popup.innerText(), /Skyward Airlines/);
         assert.match(await popup.getByRole("link").first().getAttribute("href"), /\/demo\/contracts\//);

@@ -989,7 +989,7 @@
   .op-workspace-page .op-grid-3 { grid-template-columns: minmax(0, 1fr); }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .op-product-shell { display: block; }
   .op-product-sidebar {
     position: fixed;

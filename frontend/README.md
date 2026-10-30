@@ -1,9 +1,10 @@
 # Operion frontend
 
 The public corporate website, synthetic demo and authenticated application share
-this React/Vite project. Corporate design changes are scoped to
-`.op-corporate-shell` in `src/styles/corporate-aero.css`; demo and production styles
-remain separate.
+this React/Vite project. Corporate base styles are scoped to
+`.op-corporate-shell` in `src/styles/corporate-aero.css`; demo and production base
+layouts remain separate. `src/styles/spatial-surfaces.css` is the shared
+presentation and mobile-gutter layer, imported last.
 
 ## Corporate components
 
@@ -64,6 +65,27 @@ remain separate.
   first-person biography. Predictive risk, simulation and digital twins are not
   represented as operational forecasts. The supplied logo is also packaged as
   48px/192px favicons and a 180px Apple touch icon.
+- Corporate and Demo share a cinematic spatial presentation: layered panels,
+  edge lighting, depth shadows and restrained coordinate grids. This is a visual
+  design, not an immersive WebXR session or a new device-permission request.
+- At viewport widths up to 900px, Corporate, Demo and authenticated workspace
+  primary infocards, content images and globe
+  frames use the screen width minus a 2px gutter on each side. Card grids stack
+  into one column. Nested layout wrappers do not add another gutter. Globe
+  infocards and fleet filters fill the map width; camera controls remain above
+  the scrollable popup. Logos, icons, graph nodes and inline controls retain
+  their semantic sizes.
+  Consent banners and evidence drawers follow the same gutters; authenticated
+  workspace navigation switches to its existing mobile drawer through 900px.
+- Home's Core Idea connects selectable maintenance, fuel and aircraft-lease
+  examples through a depth-layered evidence/context/review stage. These are
+  illustrative reasoning paths, not connected live events.
+- Home's 3D Asset View supports actual mesh picking, camera-following numbered
+  hotspots and keyboard-accessible part buttons for airframe/cabin, engines,
+  wings/fuel systems, tail and cockpit/avionics. The popup explains typical
+  agreement families and three review checks, with explicit limitations.
+  Selection highlights the model region; dragging still orbits and Escape
+  closes the popup and restores focus. Contract examples use existing routes.
 - Resources and Intelligence are public routes built from existing workflows,
   demo links and maturity disclosures. Platform remains an alias for Product.
   All public routes share Home's hero, typography, blue/cyan tokens, card,
@@ -181,6 +203,7 @@ In another terminal:
 npm.cmd run test:corporate
 node --test tests/command-centre.test.mjs
 node --test --test-concurrency=1 tests\about-touch.test.mjs tests\globe-touch-controls.test.mjs
+node --test --test-concurrency=1 tests\spatial-surfaces.test.mjs
 ```
 
 The UI tests require the existing Playwright Chromium runtime. They cover all

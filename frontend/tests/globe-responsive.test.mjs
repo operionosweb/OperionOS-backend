@@ -41,6 +41,12 @@ for (const width of [320, 390, 768, 1440]) {
         const fleet = shell.getByRole("dialog", { name: "Explore the fleet", exact: true });
         await fleet.waitFor();
         await assertPanelFits(fleet, shell);
+        if (width <= 900) {
+          for (const element of [shell, fleet]) {
+            const bounds = await element.boundingBox();
+            assert.ok(Math.abs(bounds.x - 2) <= .6 && Math.abs(bounds.x + bounds.width - (width - 2)) <= .6, "Globe and fleet popup have exactly 2px mobile gutters");
+          }
+        }
         assert.equal(await page.locator(".od-dashboard-flight-inspector").count(), 0, "No separate fleet section below globe");
         assert.equal(await fleet.getByLabel("Search fleet", { exact: true }).evaluate((element) => element === document.activeElement), true);
         await fleet.getByLabel("Search fleet", { exact: true }).fill("NO SUCH AIRCRAFT");
@@ -56,7 +62,10 @@ for (const width of [320, 390, 768, 1440]) {
         await card.waitFor();
         await assertPanelFits(card, shell);
         const controls = await shell.locator(".od-map-controls").boundingBox(), cardBox = await card.boundingBox();
-        assert.ok(cardBox.x + cardBox.width <= controls.x + 1, "Aircraft card leaves map controls available");
+        if (width <= 900) {
+          assert.ok(Math.abs(cardBox.x - 2) <= .6 && Math.abs(cardBox.x + cardBox.width - (width - 2)) <= .6, "Aircraft popup fills mobile width with 2px gutters");
+          assert.ok(controls.y + controls.height <= cardBox.y, "Full-width card leaves map controls available above it");
+        } else assert.ok(cardBox.x + cardBox.width <= controls.x + 1, "Aircraft card leaves map controls available");
         await toggle.click();
         await fleet.getByLabel("Search fleet", { exact: true }).press("Escape");
         assert.equal(await toggle.getAttribute("aria-expanded"), "false");

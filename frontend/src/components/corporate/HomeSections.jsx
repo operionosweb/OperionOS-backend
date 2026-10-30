@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowDown, ArrowRight, Check, CloudRain, Fuel, Gauge,
-  Landmark, Plane, Radar, ShieldCheck, TrendingUp, Wind,
+  Landmark, Radar, ShieldCheck, TrendingUp, Wind,
 } from "lucide-react";
 import { Container } from "../ui/Layout";
 import Button from "../ui/Button";
@@ -11,11 +11,10 @@ import { trackEvent } from "../analytics/Analytics";
 import AeroHero from "./AeroHero";
 import CapabilityLayers from "./CapabilityLayers";
 import ExecutiveCockpit from "./ExecutiveCockpit";
+import CoreIdea from "./CoreIdea";
 
 const AVIATION_IMAGE = "https://images.unsplash.com/photo-1540962351504-03099e0a754b?auto=format&fit=crop&w=1800&q=84";
 const VIDEO_SRC = "/videos/operion-contract-intelligence.mp4";
-const CONTRACTS = ["Aircraft leases", "MRO agreements", "Supplier contracts", "Fuel agreements", "Ground handling", "Insurance"];
-const VARIABLES = ["Fuel prices", "Interest rates", "Inflation", "Exchange rates", "Weather", "Geopolitics", "Supplier conditions"];
 const EXTRACTIONS = [
   ["Clause 8.4", "Maintenance reserves", "High confidence"],
   ["Obligation", "Return aircraft airworthy", "Lessee"],
@@ -92,7 +91,7 @@ export default function HomeSections() {
     </AeroHero>
     <CapabilityLayers/>
 
-    <section className="op-story-section op-story-isolation" id="intelligence"><Container><StoryHeading index="01" eyebrow="THE CORE IDEA" title="Contracts don't exist in isolation." copy="Aviation agreements define the rules. Markets, aircraft, suppliers and operational conditions determine when those rules matter. Operion is the intelligence layer between them." /><Reveal className="op-story-bridge"><div className="op-story-bridge-list"><p>CONTRACTS</p>{CONTRACTS.map((item) => <span key={item}>{item}</span>)}</div><div className="op-story-bridge-core"><div><Plane size={24} /><strong>OPERION</strong><small>INTELLIGENCE LAYER</small></div><span className="op-story-flight-path" /></div><div className="op-story-bridge-list is-world"><p>THE WORLD</p>{VARIABLES.map((item) => <span key={item}>{item}</span>)}</div></Reveal></Container></section>
+    <CoreIdea/>
 
     <section className="op-story-section op-story-contract"><Container><StoryHeading index="02" eyebrow="CONTRACT INTELLIGENCE / AVAILABLE NOW" title="First, Operion understands the contract." copy="Operion turns dense aviation agreements into clauses, obligations, deadlines and risks, each linked to source evidence." /><Reveal className="op-story-contract-stage"><div className="op-story-paper"><div className="op-story-paper-head"><span>LEASE AGREEMENT</span><b>PAGE 47 / 184</b></div><h3>8.4 Maintenance &amp; Redelivery</h3><p>The Lessee shall maintain the Aircraft in an airworthy condition and deliver all technical records no later than sixty (60) days prior to the scheduled redelivery date...</p><p>The obligations set out herein survive any operational interruption unless otherwise agreed in writing.</p><span className="op-story-paper-highlight">SOURCE CLAUSE DETECTED</span></div><div className="op-story-transform" aria-hidden="true"><i /><ArrowRight size={22} /></div><div className="op-story-extractions"><div className="op-story-panel-label"><span>STRUCTURED INTELLIGENCE</span><b>4 FINDINGS</b></div>{EXTRACTIONS.map(([type, value, status], index) => <div key={type} className="op-story-extraction"><span>0{index + 1}</span><div><small>{type}</small><strong>{value}</strong></div><em>{status}</em></div>)}</div></Reveal><StoryCta copy="See how Operion works with your contracts." location="home_contract_value" /></Container></section>
 

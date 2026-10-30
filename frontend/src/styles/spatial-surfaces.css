@@ -1,0 +1,158 @@
+/* Shared presentation layer; depth is visual, not an immersive WebXR session. */
+:is(.op-corporate-shell, .od-shell, .op-product-shell) {
+  --op-spatial-line: #b7d4ee;
+  --op-spatial-shadow: 0 24px 54px -32px #06467c66, 0 7px 0 -4px #d1e4f5, inset 0 1px 0 #fff;
+  --op-spatial-panel: linear-gradient(135deg, #fff 20%, #edf6ff 100%);
+}
+.op-corporate-shell :is(.op-story-section, .op-sales-section, .op-about-section, .op-solutions-section, .op-section, .oaero-capabilities, .oaero-cockpit-section, .op-method-steps > section) {
+  background-image: radial-gradient(ellipse at 95% 0, #00aaff0c, transparent 60%), linear-gradient(#0066b306 1px, transparent 1px), linear-gradient(90deg, #0066b306 1px, transparent 1px);
+  background-size: auto, 48px 48px, 48px 48px;
+}
+.op-corporate-shell :is(.oaero-hero, .op-sales-hero, .op-policy-hero, .oaero-simple-hero) {
+  background-image: radial-gradient(ellipse at 85% 50%, #69ceff30, transparent 55%), linear-gradient(135deg, #fff, #eaf3ff);
+}
+.op-corporate-shell :is(.oaero-hero-visual, .oaero-layer, .oaero-sector-card, .op-surface, .op-scenario-card, .op-enterprise-list-panel, .op-scenario-hero-visual, .op-enterprise-hero-visual, .op-scenario-process, .op-enterprise-role-card, .op-solutions-segment, .op-solutions-unified, .op-solutions-ecosystem, .op-story-paper, .op-story-extractions, .op-story-scenario-console, .op-story-signal-panel, .op-story-financial-card, .op-request-form, .op-login-panel),
+.op-corporate-shell :is(.oaero-resource-grid, .op-sales-capability-grid, .op-sales-evolution, .op-about-roadmap, .op-about-principles, .op-about-aviation-grid, .op-security-grid) > *,
+.op-corporate-shell :is(.op-sales-flow article, .op-about-intelligence-path li, .op-story-segment, .op-story-evolution article) {
+  border: 1px solid var(--op-spatial-line);
+  background: var(--op-spatial-panel);
+  box-shadow: var(--op-spatial-shadow);
+}
+.op-corporate-shell :is(.oaero-layer, .oaero-resource-grid article, .op-sales-capability-grid article, .op-about-roadmap article, .op-scenario-card, .op-enterprise-role-card) {
+  border-radius: 18px 6px 18px 6px;
+}
+.op-corporate-shell :is(.op-story-heading, .oaero-section-heading, .op-about-intro) { position: relative; }
+.op-corporate-shell :is(.op-story-eyebrow, .op-about-label, .op-sales-eyebrow, .op-solutions-label) { color: #0055a9; letter-spacing: .12em; }
+.op-corporate-shell :is(.op-about-intelligence-path li, .op-sales-flow article) { border-top: 3px solid #068fe8; }
+.op-corporate-shell :is(.op-story-product-frame, .op-solutions-segment-image, .op-founder-grid img) { box-shadow: var(--op-spatial-shadow); }
+.od-shell :is(.od-card, .od-metric, .od-portfolio, .od-finding-card, .od-evidence, .od-command-overview, .od-dashboard-aviation, .od-intelligence-categories > a, .od-evidence-drawer, .od-popover) {
+  border-color: var(--op-spatial-line);
+  background: var(--op-spatial-panel);
+  box-shadow: var(--op-spatial-shadow);
+}
+.od-shell .od-card-header { background: linear-gradient(100deg, #f8fcff, #eaf5ff); border-bottom-color: #bed6ec; }
+.od-shell .od-dashboard-globe-toolbar { background: linear-gradient(100deg, #0b2947, #103d61); border-bottom-color: #34516e; }
+.od-shell :is(.od-dashboard-globe-panel, .od-aircraft-popup, .od-globe-fleet-popup) { box-shadow: 0 20px 55px -22px #001c5577; }
+.op-product-shell :is(.op-metric-card, .op-intelligence-panel, .op-contract-card, .op-upload-stage, .op-honest-boundary, .op-surface) { border-color: var(--op-spatial-line); background: var(--op-spatial-panel); box-shadow: var(--op-spatial-shadow); }
+.op-consent { border-color: #b7d4ee; border-radius: 16px 6px; background: linear-gradient(135deg, #fff, #edf6ff); box-shadow: 0 24px 54px -22px #06467c55, inset 0 1px #fff; max-height: calc(100svh - 8px); overflow: auto; box-sizing: border-box; }
+.op-consent .op-btn-primary { background: #0066f5; border-color: #0066f5; }
+.op-consent .op-btn-secondary { background: #f3f8ff; border-color: #b7d4ee; color: #174e82; }
+
+.op-corporate-shell .op-core-idea { overflow: hidden; background-color: #eaf3fc; }
+.op-core-controls { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px; }
+.op-core-controls button { min-height: 44px; padding: 10px 18px; border: 1px solid #a9cbea; border-radius: 8px; color: #16466e; background: #f7fbff; font: 650 14px/1.3 var(--op-font-body); cursor: pointer; }
+.op-core-controls button[aria-pressed="true"] { color: #fff; background: #005bc7; border-color: #005bc7; box-shadow: 0 8px 20px -8px #0066f588; }
+.op-core-stage { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, .75fr) minmax(0, 1fr); align-items: center; gap: 28px; margin-block: 36px; perspective: 1200px; }
+.op-core-plane { min-width: 0; min-height: 300px; padding: clamp(20px, 3vw, 36px); border: 1px solid #a9cbea; border-radius: 20px 6px; background: linear-gradient(135deg, #fff, #dceeff); box-shadow: 0 36px 45px -26px #00478b66, 8px 9px 0 -5px #9fbfd9, inset 0 1px #fff; }
+.op-core-source { transform: rotateY(12deg) rotateX(3deg); }
+.op-core-world { transform: rotateY(-12deg) rotateX(3deg); }
+.op-core-coordinate { display: block; margin-bottom: 24px; color: #2b6186; font: 700 11px/1.5 var(--op-font-mono); letter-spacing: .1em; }
+.op-core-plane > svg { color: #0066cf; }
+.op-core-plane h3 { margin: 20px 0 12px; color: #0c2b49; font-size: clamp(23px, 2.5vw, 32px); line-height: 1.15; }
+.op-core-plane > strong { display: block; color: #145681; font-size: 16px; line-height: 1.5; }
+.op-core-plane p { margin-block: 16px 26px; color: #45647c; font-size: 14px; line-height: 1.7; }
+.op-core-edge { display: block; border-top: 1px solid #bed3e5; padding-top: 14px; color: #316282; font: 650 10px/1.5 var(--op-font-mono); letter-spacing: .06em; }
+.op-core-hub { position: relative; min-height: 300px; display: grid; place-content: center; justify-items: center; }
+.op-core-kernel { display: grid; justify-items: center; gap: 9px; padding: 30px 18px; border: 1px solid #99c5ef; border-radius: 26px; background: linear-gradient(145deg, #fff, #bdddff); color: #0056a6; box-shadow: 0 18px 60px -14px #006be277, inset 0 2px 3px #fff; z-index: 1; }
+.op-core-kernel strong { font-size: 20px; letter-spacing: .1em; }
+.op-core-kernel small { font-size: 8px; letter-spacing: .1em; }
+.op-core-orbit { position: absolute; inset: 15% -15%; border: 1px solid #2995df88; border-radius: 50%; transform: rotateX(58deg) rotateZ(-28deg); box-shadow: 0 0 22px #0099ff22; pointer-events: none; }
+.op-core-orbit.is-crossed { transform: rotateX(60deg) rotateZ(52deg); inset: 5% -5%; }
+.op-core-hub > span { position: absolute; bottom: 12px; color: #285d85; font-size: 11px; }
+.op-core-review { display: grid; grid-template-columns: 1fr auto 1fr; gap: 24px; align-items: center; padding: 28px; border: 1px solid #a7c7e4; border-radius: 16px; background: #f8fcff; box-shadow: var(--op-spatial-shadow); }
+.op-core-review > div { min-width: 0; }
+.op-core-review small { color: #1b6298; font: 650 10px/1.5 var(--op-font-mono); letter-spacing: .08em; }
+.op-core-review h3 { margin: 12px 0 0; color: #163b5b; font-size: 22px; line-height: 1.3; }
+.op-core-review p { color: #3a5c77; font-size: 15px; line-height: 1.7; }
+.op-core-review > svg { color: #007bd3; }
+.op-core-note { max-width: 960px; color: #4a6781; font-size: 13px; line-height: 1.65; margin-top: 24px; }
+
+.oaero-aircraft-explorer { position: relative; }
+.oaero-aircraft-hotspots { position: absolute; inset: 0; pointer-events: none; }
+.oaero-aircraft-hotspots button { position: absolute; width: 44px; height: 44px; transform: translate(-50%, -50%); pointer-events: auto; display: grid; place-items: center; padding: 0; border: 1px solid #005bb5; border-radius: 50%; background: #edf8ffed; color: #00509e; box-shadow: 0 0 0 5px #007bff12, 0 6px 18px #004c7b33; font: 750 11px/1 var(--op-font-mono); cursor: pointer; }
+.oaero-aircraft-hotspots button[hidden] { display: none; }
+.oaero-aircraft-hotspots button[aria-pressed="true"] { background: #005bc7; color: #fff; }
+.oaero-aircraft-part-list { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px; border-top: 1px solid #c9def1; background: #f6fbff; }
+.oaero-aircraft-part-list button { display: inline-flex; gap: 7px; align-items: center; min-height: 44px; padding: 8px 10px; border: 1px solid #bbd5ed; border-radius: 8px; background: #fff; color: #18476d; font: 650 11px/1.4 var(--op-font-body); cursor: pointer; }
+.oaero-aircraft-part-list button span { color: #0066bd; }
+.oaero-aircraft-part-list button[aria-pressed="true"] { background: #e1f1ff; border-color: #0066bd; }
+.oaero-part-inspector { position: absolute; z-index: 5; inset: auto 12px 58px; box-sizing: border-box; max-height: 75%; overflow: auto; overscroll-behavior: contain; padding: 18px; border: 1px solid #79aed9; border-radius: 14px; background: #f8fcfff7; color: #244b6c; box-shadow: 0 16px 48px #002a5555; backdrop-filter: blur(14px); }
+.oaero-part-inspector header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.oaero-part-inspector header small { color: #2a6390; font: 700 9px/1.5 var(--op-font-mono); letter-spacing: .08em; }
+.oaero-part-inspector h3 { margin: 7px 0 0; color: #103456; font-size: 22px; line-height: 1.2; }
+.oaero-part-inspector header button { flex-shrink: 0; display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #a3bfd8; border-radius: 8px; background: #fff; color: #234a6d; cursor: pointer; }
+.oaero-part-inspector p, .oaero-part-inspector li { font-size: 13px; line-height: 1.65; }
+.oaero-part-inspector .oaero-part-contracts { color: #0056a6; font-weight: 650; }
+.oaero-part-inspector h4 { font-size: 13px; margin-bottom: 8px; }
+.oaero-part-inspector ul { padding-left: 18px; }
+.oaero-part-inspector .oaero-part-disclosure { font-size: 11px; color: #50718d; border-top: 1px solid #c1d9ec; padding-top: 12px; }
+.oaero-part-inspector a { display: inline-flex; gap: 8px; align-items: center; min-height: 44px; color: #0059b5; font-size: 13px; font-weight: 650; }
+
+@media (max-width: 900px) {
+  /* Layout gutters belong to the outermost container, never each nested module. */
+  .op-corporate-shell .op-container { width: 100%; max-width: none; padding-inline: 2px; }
+  .op-corporate-shell .op-container .op-container { padding-inline: 0; }
+  .op-corporate-shell .op-corporate-header .op-container { padding-inline: 10px; }
+  .op-corporate-shell .oaero-hero-grid { grid-template-columns: minmax(0, 1fr); }
+  .op-corporate-shell .op-about-aviation-grid { border: 0; gap: 12px; }
+  .op-corporate-shell :is(.oaero-layer-grid, .oaero-resource-grid, .oaero-sector-grid, .op-sales-capability-grid, .op-sales-flow, .op-sales-evolution, .op-sales-segment-grid, .op-security-grid, .op-about-roadmap, .op-about-aviation-grid, .op-about-principles, .op-about-intelligence-path, .op-about-story-grid, .op-story-evolution, .op-scenario-grid, .op-enterprise-role-grid, .op-grid-2, .op-grid-3, .op-grid-4) { grid-template-columns: minmax(0, 1fr); }
+  .op-corporate-shell :is(.op-request-layout, .op-login-layout, .op-founder-grid, .op-solutions-segment) { grid-template-columns: minmax(0, 1fr); }
+  .op-corporate-shell .op-founder-grid figure { max-width: none; width: 100%; position: static; }
+  .op-corporate-shell .op-founder-grid img { border-radius: 12px; }
+  .op-corporate-shell :is(.op-sales-hero, .op-policy-hero, .oaero-simple-hero) .op-container { padding-inline: 2px; }
+  .op-corporate-shell :is(.oaero-hero-visual, .op-story-paper, .op-story-extractions, .op-story-scenario-console, .op-solutions-segment, .op-surface, .op-request-form, .op-login-panel) { width: 100%; max-width: none; min-width: 0; margin-inline: 0; box-sizing: border-box; }
+  .op-corporate-shell .oaero-hero-visual { border-inline: 0; }
+  .op-corporate-shell :is(.op-story-product-frame, .op-solutions-segment-image) { width: 100%; margin-inline: 0; }
+  .op-corporate-shell .op-solutions-segment { border-inline: 0; }
+  .op-corporate-shell :is(.op-story-product, .op-story-product-frame) video { width: 100%; }
+  .op-corporate-shell .op-story-contract-stage { gap: 16px; }
+  .op-corporate-shell .op-story-product-frame { width: calc(100% - 4px); margin-inline: 2px; border-radius: 12px; }
+  .op-corporate-shell :is(.op-sales-pipeline, .op-sales-intelligence-chain) svg { display: none; }
+  .op-corporate-shell .op-core-stage { grid-template-columns: minmax(0, 1fr); gap: 16px; perspective: none; margin-block: 24px; }
+  .op-core-plane { min-height: auto; transform: none; border-radius: 14px 5px; padding: 22px; }
+  .op-core-hub { min-height: 220px; overflow: hidden; }
+  .op-core-orbit { inset-inline: 12%; }
+  .op-core-orbit.is-crossed { inset-inline: 20%; }
+  .op-core-review { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 22px; }
+  .op-core-review > svg { transform: rotate(90deg); }
+  .oaero-aircraft { height: 430px; }
+  .oaero-aircraft-controls button { width: 44px; height: 44px; }
+  .oaero-aircraft-caption { bottom: 70px; max-width: calc(100% - 24px); }
+  .oaero-aircraft-part-list { padding: 10px 0; display: grid; grid-template-columns: minmax(0, 1fr); }
+  .oaero-aircraft-part-list button { justify-content: flex-start; padding-inline: 16px; }
+  .oaero-part-inspector { left: 0; right: 0; bottom: 64px; max-height: 72%; padding: 14px; border-radius: 12px; }
+  .od-shell .od-main { padding-inline: 2px; }
+  .op-corporate-shell .od-cockpit-embed { padding: 0; border: 0; border-radius: 0; }
+  .od-shell :is(.od-dashboard-layout, .od-grid-two, .od-metric-grid, .od-metric-grid-five, .od-command-sections, .od-command-indicators, .od-command-records, .od-dashboard-flight-stats, .od-workspace-grid, .od-finding-grid, .od-evidence-explorer, .od-financial-metrics, .od-financial-list, .od-impact-grid, .od-intelligence-layout, .od-intelligence-categories) { grid-template-columns: minmax(0, 1fr); }
+  .od-shell .od-workspace-tabs { margin-inline: 0; width: 100%; max-width: 100%; box-sizing: border-box; }
+  .od-shell .od-dashboard-aviation { padding-inline: 0; border-inline: 0; width: 100%; box-sizing: border-box; border-radius: 0; }
+  .od-shell .od-dashboard-globe-panel { border-inline: 0; border-radius: 12px; }
+  .od-shell .od-dashboard-globe-panel .od-cesium-shell { height: clamp(560px, 80svh, 720px); }
+  .od-shell .od-dashboard-globe-panel .od-map-controls { top: 8px; right: 6px; bottom: auto; display: grid; grid-template-columns: repeat(2, 44px); gap: 4px; }
+  .od-shell .od-globe-fleet-toggle { left: 6px; max-width: calc(100% - 110px); }
+  .od-shell .od-aircraft-popup.od-dashboard-flight-details,
+  .od-shell .od-globe-fleet-popup { left: 0; width: 100%; max-width: none; top: auto; bottom: 2px; max-height: calc(100% - 116px); border-radius: 12px; }
+  .od-shell .od-card { min-width: 0; border-inline: 0; }
+  .od-shell :is(.od-command-overview, .od-investigation, .od-portfolio) { border-inline: 0; }
+  .od-shell .od-command-indicators { border: 0; gap: 12px; background: transparent; }
+  .od-shell .od-command-indicators > button { border: 1px solid #b7d4ee; border-radius: 12px; background: var(--op-spatial-panel); box-shadow: var(--op-spatial-shadow); }
+  .od-shell .od-contract-evidence { padding-inline: 0; border-inline: 0; }
+  .od-shell .od-contract-clause { margin-inline: 0; }
+  .od-shell .od-timeline > article { grid-template-columns: minmax(0, 1fr); }
+  .od-shell .od-timeline-mark { display: none; }
+  .od-shell .od-command-sections .od-card-body { padding-inline: 0; }
+  .od-shell :is(.od-command-records > article, .od-finding-card, .od-portfolio, .od-evidence) { min-width: 0; width: 100%; box-sizing: border-box; }
+  .od-shell .od-card-body:has(> .od-evidence) { padding-inline: 0; }
+  .od-shell .od-dashboard-globe-panel:fullscreen { width: calc(100% - 4px); margin-inline: 2px; }
+  .op-product-shell .op-product-main { padding-inline: 2px; }
+  .op-product-shell :is(.op-metric-grid, .op-dashboard-grid, .op-grid-2, .op-grid-3, .op-flow-shell, .op-aviation-stage) { grid-template-columns: minmax(0, 1fr); }
+  .op-product-shell .op-intelligence-panel { padding-inline: 0; border-inline: 0; }
+  .op-product-shell :is(.op-contract-card, .op-metric-card, .op-globe-stage, .op-flight-sheet, .op-upload-stage, .op-honest-boundary) { width: 100%; max-width: none; min-width: 0; box-sizing: border-box; margin-inline: 0; }
+  .op-product-shell .op-workspace-tabs { margin-inline: 0; max-width: 100%; }
+  .op-consent,
+  .od-shell :is(.od-evidence-drawer, .od-popover),
+  .op-product-shell .op-filter-drawer { left: 2px; right: 2px; width: calc(100% - 4px); max-width: none; box-sizing: border-box; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .op-core-source, .op-core-world { transform: none; }
+}

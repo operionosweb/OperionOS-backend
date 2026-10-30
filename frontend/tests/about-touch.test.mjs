@@ -38,7 +38,7 @@ for (const width of [320, 360, 390, 430, 768, 1024, 1440, 1920]) {
       assert.deepEqual(await photoResponse.body(), await readFile(new URL("../src/assets/brand/founder-meelis-paloson.jpg", import.meta.url)), "Supplied photograph is used unchanged");
       assert.equal(await photo.getAttribute("alt"), "Meelis Paloson, founder of Operion OS, speaking into a microphone at an event.");
       const photoBox = await photo.boundingBox(), biographyBox = await page.locator(".op-founder-story").boundingBox();
-      if (width < 768) assert.ok(photoBox.y + photoBox.height < biographyBox.y + 1, "Mobile photograph is above biography");
+      if (width <= 900) assert.ok(photoBox.y + photoBox.height < biographyBox.y + 1, "Mobile photograph is above biography");
       else assert.ok(photoBox.x + photoBox.width < biographyBox.x, "Desktop photograph sits alongside biography");
       await page.getByText("Read the story behind Operion", { exact: true }).click();
       await page.getByText(/My entrepreneurial journey has also included founding Petinder/).waitFor();
