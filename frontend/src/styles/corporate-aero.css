@@ -82,7 +82,7 @@
   position: fixed;
   top: 76px;
   bottom: 0;
-  z-index: 2;
+  z-index: 70;
   padding: 30px clamp(20px,5vw,60px);
   align-items: flex-start;
   background: rgba(246,249,255,.99);
@@ -96,6 +96,9 @@
 .op-corporate-shell .op-navigation-overlay-actions .op-btn { color: #0050c3; }
 .op-corporate-shell .op-navigation-overlay-actions .op-btn-primary { color: #fff; }
 .op-corporate-shell .op-navigation-overlay-meta { margin-top: 25px; color: #64758c; font-size: 10px; }
+.op-corporate-shell .oaero-menu-close { display: flex; align-items: center; gap: 8px; margin: 0 0 18px auto; padding: 10px 16px; border: 1px solid #d6e2f2; border-radius: 999px; background: #fff; color: #0b1b33; cursor: pointer; }
+.oaero-hero-text .oaero-hero-grid { grid-template-columns: minmax(0,1fr); }
+.oaero-hero-text .oaero-hero-copy > p { max-width: 760px; }
 
 .oaero-hero {
   position: relative;
@@ -209,7 +212,14 @@
 .op-corporate-shell .op-story-inline-cta p,
 .op-corporate-shell .op-story-inline-cta.is-inverse p { color: #546a83; }
 .op-corporate-shell .op-story-action-list span { border: 1px solid #dde7f4; border-radius: 999px; background: #fff; }
-.op-corporate-shell .op-story-product-frame { width: min(1200px,92%); margin: 40px auto 0; overflow: hidden; border: 1px solid #d7e3f2; border-radius: 20px; box-shadow: 0 25px 60px -25px rgba(0,70,145,.2); }
+.op-corporate-shell .op-story-product-frame { width: 100%; max-width: none; margin: 40px 0 0; overflow: hidden; border: 0; border-radius: 0; box-shadow: none; }
+.op-corporate-shell .op-story-product-frame video { width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: contain; background: #071d2c; }
+.oaero-sector-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; margin-top: 36px; }
+.oaero-sector-card { min-width: 0; display: flex; flex-direction: column; padding: 28px; border: 1px solid #dce6f4; border-radius: 18px; background: #fff; }
+.oaero-sector-card > span { color: #0066f5; font: 650 12px/1.5 var(--op-font-mono); }
+.oaero-sector-card h3 { margin: 24px 0 12px; color: #0b1b33; font-size: 22px; line-height: 1.2; }
+.oaero-sector-card p { margin: 0 0 24px; color: #546a83; font-size: 15px; line-height: 1.65; }
+.oaero-sector-link { display: inline-flex; align-items: center; gap: 8px; margin-top: auto; color: #0050c3; font-size: 13px; font-weight: 650; }
 .op-corporate-shell .op-story-segment-core { border-color: #b6d2fb; background: #eaf3ff; color: #0050c3; }
 .op-corporate-shell .op-story-segment { border-color: #dce6f4; border-radius: 14px; background: #fff; padding: 20px; }
 .op-corporate-shell .op-story-final { background: #e8f1ff !important; color: #0b1b33; }
@@ -394,7 +404,10 @@
 }
 @media (max-width: 760px) {
   .op-corporate-shell > .op-shell-main { padding-top: 64px; }
-  .op-corporate-shell .op-topbar { min-height: 64px; }
+  .op-corporate-shell .op-topbar { min-height: 64px; gap: 10px; }
+  .op-corporate-shell .op-topbar > a:first-child { flex: 1 1 0; min-width: 0; max-width: 176px; }
+  .op-corporate-shell .op-mobile-menu-toggle { flex-shrink: 0; }
+  .oaero-sector-grid { grid-template-columns: minmax(0,1fr); gap: 14px; }
   .op-corporate-shell .op-navigation-overlay { top: 64px; }
   .oaero-hero { padding: 28px 0 36px; }
   .oaero-hero-grid { grid-template-columns: minmax(0,1fr); gap: 24px; }

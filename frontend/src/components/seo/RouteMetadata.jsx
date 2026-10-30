@@ -77,9 +77,9 @@ const PUBLIC_PAGES = {
     name: "Legal and Terms of Use",
   },
   "/demo/dashboard": {
-    title: "Operion Demo | Aviation Contract Intelligence Dashboard",
-    description: "Explore a clearly labelled demonstration of Operion's aviation contract intelligence workflows using prepared, non-customer data.",
-    name: "Demo Dashboard",
+    title: "Operion Demo | Aviation Contract Intelligence Command Centre",
+    description: "Explore evidence-linked contract reviews, obligations, illustrative financial exposure and one shared aviation intelligence globe using prepared, non-customer data.",
+    name: "Aviation Contract Intelligence Command Centre",
   },
   "/demo/contracts": {
     title: "Operion Demo Contracts | Aviation Contract Intelligence",

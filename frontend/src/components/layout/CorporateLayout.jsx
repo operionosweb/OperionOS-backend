@@ -98,8 +98,11 @@ export default function CorporateLayout() {
           </div>
         </Container>
 
-        <div id="corporate-navigation-overlay" ref={menuRef} tabIndex={-1} className={`op-navigation-overlay${menuOpen ? " op-navigation-overlay-open" : ""}`} aria-hidden={!menuOpen}>
+      </header>
+
+        <div id="corporate-navigation-overlay" ref={menuRef} tabIndex={-1} role="dialog" aria-modal={menuOpen ? "true" : undefined} aria-label="Corporate menu" className={`op-navigation-overlay${menuOpen ? " op-navigation-overlay-open" : ""}`} aria-hidden={!menuOpen}>
           <div className="op-navigation-overlay-inner">
+            <button type="button" className="oaero-menu-close" onClick={() => setMenuOpen(false)} aria-label="Close menu"><X size={20}/>Close</button>
             <nav aria-label="Expanded corporate navigation">
               {[...NAV_LINKS, ...MORE_LINKS].map((link) => <Link key={link.to} to={link.to} className={location.pathname === link.to ? "op-navigation-active" : ""} aria-current={location.pathname === link.to ? "page" : undefined} onClick={() => setMenuOpen(false)}>{link.label}</Link>)}
             </nav>
@@ -107,7 +110,6 @@ export default function CorporateLayout() {
             <p className="op-navigation-overlay-meta">OPERION OS / AVIATION CONTRACT INTELLIGENCE</p>
           </div>
         </div>
-      </header>
 
       <main className="op-shell-main" id="corporate-main" tabIndex={-1}>
         <Outlet />

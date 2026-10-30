@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   ArrowDown, ArrowRight, Check, CloudRain, Fuel, Gauge,
   Landmark, Plane, Radar, ShieldCheck, TrendingUp, Wind,
@@ -107,7 +108,7 @@ export default function HomeSections() {
 
     <ExecutiveCockpit/>
 
-    <section className="op-story-section op-story-segments"><Container><StoryHeading index="08" eyebrow="AVIATION FIRST" title="Built for the complexity of aviation." copy="One Contract Intelligence foundation, shaped around six aviation operating environments." /><Reveal className="op-story-segment-system"><div className="op-story-segment-core"><Plane size={25} /><strong>OPERION</strong><small>AVIATION INTELLIGENCE</small></div>{SEGMENTS.map(([title, copy], index) => <div key={title} className={`op-story-segment segment-${index + 1}`}><span>0{index + 1}</span><strong>{title}</strong><p>{copy}</p></div>)}</Reveal></Container></section>
+    <section className="op-story-section op-story-segments"><Container><StoryHeading index="08" eyebrow="AVIATION FIRST" title="Built for the complexity of aviation." copy="One evidence-linked foundation. Clear priorities for every aviation team." /><div className="oaero-sector-grid">{SEGMENTS.map(([title, copy], index) => <Reveal key={title} className="oaero-sector-card"><span>0{index + 1}</span><h3>{title}</h3><p>{copy}</p><Link className="oaero-sector-link" to="/solutions">Explore aviation solutions <ArrowRight size={16}/></Link></Reveal>)}</div></Container></section>
 
     <section className="op-story-section op-story-evolution"><Container><StoryHeading index="09" eyebrow="THE OPERION DIFFERENCE" title="One foundation. A more intelligent future." copy="The roadmap is a progression, not a claim that every layer is live today." /><Reveal className="op-story-evolution-rail">{EVOLUTION.map(([status, title, copy], index) => <div key={title}><span>0{index + 1}</span><small>{status}</small><strong>{title}</strong><p>{copy}</p></div>)}</Reveal><Reveal className="op-story-trust"><ShieldCheck size={22} /><p>Current intelligence is evidence-linked and reviewable. Predictive and simulation layers are clearly identified as developing or roadmap capabilities.</p></Reveal></Container></section>
 

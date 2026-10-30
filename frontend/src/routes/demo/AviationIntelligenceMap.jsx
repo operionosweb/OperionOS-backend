@@ -1,6 +1,7 @@
 import React, {
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -14,23 +15,16 @@ import {
   CloudRain,
   FileText,
   Filter,
-  Gauge,
   GitBranch,
   ListChecks,
   Map,
   Plane,
-  Route,
-  Search,
-  Settings2,
   ShieldAlert,
   Sparkles,
-  TrendingDown,
-  TrendingUp,
   UsersRound,
-  Wind,
 } from "lucide-react";
 import { getAviationProvider } from "../../demo/aviationDataProvider";
-import { AVIATION_MAP_STYLES } from "../../demo/aviationMapLayers";
+import FlightOperations from "../../components/aviation/FlightOperations";
 import { useDemoData } from "../../demo/DemoDataProvider";
 import {
   Confidence,
@@ -41,9 +35,6 @@ import {
   SkeletonGrid,
 } from "../../demo/DemoUI";
 
-const CesiumFlightGlobe = lazy(
-  () => import("../../components/demoRedesign/CesiumFlightGlobe"),
-);
 const ContractDependencyGraph = lazy(
   () => import("../../components/demoRedesign/ContractDependencyGraph"),
 );
@@ -51,15 +42,6 @@ const ContractPreviewDrawer = lazy(
   () => import("../../components/demoRedesign/ContractPreviewDrawer"),
 );
 const provider = getAviationProvider();
-const statuses = [
-  "All",
-  "On time",
-  "Delayed",
-  "Diverted",
-  "Weather impact",
-  "Maintenance",
-  "Alerts",
-];
 const tabs = ["Flight info", "Aircraft", "Contracts", "Alerts", "History"];
 const TRACKING_STATE_KEY = "operion.demo.liveTracking";
 
@@ -97,62 +79,6 @@ function openAssistant(
         },
       },
     }),
-  );
-}
-
-function SummaryCards({ summary, onAlerts }) {
-  const cards = [
-    { key: "liveFlights", label: "Live flights", icon: Plane, tone: "green" },
-    {
-      key: "trackedAircraft",
-      label: "Tracked aircraft",
-      icon: Gauge,
-      tone: "violet",
-    },
-    { key: "activeRoutes", label: "Active routes", icon: Route, tone: "blue" },
-    {
-      key: "flightAlerts",
-      label: "Flight alerts",
-      icon: AlertTriangle,
-      tone: "red",
-      onClick: onAlerts,
-    },
-  ];
-  return (
-    <section
-      className="od-flight-summary"
-      aria-label="Deterministic demo aviation overview"
-    >
-      {cards.map(({ key, label, icon: Icon, tone, onClick }) => {
-        const delta = summary.deltas?.[key] || 0;
-        const Tag = onClick ? "button" : "div";
-        return (
-          <Tag
-            type={onClick ? "button" : undefined}
-            onClick={onClick}
-            className={`od-flight-stat od-flight-stat-${tone}`}
-            key={key}
-          >
-            <span className="od-flight-stat-icon">
-              <Icon size={17} />
-            </span>
-            <small>{label}</small>
-            <strong>{summary[key]?.toLocaleString()}</strong>
-            <span className={delta < 0 ? "is-down" : "is-up"}>
-              {delta < 0 ? (
-                <TrendingDown size={12} />
-              ) : (
-                <TrendingUp size={12} />
-              )}{" "}
-              {delta > 0 ? "+" : ""}
-              {delta}% vs yesterday
-            </span>
-            <i aria-hidden="true" />
-          </Tag>
-        );
-      })}
-      <DemoBadge>DEMO AGGREGATES</DemoBadge>
-    </section>
   );
 }
 
@@ -498,26 +424,11 @@ function IntelligenceSummary({
 export default function AviationIntelligenceMap() {
   const navigate = useNavigate();
   const { contracts } = useDemoData();
-  const filterRef = useRef(null);
   const restoredRef = useRef(restoreTrackingState());
   const [aircraft, setAircraft] = useState([]);
-  const [summary, setSummary] = useState({ deltas: {} });
   const [weather, setWeather] = useState({ state: "loading", cells: [] });
   const [selectedId, setSelectedId] = useState(
     restoredRef.current.selectedId || "ac-goper",
-  );
-  const [statusFilter, setStatusFilter] = useState(
-    restoredRef.current.statusFilter || "All",
-  );
-  const [query, setQuery] = useState(restoredRef.current.query || "");
-  const [viewMode, setViewMode] = useState(
-    restoredRef.current.viewMode || "globe",
-  );
-  const [mapStyle, setMapStyle] = useState(
-    restoredRef.current.mapStyle || "standard",
-  );
-  const [weatherEnabled, setWeatherEnabled] = useState(
-    restoredRef.current.weatherEnabled ?? true,
   );
   const [activeTab, setActiveTab] = useState(
     restoredRef.current.activeTab || "Contracts",
@@ -525,23 +436,21 @@ export default function AviationIntelligenceMap() {
   const [selectedContractId, setSelectedContractId] = useState(
     restoredRef.current.selectedContractId || null,
   );
-  const [showSettings, setShowSettings] = useState(false);
   const [graph, setGraph] = useState(null);
   const [relationships, setRelationships] = useState([]);
   const [state, setState] = useState("loading");
+  const syncSelectedAircraft = useCallback((item) => { if (item) setSelectedId(item.id); }, []);
 
   useEffect(() => {
     let active = true;
     Promise.all([
       provider.getAircraft(),
       provider.getWeather(),
-      provider.getSummary(),
     ])
-      .then(([items, weatherData, metrics]) => {
+      .then(([items, weatherData]) => {
         if (active) {
           setAircraft(items);
           setWeather(weatherData);
-          setSummary(metrics);
           setState("ready");
         }
       })
@@ -553,19 +462,6 @@ export default function AviationIntelligenceMap() {
       active = false;
     };
   }, []);
-  const visible = useMemo(
-    () =>
-      aircraft.filter(
-        (item) =>
-          (statusFilter === "All" || statusFilter === "Alerts"
-            ? statusFilter !== "Alerts" || item.alerts.length
-            : item.status === statusFilter) &&
-          `${item.registration} ${item.callsign} ${item.flightNumber} ${item.operator} ${item.origin} ${item.destination}`
-            .toLowerCase()
-            .includes(query.trim().toLowerCase()),
-      ),
-    [aircraft, query, statusFilter],
-  );
   const selected =
     aircraft.find((item) => item.id === selectedId) || aircraft[0] || null;
   const related = useMemo(
@@ -633,24 +529,14 @@ export default function AviationIntelligenceMap() {
       TRACKING_STATE_KEY,
       JSON.stringify({
         selectedId,
-        statusFilter,
-        query,
-        viewMode,
-        mapStyle,
-        weatherEnabled,
         activeTab,
         selectedContractId,
       }),
     );
   }, [
     activeTab,
-    mapStyle,
-    query,
     selectedContractId,
     selectedId,
-    statusFilter,
-    viewMode,
-    weatherEnabled,
   ]);
 
   function openContractWorkspace(section = "overview", evidenceId = null) {
@@ -659,11 +545,6 @@ export default function AviationIntelligenceMap() {
       TRACKING_STATE_KEY,
       JSON.stringify({
         selectedId,
-        statusFilter,
-        query,
-        viewMode,
-        mapStyle,
-        weatherEnabled,
         activeTab,
         selectedContractId,
       }),
@@ -675,8 +556,6 @@ export default function AviationIntelligenceMap() {
 
   function selectLinkedAircraft(aircraftId) {
     setSelectedId(aircraftId);
-    setStatusFilter("All");
-    setQuery("");
     setActiveTab("Contracts");
   }
 
@@ -726,24 +605,16 @@ export default function AviationIntelligenceMap() {
       <PageHeader
         eyebrow="Aviation intelligence map"
         title="Live Tracking"
-        description="Real-time flight operations and contract intelligence"
+        description="Prepared aircraft relationships and evidence-linked contract intelligence. No live flight feed is connected."
         actions={
           <div className="od-live-header-actions">
             <span className="od-live-indicator">
               <i />
-              Live demo
+              Synthetic demo
             </span>
-            <button type="button" onClick={() => filterRef.current?.focus()}>
+            <button type="button" onClick={() => document.querySelector(".od-flight-search input")?.focus()}>
               <Filter size={14} />
               Filters
-            </button>
-            <button
-              type="button"
-              aria-expanded={showSettings}
-              onClick={() => setShowSettings((value) => !value)}
-            >
-              <Settings2 size={14} />
-              Settings
             </button>
             <button type="button" onClick={exportSnapshot}>
               <ArrowDownToLine size={14} />
@@ -762,177 +633,8 @@ export default function AviationIntelligenceMap() {
           </div>
         }
       />
-      {showSettings && (
-        <div className="od-map-settings">
-          <div>
-            <strong>Visualization settings</strong>
-            <span>Provider: {provider.sourceLabel}</span>
-          </div>
-          <label>
-            <input
-              type="checkbox"
-              checked={weatherEnabled}
-              onChange={(event) => setWeatherEnabled(event.target.checked)}
-            />{" "}
-            Show scenario weather
-          </label>
-          <button type="button" onClick={() => setViewMode("globe")}>
-            Reset visualization
-          </button>
-        </div>
-      )}
-      <SummaryCards
-        summary={summary}
-        onAlerts={() => setStatusFilter("Alerts")}
-      />
-      <section className="od-aviation-workspace">
-        <div className="od-map-column">
-          <div className="od-map-toolbar">
-            <label>
-              <Search size={15} />
-              <input
-                ref={filterRef}
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Flight, registration, route..."
-                aria-label="Search aircraft"
-              />
-            </label>
-            <div className="od-view-switch" role="group" aria-label="Map view">
-              <button
-                type="button"
-                className={viewMode === "map" ? "is-active" : ""}
-                onClick={() => setViewMode("map")}
-              >
-                <Map size={14} />
-                Map
-              </button>
-              <button
-                type="button"
-                className={viewMode === "globe" ? "is-active" : ""}
-                onClick={() => setViewMode("globe")}
-              >
-                <Plane size={14} />
-                Globe
-              </button>
-            </div>
-            <button
-              type="button"
-              className={`od-weather-toggle${weatherEnabled ? " is-requested" : ""}`}
-              aria-pressed={weatherEnabled}
-              onClick={() => setWeatherEnabled((value) => !value)}
-            >
-              <CloudRain size={15} />
-              Weather <span>{weatherEnabled ? "ON" : "OFF"}</span>
-            </button>
-          </div>
-          {viewMode === "map" && (
-            <div
-              className="od-map-style-selector"
-              role="group"
-              aria-label="Map style"
-            >
-              {AVIATION_MAP_STYLES.map((style) => (
-                <button
-                  type="button"
-                  key={style.id}
-                  className={mapStyle === style.id ? "is-active" : ""}
-                  aria-pressed={mapStyle === style.id}
-                  onClick={() => setMapStyle(style.id)}
-                >
-                  {style.label}
-                </button>
-              ))}
-            </div>
-          )}
-          <div
-            className="od-status-filter"
-            role="group"
-            aria-label="Flight status filter"
-          >
-            {statuses.map((status) => (
-              <button
-                type="button"
-                key={status}
-                className={
-                  statusFilter === status
-                    ? `is-active status-${status.toLowerCase().replaceAll(" ", "-")}`
-                    : ""
-                }
-                onClick={() => setStatusFilter(status)}
-              >
-                <i />
-                {status}
-              </button>
-            ))}
-          </div>
-          <div className="od-map-stage">
-            <Suspense
-              fallback={
-                <div className="od-globe-loading">
-                  <Plane size={32} />
-                  <strong>Loading aviation map</strong>
-                </div>
-              }
-            >
-              <CesiumFlightGlobe
-                aircraft={visible}
-                selectedId={selectedId}
-                onSelect={setSelectedId}
-                viewMode={viewMode}
-                mapStyle={mapStyle}
-                weather={weather}
-                weatherEnabled={weatherEnabled}
-              />
-            </Suspense>
-            <div className="od-aircraft-roster" aria-label="Trackable aircraft">
-              <span>{visible.length} aircraft</span>
-              {visible.map((item) => (
-                <button
-                  type="button"
-                  key={item.id}
-                  className={item.id === selectedId ? "is-active" : ""}
-                  onClick={() => setSelectedId(item.id)}
-                >
-                  <i
-                    className={`status-${item.status.toLowerCase().replaceAll(" ", "-")}`}
-                  />
-                  <strong>{item.callsign}</strong>
-                  <small>
-                    {item.origin} → {item.destination}
-                  </small>
-                </button>
-              ))}
-            </div>
-            {weatherEnabled && (
-              <div className="od-weather-legend">
-                <header>
-                  <Wind size={14} />
-                  <strong>Scenario weather</strong>
-                  <DemoBadge>NOT LIVE</DemoBadge>
-                </header>
-                <div>
-                  <span>
-                    <i className="cloud" />
-                    Cloud
-                  </span>
-                  <span>
-                    <i className="rain" />
-                    Rain
-                  </span>
-                  <span>
-                    <i className="heavy" />
-                    Heavy rain
-                  </span>
-                  <span>
-                    <i className="storm" />
-                    Storm
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+      <FlightOperations selectedAircraftId={selectedId} onAircraftSelect={syncSelectedAircraft}/>
+      <section className="od-tracking-contract-context" aria-label="Additional aircraft contract workspace">
         {selected && (
           <SelectedAircraftPanel
             aircraft={selected}

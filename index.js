@@ -23,6 +23,7 @@ import documentRoutes from "./routes/documentRoutes.js";
 import analysisRunRoutes from "./routes/analysisRunRoutes.js";
 import aviationRoutes from "./routes/aviationRoutes.js";
 import contactRoutes from "./routes/contactRoutes.js";
+import weatherMapRoutes from "./routes/weatherMapRoutes.js";
 import platformRoutes from "./routes/platformRoutes.js";
 import commercialIntelligenceRoutes from "./routes/commercialIntelligenceRoutes.js";
 
@@ -62,6 +63,7 @@ app.set("trust proxy", 1);
  */
 
 app.use(cors());
+app.use("/api/weather-maps", weatherMapRoutes);
 
 app.use(
   "/api/contact",

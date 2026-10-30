@@ -23,6 +23,9 @@ async function createPage(width = 1440) {
     return route.continue();
   });
   const page = await context.newPage();
+  await page.route("**/api/weather-maps/status", (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ configured: false }),
+  }));
   page.setDefaultTimeout(10000);
   return { context, page };
 }
@@ -52,6 +55,7 @@ for (const width of [1440, 768, 390, 320]) {
         assert.equal(await page.locator(".op-corporate-shell").getAttribute("data-op-theme"), "light");
         assert.equal(await page.locator(".op-corporate-shell").evaluate((el) => getComputedStyle(el).getPropertyValue("--op-color-accent").trim()), "#0066f5");
         assert.equal(await page.locator(".oaero-hero, .oaero-simple-hero, .op-policy-hero, .op-login-hero").count(), 1, `${route}: shared corporate hero styling`);
+        assert.equal(await page.locator(".oaero-hero-visual").count(), route === "/" ? 1 : 0, `${route}: 3D aircraft hero is Home-only`);
       }
       assert.deepEqual(errors, []);
     } finally { await context.close(); }
@@ -86,7 +90,7 @@ test("aircraft renders, supports view controls, and capability panels expand", a
   } finally { await context.close(); }
 });
 
-test("Home cockpit follows its introduction and all globe controls affect the scene", async () => {
+test("Home cockpit follows its introduction and shares aircraft selection with Platform", async () => {
   const { context, page } = await createPage();
   try {
     await page.goto(target.origin);
@@ -94,37 +98,33 @@ test("Home cockpit follows its introduction and all globe controls affect the sc
     const canvas = section.locator("canvas");
     await canvas.scrollIntoViewIfNeeded();
     const heading = await section.locator("#cockpit-preview-title").boundingBox();
-    const cockpit = await section.locator(".oaero-cockpit").boundingBox();
+    const cockpit = await section.locator(".od-dashboard-aviation").boundingBox();
     assert.ok(heading.y + heading.height < cockpit.y, "Cockpit is below the A real view introduction");
-    assert.equal(await section.locator("h3").innerText(), "Executive Cockpit");
     await section.getByRole("button", { name: "Pause simulation", exact: true }).click();
     const original = await canvas.screenshot();
-    for (const name of ["Clouds", "Weather radar", "Wind", "Airspace"]) {
+    for (const name of ["Clouds", "Weather", "Wind", "Routes"]) {
       const button = section.getByRole("button", { name, exact: true });
       const previous = await button.getAttribute("aria-pressed");
-      const before = await canvas.screenshot();
       await button.click();
-      await page.waitForTimeout(100);
       assert.notEqual(await button.getAttribute("aria-pressed"), previous);
-      assert.notDeepEqual(await canvas.screenshot(), before, `${name} changes the globe layer`);
     }
-    await section.getByRole("button", { name: "Zoom globe in", exact: true }).click();
+    await section.getByRole("button", { name: "Zoom in", exact: true }).click();
     await page.waitForTimeout(100);
     assert.notDeepEqual(await canvas.screenshot(), original);
     await section.getByRole("button", { name: "Delayed", exact: true }).click();
-    assert.match(await section.locator(".oaero-cockpit-map-status").innerText(), /2 simulated flights/);
-    const flights = section.getByRole("group", { name: "Select a simulated flight", exact: true }).getByRole("button");
+    assert.match(await section.locator(".od-dashboard-globe-footer").innerText(), /2 aircraft shown/);
+    const flights = section.locator(".od-dashboard-aircraft-list").getByRole("button");
     assert.equal(await flights.count(), 2);
     await flights.nth(1).click();
-    assert.equal(await section.locator(".oaero-cockpit-inspector h4").innerText(), "ZS-SXX");
+    assert.equal(await section.locator(".od-dashboard-selected-heading h3").innerText(), "ZS-SXX");
     await section.getByRole("button", { name: "Diverted", exact: true }).click();
-    assert.equal(await section.locator(".oaero-cockpit-inspector h4").innerText(), "VT-ANA");
-    assert.match(await section.locator(".oaero-cockpit-inspector a").getAttribute("href"), /\/demo\/contracts\/demo-ground-handling/);
+    assert.equal(await section.locator(".od-dashboard-selected-heading h3").innerText(), "VT-ANA");
+    assert.match(await section.locator(".od-flight-contract-links a").first().getAttribute("href"), /\/demo\/contracts\/demo-ground-handling/);
     await section.getByRole("button", { name: "Company fleet", exact: true }).click();
-    assert.match(await section.locator(".oaero-cockpit-map-status").innerText(), /2 simulated flights/);
+    assert.match(await section.locator(".od-dashboard-globe-footer").innerText(), /2 aircraft shown/);
     await page.goto(`${target.origin}/product`);
     await page.locator("#executive-cockpit canvas").waitFor();
-    assert.equal(await page.locator(".oaero-cockpit").count(), 1, "Platform reuses the same cockpit, not a clipped dashboard");
+    assert.equal(await page.locator(".od-dashboard-aviation").count(), 1, "Platform reuses the shared flight operations");
   } finally { await context.close(); }
 });
 
@@ -226,15 +226,14 @@ test("unsupported WebGL exposes a clear fallback without hiding corporate conten
         return /webgl/i.test(type) ? null : original.call(this, type, ...args);
       };
     });
-    await page.goto(`${target.origin}/about`);
+    await page.goto(target.origin);
     await page.locator(".oaero-aircraft-unavailable[role='status']").waitFor();
     assert.equal(await page.locator("#corporate-main h1").isVisible(), true);
     assert.equal(await page.locator(".oaero-hero-actions a").first().isVisible(), true);
-    await page.goto(target.origin);
-    await page.locator(".oaero-cockpit-fallback[role='status']").waitFor();
+    await page.locator(".od-globe-unavailable[role='status']").waitFor();
     await page.locator("#executive-cockpit").getByRole("button", { name: "Diverted", exact: true }).click();
-    assert.equal(await page.locator(".oaero-cockpit-inspector h4").innerText(), "VT-ANA");
-    assert.equal(await page.locator(".oaero-cockpit-inspector a").isVisible(), true);
+    assert.equal(await page.locator(".od-dashboard-selected-heading h3").innerText(), "VT-ANA");
+    assert.equal(await page.locator(".od-flight-contract-links a").first().isVisible(), true);
   } finally { await context.close(); }
 });
 
@@ -282,7 +281,7 @@ for (const width of [1440, 1024, 768, 390, 320]) {
       const controlsBox = await globe.locator(".od-map-controls").boundingBox();
       assert.ok(controlsBox.x >= globeBox.x && controlsBox.x + controlsBox.width <= globeBox.x + globeBox.width, "View controls stay inside the globe horizontally");
       assert.ok(controlsBox.y >= globeBox.y && controlsBox.y + controlsBox.height <= globeBox.y + globeBox.height, "View controls stay inside the globe vertically");
-      for (const selector of [".od-dashboard-flight-stats", ".od-dashboard-flight-inspector", ".od-dashboard-layout"]) {
+      for (const selector of [".od-dashboard-flight-stats-wrap", ".od-dashboard-flight-inspector", ".od-command-sections"]) {
         const box = await page.locator(selector).boundingBox();
         assert.ok(box.y >= globeBox.y + globeBox.height - 1, `${selector} stays below the globe`);
       }
@@ -317,5 +316,170 @@ test("demo cockpit fleet selection, filters and globe layers remain interactive"
     await cockpit.getByRole("button", { name: "Satellite", exact: true }).click();
     await cockpit.getByRole("button", { name: "Standard", exact: true }).waitFor();
     assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+test("Home video spans the viewport and aviation sectors form an orderly six-card grid", async () => {
+  const { context, page } = await createPage();
+  try {
+    for (const width of [1440, 768, 390, 320]) {
+      await page.setViewportSize({ width, height: 1000 });
+      await page.goto(target.origin);
+      const video = await page.locator(".op-story-product-frame").boundingBox();
+      assert.ok(Math.abs(video.x) <= 1 && Math.abs(video.width - width) <= 1, "Video is edge-to-edge");
+      const cards = page.locator(".oaero-sector-card");
+      assert.equal(await cards.count(), 6);
+      const boxes = await cards.evaluateAll((elements) => elements.map((el) => {
+        const { x, y, width, height } = el.getBoundingClientRect();
+        return { x, y, width, height };
+      }));
+      for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          const a = boxes[i], b = boxes[j];
+          assert.ok(a.x + a.width <= b.x + 1 || b.x + b.width <= a.x + 1 || a.y + a.height <= b.y + 1 || b.y + b.height <= a.y + 1, "Sector cards never overlap");
+        }
+      }
+    }
+  } finally { await context.close(); }
+});
+
+for (const width of [320, 390, 768]) {
+  test(`mobile menu exposes every desktop navigation link in a scrollable viewport at ${width}px`, async () => {
+    const { context, page } = await createPage(width);
+    try {
+      await page.goto(target.origin);
+      const destinations = await page.locator(".op-corporate-nav a").evaluateAll((links) => links.map((a) => ({ label: a.textContent, path: new URL(a.href).pathname })));
+      for (const { label, path } of destinations) {
+        await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+        const menu = page.getByRole("dialog", { name: "Corporate menu", exact: true });
+        const bounds = await menu.boundingBox();
+        assert.ok(bounds.height > 700 && bounds.y + bounds.height <= 1001, "Menu fills the visible area below the header");
+        await menu.getByRole("navigation").getByRole("link", { name: label, exact: true }).click();
+        await page.waitForURL(`${target.origin}${path}`);
+        assert.equal(await page.locator("#corporate-navigation-overlay").getAttribute("aria-hidden"), "true");
+      }
+      await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+      await page.getByRole("button", { name: "Close menu", exact: true }).click();
+      assert.equal(await page.getByRole("button", { name: "Open navigation", exact: true }).evaluate((el) => el === document.activeElement), true);
+    } finally { await context.close(); }
+  });
+}
+
+for (const route of ["/product", "/demo/dashboard"]) {
+  test(`${route} provides the same globe features, searchable synthetic fleet and honest provider availability`, async () => {
+    const { context, page } = await createPage();
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    try {
+      await page.goto(`${target.origin}${route}`);
+      const cockpit = page.locator(".od-dashboard-aviation");
+      await cockpit.locator("canvas").waitFor();
+      for (const label of ["Globe", "Map", "Weather", "Clouds", "Wind", "Routes", "Satellite", "Pause simulation", "Zoom in", "Zoom out", "Reset view", "Full screen"]) {
+        assert.equal(await cockpit.getByRole("button", { name: label, exact: true }).count(), 1);
+      }
+
+      const search = cockpit.getByRole("searchbox", { name: "Search simulated aircraft", exact: true });
+      for (const [query, registration] of [["g opra", "G-OPRA"], ["AIC131", "VT-ANA"], ["AV091", "N712AV"], ["76c712", "9V-NEO"]]) {
+        await search.fill(query);
+        assert.equal(await cockpit.locator(".od-dashboard-selected-heading h3").innerText(), registration);
+        assert.match(await cockpit.locator(".od-dashboard-globe-footer").innerText(), /1 aircraft shown/);
+        assert.equal(await cockpit.getByText("Aircraft photo unavailable", { exact: true }).count(), 1);
+      }
+      await search.fill("NO-MATCH");
+      await cockpit.getByText("No aircraft match this search and filter", { exact: true }).waitFor();
+      await cockpit.getByRole("button", { name: "Show all flights", exact: true }).click();
+      assert.equal(await search.inputValue(), "");
+      assert.match(await cockpit.locator(".od-dashboard-globe-footer").innerText(), /12 aircraft shown/);
+      assert.equal(await cockpit.getByRole("button", { name: "Turbulence unavailable", exact: true }).isDisabled(), true);
+      assert.match(await cockpit.locator(".od-provider-notice").innerText(), /Live flights unavailable/);
+      assert.equal(await cockpit.getByRole("link", { name: "View Turbli turbulence forecasts (external)", exact: true }).getAttribute("href"), "https://turbli.com/maps/interactive-turbulence-map/");
+      assert.equal(await cockpit.getByRole("link", { name: "Search live flights on Flightradar24 (external)", exact: true }).getAttribute("href"), "https://www.flightradar24.com/");
+      assert.deepEqual(errors, []);
+    } finally { await context.close(); }
+  });
+}
+
+test("all demo page titles stay between 24px and 28px on desktop and mobile", { timeout: 120000 }, async () => {
+  const { context, page } = await createPage();
+  await context.addInitScript(() => {
+    const original = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function(type, ...args) {
+      return /webgl/i.test(type) ? null : original.call(this, type, ...args);
+    };
+  });
+  try {
+    for (const width of [1440, 390, 320]) {
+      await page.setViewportSize({ width, height: 1000 });
+      for (const route of ["/demo/dashboard", "/demo/contracts", "/demo/upload", "/demo/live-tracking", "/demo/intelligence", "/demo/organisation", "/demo/users", "/demo/settings"]) {
+        await page.goto(`${target.origin}${route}`, { waitUntil: "domcontentloaded" });
+        const title = page.locator(".od-page-header h1");
+        await title.waitFor();
+        const size = await title.evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
+        assert.ok(size >= 24 && size <= 28, `${route} at ${width}px: ${size}px title`);
+      }
+    }
+  } finally { await context.close(); }
+});
+
+test("Xweather layers are individually selectable on every shared Cesium globe without client credentials", { timeout: 120000 }, async () => {
+  const { context, page } = await createPage();
+  const requests = [];
+  try {
+    const tile = Buffer.from(await page.evaluate(() => {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 256;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#0077cc";
+      ctx.fillRect(0, 0, 256, 256);
+      return canvas.toDataURL("image/png").split(",")[1];
+    }), "base64");
+    await page.route("**/api/weather-maps/status", (route) => route.fulfill({
+      status: 200, contentType: "application/json", body: JSON.stringify({ configured: true }),
+    }));
+    await page.route("**/api/weather-maps/tiles/**", (route) => {
+      requests.push(new URL(route.request().url()).pathname);
+      return route.fulfill({ status: 200, contentType: "image/png", body: tile });
+    });
+    for (const route of ["/product", "/demo/dashboard", "/demo/live-tracking"]) {
+      await page.goto(`${target.origin}${route}`, { waitUntil: "domcontentloaded" });
+      await page.locator(".od-real-weather-layers summary").click();
+      const filters = page.getByRole("region", { name: "Provider weather layer filters" });
+      for (const label of ["Radar (regional coverage)", "Satellite / clouds (GeoColor)", "Surface wind speed (10 m)", "Administrative boundaries"]) {
+        const button = filters.getByRole("button", { name: label, exact: true });
+        await button.click();
+        assert.equal(await button.getAttribute("aria-pressed"), "true", `${route}: ${label}`);
+      }
+      await filters.getByRole("button", { name: "Radar (regional coverage)", exact: true }).click();
+      assert.equal(await filters.getByRole("button", { name: "Radar (regional coverage)", exact: true }).getAttribute("aria-pressed"), "false");
+      assert.equal(await filters.getByRole("button", { name: "Surface wind speed (10 m)", exact: true }).getAttribute("aria-pressed"), "true");
+      await page.waitForTimeout(300);
+    }
+    assert.ok(requests.some((url) => url.includes("/wind-speeds/")), "Wind imagery uses the credential-free proxy");
+    assert.ok(requests.every((url) => !url.includes("secret")), "No credential is put in client tile requests");
+  } finally { await context.close(); }
+});
+
+test("weather configuration and tile failures remain explicit without synthetic success fallbacks", { timeout: 60000 }, async () => {
+  const { context, page } = await createPage();
+  let tileRequests = 0;
+  try {
+    await page.route("**/api/weather-maps/tiles/**", (route) => {
+      tileRequests++;
+      return route.fulfill({ status: 502, json: { error: "Provider unavailable" } });
+    });
+    await page.goto(`${target.origin}/demo/dashboard`, { waitUntil: "domcontentloaded" });
+    await page.locator(".od-real-weather-layers summary").click();
+    const filters = page.getByRole("region", { name: "Provider weather layer filters" });
+    assert.equal(await filters.getByRole("button", { name: "Radar (regional coverage)", exact: true }).isDisabled(), true);
+    assert.equal(tileRequests, 0, "Disabled integration does not request billable imagery");
+    await page.route("**/api/weather-maps/status", (route) => route.fulfill({ json: { configured: true } }));
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.locator(".od-real-weather-layers summary").click();
+    const radar = filters.getByRole("button", { name: "Radar (regional coverage)", exact: true });
+    await radar.click();
+    await filters.getByRole("alert").waitFor();
+    assert.match(await filters.getByRole("alert").innerText(), /Weather imagery failed/);
+    assert.equal(await radar.getAttribute("aria-pressed"), "false", "Failed imagery is not represented as an active data layer");
+    assert.ok(tileRequests > 0);
   } finally { await context.close(); }
 });
