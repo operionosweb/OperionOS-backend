@@ -383,16 +383,19 @@ for (const route of ["/product", "/demo/dashboard"]) {
         assert.equal(await cockpit.getByRole("button", { name: label, exact: true }).count(), 1);
       }
 
-      const search = cockpit.getByRole("searchbox", { name: "Search simulated aircraft", exact: true });
+      const search = cockpit.getByRole("searchbox", { name: "Search fleet", exact: true });
       for (const [query, registration] of [["g opra", "G-OPRA"], ["AIC131", "VT-ANA"], ["AV091", "N712AV"], ["76c712", "9V-NEO"]]) {
+        await cockpit.getByRole("button", { name: "Explore the fleet", exact: true }).click();
         await search.fill(query);
+        await cockpit.locator(".od-dashboard-aircraft-list button").first().click();
         assert.equal(await cockpit.locator(".od-dashboard-selected-heading h3").innerText(), registration);
         assert.match(await cockpit.locator(".od-dashboard-globe-footer").innerText(), /1 aircraft shown/);
         assert.equal(await cockpit.getByText("Aircraft photo unavailable", { exact: true }).count(), 1);
       }
+      await cockpit.getByRole("button", { name: "Explore the fleet", exact: true }).click();
       await search.fill("NO-MATCH");
-      await cockpit.getByText("No aircraft match this search and filter", { exact: true }).waitFor();
-      await cockpit.getByRole("button", { name: "Show all flights", exact: true }).click();
+      await cockpit.getByText("No aircraft match these filters.", { exact: true }).waitFor();
+      await search.fill("");
       assert.equal(await search.inputValue(), "");
       assert.match(await cockpit.locator(".od-dashboard-globe-footer").innerText(), /12 aircraft shown/);
       assert.equal(await cockpit.getByRole("button", { name: "Turbulence unavailable", exact: true }).isDisabled(), true);

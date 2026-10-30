@@ -21,6 +21,7 @@ import { LocateFixed, Maximize2, Minimize2, Minus, Plus } from "lucide-react";
 import { getAviationMapStyle } from "../../demo/aviationMapLayers";
 import WeatherMapLayers from "../aviation/WeatherMapLayers";
 import { AIRCRAFT_MODEL_URL, AIRCRAFT_STATUS_COLORS, advanceAircraftPosition, aircraftOrientation, aircraftRoutePositions } from "../aviation/aircraftPose";
+import { attachGlobeTouchControls } from "../aviation/globeTouchControls";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
 export default function CesiumFlightGlobe({ aircraft, visibleIds, selectedId, onSelect, viewMode = "globe", mapStyle = "standard", weather, weatherEnabled = false, cloudsEnabled = weatherEnabled, windEnabled = false, routesEnabled = true, playing = true, spatialObjects = [], visibleLayers = ["aircraft"], onObjectSelect, children }) {
@@ -207,15 +208,17 @@ export default function CesiumFlightGlobe({ aircraft, visibleIds, selectedId, on
     }));
 
     setup("camera", () => viewer.camera.setView({ destination: Cartesian3.fromDegrees(18, 42, 10500000) }));
-    viewer.screenSpaceEventHandler.setInputAction((movement) => {
-      const picked = viewer.scene.pick(movement.position);
+    const selectAtPosition = (position) => {
+      const picked = viewer.scene.pick(position);
       const entityId = typeof picked?.id === "string" ? picked.id : picked?.id?.id;
       if (entityId?.startsWith("spatial-")) objectSelectRef.current?.(spatialObjectsRef.current.find((item) => `spatial-${item.id}` === entityId));
       if (entityId?.startsWith("aircraft-")) onSelectRef.current?.(entityId.replace("aircraft-", ""));
       if (entityId?.startsWith("route-origin-")) onSelectRef.current?.(entityId.replace("route-origin-", ""));
       else if (entityId?.startsWith("route-destination-")) onSelectRef.current?.(entityId.replace("route-destination-", ""));
       else if (entityId?.startsWith("route-")) onSelectRef.current?.(entityId.replace("route-", ""));
-    }, ScreenSpaceEventType.LEFT_CLICK);
+    };
+    viewer.screenSpaceEventHandler.setInputAction((movement) => selectAtPosition(movement.position), ScreenSpaceEventType.LEFT_CLICK);
+    modelListeners.push(attachGlobeTouchControls(viewer, selectAtPosition));
 
     if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       timer = window.setInterval(() => {

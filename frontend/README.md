@@ -54,6 +54,16 @@ remain separate.
   or keyboard focus, and can be pinned open. Mobile retains its navigation drawer
   and bottom navigation. Relationship-node badges and tracking actions use
   bounded, wrapping text rather than overflowing their cards or buttons.
+- Mobile globe navigation uses two fingers to pan/orbit, pinch to zoom and twist
+  to rotate the view. A single tap still selects an aircraft; a single-finger
+  drag cannot move the map. This shared touch controller is also used by the
+  authenticated production globe, without altering mouse controls. Touch gestures
+  on the canvas are reserved for the globe; scroll the page outside the canvas.
+- The About page presents the company story, aviation-first focus, four explicit
+  maturity stages, six principles and the founder's supplied photograph and
+  first-person biography. Predictive risk, simulation and digital twins are not
+  represented as operational forecasts. The supplied logo is also packaged as
+  48px/192px favicons and a 180px Apple touch icon.
 - Resources and Intelligence are public routes built from existing workflows,
   demo links and maturity disclosures. Platform remains an alias for Product.
   All public routes share Home's hero, typography, blue/cyan tokens, card,
@@ -170,6 +180,7 @@ In another terminal:
 ```powershell
 npm.cmd run test:corporate
 node --test tests/command-centre.test.mjs
+node --test --test-concurrency=1 tests\about-touch.test.mjs tests\globe-touch-controls.test.mjs
 ```
 
 The UI tests require the existing Playwright Chromium runtime. They cover all
@@ -187,7 +198,7 @@ the globe, including fullscreen. Clicking an aircraft/route or choosing a fleet
 entry opens the same popup on Home, Platform, Dashboard and tracking. Close with
 the close button or Escape while focused inside the card; map navigation remains
 available alongside it. On small screens the card uses a bounded bottom panel.
-Synthetic fleet totals and fleet selection sit below it;
+Fleet search and selection use a second on-globe popup;
 contract metrics and intelligence cards follow in a separate section. The UI suite
 also checks this layout at 1440, 1024, 768, 390 and 320px and exercises fleet
 selection, filters and globe layers.
@@ -197,3 +208,8 @@ records, review validation/save/cancel and shared spatial controls.
 Corporate checks additionally cover Home-only aircraft, edge-to-edge Home video,
 non-overlapping aviation-sector cards, all desktop links in the mobile menu,
 and shared globe search/provider-availability behavior.
+About checks cover all eight widths, the unchanged founder image, expanded
+biography, maturity disclosures, CTA destinations, metadata and favicon assets.
+Mobile checks dispatch actual two-point browser touch gestures for pan, pinch
+and rotation on all four shared globe routes, single-tap aircraft selection and
+2D map panning. One-finger drags must leave the camera unchanged.

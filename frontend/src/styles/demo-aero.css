@@ -620,6 +620,7 @@
   .od-shell *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
 
+.od-shell .od-globe-instructions { min-width: 0; line-height: 1.5; white-space: normal; }
 .od-shell .od-globe-fleet-toggle {
   position: absolute;
   z-index: 6;

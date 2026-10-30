@@ -63,7 +63,7 @@ const PUBLIC_PAGES = {
   },
   "/about": {
     title: "About Operion | AI Contract Intelligence for Aviation",
-    description: "Learn why Operion is building the intelligence layer between aviation contracts, operational reality, financial exposure, and future risk.",
+    description: "Discover why Operion starts with aviation, meet founder Meelis Paloson, and explore the evidence-linked path from Contract Intelligence to predictive risk.",
     name: "About Operion",
   },
   "/privacy": {

@@ -7,6 +7,7 @@ import LabelStyle from "@cesium/engine/Source/Scene/LabelStyle.js";
 import ScreenSpaceEventType from "@cesium/engine/Source/Core/ScreenSpaceEventType.js";
 import VerticalOrigin from "@cesium/engine/Source/Scene/VerticalOrigin.js";
 import Viewer from "@cesium/widgets/Source/Viewer/Viewer.js";
+import { attachGlobeTouchControls } from "./globeTouchControls";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
 function validPosition(position) {
@@ -38,11 +39,13 @@ export default function ProductionFlightGlobe({ aircraft, selectedId, onSelect }
       });
     });
     viewer.camera.setView({ destination: Cartesian3.fromDegrees(10, 35, 14_000_000), orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 } });
-    viewer.screenSpaceEventHandler.setInputAction(({ position }) => {
+    const selectAtPosition = (position) => {
       const id = viewer.scene.pick(position)?.id?.id;
       if (id?.startsWith("aircraft-")) selectRef.current?.(id.slice(9));
-    }, ScreenSpaceEventType.LEFT_CLICK);
-    return () => { viewer.destroy(); viewerRef.current = null; };
+    };
+    viewer.screenSpaceEventHandler.setInputAction(({ position }) => selectAtPosition(position), ScreenSpaceEventType.LEFT_CLICK);
+    const removeTouchControls = attachGlobeTouchControls(viewer, selectAtPosition);
+    return () => { removeTouchControls(); viewer.destroy(); viewerRef.current = null; };
   }, [aircraft]);
 
   useEffect(() => {

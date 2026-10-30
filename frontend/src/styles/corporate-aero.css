@@ -32,6 +32,56 @@
   padding-bottom: 0;
   isolation: isolate;
 }
+
+.op-corporate-shell .op-about-story-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(20px, 4vw, 64px); margin-top: 24px; }
+.op-corporate-shell .op-about-story-grid p,
+.op-corporate-shell .op-about-thesis p,
+.op-corporate-shell .op-founder-story > p,
+.op-corporate-shell .op-founder-more p,
+.op-corporate-shell .op-about-vision p { font-size: 16px; line-height: 1.75; color: #435b76; }
+.op-corporate-shell .op-about-thesis { max-width: 860px; padding-left: clamp(16px, 3vw, 32px); margin-top: 28px; border-left: 3px solid #0066f5; }
+.op-corporate-shell .op-about-thesis strong { display: block; margin-top: 22px; font-size: clamp(20px, 2.2vw, 28px); line-height: 1.35; color: #0b1b33; }
+.op-corporate-shell .op-about-focus-label,
+.op-corporate-shell .op-about-maturity-note { margin: 28px 0 16px; color: #536b85; font-size: 14px; line-height: 1.6; }
+.op-corporate-shell .op-about-roadmap { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-top: 32px; }
+.op-corporate-shell .op-about-roadmap article { min-width: 0; padding: 22px; border: 1px solid #d5e3f2; border-radius: 16px; background: linear-gradient(145deg, #fff, #f8fbff); box-shadow: 0 14px 40px -24px #0066f540; }
+.op-corporate-shell .op-about-roadmap header { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.op-corporate-shell .op-about-roadmap header > span { color: #0066f5; font-size: 28px; font-weight: 700; }
+.op-corporate-shell .op-about-roadmap small { max-width: 100%; padding: 5px 8px; border: 1px solid #d3e2f5; border-radius: 8px; background: #edf5ff; color: #22578d; font-size: 11px; line-height: 1.35; }
+.op-corporate-shell .op-about-roadmap h3 { margin: 22px 0 12px; font-size: 22px; line-height: 1.2; overflow-wrap: anywhere; }
+.op-corporate-shell .op-about-roadmap p { font-size: 14px; line-height: 1.5; color: #425f7d; }
+.op-corporate-shell .op-about-roadmap ul { padding-left: 18px; margin: 20px 0 0; color: #536a83; font-size: 14px; line-height: 1.65; }
+.op-corporate-shell .op-about-roadmap li + li { margin-top: 9px; }
+.op-corporate-shell .op-founder-grid { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: clamp(24px, 5vw, 80px); align-items: start; }
+.op-corporate-shell .op-founder-grid figure { min-width: 0; margin: 0; position: sticky; top: 104px; }
+.op-corporate-shell .op-founder-grid img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; object-position: center; border: 1px solid #d9e3ed; border-radius: 20px; box-shadow: 0 22px 70px -35px #0b26486b; }
+.op-corporate-shell .op-founder-grid figcaption { margin-top: 15px; color: #536a83; font-size: 13px; line-height: 1.6; }
+.op-corporate-shell .op-founder-story { min-width: 0; }
+.op-corporate-shell .op-founder-story h2 { margin: 12px 0; font-size: clamp(30px, 4vw, 48px); line-height: 1.1; color: #0b1b33; }
+.op-corporate-shell .op-founder-story .op-founder-title { color: #0055c7; font-size: 14px; font-weight: 650; }
+.op-corporate-shell .op-founder-story blockquote { margin: 26px 0; padding: 0 0 0 22px; border-left: 3px solid #0066f5; color: #163d68; font-size: clamp(20px, 2.1vw, 27px); line-height: 1.5; }
+.op-corporate-shell .op-founder-more { padding: 16px 0; margin-top: 12px; border-block: 1px solid #d5e2f0; }
+.op-corporate-shell .op-founder-more summary { padding: 8px 0; color: #0057c9; cursor: pointer; font-size: 15px; font-weight: 650; }
+.op-corporate-shell .op-founder-link { display: inline-flex; align-items: center; gap: 10px; max-width: 100%; min-height: 44px; margin-top: 20px; padding-block: 8px; color: #0057c9; font-size: 15px; line-height: 1.5; }
+.op-corporate-shell .op-founder-link svg { flex-shrink: 0; }
+.op-corporate-shell .op-about-intelligence-path { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 30px 0 0; padding: 0; }
+.op-corporate-shell .op-about-intelligence-path li { min-width: 0; border-top: 2px solid #0066f5; border-radius: 0 0 14px 14px; background: #fff; padding: 24px; }
+.op-corporate-shell .op-about-intelligence-path span { color: #0066f5; font-size: 13px; font-weight: 700; }
+.op-corporate-shell .op-about-intelligence-path h3 { font-size: 22px; line-height: 1.3; margin: 18px 0 12px; }
+.op-corporate-shell .op-about-intelligence-path p { color: #536a83; font-size: 15px; line-height: 1.65; }
+.op-corporate-shell .op-about-vision { margin-top: 28px; max-width: 960px; }
+.op-corporate-shell .op-about-vision ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 32px; padding-left: 20px; color: #244a76; font-size: 17px; line-height: 1.6; }
+.op-corporate-shell .op-about-page :is(.op-btn, summary, h2, h3, figcaption) { overflow-wrap: anywhere; }
+.op-corporate-shell .op-about-page .op-btn { max-width: 100%; white-space: normal; }
+@media (max-width: 1100px) {
+  .op-corporate-shell .op-about-roadmap { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 767px) {
+  .op-corporate-shell :is(.op-about-story-grid, .op-founder-grid, .op-about-intelligence-path, .op-about-vision ul) { grid-template-columns: minmax(0, 1fr); }
+  .op-corporate-shell .op-founder-grid figure { position: static; max-width: 480px; width: 100%; margin-inline: auto; }
+  .op-corporate-shell .op-about-roadmap { grid-template-columns: minmax(0, 1fr); }
+  .op-corporate-shell .op-founder-story blockquote { padding-left: 16px; }
+}
 .op-corporate-shell :where(p, li, dd, input, select, textarea) { font-family: var(--op-font-body); }
 .op-corporate-shell :where(h1,h2,h3,h4) { font-family: var(--op-font-display); }
 .op-corporate-shell :where(a,button,input,select,textarea):focus-visible { outline: 3px solid #0066f5; outline-offset: 4px; }
