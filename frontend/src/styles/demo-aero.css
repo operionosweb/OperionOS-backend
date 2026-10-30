@@ -497,10 +497,10 @@
 .od-shell .od-aircraft-popup.od-dashboard-flight-details {
   position: absolute;
   z-index: 4;
-  top: 12px;
+  top: 64px;
   left: 12px;
   width: min(360px, calc(100% - 88px));
-  max-height: calc(100% - 24px);
+  max-height: calc(100% - 76px);
   box-sizing: border-box;
   padding: 16px;
   overflow: auto;
@@ -618,4 +618,113 @@
   .od-shell *,
   .od-shell *::before,
   .od-shell *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+.od-shell .od-globe-fleet-toggle {
+  position: absolute;
+  z-index: 6;
+  top: 10px;
+  left: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: calc(100% - 76px);
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid #bcd3e8;
+  border-radius: 10px;
+  background: #f7fbff;
+  color: #173c60;
+  font: 700 12px/1.3 var(--op-font-body);
+  white-space: normal;
+  cursor: pointer;
+}
+.od-shell .od-globe-fleet-popup {
+  position: absolute;
+  z-index: 6;
+  top: 64px;
+  left: 10px;
+  width: min(340px, calc(100% - 76px));
+  max-height: calc(100% - 76px);
+  padding: 12px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+  box-shadow: 0 16px 48px #00122847;
+}
+.od-globe-fleet-popup[hidden] { display: none; }
+.od-globe-fleet-popup > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.od-shell .od-globe-fleet-popup h3 { margin: 0; font-size: 15px; line-height: 1.25; }
+.od-fleet-search { display: grid; gap: 5px; margin-block: 10px; min-width: 0; font-size: 12px; color: #385777; }
+.od-fleet-search :is(input, select) { box-sizing: border-box; min-width: 0; width: 100%; min-height: 44px; padding: 8px; border: 1px solid #bbd0e4; border-radius: 7px; background: white; color: #19344f; font: inherit; }
+.od-shell .od-globe-fleet-popup .od-dashboard-aircraft-list { max-height: none; }
+.od-shell .od-globe-fleet-popup .od-dashboard-aircraft-list > button { width: 100%; min-height: 44px; grid-template-columns: 7px minmax(0, 1fr); }
+.od-shell .od-globe-fleet-popup .od-dashboard-aircraft-list > button > span:last-child { grid-column: 2; overflow-wrap: anywhere; }
+.od-shell .od-aircraft-popup :is(.od-dashboard-selected-heading, .od-dashboard-flight-facts > div) { min-width: 0; }
+.od-shell .od-aircraft-popup :is(h3, small, strong, em, summary) { overflow-wrap: anywhere; white-space: normal; }
+.od-shell .od-aircraft-popup .od-badge { max-width: 100%; width: fit-content; box-sizing: border-box; white-space: normal; overflow-wrap: anywhere; }
+
+.od-shell .od-page-header { flex-wrap: wrap; }
+.od-shell button { font-size: 12px; line-height: 1.35; }
+.od-shell .od-page-actions { min-width: 0; max-width: 100%; flex-wrap: wrap; }
+.od-shell .od-live-header-actions { min-width: 0; max-width: 100%; justify-content: flex-start; }
+.od-shell .od-live-header-actions button,
+.od-shell .od-button {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  height: auto;
+  padding: 9px 12px;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.od-shell :is(.od-live-header-actions, .od-button, .od-globe-layer-controls, .od-globe-fleet-toggle) svg { flex-shrink: 0; }
+.od-shell .od-section-heading { gap: 14px; flex-wrap: wrap; }
+.od-shell .od-section-heading > div { min-width: 0; }
+.od-shell .od-graph-node { box-sizing: border-box; padding: 10px; }
+.od-shell .od-graph-node > span { font-size: 9px; line-height: 1.2; }
+.od-shell .od-graph-node > strong { font-size: 12px; line-height: 1.3; }
+.od-shell .od-graph-node > small { font-size: 10px; line-height: 1.3; }
+.od-shell .od-graph-node .od-badge,
+.od-shell .od-graph-node > em {
+  display: block;
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: 100%;
+  font-size: 9px;
+  line-height: 1.3;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.od-sidebar-pin { display: none; }
+@media (min-width: 901px) {
+  .od-shell .od-sidebar { width: 72px; padding: 14px 8px; overflow-x: hidden; transition: width 180ms ease; }
+  .od-shell .od-sidebar.is-expanded { width: 258px; padding-inline: 16px; }
+  .od-shell .od-frame { margin-left: 72px; transition: margin-left 180ms ease; }
+  .od-shell.has-pinned-navigation .od-frame { margin-left: 258px; }
+  .od-shell .od-sidebar-pin { display: grid; flex-shrink: 0; margin: 0 0 12px 9px; }
+  .od-shell .od-sidebar:not(.is-expanded) :is(.od-brand, .od-brand-subtitle, .od-budget-card, .od-sidebar-foot),
+  .od-shell .od-sidebar:not(.is-expanded) > .od-badge { display: none; }
+  .od-shell .od-sidebar:not(.is-expanded) .od-nav-label { height: 18px; padding: 0; font-size: 0; }
+  .od-shell .od-sidebar:not(.is-expanded) .od-nav-link { justify-content: center; padding-inline: 0; }
+  .od-shell .od-sidebar:not(.is-expanded) .od-nav-link > span { display: none; }
+  .od-shell .od-sidebar .od-nav-link svg { flex-shrink: 0; }
+}
+@media (max-width: 680px) {
+  .od-shell .od-dashboard-aviation { padding: 8px; }
+  .od-shell .od-globe-layer-controls { grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); }
+  .od-shell .od-globe-layer-controls button { min-width: 0; white-space: normal; overflow-wrap: anywhere; line-height: 1.3; }
+  .od-shell .od-dashboard-globe-panel .od-cesium-shell { height: clamp(420px, 65svh, 600px); }
+  .od-shell .od-dashboard-globe-panel:fullscreen .od-cesium-shell { height: auto; }
+  .od-shell .od-globe-fleet-popup { left: 8px; width: calc(100% - 72px); }
+  .od-shell .od-aircraft-popup.od-dashboard-flight-details { max-height: min(72%, calc(100% - 76px)); }
+}
+@media (max-width: 400px) {
+  .od-shell .od-aircraft-popup .od-dashboard-flight-facts { grid-template-columns: minmax(0, 1fr); }
+  .od-shell .od-aircraft-popup .od-dashboard-route { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .od-shell .od-aircraft-popup .od-dashboard-route > :is(i, svg) { display: none; }
+  .od-shell .od-aircraft-popup .od-dashboard-route strong { font-size: 15px; }
 }

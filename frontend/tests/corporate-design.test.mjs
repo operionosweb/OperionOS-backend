@@ -115,6 +115,7 @@ test("Home cockpit follows its introduction and shares aircraft selection with P
     await section.getByRole("button", { name: "Delayed", exact: true }).click();
     assert.match(await section.locator(".od-dashboard-globe-footer").innerText(), /2 aircraft shown/);
     const flights = section.locator(".od-dashboard-aircraft-list").getByRole("button");
+    await section.getByRole("button", { name: "Explore the fleet", exact: true }).click();
     assert.equal(await flights.count(), 2);
     await flights.nth(1).click();
     assert.equal(await section.locator(".od-dashboard-selected-heading h3").innerText(), "ZS-SXX");
@@ -282,7 +283,7 @@ for (const width of [1440, 1024, 768, 390, 320]) {
       const controlsBox = await globe.locator(".od-map-controls").boundingBox();
       assert.ok(controlsBox.x >= globeBox.x && controlsBox.x + controlsBox.width <= globeBox.x + globeBox.width, "View controls stay inside the globe horizontally");
       assert.ok(controlsBox.y >= globeBox.y && controlsBox.y + controlsBox.height <= globeBox.y + globeBox.height, "View controls stay inside the globe vertically");
-      for (const selector of [".od-dashboard-flight-stats-wrap", ".od-dashboard-flight-inspector", ".od-command-sections"]) {
+      for (const selector of [".od-dashboard-flight-stats-wrap", ".od-command-sections"]) {
         const box = await page.locator(selector).boundingBox();
         assert.ok(box.y >= globeBox.y + globeBox.height - 1, `${selector} stays below the globe`);
       }
@@ -302,8 +303,11 @@ test("demo cockpit fleet selection, filters and globe layers remain interactive"
     await page.goto(`${target.origin}/demo/dashboard`);
     const cockpit = page.locator(".od-dashboard-aviation");
     await cockpit.locator("canvas").waitFor();
+    await cockpit.locator("canvas").scrollIntoViewIfNeeded();
+    await cockpit.locator('.od-cesium-globe[data-aircraft-models-ready="12"]').waitFor({ timeout: 30000 });
     const initial = await cockpit.locator(".od-dashboard-selected-heading h3").innerText();
-    await cockpit.locator(".od-dashboard-aircraft-list button").nth(1).click();
+    await cockpit.getByRole("button", { name: "Explore the fleet", exact: true }).click();
+    await cockpit.locator(".od-dashboard-aircraft-list button").nth(1).click({ timeout: 30000 });
     assert.notEqual(await cockpit.locator(".od-dashboard-selected-heading h3").innerText(), initial);
     for (const name of ["Company fleet", "Operational watch", "All flights"]) {
       await cockpit.getByRole("button", { name, exact: true }).click();

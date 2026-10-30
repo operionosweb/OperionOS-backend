@@ -165,6 +165,7 @@ for (const width of [1440, 390, 320]) {
         await popup.getByRole("button", { name: "Close aircraft infocard", exact: true }).focus();
         await page.keyboard.press("Escape");
         assert.equal(await globe.getByRole("dialog").count(), 0);
+        await globe.getByRole("button", { name: "Explore the fleet", exact: true }).click();
         await page.locator(".od-dashboard-aircraft-list button").nth(1).click();
         await globe.getByRole("dialog", { name: "G-OPRA", exact: true }).waitFor();
         if (route === "/demo/dashboard" && width === 1440) {
@@ -190,6 +191,7 @@ test("missing 3D asset is reported explicitly without breaking aircraft details"
     await page.goto(`${origin}/demo/dashboard`, { waitUntil: "domcontentloaded" });
     await page.getByText("3D aircraft are unavailable. Select aircraft from the fleet list to inspect their details.", { exact: true }).waitFor();
     assert.equal(await page.locator(".od-cesium-globe").getAttribute("data-aircraft-models-ready"), "0");
+    await page.getByRole("button", { name: "Explore the fleet", exact: true }).click();
     await page.locator(".od-dashboard-aircraft-list button").nth(1).click();
     await page.getByRole("dialog", { name: "G-OPRA", exact: true }).waitFor();
   } finally { await context.close(); }

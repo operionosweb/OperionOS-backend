@@ -1,7 +1,7 @@
 import React, { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  CloudRain, Globe2, Layers, Map, Plane, Radio, Search, ShieldAlert, Wind,
+  CloudRain, Globe2, Layers, Map, Plane, Radio, Search, ShieldAlert, Wind, X,
 } from "lucide-react";
 import { DemoBadge, GlassCard } from "../../demo/DemoUI";
 import { getAviationProvider } from "../../demo/aviationDataProvider";
@@ -12,7 +12,7 @@ import AircraftInfoPopup from "./AircraftInfoPopup";
 const CesiumFlightGlobe = lazy(() => import("../demoRedesign/CesiumFlightGlobe"));
 const aviationProvider = getAviationProvider();
 
-export default function FlightOperations({ onAircraftSelect, selectedAircraftId, contractIds }) {
+export default function FlightOperations({ onAircraftSelect, selectedAircraftId, contractIds, fleetRequest = 0 }) {
   const headingId = useId();
   const [aircraft, setAircraft] = useState([]);
   const [weather, setWeather] = useState(null);
@@ -31,12 +31,29 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
   const [layers, setLayers] = useState(() => GLOBE_LAYERS.filter((layer) => layer.initial).map((layer) => layer.id));
   const [selectedObject, setSelectedObject] = useState(null);
   const [aircraftPopupOpen, setAircraftPopupOpen] = useState(true);
+  const [fleetOpen, setFleetOpen] = useState(false);
   const workspaceRef = useRef(null);
+  const fleetButtonRef = useRef(null);
+  const fleetSearchRef = useRef(null);
+  const fleetId = useId();
+  useEffect(() => { if (fleetOpen) fleetSearchRef.current?.focus({ preventScroll: true }); }, [fleetOpen]);
+  useEffect(() => {
+    if (!fleetRequest || loadState !== "ready") return;
+    setFleetOpen(true);
+    setAircraftPopupOpen(false);
+    workspaceRef.current?.scrollIntoView({ block: "start" });
+  }, [fleetRequest, loadState]);
 
   function selectAircraft(id) {
     setSelectedObject(null);
     setSelectedId(id);
+    setFleetOpen(false);
     setAircraftPopupOpen(true);
+  }
+
+  function closeFleet() {
+    setFleetOpen(false);
+    fleetButtonRef.current?.focus({ preventScroll: true });
   }
 
   function closeAircraftPopup() {
@@ -159,11 +176,32 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
             <button type="button" className={mapStyle === "satellite" ? "is-active" : ""} aria-pressed={mapStyle === "satellite"} onClick={() => setMapStyle((style) => style === "standard" ? "satellite" : "standard")}>{mapStyle === "satellite" ? "Standard" : "Satellite"}</button>
           </div>
         </div>
-        {visibleAircraft.length ? <Suspense fallback={<div className="od-globe-loading"><Plane size={28}/><strong>Loading interactive globe</strong></div>}>
+        <Suspense fallback={<div className="od-globe-loading"><Plane size={28}/><strong>Loading interactive globe</strong></div>}>
           <CesiumFlightGlobe aircraft={aircraft} visibleIds={visibleIds} selectedId={selected?.id} onSelect={selectAircraft} viewMode={viewMode} mapStyle={mapStyle} weather={weather} weatherEnabled={weatherEnabled} cloudsEnabled={cloudsEnabled} windEnabled={windEnabled} routesEnabled={routesEnabled} playing={playing} spatialObjects={objects} visibleLayers={layers} onObjectSelect={(item) => { setAircraftPopupOpen(false); setSelectedObject(item); }}>
+            <button ref={fleetButtonRef} type="button" className="od-globe-fleet-toggle" aria-expanded={fleetOpen} aria-controls={fleetId}
+              onClick={() => { setFleetOpen((open) => !open); setAircraftPopupOpen(false); }}>
+              <Plane size={16}/>Explore the fleet
+            </button>
+            <section id={fleetId} hidden={!fleetOpen} className="od-globe-fleet-popup od-dashboard-fleet-card" role="dialog" aria-modal="false" aria-label="Explore the fleet"
+              onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); closeFleet(); } }}
+              onPointerDown={(event) => event.stopPropagation()} onWheel={(event) => event.stopPropagation()}>
+              <header><h3>Explore the fleet</h3><button type="button" className="od-aircraft-popup-close" onClick={closeFleet} aria-label="Close fleet filters"><X size={18}/></button></header>
+              <label className="od-fleet-search">Search fleet<input ref={fleetSearchRef} autoFocus={fleetOpen} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Registration or callsign"/></label>
+              <label className="od-fleet-search">Flight status<select aria-label="Flight status" value={filter} onChange={(event) => setFilter(event.target.value)}>
+                <option value="all">All flights</option><option value="company">Company fleet</option><option value="watch">Operational watch</option><option value="delayed">Delayed</option><option value="diverted">Diverted</option>
+              </select></label>
+              <div className="od-dashboard-aircraft-list" aria-label="Choose an aircraft">
+                {visibleAircraft.map((item) => <button type="button" className={item.id === selected?.id ? "is-active" : ""} aria-pressed={item.id === selected?.id} onClick={() => selectAircraft(item.id)} key={item.id}>
+                  <span className={`od-aircraft-status${item.status === "On time" ? " is-good" : " is-alert"}`}/>
+                  <span><strong>{item.callsign}</strong><small>{item.origin} → {item.destination}</small></span><span>{item.status}</span>
+                </button>)}
+              </div>
+              {!visibleAircraft.length && <p role="status">No aircraft match these filters.</p>}
+              <button type="button" className="od-button" onClick={resetFilters}>Clear fleet filters</button>
+            </section>
             {selected && aircraftPopupOpen && <AircraftInfoPopup aircraft={selected} contracts={selectedContracts} onClose={closeAircraftPopup}/>}
           </CesiumFlightGlobe>
-        </Suspense> : <div className="od-globe-empty"><Plane size={24}/><strong>No aircraft match this search and filter</strong><button type="button" onClick={resetFilters}>Show all flights</button></div>}
+        </Suspense>
         <footer className="od-dashboard-globe-footer"><span><i/>Prepared synthetic positions</span><span role="status">{visibleAircraft.length} aircraft shown</span><span>Not a live aviation feed or navigation aid</span></footer>
       </section>
       <details className="od-dashboard-flight-stats-wrap"><summary>Prepared fleet summary · not portfolio intelligence</summary><div className="od-dashboard-flight-stats" aria-label="Synthetic aviation summary">
@@ -187,23 +225,6 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
             <div className="od-spatial-object-list">{objects.filter((item) => layers.includes(item.layer)).map((item) => <button type="button" className="od-button" key={item.id} onClick={() => setSelectedObject(item)}>{item.title} · {item.layer}</button>)}</div>
             {!objects.some((item) => layers.includes(item.layer)) && <p>Enable an available spatial layer to browse its records.</p>}
           </details>
-      <aside className="od-dashboard-flight-inspector" aria-label="Aircraft fleet selector">
-        {selected ? <>
-          <div className="od-dashboard-fleet-card">
-          <h3>Explore the fleet</h3>
-          <p>Select an aircraft to inspect its route and flight details.</p>
-          <div className="od-dashboard-aircraft-list" aria-label="Choose an aircraft">
-            {visibleAircraft.map((item) =>
-              <button type="button" className={item.id === selected.id ? "is-active" : ""} aria-pressed={item.id === selected.id} onClick={() => selectAircraft(item.id)} key={item.id}>
-                <span className={`od-aircraft-status${item.status === "On time" ? " is-good" : " is-alert"}`}/>
-                <span><strong>{item.callsign}</strong><small>{item.origin} → {item.destination}</small></span>
-                <span>{item.status}</span>
-              </button>
-            )}
-          </div>
-          </div>
-        </> : <div className="od-data-unavailable"><Plane size={18}/><strong>No aircraft available in this view.</strong></div>}
-      </aside>
     </div>
   </section>;
 }

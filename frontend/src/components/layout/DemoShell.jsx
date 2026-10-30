@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   Bell, Bot, BrainCircuit, CalendarClock, ChevronDown, Clock3, FileCheck2, FileText,
   Gauge, Menu, Radio, Search, Settings, ShieldAlert, Upload, Users, X, Building2,
-  Radar, Scale, ListChecks, CircleDollarSign,
+  Radar, Scale, ListChecks, CircleDollarSign, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import BrandMark from "../ui/BrandMark";
 import OperionAssistant from "../demo/OperionAssistant";
@@ -28,7 +28,7 @@ const adminNav = [
 ];
 
 function NavigationLink({ to, label, icon: Icon, onNavigate, end }) {
-  return <NavLink to={to} end={end} onClick={onNavigate} className={({ isActive }) => `od-nav-link${isActive ? " is-active" : ""}`}><Icon size={17} strokeWidth={1.8} /><span>{label}</span></NavLink>;
+  return <NavLink to={to} end={end} aria-label={label} title={label} onClick={onNavigate} className={({ isActive }) => `od-nav-link${isActive ? " is-active" : ""}`}><Icon size={17} strokeWidth={1.8} /><span>{label}</span></NavLink>;
 }
 
 function DemoShellContent() {
@@ -36,6 +36,10 @@ function DemoShellContent() {
   const { contracts, budget } = useDemoData();
   const [utcTime, setUtcTime] = useState(() => new Date().toISOString().slice(11, 19));
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [navigationPinned, setNavigationPinned] = useState(false);
+  const [navigationHovered, setNavigationHovered] = useState(false);
+  const [navigationFocused, setNavigationFocused] = useState(false);
+  const navigationExpanded = navigationPinned || navigationHovered || navigationFocused;
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -67,9 +71,15 @@ function DemoShellContent() {
     return () => window.clearInterval(timer);
   }, []);
 
-  return <div className="od-shell">
+  return <div className={`od-shell${navigationPinned ? " has-pinned-navigation" : ""}`}>
     <button type="button" className={`od-scrim${drawerOpen ? " is-visible" : ""}`} onClick={() => setDrawerOpen(false)} aria-label="Close navigation" />
-    <aside className={`od-sidebar${drawerOpen ? " is-open" : ""}`}>
+    <aside id="demo-sidebar" className={`od-sidebar${drawerOpen ? " is-open" : ""}${navigationExpanded ? " is-expanded" : ""}`}
+      onPointerEnter={(event) => { if (event.pointerType === "mouse") setNavigationHovered(true); }} onPointerLeave={() => setNavigationHovered(false)}
+      onFocusCapture={() => setNavigationFocused(true)} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setNavigationFocused(false); }}>
+      <button type="button" className="od-icon-button od-sidebar-pin" aria-controls="demo-sidebar" aria-pressed={navigationPinned}
+        aria-label={navigationPinned ? "Unpin navigation" : "Pin navigation open"} onClick={() => setNavigationPinned((pinned) => !pinned)}>
+        {navigationPinned ? <PanelLeftClose size={18}/> : <PanelLeftOpen size={18}/>}
+      </button>
       <div className="od-brand"><BrandMark to="/demo/dashboard" size="sm" /><button type="button" className="od-icon-button od-mobile-only" onClick={() => setDrawerOpen(false)} aria-label="Close navigation"><X size={19}/></button></div>
       <p className="od-brand-subtitle">Aviation Contract Intelligence</p>
       <DemoBadge>DEMO MODE</DemoBadge>

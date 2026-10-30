@@ -44,6 +44,16 @@ remain separate.
   Cesium 1.132 and Widgets 13.0 are pinned together so the viewer, route
   primitives and packaged workers use one Engine 19 renderer, rather than loading
   incompatible nested engines.
+- "Explore the fleet" opens a bounded, scrollable search/status selector directly
+  inside every globe, including fullscreen. Selecting an aircraft replaces it
+  with that aircraft's infocard; Escape closes the fleet panel and restores
+  focus to its toggle. Empty results keep the globe and filters available.
+  At narrow widths aircraft facts stack, layer buttons wrap and panels stay
+  inside the canvas without covering the map controls.
+- Desktop demo navigation collapses to a left icon rail, expands on mouse hover
+  or keyboard focus, and can be pinned open. Mobile retains its navigation drawer
+  and bottom navigation. Relationship-node badges and tracking actions use
+  bounded, wrapping text rather than overflowing their cards or buttons.
 - Resources and Intelligence are public routes built from existing workflows,
   demo links and maturity disclosures. Platform remains an alias for Product.
   All public routes share Home's hero, typography, blue/cyan tokens, card,

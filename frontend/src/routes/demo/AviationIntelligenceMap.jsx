@@ -437,6 +437,7 @@ export default function AviationIntelligenceMap() {
     restoredRef.current.selectedContractId || null,
   );
   const [graph, setGraph] = useState(null);
+  const [fleetRequest, setFleetRequest] = useState(0);
   const [relationships, setRelationships] = useState([]);
   const [state, setState] = useState("loading");
   const syncSelectedAircraft = useCallback((item) => { if (item) setSelectedId(item.id); }, []);
@@ -612,7 +613,7 @@ export default function AviationIntelligenceMap() {
               <i />
               Synthetic demo
             </span>
-            <button type="button" onClick={() => document.querySelector(".od-flight-search input")?.focus()}>
+            <button type="button" onClick={() => setFleetRequest((request) => request + 1)}>
               <Filter size={14} />
               Filters
             </button>
@@ -633,7 +634,7 @@ export default function AviationIntelligenceMap() {
           </div>
         }
       />
-      <FlightOperations selectedAircraftId={selectedId} onAircraftSelect={syncSelectedAircraft}/>
+      <FlightOperations selectedAircraftId={selectedId} onAircraftSelect={syncSelectedAircraft} fleetRequest={fleetRequest}/>
       <details className="od-tracking-contract-context">
         <summary>Additional aircraft contract workspace</summary>
         {selected && (
