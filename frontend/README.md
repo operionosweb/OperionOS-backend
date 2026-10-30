@@ -78,8 +78,14 @@ presentation and mobile-gutter layer, imported last.
   Consent banners and evidence drawers follow the same gutters; authenticated
   workspace navigation switches to its existing mobile drawer through 900px.
 - Home's Core Idea connects selectable maintenance, fuel and aircraft-lease
-  examples through a depth-layered evidence/context/review stage. These are
-  illustrative reasoning paths, not connected live events.
+  examples through paper-like agreement and working-situation cards, rather
+  than a decorative intelligence hub. Desktop mouse movement adds restrained
+  3D tilt; cards settle into view without continuous animation. Mobile and
+  reduced-motion preferences disable the motion.
+- Home's aviation-context section connects five selectable working situations
+  (maintenance/suppliers, fuel, currency, interest rates and weather) to the
+  relevant agreement, mechanism and next review question. These are illustrative
+  reasoning paths, not connected live feeds, verified events or forecasts.
 - Home's 3D Asset View supports actual mesh picking, camera-following numbered
   hotspots and keyboard-accessible part buttons for airframe/cabin, engines,
   wings/fuel systems, tail and cockpit/avionics. The popup explains typical

@@ -1,13 +1,26 @@
 import React, { useState } from "react";
-import { ArrowRight, FileText, Globe2, Layers3 } from "lucide-react";
+import { ArrowRight, FileText, CalendarClock } from "lucide-react";
 import { Container } from "../ui/Layout";
 import Reveal from "../ui/Reveal";
 
 const CONNECTIONS = [
-  { label: "Maintenance", contract: "Engine maintenance agreement", signal: "An engine shop visit is delayed", consequence: "Aircraft availability may be affected", action: "Review turnaround commitments, exclusions, remedies and notice requirements." },
-  { label: "Fuel", contract: "Fuel supply agreement", signal: "The market price of fuel rises", consequence: "Procurement costs may change", action: "Check indexation, price caps, pass-through provisions and the applicable pricing period." },
-  { label: "Aircraft lease", contract: "Aircraft operating lease", signal: "An aircraft approaches redelivery", consequence: "Return condition can create exposure", action: "Inspect maintenance condition, technical records, notice periods and return requirements." },
+  { label: "Maintenance", contract: "Engine maintenance agreement", excerpt: "Turnaround commitments, the agreed workscope and the conditions for returning an engine to service.", signal: "An engine shop visit is delayed", note: "The operations team needs to know whether a spare engine is available and when the aircraft can return to service.", consequence: "Aircraft availability may be affected", action: "Review turnaround commitments, exclusions, remedies and notice requirements." },
+  { label: "Fuel", contract: "Fuel supply agreement", excerpt: "The pricing period, the reference index and any agreed cap or adjustment to the supply price.", signal: "The market price of fuel rises", note: "Procurement needs to understand when a market movement reaches the invoice, rather than assuming every change passes through.", consequence: "Procurement costs may change", action: "Check indexation, price caps, pass-through provisions and the applicable pricing period." },
+  { label: "Aircraft lease", contract: "Aircraft operating lease", excerpt: "The required return condition, the technical records to deliver and the notice due before redelivery.", signal: "An aircraft approaches redelivery", note: "The technical and leasing teams need time to close records gaps, plan inspections and agree any remaining work.", consequence: "Return condition can create exposure", action: "Inspect maintenance condition, technical records, notice periods and return requirements." },
 ];
+
+function tiltCard(event) {
+  if (event.pointerType !== "mouse" || !window.matchMedia("(min-width: 901px) and (prefers-reduced-motion: no-preference)").matches) return;
+  const card = event.currentTarget;
+  const bounds = card.getBoundingClientRect();
+  card.style.setProperty("--card-turn", `${((event.clientX - bounds.left) / bounds.width - .5) * 8}deg`);
+  card.style.setProperty("--card-pitch", `${(.5 - (event.clientY - bounds.top) / bounds.height) * 6}deg`);
+}
+
+function resetCard(event) {
+  event.currentTarget.style.removeProperty("--card-turn");
+  event.currentTarget.style.removeProperty("--card-pitch");
+}
 
 export default function CoreIdea() {
   const [active, setActive] = useState(0);
@@ -15,15 +28,15 @@ export default function CoreIdea() {
   return <section className="op-story-section op-core-idea" id="intelligence" aria-labelledby="core-idea-title"><Container>
     <Reveal className="op-story-heading"><p className="op-story-index">01</p><div>
       <p className="op-story-eyebrow">THE CORE IDEA</p><h2 id="core-idea-title">Contracts don't exist in isolation.</h2>
-      <p className="op-story-copy">An agreement defines the commitments. The world around it changes their significance. Operion connects the two, starting with evidence you can inspect.</p>
+      <p className="op-story-copy">A delayed shop visit. A higher fuel bill. An aircraft due back to its lessor. The contract only tells half the story. What matters is how its terms apply to the situation your team is facing.</p>
     </div></Reveal>
     <div className="op-core-controls" role="group" aria-label="Explore a contractual connection">
       {CONNECTIONS.map((item, index) => <button key={item.label} type="button" aria-pressed={active === index} onClick={() => setActive(index)}>{item.label}</button>)}
     </div>
     <Reveal className="op-core-stage">
-      <article className="op-core-plane op-core-source"><span className="op-core-coordinate">01 / SOURCE</span><FileText size={28}/><h3>The agreement</h3><strong>{connection.contract}</strong><p>Clauses · obligations · deadlines<br/>A traceable source, not a disconnected alert.</p><span className="op-core-edge">CONTRACTUAL EVIDENCE</span></article>
-      <div className="op-core-hub" aria-label="Operion intelligence layer"><div className="op-core-orbit" aria-hidden="true"/><div className="op-core-orbit is-crossed" aria-hidden="true"/><div className="op-core-kernel"><Layers3 size={30}/><strong>OPERION</strong><small>INTELLIGENCE LAYER</small></div><span>Understand → connect → review</span></div>
-      <article className="op-core-plane op-core-world"><span className="op-core-coordinate">02 / CONTEXT</span><Globe2 size={28}/><h3>The changing world</h3><strong>{connection.signal}</strong><p>Assets · markets · operational dependencies<br/>Context that needs validation, not assumed certainty.</p><span className="op-core-edge">RELEVANT CONDITIONS</span></article>
+      <article key={`source-${active}`} className="op-core-plane op-core-source" onPointerMove={tiltCard} onPointerLeave={resetCard}><span className="op-core-coordinate">THE TERMS ON PAPER</span><FileText size={25}/><h3>The agreement</h3><strong>{connection.contract}</strong><p>{connection.excerpt}</p><span className="op-core-edge">Start with the signed terms.</span></article>
+      <div className="op-core-hub"><span>Read together</span><ArrowRight size={30} aria-hidden="true"/><small>with Operion</small></div>
+      <article key={`world-${active}`} className="op-core-plane op-core-world" onPointerMove={tiltCard} onPointerLeave={resetCard}><span className="op-core-coordinate">THE SITUATION IN PRACTICE</span><CalendarClock size={25}/><h3>The working reality</h3><strong>{connection.signal}</strong><p>{connection.note}</p><span className="op-core-edge">Bring the right people and context.</span></article>
     </Reveal>
     <section className="op-core-review" aria-live="polite" aria-label="Illustrative contractual connection">
       <div><small>03 / POTENTIAL CONSEQUENCE</small><h3>{connection.consequence}</h3></div><ArrowRight aria-hidden="true"/>

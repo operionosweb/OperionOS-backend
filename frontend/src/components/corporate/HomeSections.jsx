@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ArrowDown, ArrowRight, Check, CloudRain, Fuel, Gauge,
-  Landmark, Radar, ShieldCheck, TrendingUp, Wind,
+  ArrowDown, ArrowRight, Check, Fuel, Gauge,
+  Landmark, ShieldCheck, Wind,
 } from "lucide-react";
 import { Container } from "../ui/Layout";
 import Button from "../ui/Button";
@@ -12,21 +12,14 @@ import AeroHero from "./AeroHero";
 import CapabilityLayers from "./CapabilityLayers";
 import ExecutiveCockpit from "./ExecutiveCockpit";
 import CoreIdea from "./CoreIdea";
+import AviationContext from "./AviationContext";
 
-const AVIATION_IMAGE = "https://images.unsplash.com/photo-1540962351504-03099e0a754b?auto=format&fit=crop&w=1800&q=84";
 const VIDEO_SRC = "/videos/operion-contract-intelligence.mp4";
 const EXTRACTIONS = [
   ["Clause 8.4", "Maintenance reserves", "High confidence"],
   ["Obligation", "Return aircraft airworthy", "Lessee"],
   ["Deadline", "60 days before redelivery", "Event-based"],
   ["Risk", "Uncapped return exposure", "Review required"],
-];
-const SIGNALS = [
-  [Fuel, "Fuel", "+18%", "Commercial pressure"],
-  [TrendingUp, "FX", "EUR/USD -6%", "Lease cost movement"],
-  [Landmark, "Rates", "+1.2%", "Financing pressure"],
-  [CloudRain, "Weather", "Elevated", "Operational disruption"],
-  [Radar, "Supplier", "Watch", "SLA dependency"],
 ];
 const SCENARIOS = [
   { id: "baseline", label: "Baseline", fuel: 0, fx: 0, supplier: "Stable", exposure: 2.4, delta: 0, action: "Continue monitoring contractual thresholds." },
@@ -95,7 +88,7 @@ export default function HomeSections() {
 
     <section className="op-story-section op-story-contract"><Container><StoryHeading index="02" eyebrow="CONTRACT INTELLIGENCE / AVAILABLE NOW" title="First, Operion understands the contract." copy="Operion turns dense aviation agreements into clauses, obligations, deadlines and risks, each linked to source evidence." /><Reveal className="op-story-contract-stage"><div className="op-story-paper"><div className="op-story-paper-head"><span>LEASE AGREEMENT</span><b>PAGE 47 / 184</b></div><h3>8.4 Maintenance &amp; Redelivery</h3><p>The Lessee shall maintain the Aircraft in an airworthy condition and deliver all technical records no later than sixty (60) days prior to the scheduled redelivery date...</p><p>The obligations set out herein survive any operational interruption unless otherwise agreed in writing.</p><span className="op-story-paper-highlight">SOURCE CLAUSE DETECTED</span></div><div className="op-story-transform" aria-hidden="true"><i /><ArrowRight size={22} /></div><div className="op-story-extractions"><div className="op-story-panel-label"><span>STRUCTURED INTELLIGENCE</span><b>4 FINDINGS</b></div>{EXTRACTIONS.map(([type, value, status], index) => <div key={type} className="op-story-extraction"><span>0{index + 1}</span><div><small>{type}</small><strong>{value}</strong></div><em>{status}</em></div>)}</div></Reveal><StoryCta copy="See how Operion works with your contracts." location="home_contract_value" /></Container></section>
 
-    <section className="op-story-section op-story-aviation"><div className="op-story-aviation-image" style={{ backgroundImage: `url(${AVIATION_IMAGE})` }} aria-hidden="true" /><Container><StoryHeading index="03" eyebrow="AVIATION CONTEXT / DIRECTION" title="Then it understands what surrounds it." copy="Operion is being built to connect contractual intelligence with the aviation variables that can change its significance. External feeds shown here represent product direction." inverse /><Reveal className="op-story-signal-grid">{SIGNALS.map(([Icon, label, value, meaning], index) => <div key={label} className={`op-story-signal signal-${index + 1}`}><Icon size={18} /><span>{label}</span><strong>{value}</strong><small>{meaning}</small></div>)}</Reveal></Container></section>
+    <AviationContext/>
 
     <section className="op-story-section op-story-risk"><Container><StoryHeading index="04" eyebrow="PREDICTIVE RISK / IN DEVELOPMENT" title="See risk before it becomes exposure." copy="Operion's direction goes beyond identifying a clause. It connects the contractual mechanism to changing conditions and shows the potential decision impact without presenting estimates as certainty." /><Reveal className="op-story-exposure-stage"><div className="op-story-exposure-contract"><span>AIRCRAFT LEASE</span><strong>Current exposure</strong><b>€2.40M</b><small>Illustrative contractual baseline</small></div><div className="op-story-exposure-conditions"><p>CHANGING CONDITIONS</p><div><Fuel size={17} /><span>Fuel</span><strong>+18%</strong></div><div><Wind size={17} /><span>EUR / USD</span><strong>-6%</strong></div><div><Landmark size={17} /><span>Interest rates</span><strong>+1.2%</strong></div></div><div className="op-story-exposure-result"><span>POTENTIAL EXPOSURE</span><strong>€3.08M</strong><p>+€680K modelled change</p><small>Illustrative scenario, not a forecast</small></div></Reveal></Container></section>
 

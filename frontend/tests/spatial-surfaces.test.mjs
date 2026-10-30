@@ -18,7 +18,7 @@ const surfaces = [
   ".op-about-roadmap article", ".op-about-principles > div", ".op-about-aviation-grid > div",
   ".op-about-intelligence-path li", ".op-founder-grid img", ".op-surface", ".op-solutions-segment",
   ".op-solutions-segment-image", ".op-security-grid > *", ".op-request-form", ".op-login-panel",
-  ".op-core-plane", ".op-core-review", ".od-card", ".od-metric", ".od-portfolio", ".od-finding-card",
+  ".op-core-plane", ".op-core-review", ".op-context-step", ".od-card", ".od-metric", ".od-portfolio", ".od-finding-card",
   ".od-evidence", ".od-command-overview", ".od-command-indicators > button", ".od-command-records > article",
   ".od-financial-metrics > article", ".od-contract-clause", ".od-dashboard-globe-panel", ".od-cesium-shell",
   ".op-consent", ".op-story-product-frame", ".od-intelligence-categories > a", ".od-contract-row",
@@ -76,11 +76,81 @@ test("the Core Idea is a depth-layered interactive contract-to-context experienc
       ["Fuel", "Fuel supply agreement", "Procurement costs may change"],
       ["Aircraft lease", "Aircraft operating lease", "Return condition can create exposure"],
     ]) {
-      await page.getByRole("button", { name: label, exact: true }).click();
+      await page.getByRole("group", { name: "Explore a contractual connection" }).getByRole("button", { name: label, exact: true }).click();
       assert.equal(await page.locator(".op-core-source > strong").innerText(), contract);
       assert.equal(await page.locator(".op-core-review h3").innerText(), consequence);
-      assert.match(await page.locator(".op-core-note").innerText(), /not live events/);
+      assert.match(await page.locator(".op-core-idea .op-core-note").innerText(), /not live events/);
     }
+  } finally { await context.close(); }
+});
+
+test("aviation context connects each working situation to an agreement and a concrete review", async () => {
+  const { context, page } = await createPage(1440);
+  try {
+    await page.goto(origin);
+    const controls = page.getByRole("group", { name: "Explore aviation conditions" });
+    for (const width of [320, 390, 768, 900, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 1000 });
+      for (const [label, agreement, question] of [
+        ["Maintenance & suppliers", "Engine maintenance & support", "Who needs to act before the next commitment is missed?"],
+        ["Fuel", "Fuel supply agreement", "When would the change reach the invoice?"],
+        ["Currency", "Aircraft lease & payment terms", "Which upcoming payments need a treasury review?"],
+        ["Interest rates", "Aircraft financing agreement", "Does this agreement actually reprice?"],
+        ["Weather", "Ground handling & airport services", "Which obligations still apply during the disruption?"],
+      ]) {
+        const trigger = controls.getByRole("button", { name: label, exact: true });
+        await trigger.focus();
+        await page.keyboard.press("Enter");
+        assert.equal(await trigger.getAttribute("aria-pressed"), "true");
+        assert.equal(await controls.locator('[aria-pressed="true"]').count(), 1);
+        const example = page.locator("#aviation-context-example");
+        assert.equal(await example.locator("article").count(), 3);
+        assert.equal(await example.locator("article").nth(1).locator("h4").innerText(), agreement);
+        assert.equal(await example.locator("article").nth(2).locator("h4").innerText(), question);
+        assert.match(await example.innerText(), /not a live operational event/);
+        assert.match(await page.locator(".op-story-aviation .op-core-note").innerText(), /no live weather, market or supplier data/);
+        for (const card of await example.locator("article").all()) {
+          assert.ok(await card.evaluate((element) => element.scrollWidth <= element.clientWidth + 1));
+          if (width <= 900) {
+            const bounds = await card.boundingBox();
+            assert.ok(Math.abs(bounds.x - 2) <= .6 && Math.abs(bounds.x + bounds.width - (width - 2)) <= .6);
+          }
+        }
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+      }
+    }
+    assert.equal(await page.locator(".op-core-orbit, .op-core-kernel, .op-story-signal-grid").count(), 0, "No decorative AI hub or disconnected mini-card display");
+  } finally { await context.close(); }
+});
+
+test("paper cards have real pointer-driven 3D motion with reduced-motion and mobile safeguards", async () => {
+  const { context, page } = await createPage(1440);
+  try {
+    await page.goto(origin);
+    await page.getByRole("button", { name: "Decline", exact: true }).click();
+    const card = page.locator(".op-core-source");
+    await card.scrollIntoViewIfNeeded();
+    assert.equal(await card.evaluate((element) => getComputedStyle(element).transform), "none");
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.waitForFunction(() => document.querySelector(".op-core-stage").classList.contains("op-reveal-visible"));
+    await card.evaluate(async (element) => { await Promise.all(element.getAnimations().map((animation) => animation.finished)); });
+    const bounds = await card.boundingBox();
+    await page.mouse.move(bounds.x + bounds.width * .8, bounds.y + bounds.height * .25);
+    await page.waitForFunction(() => !!document.querySelector(".op-core-source").style.getPropertyValue("--card-turn"));
+    await card.evaluate(async (element) => { await Promise.all(element.getAnimations().map((animation) => animation.finished)); });
+    assert.match(await card.evaluate((element) => getComputedStyle(element).transform), /^matrix3d/);
+    await page.mouse.move(0, 0);
+    assert.equal(await card.evaluate((element) => element.style.getPropertyValue("--card-turn")), "");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    assert.equal(await card.evaluate((element) => getComputedStyle(element).animationName), "none");
+    await page.waitForFunction(() => getComputedStyle(document.querySelector(".op-core-source")).transform === "none");
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await card.scrollIntoViewIfNeeded();
+    const mobile = await card.boundingBox();
+    await page.mouse.move(mobile.x + mobile.width * .75, mobile.y + mobile.height * .25);
+    assert.equal(await card.evaluate((element) => element.style.getPropertyValue("--card-turn")), "");
+    assert.equal(await card.evaluate((element) => getComputedStyle(element).transform), "none");
   } finally { await context.close(); }
 });
 
