@@ -6,9 +6,9 @@ import IntelligenceStatus from "../components/intelligence/IntelligenceStatus";
 import SpatialStage from "../components/intelligence/spatial/SpatialStage";
 import SpatialTransition from "../components/intelligence/spatial/SpatialTransition";
 import { INTELLIGENCE_AVAILABILITY } from "../lib/contractIntelligenceModel";
+import AeroHero from "../components/corporate/AeroHero";
 
 const SOURCES = ["Contracts", "Operational systems", "Financial systems", "Supplier systems", "External data"];
-const HERO = "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=2000&q=84";
 const INTELLIGENCE = ["Contract Intelligence", "Clause Intelligence", "Obligation Intelligence", "Financial Intelligence", "Risk Intelligence", "Predictive Intelligence"];
 const DECISIONS = ["Insights", "Alerts", "Scenarios", "Recommendations", "Workflows"];
 const PEOPLE = ["CEO", "CFO", "Legal", "Procurement", "Operations", "Technical"];
@@ -124,17 +124,7 @@ export default function Enterprise() {
   const nodes = ["Contracts", "Operations", "Finance", "Suppliers", "Assets", "People", "External events"].map((label) => ({ id: label.toLowerCase().replaceAll(" ", "-"), label, availability: label === "Contracts" ? INTELLIGENCE_AVAILABILITY.AVAILABLE : INTELLIGENCE_AVAILABILITY.PENDING }));
   return (
     <>
-      <section className="op-page-hero op-cinematic-hero" style={{ backgroundImage: `url(${HERO})` }}>
-        <div className="op-page-hero-overlay">
-          <Container>
-            <Reveal>
-              <p className="op-stitch-label">OPERION / ENTERPRISE ARCHITECTURE</p>
-              <h1>The intelligence layer between contracts and decisions.</h1>
-              <p>Connect contractual rules with the operational, financial and external context around them.</p>
-            </Reveal>
-          </Container>
-        </div>
-      </section>
+      <AeroHero eyebrow="ENTERPRISE ARCHITECTURE" title="The intelligence layer between contracts and decisions." copy="Connect contractual rules with the operational, financial and external context around them."/>
       <Section className="op-enterprise-hero">
         <Reveal><p className="op-eyebrow">Enterprise architecture</p><h2 className="op-heading-xl">The intelligence layer between contracts and decisions.</h2><p className="op-body-lg" style={{ marginTop: "var(--op-space-5)", maxWidth: 820 }}>Contracts do not operate in isolation. They interact with operations, suppliers, finance, people, assets, markets and external events. Operion is building an intelligence layer that connects those relationships — starting with understanding the contract and evolving toward predictive risk intelligence, scenario analysis and decision support.</p></Reveal>
         <Reveal className="op-enterprise-hero-visual" style={{ marginTop: "var(--op-space-7)" }}><div><p className="op-kicker" style={{ marginBottom: "var(--op-space-2)" }}>Conceptual enterprise architecture</p><p className="op-body-sm">Select a surrounding context to see how the intended intelligence layer relates to Operion. These are architectural relationships, not claimed live integrations.</p></div><SpatialStage stages={nodes} activeStageId={nodes.find((node) => node.label === activeNode)?.id} onSelectStage={(node) => setActiveNode(node.label)} /><SpatialTransition kind="navigate"><div className="op-enterprise-active-node"><span className="op-kicker">Selected context</span><strong>{activeNode}</strong><IntelligenceStatus state={activeNode === "Contracts" ? INTELLIGENCE_AVAILABILITY.AVAILABLE : INTELLIGENCE_AVAILABILITY.PENDING} /></div></SpatialTransition><Flow items={["Contracts", "Clauses", "Obligations", "Operational context", "Financial context", "External events", "Risk", "Scenarios", "Decisions"]} /></Reveal>

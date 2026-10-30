@@ -1,9 +1,143 @@
-import React from "react";
+import React, { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Bot, CalendarClock, FileText, ListChecks, ShieldCheck, ShieldAlert } from "lucide-react";
+import {
+  Bot, CalendarClock, CloudRain, FileText, Globe2, ListChecks, Map,
+  Plane, Radio, ShieldCheck, ShieldAlert,
+} from "lucide-react";
 import { useDemoData } from "../../demo/DemoDataProvider";
 import { DemoBadge, GlassCard, MetricCard, PageHeader, RiskBadge } from "../../demo/DemoUI";
 import { trackEvent } from "../../components/analytics/Analytics";
+import { getAviationProvider } from "../../demo/aviationDataProvider";
+
+const CesiumFlightGlobe = lazy(() => import("../../components/demoRedesign/CesiumFlightGlobe"));
+const aviationProvider = getAviationProvider();
+
+function DashboardAviation() {
+  const [aircraft, setAircraft] = useState([]);
+  const [weather, setWeather] = useState(null);
+  const [summary, setSummary] = useState(null);
+  const [selectedId, setSelectedId] = useState("ac-goper");
+  const [filter, setFilter] = useState("all");
+  const [viewMode, setViewMode] = useState("globe");
+  const [mapStyle, setMapStyle] = useState("standard");
+  const [weatherEnabled, setWeatherEnabled] = useState(false);
+  const [loadState, setLoadState] = useState("loading");
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      aviationProvider.getAircraft(),
+      aviationProvider.getWeather(),
+      aviationProvider.getSummary(),
+    ]).then(([nextAircraft, nextWeather, nextSummary]) => {
+      if (!active) return;
+      setAircraft(nextAircraft);
+      setWeather(nextWeather);
+      setSummary(nextSummary);
+      setLoadState("ready");
+    }).catch((error) => {
+      console.error("Synthetic aviation provider failed", error);
+      if (active) setLoadState("error");
+    });
+    return () => { active = false; };
+  }, []);
+
+  const visibleAircraft = useMemo(() => aircraft.filter((item) => {
+    if (filter === "company") return item.company;
+    if (filter === "watch") return item.status !== "On time";
+    return true;
+  }), [aircraft, filter]);
+  const selected = visibleAircraft.find((item) => item.id === selectedId) || visibleAircraft[0] || null;
+
+  useEffect(() => {
+    if (selected && selected.id !== selectedId) setSelectedId(selected.id);
+  }, [selected, selectedId]);
+
+  if (loadState === "loading") {
+    return <GlassCard title="Preparing flight operations" eyebrow="Synthetic aviation feed"><p>Loading the demonstration fleet and route data.</p></GlassCard>;
+  }
+  if (loadState === "error" || !summary || !weather) {
+    return <GlassCard title="Flight operations unavailable" eyebrow="Aviation feed error"><p>The synthetic aviation provider could not be loaded. Contract intelligence remains available.</p></GlassCard>;
+  }
+
+  return <section className="od-dashboard-aviation od-aviation-workspace" aria-labelledby="od-dashboard-aviation-title">
+    <header className="od-dashboard-aviation-header">
+      <div>
+        <span className="od-eyebrow">Spatial operations · synthetic positions</span>
+        <h2 id="od-dashboard-aviation-title">Global Fleet Operations</h2>
+        <p>Explore prepared aircraft positions and their contract-linked routes.</p>
+      </div>
+      <div className="od-dashboard-globe-actions">
+        <div className="od-globe-toggle-group" role="group" aria-label="Aircraft filter">
+          {[["all", "All flights"], ["company", "Company fleet"], ["watch", "Operational watch"]].map(([value, label]) =>
+            <button type="button" className={filter === value ? "is-active" : ""} aria-pressed={filter === value} onClick={() => setFilter(value)} key={value}>{label}</button>
+          )}
+        </div>
+        <Link className="od-button" to="/demo/live-tracking">Open tracking <Globe2 size={15}/></Link>
+      </div>
+    </header>
+    <div className="od-dashboard-flight-stats" aria-label="Synthetic aviation summary">
+      {[
+        ["Live flights", summary.liveFlights, Plane],
+        ["Tracked aircraft", summary.trackedAircraft, Radio],
+        ["Active routes", summary.activeRoutes, Globe2],
+        ["Flight alerts", summary.flightAlerts, ShieldAlert],
+      ].map(([label, value, Icon]) =>
+        <div className="od-dashboard-flight-stat" key={label}>
+          <span><Icon size={16}/></span><small>{label}</small><strong>{value.toLocaleString()}</strong>
+        </div>
+      )}
+      <DemoBadge>DEMO AGGREGATES</DemoBadge>
+    </div>
+    <div className="od-dashboard-globe-layout">
+      <section className="od-dashboard-globe-panel" aria-label="Interactive flight globe">
+        <div className="od-dashboard-globe-toolbar">
+          <span className="od-globe-instructions"><i/>Drag to rotate · scroll to zoom · select an aircraft</span>
+          <div className="od-globe-layer-controls">
+            <button type="button" className={viewMode === "globe" ? "is-active" : ""} aria-pressed={viewMode === "globe"} onClick={() => setViewMode("globe")}><Globe2 size={14}/>Globe</button>
+            <button type="button" className={viewMode === "map" ? "is-active" : ""} aria-pressed={viewMode === "map"} onClick={() => setViewMode("map")}><Map size={14}/>Map</button>
+            <button type="button" className={weatherEnabled ? "is-active" : ""} aria-pressed={weatherEnabled} onClick={() => setWeatherEnabled((enabled) => !enabled)}><CloudRain size={14}/>Weather</button>
+            <button type="button" className={mapStyle === "satellite" ? "is-active" : ""} aria-pressed={mapStyle === "satellite"} onClick={() => setMapStyle((style) => style === "standard" ? "satellite" : "standard")}>{mapStyle === "satellite" ? "Standard" : "Satellite"}</button>
+          </div>
+        </div>
+        {visibleAircraft.length ? <Suspense fallback={<div className="od-globe-loading"><Plane size={28}/><strong>Loading interactive globe</strong></div>}>
+          <CesiumFlightGlobe aircraft={visibleAircraft} selectedId={selected?.id} onSelect={setSelectedId} viewMode={viewMode} mapStyle={mapStyle} weather={weather} weatherEnabled={weatherEnabled}/>
+        </Suspense> : <div className="od-globe-empty"><Plane size={24}/><strong>No aircraft match this filter</strong><button type="button" onClick={() => setFilter("all")}>Show all flights</button></div>}
+        <footer className="od-dashboard-globe-footer"><span><i/>Prepared synthetic positions</span><span>{visibleAircraft.length} aircraft shown</span><span>Not a live aviation feed</span></footer>
+      </section>
+      <aside className="od-dashboard-flight-inspector" aria-label="Selected flight details">
+        {selected ? <>
+          <div className="od-dashboard-selected-heading">
+            <span className="od-dashboard-plane-icon"><Plane size={18}/></span>
+            <div><small>Selected aircraft</small><h3>{selected.registration}</h3></div>
+            <DemoBadge tone={selected.status === "On time" ? "success" : "neutral"}>{selected.status}</DemoBadge>
+          </div>
+          <p className="od-dashboard-flight-operator">{selected.operator} · {selected.type}</p>
+          <div className="od-dashboard-route">
+            <span><small>ORIGIN</small><strong>{selected.origin}</strong><em>{selected.departure}</em></span>
+            <i aria-hidden="true"/><Plane size={16}/>
+            <span><small>DESTINATION</small><strong>{selected.destination}</strong><em>{selected.eta}</em></span>
+          </div>
+          <dl className="od-dashboard-flight-facts">
+            <div><dt>Altitude</dt><dd>{selected.altitude.toLocaleString()} m</dd></div>
+            <div><dt>Ground speed</dt><dd>{selected.speed} km/h</dd></div>
+            <div><dt>Heading</dt><dd>{selected.heading}°</dd></div>
+            <div><dt>Flight phase</dt><dd>{selected.phase}</dd></div>
+          </dl>
+          <div className="od-dashboard-aircraft-list" aria-label="Choose an aircraft">
+            {visibleAircraft.slice(0, 5).map((item) =>
+              <button type="button" className={item.id === selected.id ? "is-active" : ""} aria-pressed={item.id === selected.id} onClick={() => setSelectedId(item.id)} key={item.id}>
+                <span className={`od-aircraft-status${item.status === "On time" ? " is-good" : " is-alert"}`}/>
+                <span><strong>{item.callsign}</strong><small>{item.origin} → {item.destination}</small></span>
+                <span>{item.status}</span>
+              </button>
+            )}
+          </div>
+        </> : <div className="od-data-unavailable"><Plane size={18}/><strong>No aircraft available in this view.</strong></div>}
+      </aside>
+    </div>
+  </section>;
+}
 
 export default function DemoDashboard({ headingLevel }) {
   const { primaryContract: contract } = useDemoData();
@@ -11,7 +145,8 @@ export default function DemoDashboard({ headingLevel }) {
   const severity = contract.risks.reduce((result, risk) => ({ ...result, [risk.severity]: (result[risk.severity] || 0) + 1 }), {});
 
   return <div className="od-dashboard-page">
-    <PageHeader eyebrow="Dashboard / contract intelligence" title="Good morning, John" headingLevel={headingLevel} description="Your aviation contract intelligence command centre." actions={<><DemoBadge>DEMO DATA</DemoBadge><Link className="od-button od-button-primary" to={`/demo/contracts/${contract.id}/assistant`}><Bot size={16}/>Ask Operion</Link></>} />
+    <PageHeader eyebrow="Executive command / aviation intelligence" title="Executive Cockpit" headingLevel={headingLevel} description="Global asset operations, contract exposure, and evidence-linked intelligence." actions={<><DemoBadge>DEMO DATA</DemoBadge><Link className="od-button od-button-primary" to={`/demo/contracts/${contract.id}/assistant`}><Bot size={16}/>Ask Operion</Link></>} />
+    <DashboardAviation/>
     <div className="od-dashboard-layout od-dashboard-layout-wide">
       <div className="od-dashboard-center">
         <div className="od-metric-grid od-metric-grid-five">

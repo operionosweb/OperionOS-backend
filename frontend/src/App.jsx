@@ -27,6 +27,8 @@ const Scenarios = lazy(() => import("./routes/Scenarios"));
 const Enterprise = lazy(() => import("./routes/Enterprise"));
 const Solutions = lazy(() => import("./routes/Solutions"));
 const About = lazy(() => import("./routes/About"));
+const Resources = lazy(() => import("./routes/Resources"));
+const Intelligence = lazy(() => import("./routes/Intelligence"));
 const ProductionDashboard = lazy(() => import("./routes/ProductionDashboard"));
 const ProductionContracts = lazy(() => import("./routes/ProductionContracts"));
 const ProductionUpload = lazy(() => import("./routes/ProductionUpload"));
@@ -88,6 +90,8 @@ export default function App() {
               <Route path="/request-demo" element={<RequestDemo />} />
               <Route path="/contact" element={<Navigate to="/request-demo" replace />} />
               <Route path="/about" element={<About />} />
+              <Route path="/resources" element={<Resources />} />
+              <Route path="/intelligence" element={<Intelligence />} />
               <Route path="/privacy" element={<PrivacyPage />} />
               <Route path="/legal" element={<LegalPage />} />
               <Route path="/login" element={<Login />} />

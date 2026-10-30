@@ -2,8 +2,8 @@ import React from "react";
 import Button from "../components/ui/Button";
 import Reveal from "../components/ui/Reveal";
 import { Container } from "../components/ui/Layout";
+import AeroHero from "../components/corporate/AeroHero";
 
-const HERO = "https://images.unsplash.com/photo-1556388158-158ea5ccacbd?auto=format&fit=crop&w=2000&q=84";
 const CONTRACT_CONNECTIONS = [
   "Operations", "Suppliers", "Aircraft", "Maintenance", "Financing", "Fuel",
   "Currencies", "Interest rates", "Weather", "Geopolitical events", "Financial exposure",
@@ -34,7 +34,7 @@ function AboutSection({ label, title, copy, children, dark = false, className = 
 
 export default function About() {
   return <main className="op-about-page">
-    <section className="op-about-hero op-cinematic-hero" style={{ backgroundImage: `url(${HERO})` }}><div className="op-about-hero-overlay"><Container><Reveal className="op-about-hero-content"><p className="op-about-label">ABOUT OPERION</p><h1>Building the intelligence layer for aviation contracts.</h1><p>Operion transforms complex aviation contracts into actionable intelligence, helping organisations understand obligations, identify risk, quantify exposure and make better decisions.</p><div className="op-about-actions"><Button to="/request-demo" variant="primary">Request a Demo</Button><Button to="/product" variant="secondary">Explore the Platform</Button></div></Reveal></Container></div></section>
+    <AeroHero eyebrow="ABOUT OPERION" title="Building the intelligence layer for aviation contracts." copy="Operion transforms complex aviation contracts into actionable intelligence, helping organisations understand obligations, identify risk, quantify exposure and make better decisions."/>
 
     <AboutSection label="WHY OPERION EXISTS" title="Contracts contain the operating reality of aviation." copy="Aviation organisations depend on thousands of contractual relationships. Inside them sit financial commitments, operational obligations, deadlines, liabilities and dependencies. Traditional contract management can tell teams where documents are. Operion is being built to understand what those contracts mean, and eventually what happens when the world around them changes." className="op-about-story" />
 

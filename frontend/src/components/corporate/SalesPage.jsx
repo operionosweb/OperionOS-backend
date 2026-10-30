@@ -4,26 +4,10 @@ import { Container } from "../ui/Layout";
 import Button from "../ui/Button";
 import Reveal from "../ui/Reveal";
 import { trackEvent } from "../analytics/Analytics";
+import AeroHero from "./AeroHero";
 
-export function SalesHero({ eyebrow, title, copy, children, image, imageAlt }) {
-  return (
-    <section className="op-sales-hero op-cinematic-hero" style={image ? { backgroundImage: `linear-gradient(90deg, rgba(4, 22, 37, .94) 0%, rgba(4, 29, 45, .78) 52%, rgba(4, 28, 43, .28) 100%), url(${image})` } : undefined}>
-      <Container>
-        <div className="op-sales-hero-grid">
-          <Reveal className="op-sales-hero-copy">
-            <p className="op-sales-label">{eyebrow}</p>
-            <h1>{title}</h1>
-            <p>{copy}</p>
-            <div className="op-sales-actions">
-              <Button to="/request-demo" onClick={() => trackEvent("request_demo_click", { location: eyebrow.toLowerCase().replaceAll(" ", "_") })}>Request a Private Demo <ArrowRight size={16} /></Button>
-              {children}
-            </div>
-          </Reveal>
-          {imageAlt && <span className="op-visually-hidden">{imageAlt}</span>}
-        </div>
-      </Container>
-    </section>
-  );
+export function SalesHero({ eyebrow, title, copy, children }) {
+  return <AeroHero eyebrow={eyebrow} title={title} copy={copy}>{children}</AeroHero>;
 }
 
 export function SalesSection({ eyebrow, title, copy, children, dark = false, className = "" }) {

@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import {
-  Bell, Bot, BrainCircuit, CalendarClock, ChevronDown, FileCheck2, FileText,
-  Gauge, Menu, Search, Settings, ShieldAlert, Upload, Users, X, Building2,
+  Bell, Bot, BrainCircuit, CalendarClock, ChevronDown, Clock3, FileCheck2, FileText,
+  Gauge, Menu, Radio, Search, Settings, ShieldAlert, Upload, Users, X, Building2,
   Radar, Scale, ListChecks, CircleDollarSign,
 } from "lucide-react";
 import BrandMark from "../ui/BrandMark";
@@ -34,6 +34,7 @@ function NavigationLink({ to, label, icon: Icon, onNavigate, end }) {
 function DemoShellContent() {
   const location = useLocation();
   const { contracts, budget } = useDemoData();
+  const [utcTime, setUtcTime] = useState(() => new Date().toISOString().slice(11, 19));
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -60,6 +61,10 @@ function DemoShellContent() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  useEffect(() => {
+    const timer = window.setInterval(() => setUtcTime(new Date().toISOString().slice(11, 19)), 1000);
+    return () => window.clearInterval(timer);
   }, []);
 
   return <div className="od-shell">
@@ -88,6 +93,11 @@ function DemoShellContent() {
       <header className="od-topbar">
         <button type="button" className="od-icon-button od-mobile-only" onClick={() => setDrawerOpen(true)} aria-label="Open navigation"><Menu size={20}/></button>
         <button type="button" className="od-search-trigger" onClick={() => setPaletteOpen(true)}><Search size={16}/><span>Search contracts, clauses, obligations, risks...</span><kbd>Ctrl K</kbd></button>
+        <div className="od-system-status" aria-label="Synthetic demonstration telemetry">
+          <span><i className="od-system-dot" />SYNTHETIC FEED</span>
+          <span><Clock3 size={14} />{utcTime} UTC</span>
+          <span><Radio size={14} />DEMO ENVIRONMENT</span>
+        </div>
         <div className="od-top-actions">
           <button type="button" className="od-icon-button" onClick={() => setNotificationsOpen((open) => !open)} aria-label="Demo notifications"><Bell size={18}/><i>3</i></button>
           <Link to={`${workspaceBase}/assistant`} className="od-ask-button"><Bot size={16}/>Ask Operion</Link>

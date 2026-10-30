@@ -8,33 +8,25 @@ import { openAnalyticsPreferences, trackEvent } from "../analytics/Analytics";
 
 const NAV_LINKS = [
   { to: "/product", label: "Platform" },
-  { to: "/#intelligence", label: "Intelligence" },
+  { to: "/intelligence", label: "Intelligence" },
   { to: "/aviation", label: "Aviation" },
+  { to: "/solutions", label: "Solutions" },
+  { to: "/resources", label: "Resources" },
+  { to: "/about", label: "About us" },
+];
+const MORE_LINKS = [
+  { to: "/how-it-works", label: "How it works" },
   { to: "/scenarios", label: "Scenarios" },
-  { to: "/about", label: "Resources" },
+  { to: "/enterprise", label: "Enterprise" },
+  { to: "/security", label: "Security" },
 ];
 
 export default function CorporateLayout() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [heroVisible, setHeroVisible] = useState(true);
   const menuButtonRef = React.useRef(null);
   const menuRef = React.useRef(null);
   const location = useLocation();
   const isHome = location.pathname === "/";
-
-  useEffect(() => {
-    const hero = document.querySelector(".op-cinematic-hero");
-    if (!hero) {
-      setHeroVisible(false);
-      return undefined;
-    }
-
-    const observer = new IntersectionObserver(([entry]) => {
-      setHeroVisible(entry.isIntersecting && entry.boundingClientRect.top <= 80);
-    }, { rootMargin: "-80px 0px 0px 0px", threshold: [0, 0.01] });
-    observer.observe(hero);
-    return () => observer.disconnect();
-  }, [location.pathname]);
 
   useEffect(() => {
     menuRef.current?.toggleAttribute("inert", !menuOpen);
@@ -68,7 +60,8 @@ export default function CorporateLayout() {
   useEffect(() => setMenuOpen(false), [location.pathname]);
 
   return (
-    <div className={`op-shell op-corporate-shell${isHome ? " op-home-shell" : ""}${heroVisible ? " op-hero-active" : " op-content-active"}${menuOpen ? " op-menu-active" : ""}`} data-op-theme="light">
+    <div className={`op-shell op-corporate-shell op-content-active${isHome ? " op-home-shell" : ""}${menuOpen ? " op-menu-active" : ""}`} data-op-theme="light">
+      <a className="oaero-skip-link" href="#corporate-main">Skip to content</a>
       <header className="op-shell-header op-corporate-header">
         <Container>
           <div className="op-topbar">
@@ -76,7 +69,7 @@ export default function CorporateLayout() {
 
             <nav className="op-nav op-corporate-nav" aria-label="Corporate navigation">
               {NAV_LINKS.map((link) => (
-                <Link key={link.to} to={link.to} className="op-nav-link" onClick={() => link.event && trackEvent(link.event, { location: "navigation" })}>
+                <Link key={link.to} to={link.to} className={`op-nav-link${location.pathname === link.to ? " is-active" : ""}`} aria-current={location.pathname === link.to ? "page" : undefined}>
                   {link.label}
                 </Link>
               ))}
@@ -89,6 +82,7 @@ export default function CorporateLayout() {
                 Request Demo
               </Button>
             </div>
+            <Link to="/request-demo" className="op-btn op-btn-primary oaero-mobile-demo" onClick={() => trackEvent("request_demo_click", { location: "mobile_header" })}>Book Demo</Link>
 
             <button
               type="button"
@@ -107,7 +101,7 @@ export default function CorporateLayout() {
         <div id="corporate-navigation-overlay" ref={menuRef} tabIndex={-1} className={`op-navigation-overlay${menuOpen ? " op-navigation-overlay-open" : ""}`} aria-hidden={!menuOpen}>
           <div className="op-navigation-overlay-inner">
             <nav aria-label="Expanded corporate navigation">
-              {NAV_LINKS.map((link) => <Link key={link.to} to={link.to} className={location.pathname === link.to ? "op-navigation-active" : ""} onClick={() => { setMenuOpen(false); if (link.event) trackEvent(link.event, { location: "mobile_navigation" }); }}>{link.label}</Link>)}
+              {[...NAV_LINKS, ...MORE_LINKS].map((link) => <Link key={link.to} to={link.to} className={location.pathname === link.to ? "op-navigation-active" : ""} aria-current={location.pathname === link.to ? "page" : undefined} onClick={() => setMenuOpen(false)}>{link.label}</Link>)}
             </nav>
             <div className="op-navigation-overlay-actions"><Button to="/request-demo" variant="primary" onClick={() => trackEvent("request_demo_click", { location: "mobile_navigation" })}>Request Demo <span aria-hidden="true">↗</span></Button><Button to="/demo" variant="secondary" onClick={() => trackEvent("demo_access_click", { location: "mobile_navigation" })}>Access Demo</Button><Button to="/login" variant="quiet" onClick={() => trackEvent("login_click", { location: "mobile_navigation" })}>Login</Button></div>
             <p className="op-navigation-overlay-meta">OPERION OS / AVIATION CONTRACT INTELLIGENCE</p>
@@ -115,7 +109,7 @@ export default function CorporateLayout() {
         </div>
       </header>
 
-      <main className="op-shell-main">
+      <main className="op-shell-main" id="corporate-main" tabIndex={-1}>
         <Outlet />
       </main>
 
@@ -125,5 +119,57 @@ export default function CorporateLayout() {
 }
 
 function CorporateFooter() {
-  return <footer className="op-corporate-footer"><Container><div className="op-corporate-footer-lead"><div><p className="op-corporate-footer-label">OPERION / CONTRACT INTELLIGENCE</p><h2>Intelligence for the complexity of aviation.</h2><p>Connect the relationships that matter across contracts, obligations, operations and decisions.</p></div><div className="op-corporate-footer-cta"><Button to="/aviation" variant="primary">Explore Aviation <span aria-hidden="true">↗</span></Button><Button to="/request-demo" variant="secondary" onClick={() => trackEvent("contact_click", { location: "footer" })}>Talk to Operion</Button></div></div><div className="op-corporate-footer-grid"><div><strong className="op-corporate-footer-wordmark">OPERION</strong><p>Contract Intelligence for Aviation.</p><a href="mailto:info@operionos.com">info@operionos.com</a></div><div><h3>Explore</h3><Link to="/product">Product</Link><Link to="/aviation">Aviation</Link><Link to="/how-it-works">How It Works</Link><Link to="/security">Security</Link></div><div><h3>Company</h3><Link to="/about">About</Link><Link to="/request-demo">Contact</Link><Link to="/privacy">Privacy</Link><Link to="/legal">Legal / Terms</Link></div><div><h3>Access</h3><Link to="/login" onClick={() => trackEvent("login_click", { location: "footer" })}>Login</Link><Link to="/demo" onClick={() => trackEvent("demo_access_click", { location: "footer" })}>Access Demo</Link><Link to="/request-demo">Request private access</Link></div></div><div className="op-corporate-footer-utility"><span>© {new Date().getFullYear()} Operion. Aviation contract intelligence.</span><button type="button" className="op-footer-privacy-button" onClick={openAnalyticsPreferences}>Analytics preferences</button></div></Container></footer>;
+  return (
+    <footer className="op-corporate-footer">
+      <Container>
+        <div className="op-corporate-footer-lead">
+          <div>
+            <p className="op-corporate-footer-label">OPERION / CONTRACT INTELLIGENCE</p>
+            <h2>Intelligence for the complexity of aviation.</h2>
+            <p>Connect the relationships that matter across contracts, obligations, operations and decisions.</p>
+          </div>
+          <div className="op-corporate-footer-cta">
+            <Button to="/aviation" variant="primary">Explore Aviation <span aria-hidden="true">↗</span></Button>
+            <Button to="/request-demo" variant="secondary" onClick={() => trackEvent("contact_click", { location: "footer" })}>Talk to Operion</Button>
+          </div>
+        </div>
+        <div className="op-corporate-footer-grid">
+          <div>
+            <strong className="op-corporate-footer-wordmark">OPERION</strong>
+            <p>Contract Intelligence for Aviation.</p>
+            <a href="mailto:info@operionos.com">info@operionos.com</a>
+          </div>
+          <div>
+            <h3>Explore</h3>
+            <Link to="/product">Platform</Link>
+            <Link to="/intelligence">Intelligence</Link>
+            <Link to="/aviation">Aviation</Link>
+            <Link to="/how-it-works">How It Works</Link>
+            <Link to="/solutions">Solutions</Link>
+            <Link to="/scenarios">Scenarios</Link>
+            <Link to="/enterprise">Enterprise</Link>
+            <Link to="/security">Security</Link>
+          </div>
+          <div>
+            <h3>Company</h3>
+            <Link to="/about">About</Link>
+            <Link to="/resources">Resources</Link>
+            <Link to="/request-demo">Contact</Link>
+            <Link to="/privacy">Privacy</Link>
+            <Link to="/legal">Legal / Terms</Link>
+          </div>
+          <div>
+            <h3>Access</h3>
+            <Link to="/login" onClick={() => trackEvent("login_click", { location: "footer" })}>Login</Link>
+            <Link to="/demo" onClick={() => trackEvent("demo_access_click", { location: "footer" })}>Access Demo</Link>
+            <Link to="/request-demo">Request private access</Link>
+          </div>
+        </div>
+        <div className="op-corporate-footer-utility">
+          <span>© {new Date().getFullYear()} Operion. Aviation contract intelligence.</span>
+          <button type="button" className="op-footer-privacy-button" onClick={openAnalyticsPreferences}>Analytics preferences</button>
+        </div>
+      </Container>
+    </footer>
+  );
 }

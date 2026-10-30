@@ -16,6 +16,16 @@ const PUBLIC_PAGES = {
     description: "Explore how Operion structures aviation contracts into searchable clauses, obligations, deadlines, risks, relationships, evidence, and decision support.",
     name: "Product",
   },
+  "/resources": {
+    title: "Operion Resources | Workflows, Demonstrations and Governance",
+    description: "Explore Operion's existing contract intelligence workflows, prepared aviation demonstrations, scenarios, security and governance information.",
+    name: "Resources",
+  },
+  "/intelligence": {
+    title: "Operion Intelligence | Evidence-Linked Aviation Contract Review",
+    description: "Explore Operion Contract Intelligence and the clearly identified development roadmap for aviation context, predictive risk and scenario simulation.",
+    name: "Intelligence",
+  },
   "/solutions": {
     title: "Operion Solutions | Contract Intelligence for Aviation",
     description: "See how Operion supports airlines, aircraft lessors, MRO providers, ground handlers, airports, suppliers, and aviation advisers with contract intelligence.",

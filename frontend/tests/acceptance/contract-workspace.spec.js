@@ -1,6 +1,8 @@
-import { expect, test } from "@playwright/test";
+import { assertAcceptanceExecutionAllowed } from "./safety.mjs";
 
-import { apiRequest, readAcceptanceState } from "./fixture-support.mjs";
+assertAcceptanceExecutionAllowed();
+const { expect, test } = await import("@playwright/test");
+const { apiRequest, readAcceptanceState } = await import("./fixture-support.mjs");
 
 let state;
 const diagnostics = new WeakMap();

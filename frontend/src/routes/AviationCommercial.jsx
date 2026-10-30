@@ -3,7 +3,6 @@ import { Check, Plane } from "lucide-react";
 import { SalesCta, SalesFlow, SalesHero, SalesSection } from "../components/corporate/SalesPage";
 import Reveal from "../components/ui/Reveal";
 
-const AVIATION_IMAGE = "https://images.unsplash.com/photo-1570710891163-6d3b5c47248b?auto=format&fit=crop&w=1800&q=84";
 const SEGMENTS = [
   ["Airlines", ["Aircraft leases", "Engine and maintenance agreements", "Supplier and airport contracts", "Ground handling", "Operational services"]],
   ["Aircraft Leasing Companies", ["Lease agreements", "Maintenance obligations", "Return conditions", "Payment obligations", "Technical requirements"]],
@@ -17,7 +16,7 @@ const LEASE_SCENARIO = ["Maintenance return clause", "Aircraft return obligation
 
 export default function AviationCommercial() {
   return <main className="op-sales-page">
-    <SalesHero eyebrow="AVIATION" title="Contract Intelligence Built for Aviation" copy="Aviation contracts connect aircraft, operations, suppliers, maintenance, financing and financial exposure. Operion helps organisations understand those connections." image={AVIATION_IMAGE} imageAlt="Commercial aircraft operating within the aviation ecosystem" />
+    <SalesHero eyebrow="AVIATION" title="Contract Intelligence Built for Aviation" copy="Aviation contracts connect aircraft, operations, suppliers, maintenance, financing and financial exposure. Operion helps organisations understand those connections." />
 
     <SalesSection eyebrow="WHO OPERION SERVES" title="One industry. Interconnected contractual complexity." copy="Operion is shaped around the agreements that keep aircraft, services and commercial relationships moving.">
       <Reveal className="op-sales-segment-grid">{SEGMENTS.map(([title, items]) => <article key={title}><Plane size={20} /><h3>{title}</h3><ul>{items.map((item) => <li key={item}><Check size={13} />{item}</li>)}</ul></article>)}</Reveal>

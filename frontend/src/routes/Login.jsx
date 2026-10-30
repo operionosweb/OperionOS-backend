@@ -8,7 +8,6 @@ import Logo from "../components/ui/Logo";
 import { useAuth } from "../context/AuthContext";
 import { trackEvent } from "../components/analytics/Analytics";
 
-const HERO = "https://images.unsplash.com/photo-1542296332-2e4473faf563?auto=format&fit=crop&w=1800&q=82";
 
 export default function Login() {
   const auth = useAuth();
@@ -64,7 +63,7 @@ export default function Login() {
 
   return (
     <main className="op-login-page">
-      <section className="op-login-hero op-cinematic-hero" style={{ backgroundImage: `linear-gradient(90deg, rgba(4, 22, 37, .94), rgba(4, 29, 45, .5)), url(${HERO})` }}>
+      <section className="op-login-hero">
         <Container><div className="op-login-grid">
           <Reveal className="op-login-copy"><p className="op-sales-label">OPERION / ACCOUNT ACCESS</p><h1>Access Operion.</h1><p>Sign in to access your Operion workspace and continue working with aviation contract intelligence.</p><Button to="/" variant="secondary">Back to Operion</Button></Reveal>
           <Reveal as="form" className="op-login-panel" onSubmit={handleSubmit}>

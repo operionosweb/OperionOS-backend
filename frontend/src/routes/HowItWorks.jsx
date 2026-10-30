@@ -4,7 +4,6 @@ import { SalesCta, SalesHero, SalesSection } from "../components/corporate/Sales
 import Reveal from "../components/ui/Reveal";
 import Button from "../components/ui/Button";
 
-const METHOD_IMAGE = "https://images.unsplash.com/photo-1517479149777-5f3b1511d5ad?auto=format&fit=crop&w=2000&q=82";
 const STEPS = [
   ["01", "Upload", "Upload contracts and relevant supporting documents into the Operion workspace.", ["Source document", "Controlled workspace"]],
   ["02", "Understand", "Operion analyses the contractual language and structure while preserving context.", ["Contract structure", "Relevant language"]],
@@ -17,7 +16,7 @@ const PIPELINE = ["Document", "AI Understanding", "Contract Intelligence", "Risk
 
 export default function HowItWorks() {
   return <main className="op-sales-page">
-    <SalesHero eyebrow="HOW OPERION WORKS" title="From Contract to Decision" copy="Operion transforms complex aviation contracts into structured intelligence that teams can understand, monitor and act on." image={METHOD_IMAGE} imageAlt="Aircraft operations viewed through a structured aviation workflow">
+    <SalesHero eyebrow="HOW OPERION WORKS" title="From Contract to Decision" copy="Operion transforms complex aviation contracts into structured intelligence that teams can understand, monitor and act on.">
       <Button to="/demo/dashboard" variant="secondary">Explore the Live Demo <ArrowRight size={16} /></Button>
     </SalesHero>
 
