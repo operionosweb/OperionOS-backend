@@ -1,7 +1,8 @@
-import { defineConfig } from "@playwright/test";
-
 import { acceptanceRoot, frontendRoot, loadAcceptanceEnvironment, repositoryRoot } from "./environment.mjs";
+import { assertAcceptanceExecutionAllowed } from "./safety.mjs";
 
+assertAcceptanceExecutionAllowed();
+const { defineConfig } = await import("@playwright/test");
 loadAcceptanceEnvironment();
 
 export default defineConfig({
@@ -30,7 +31,7 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      command: "npm run preview -- --host 127.0.0.1 --port 4174",
+      command: "node tests/acceptance/start-frontend.mjs",
       cwd: frontendRoot,
       url: process.env.CONTRACT_ACCEPTANCE_WEB_URL,
       reuseExistingServer: false,

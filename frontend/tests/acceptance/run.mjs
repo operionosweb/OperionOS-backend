@@ -3,9 +3,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { frontendRoot, loadAcceptanceEnvironment } from "./environment.mjs";
+import { assertAcceptanceExecutionAllowed } from "./safety.mjs";
 
-const viteCli = path.join(frontendRoot, "node_modules", "vite", "bin", "vite.js");
-const playwrightCli = fileURLToPath(import.meta.resolve("@playwright/test/cli"));
+const frontendLauncher = path.join(frontendRoot, "tests", "acceptance", "start-frontend.mjs");
 
 function run(command, args) {
   return new Promise((resolve, reject) => {
@@ -16,8 +16,10 @@ function run(command, args) {
 }
 
 try {
+  assertAcceptanceExecutionAllowed();
+  const playwrightCli = fileURLToPath(import.meta.resolve("@playwright/test/cli"));
   loadAcceptanceEnvironment();
-  await run(process.execPath, [viteCli, "build"]);
+  await run(process.execPath, [frontendLauncher, "--build"]);
   await run(process.execPath, [playwrightCli, "test", "--config", "tests/acceptance/playwright.config.js"]);
 } catch (error) {
   console.error(`Authenticated acceptance failed: ${error.message}`);

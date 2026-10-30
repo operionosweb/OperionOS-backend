@@ -293,7 +293,7 @@ function buildSource(text, format, identifiers) {
 }
 
 async function runThroughPipeline(corpusEntry) {
-  const text = await fs.readFile(path.join(ROOT, corpusEntry.fixture), "utf8");
+  const text = corpusEntry.text ?? await fs.readFile(path.join(ROOT, corpusEntry.fixture), "utf8");
   const identifiers = {
     organizationId: ORGANIZATION_ID,
     contractId: crypto.randomUUID(),
@@ -303,7 +303,7 @@ async function runThroughPipeline(corpusEntry) {
   };
   const source = buildSource(text, corpusEntry.format, identifiers);
   let analysisRun = { id: identifiers.analysisRunId, organization_id: ORGANIZATION_ID, contract_id: identifiers.contractId, document_version_id: identifiers.documentVersionId, status: "queued" };
-  const state = { clauses: [], richClauses: [], obligations: [], deadlines: [], risks: [], evidence: [], profile: null };
+  const state = { clauses: [], richClauses: [], obligations: [], deadlines: [], risks: [], evidence: [], profile: null, relationshipType: null };
 
   const pipeline = createContractIntelligencePipeline({
     analysisRunRepository: {
@@ -379,13 +379,34 @@ async function runThroughPipeline(corpusEntry) {
       },
     },
     searchRepository: { replaceForRun: async ({ chunks }) => chunks },
-    aviationRelationshipRepository: { materializeContractRelationships: async () => [] },
+    aviationRelationshipRepository: {
+      materializeContractRelationships: async ({ relationshipType }) => {
+        state.relationshipType = relationshipType;
+        return [];
+      },
+    },
   });
 
   const result = await pipeline.run({ organizationId: ORGANIZATION_ID, analysisRunId: identifiers.analysisRunId });
   assert.equal(result.status, "completed");
   return state;
 }
+
+test("uncertain classification does not materialize a lease relationship or lease-return actions", async () => {
+  const state = await runThroughPipeline({
+    name: "Ambiguous redelivery language",
+    text: "The Aircraft shall be returned in airworthy condition after redelivery.",
+    format: "docx",
+  });
+
+  assert.equal(state.profile.classification.type, "OTHER");
+  assert.equal(state.profile.classification.status, "requires_review");
+  assert.notEqual(state.relationshipType, "leased_under");
+  assert.equal(state.relationshipType, "governed_by");
+  assert.ok(state.profile.recommendations.every((item) => item.suggestedOwner !== "LEASE_RETURN_TECHNICAL"));
+  assert.ok(state.profile.recommendations.every((item) => !/lease return|redelivery compliance plan/i.test(item.action)));
+  assert.equal(state.profile.metadata.leaseIntelligence, null);
+});
 
 function evaluate(corpusEntry, state) {
   const clausesById = new Map(state.richClauses.map((clause) => [clause.id, clause]));
@@ -510,7 +531,7 @@ function actualLabel(layer, item) {
 }
 
 const ACCEPTANCE_BASELINE = {
-  classifications: [true, false, true, true, true],
+  classifications: [true, true, true, true, true],
   clauses: { truePositive: 40, falsePositive: 2, falseNegative: 2 },
   obligations: { truePositive: 30, falsePositive: 3, falseNegative: 1 },
   deadlines: { truePositive: 25, falsePositive: 1, falseNegative: 0 },

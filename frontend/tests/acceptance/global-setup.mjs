@@ -3,7 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { acceptanceStatePath } from "./environment.mjs";
-import { apiRequest, cleanupFixtures, cleanupStaleFixtures, createClients, createTenant, uploadContract, writeDocx } from "./fixture-support.mjs";
+import { assertAcceptanceExecutionAllowed } from "./safety.mjs";
 
 const COMPLETED_TEXT = `SYNTHETIC AIRCRAFT LEASE AGREEMENT
 Agreement Number: PW-LEASE-2026-001
@@ -56,11 +56,12 @@ The Lessee shall maintain the Aircraft in an airworthy condition throughout the 
 The Lessee shall return the Aircraft with complete maintenance records on the Expiration Date.`;
 
 export default async function globalSetup() {
+  assertAcceptanceExecutionAllowed();
+  const { apiRequest, createClients, createTenant, uploadContract, writeDocx } = await import("./fixture-support.mjs");
   const { admin, pool } = createClients();
   const runLabel = `playwright-acceptance-${Date.now()}-${randomUUID().slice(0, 8)}`;
   const state = { runLabel, tenants: [], aircraftIds: [], contracts: {} };
   try {
-    await cleanupStaleFixtures({ admin, pool });
     const tenantA = await createTenant({ admin, pool, runLabel, suffix: "a" });
     state.tenants.push(tenantA);
     const tenantB = await createTenant({ admin, pool, runLabel, suffix: "b" });
@@ -107,9 +108,6 @@ export default async function globalSetup() {
 
     await fs.mkdir(path.dirname(acceptanceStatePath), { recursive: true });
     await fs.writeFile(acceptanceStatePath, JSON.stringify(state), { mode: 0o600 });
-  } catch (error) {
-    await cleanupFixtures({ admin, pool, state });
-    throw error;
   } finally {
     await pool.end();
   }

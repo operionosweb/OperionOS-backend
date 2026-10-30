@@ -6,21 +6,26 @@ import { createClient } from "@supabase/supabase-js";
 import { TextReader, Uint8ArrayWriter, ZipWriter } from "@zip.js/zip.js";
 import pg from "pg";
 
-import { acceptanceStatePath, loadAcceptanceEnvironment } from "./environment.mjs";
-
-const BUCKET = process.env.CONTRACT_DOCUMENT_BUCKET || "contract-documents";
+import { loadAcceptanceEnvironment } from "./environment.mjs";
+import { assertAcceptanceExecutionAllowed } from "./safety.mjs";
 
 export function createClients() {
+  assertAcceptanceExecutionAllowed();
   loadAcceptanceEnvironment();
   return {
     admin: createClient(process.env.SUPABASE_URL, process.env.SUPABASE_TEST_SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
     }),
-    pool: new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }),
+    pool: new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: false }),
   };
 }
 
 export async function apiRequest(route, { token, organizationId, method = "GET", body } = {}) {
+  assertAcceptanceExecutionAllowed();
+  loadAcceptanceEnvironment();
+  if (!route.startsWith("/api/") || route.includes("\\") || /[\r\n]/.test(route)) {
+    throw new Error("Acceptance requests must use an application API path.");
+  }
   const headers = {};
   if (token) headers.authorization = `Bearer ${token}`;
   if (organizationId) headers["x-org-id"] = organizationId;
@@ -30,6 +35,7 @@ export async function apiRequest(route, { token, organizationId, method = "GET",
     headers,
     body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(60_000),
+    redirect: "error",
   });
   const text = await response.text();
   let payload;
@@ -38,6 +44,7 @@ export async function apiRequest(route, { token, organizationId, method = "GET",
 }
 
 export async function createTenant({ admin, pool, runLabel, suffix }) {
+  assertAcceptanceExecutionAllowed();
   const user = { email: `${runLabel}-${suffix}@example.invalid`, password: `${randomUUID()}-TestOnly!` };
   const auth = await admin.auth.admin.createUser({ ...user, email_confirm: true });
   if (auth.error) throw auth.error;
@@ -52,6 +59,7 @@ export async function createTenant({ admin, pool, runLabel, suffix }) {
 }
 
 export async function writeDocx(filePath, content) {
+  assertAcceptanceExecutionAllowed();
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   const writer = new Uint8ArrayWriter();
   const zip = new ZipWriter(writer);
@@ -65,6 +73,7 @@ export async function writeDocx(filePath, content) {
 }
 
 export async function uploadContract({ filePath, tenant, title }) {
+  assertAcceptanceExecutionAllowed();
   const form = new FormData();
   const mimeType = path.extname(filePath).toLowerCase() === ".docx"
     ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -76,53 +85,10 @@ export async function uploadContract({ filePath, tenant, title }) {
   return { ...response.payload, title };
 }
 
-export async function cleanupFixtures({ admin, pool, state, removeState = true }) {
-  const organizationIds = (state?.tenants || []).map((tenant) => tenant.organizationId).filter(Boolean);
-  if (organizationIds.length) {
-    const documents = await pool.query("select storage_key from documents where organization_id = any($1::uuid[])", [organizationIds]);
-    for (const { storage_key: storageKey } of documents.rows) {
-      if (storageKey) await admin.storage.from(BUCKET).remove([storageKey]);
-    }
-    await pool.query("delete from aircraft_contract_relationships where organization_id = any($1::uuid[])", [organizationIds]);
-    await pool.query("update contracts set source_document_id = null where organization_id = any($1::uuid[])", [organizationIds]);
-    await pool.query("delete from contracts where organization_id = any($1::uuid[])", [organizationIds]);
-    await pool.query("delete from organizations where id = any($1::uuid[])", [organizationIds]);
-  }
-  if (state?.aircraftIds?.length) await pool.query("delete from aircraft where id = any($1::uuid[])", [state.aircraftIds]);
-  for (const tenant of state?.tenants || []) {
-    if (!tenant.user?.id) continue;
-    const deletion = await admin.auth.admin.deleteUser(tenant.user.id);
-    if (deletion.error && deletion.error.status !== 404) throw deletion.error;
-  }
-  if (removeState) await fs.rm(path.dirname(acceptanceStatePath), { recursive: true, force: true });
+export async function cleanupFixtures() {
+  assertAcceptanceExecutionAllowed();
 }
 
-export async function cleanupStaleFixtures({ admin, pool }) {
-  const organizations = await pool.query("select id from organizations where slug like 'playwright-acceptance-%'");
-  if (!organizations.rows.length) return;
-  const organizationIds = organizations.rows.map((row) => row.id);
-  const users = await pool.query("select distinct user_id from organization_memberships where organization_id = any($1::uuid[])", [organizationIds]);
-  const aircraft = await pool.query("select distinct aircraft_id from aircraft_organization_relationships where organization_id = any($1::uuid[])", [organizationIds]);
-  await cleanupFixtures({
-    admin,
-    pool,
-    removeState: false,
-    state: {
-      tenants: organizationIds.map((organizationId) => ({ organizationId })),
-      aircraftIds: aircraft.rows.map((row) => row.aircraft_id),
-    },
-  });
-  for (const { user_id: userId } of users.rows) {
-    const deletion = await admin.auth.admin.deleteUser(userId);
-    if (deletion.error && deletion.error.status !== 404) throw deletion.error;
-  }
-}
-
-export async function readAcceptanceState({ optional = false } = {}) {
-  try {
-    return JSON.parse(await fs.readFile(acceptanceStatePath, "utf8"));
-  } catch (error) {
-    if (optional && error.code === "ENOENT") return null;
-    throw error;
-  }
+export async function readAcceptanceState() {
+  assertAcceptanceExecutionAllowed();
 }

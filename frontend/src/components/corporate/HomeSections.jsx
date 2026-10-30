@@ -1,16 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ArrowDown, ArrowRight, Check, CloudRain, FileSearch, Fuel, Gauge,
+  ArrowDown, ArrowRight, Check, CloudRain, Fuel, Gauge,
   Landmark, Plane, Radar, ShieldCheck, TrendingUp, Wind,
 } from "lucide-react";
 import { Container } from "../ui/Layout";
 import Button from "../ui/Button";
 import Reveal from "../ui/Reveal";
 import { trackEvent } from "../analytics/Analytics";
+import AeroHero from "./AeroHero";
+import CapabilityLayers from "./CapabilityLayers";
+import ExecutiveCockpit from "./ExecutiveCockpit";
 
-const HERO_IMAGE = "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=2200&q=88";
 const AVIATION_IMAGE = "https://images.unsplash.com/photo-1540962351504-03099e0a754b?auto=format&fit=crop&w=1800&q=84";
-const FINAL_IMAGE = "https://images.unsplash.com/photo-1464037866556-6812c9d1c72e?auto=format&fit=crop&w=2000&q=86";
 const VIDEO_SRC = "/videos/operion-contract-intelligence.mp4";
 const CONTRACTS = ["Aircraft leases", "MRO agreements", "Supplier contracts", "Fuel agreements", "Ground handling", "Insurance"];
 const VARIABLES = ["Fuel prices", "Interest rates", "Inflation", "Exchange rates", "Weather", "Geopolitics", "Supplier conditions"];
@@ -52,10 +53,6 @@ function StoryHeading({ index, eyebrow, title, copy, inverse = false }) {
   return <Reveal className={`op-story-heading${inverse ? " is-inverse" : ""}`}><p className="op-story-index">{index}</p><div><p className="op-story-eyebrow">{eyebrow}</p><h2>{title}</h2>{copy && <p className="op-story-copy">{copy}</p>}</div></Reveal>;
 }
 
-function IntelligencePulse() {
-  return <div className="op-story-pulse" aria-hidden="true"><i /><i /><i /></div>;
-}
-
 function StoryCta({ copy, location, inverse = false }) {
   return <Reveal className={`op-story-inline-cta${inverse ? " is-inverse" : ""}`}><p>{copy}</p><Button to="/request-demo" onClick={() => trackEvent("request_demo_click", { location })}>Request a demo <ArrowRight size={16} /></Button></Reveal>;
 }
@@ -89,7 +86,10 @@ export default function HomeSections() {
   };
 
   return <>
-    <section className="op-story-hero op-cinematic-hero" style={{ backgroundImage: `url(${HERO_IMAGE})` }}><div className="op-story-hero-shade"><Container className="op-story-hero-layout"><Reveal className="op-story-hero-copy"><p className="op-story-eyebrow">OPERION / AVIATION CONTRACT INTELLIGENCE</p><h1>Understand your contracts.<br /><span>See what&apos;s coming.</span></h1><p className="op-story-hero-lead">AI-powered Contract Intelligence for Aviation that reveals obligations, exposure and what to do next.</p><div className="op-story-actions"><Button to="/request-demo" onClick={() => trackEvent("request_demo_click", { location: "home_hero" })}>Request a demo <ArrowRight size={16} /></Button><a className="op-btn op-btn-secondary" href="#product">Explore the platform <ArrowDown size={16} /></a></div></Reveal><Reveal className="op-story-hero-system"><div className="op-story-system-top"><span>OPERION INTELLIGENCE / LIVE VIEW</span><b>CONTRACT INGESTED</b></div><div className="op-story-document-mini"><FileSearch size={20} /><div><strong>Aircraft Lease Agreement</strong><small>184 pages / source preserved</small></div><IntelligencePulse /></div><div className="op-story-system-flow">{["Clauses", "Obligations", "Deadlines", "Risks"].map((item, index) => <div key={item}><span>0{index + 1}</span><strong>{item}</strong><i /></div>)}</div><div className="op-story-system-foot"><span>Evidence linked</span><span>Human review visible</span></div></Reveal></Container><div className="op-story-hero-rail"><Container>{["CONTRACT", "UNDERSTANDING", "RISK", "CONTEXT", "SCENARIO", "ACTION"].map((item, index) => <span key={item}><b>0{index + 1}</b>{item}</span>)}</Container></div></div></section>
+    <AeroHero home eyebrow="AVIATION CONTRACT INTELLIGENCE" title={<>Understand your contracts.<br/><span>See what's coming.</span></>} copy="Connect complex aviation agreements to obligations, exposure and the decisions that matter. Intelligence grounded in evidence, designed for your team.">
+      <a className="op-btn op-btn-secondary" href="#intelligence">Discover Operion <ArrowDown size={16}/></a>
+    </AeroHero>
+    <CapabilityLayers/>
 
     <section className="op-story-section op-story-isolation" id="intelligence"><Container><StoryHeading index="01" eyebrow="THE CORE IDEA" title="Contracts don't exist in isolation." copy="Aviation agreements define the rules. Markets, aircraft, suppliers and operational conditions determine when those rules matter. Operion is the intelligence layer between them." /><Reveal className="op-story-bridge"><div className="op-story-bridge-list"><p>CONTRACTS</p>{CONTRACTS.map((item) => <span key={item}>{item}</span>)}</div><div className="op-story-bridge-core"><div><Plane size={24} /><strong>OPERION</strong><small>INTELLIGENCE LAYER</small></div><span className="op-story-flight-path" /></div><div className="op-story-bridge-list is-world"><p>THE WORLD</p>{VARIABLES.map((item) => <span key={item}>{item}</span>)}</div></Reveal></Container></section>
 
@@ -105,10 +105,12 @@ export default function HomeSections() {
 
     <section className="op-story-product" id="product"><Container><StoryHeading index="07" eyebrow="THE OPERION PLATFORM / REAL PRODUCT" title="Intelligence you can inspect, not just accept." copy="Upload a contract. Extract clauses, obligations, deadlines and risks. Search the analysis and trace every important finding back to evidence." /></Container><Reveal className="op-story-product-frame"><video ref={productVideoRef} controls loop muted playsInline preload="metadata" aria-label="Operion contract intelligence product demonstration"><source src={VIDEO_SRC} type="video/mp4" /></video></Reveal></section>
 
+    <ExecutiveCockpit/>
+
     <section className="op-story-section op-story-segments"><Container><StoryHeading index="08" eyebrow="AVIATION FIRST" title="Built for the complexity of aviation." copy="One Contract Intelligence foundation, shaped around six aviation operating environments." /><Reveal className="op-story-segment-system"><div className="op-story-segment-core"><Plane size={25} /><strong>OPERION</strong><small>AVIATION INTELLIGENCE</small></div>{SEGMENTS.map(([title, copy], index) => <div key={title} className={`op-story-segment segment-${index + 1}`}><span>0{index + 1}</span><strong>{title}</strong><p>{copy}</p></div>)}</Reveal></Container></section>
 
     <section className="op-story-section op-story-evolution"><Container><StoryHeading index="09" eyebrow="THE OPERION DIFFERENCE" title="One foundation. A more intelligent future." copy="The roadmap is a progression, not a claim that every layer is live today." /><Reveal className="op-story-evolution-rail">{EVOLUTION.map(([status, title, copy], index) => <div key={title}><span>0{index + 1}</span><small>{status}</small><strong>{title}</strong><p>{copy}</p></div>)}</Reveal><Reveal className="op-story-trust"><ShieldCheck size={22} /><p>Current intelligence is evidence-linked and reviewable. Predictive and simulation layers are clearly identified as developing or roadmap capabilities.</p></Reveal></Container></section>
 
-    <section className="op-story-final" style={{ backgroundImage: `url(${FINAL_IMAGE})` }}><div><Container><Reveal><p className="op-story-eyebrow">OPERION / REQUEST A PRIVATE DEMONSTRATION</p><h2>Turn your contracts<br />into intelligence.</h2><p>Bring an aviation contract or a question about exposure. See how Operion structures the evidence and supports the decision.</p><div className="op-story-actions"><Button to="/request-demo" onClick={() => trackEvent("request_demo_click", { location: "home_final" })}>Request a demo <ArrowRight size={16} /></Button><Button to="/product" variant="secondary">Explore the platform</Button></div></Reveal></Container></div></section>
+    <section className="op-story-final"><div><Container><Reveal><p className="op-story-eyebrow">OPERION / REQUEST A PRIVATE DEMONSTRATION</p><h2>Turn your contracts<br />into intelligence.</h2><p>Bring an aviation contract or a question about exposure. See how Operion structures the evidence and supports the decision.</p><div className="op-story-actions"><Button to="/request-demo" onClick={() => trackEvent("request_demo_click", { location: "home_final" })}>Request a demo <ArrowRight size={16} /></Button><Button to="/product" variant="secondary">Explore the platform</Button></div></Reveal></Container></div></section>
   </>;
 }

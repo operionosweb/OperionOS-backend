@@ -3,7 +3,6 @@ import { Check, FileSearch, KeyRound, LockKeyhole, ShieldCheck } from "lucide-re
 import { SalesCta, SalesHero, SalesSection } from "../components/corporate/SalesPage";
 import Reveal from "../components/ui/Reveal";
 
-const SECURITY_IMAGE = "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=2000&q=82";
 const VERIFIED_CONTROLS = [
   [KeyRound, "Authenticated application access", "Private application routes require an authenticated user session."],
   [ShieldCheck, "Organisation boundaries", "Backend requests carry organisation context so access decisions can be scoped to the active organisation."],
@@ -14,7 +13,7 @@ const REVIEW_AREAS = ["Identity and access requirements", "Data handling and ret
 
 export default function Security() {
   return <main className="op-sales-page">
-    <SalesHero eyebrow="SECURITY" title="Enterprise security for sensitive contractual intelligence." copy="Operion is designed around controlled access, organisation boundaries and evidence-backed review, with deployment controls assessed against each organisation's requirements." image={SECURITY_IMAGE} imageAlt="Protected enterprise data infrastructure in a secure technical environment" />
+    <SalesHero eyebrow="SECURITY" title="Enterprise security for sensitive contractual intelligence." copy="Operion is designed around controlled access, organisation boundaries and evidence-backed review, with deployment controls assessed against each organisation's requirements." />
 
     <SalesSection eyebrow="CURRENT ARCHITECTURE" title="Security controls that can be explained." copy="Operion distinguishes implemented application controls from deployment-specific requirements and future assurance work.">
       <Reveal className="op-security-grid">{VERIFIED_CONTROLS.map(([Icon, title, copy]) => <article key={title}><Icon size={21} /><h3>{title}</h3><p>{copy}</p></article>)}</Reveal>

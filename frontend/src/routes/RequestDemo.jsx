@@ -8,7 +8,6 @@ import { apiRequest } from "../lib/apiClient";
 const ROLES = ["Executive / Management", "Legal", "Finance", "Procurement", "Operations", "Risk", "Other"];
 const ORGANISATIONS = ["Airline", "Aircraft Leasing", "MRO", "Ground Handling", "Aviation Services", "Consultancy", "Other"];
 const NEXT_STEPS = ["We review your requirements.", "We arrange a private Operion demonstration.", "We show how Operion can be applied to your aviation environment.", "If appropriate, we discuss a pilot."];
-const CONTACT_IMAGE = "https://images.unsplash.com/photo-1540962351504-03099e0a754b?auto=format&fit=crop&w=2000&q=82";
 
 export default function RequestDemo() {
   const [status, setStatus] = useState("idle");
@@ -32,12 +31,7 @@ export default function RequestDemo() {
 
   return (
     <main className="op-request-page">
-      <section
-        className="op-request-hero op-cinematic-hero"
-        style={{
-          backgroundImage: `linear-gradient(90deg, rgba(4, 22, 37, .94), rgba(4, 29, 45, .62)), url(${CONTACT_IMAGE})`,
-        }}
-      >
+      <section className="op-request-hero oaero-simple-hero">
         <Container>
           <Reveal>
             <p className="op-sales-label">PRIVATE DEMONSTRATION</p>

@@ -3,10 +3,8 @@ import { ArrowDown, ArrowRight, Check } from "lucide-react";
 import { SalesCta, SalesFlow, SalesHero, SalesSection } from "../components/corporate/SalesPage";
 import Reveal from "../components/ui/Reveal";
 import { trackEvent } from "../components/analytics/Analytics";
-import { DemoDataProvider } from "../demo/DemoDataProvider";
-import DemoDashboard from "./demo/DemoDashboard";
+import ExecutiveCockpit from "../components/corporate/ExecutiveCockpit";
 
-const PRODUCT_IMAGE = "https://images.unsplash.com/photo-1589782182703-2aaa69037b5b?auto=format&fit=crop&w=2000&q=82";
 const CAPABILITIES = [
   ["Contract Understanding", "Analyse complex aviation contracts and supporting documents while preserving their structure and context."],
   ["Clause Intelligence", "Identify commercial, operational and risk-related provisions and keep each insight linked to evidence."],
@@ -36,14 +34,11 @@ const ROADMAP = [
 
 export default function Product() {
   return <main className="op-sales-page">
-    <SalesHero eyebrow="OPERION PRODUCT" title="Contract Intelligence for Aviation" copy="Turn complex aviation contracts into operational, financial and risk intelligence." image={PRODUCT_IMAGE} imageAlt="Aviation contract documentation under professional review">
+    <SalesHero eyebrow="OPERION PRODUCT" title="Contract Intelligence for Aviation" copy="Turn complex aviation contracts into operational, financial and risk intelligence.">
       <a className="op-btn op-btn-secondary" href="#workflow" onClick={() => trackEvent("how_it_works_click", { location: "product_hero" })}>See How It Works <ArrowDown size={16} /></a>
     </SalesHero>
 
-    <section className="op-sales-product-stage" aria-label="Operion prepared demonstration interface">
-      <div className="op-sales-product-stage-copy"><span>Prepared demonstration interface</span><strong>A real view of the Operion contract intelligence workspace.</strong><a href="/demo/dashboard">Explore the live demo <ArrowRight size={15} /></a></div>
-      <div className="op-sales-live-product"><DemoDataProvider><DemoDashboard headingLevel="h2" /></DemoDataProvider></div>
-    </section>
+    <ExecutiveCockpit/>
 
     <SalesSection eyebrow="CURRENT CAPABILITIES" title="Understand what your contracts actually contain." copy="Operion helps teams find the contractual information that governs operational commitments and commercial exposure.">
       <Reveal className="op-sales-capability-grid">{CAPABILITIES.map(([title, copy]) => <article key={title}><Check size={17} /><h3>{title}</h3><p>{copy}</p></article>)}</Reveal>

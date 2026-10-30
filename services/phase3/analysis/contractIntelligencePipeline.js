@@ -49,7 +49,9 @@ function withClauseEvidence(clauses, evidence, clauseEvidence = []) {
   });
 }
 
-function relationshipTypeFor(contractType) {
+function relationshipTypeFor(classification) {
+  if (classification.status !== "confirmed") return "governed_by";
+  const contractType = classification.type;
   if (contractType === "AIRCRAFT_LEASE") return "leased_under";
   if (["MRO", "ENGINE_MAINTENANCE", "POWER_BY_HOUR"].includes(contractType)) return "maintained_under";
   if (contractType === "INSURANCE") return "insured_under";
@@ -153,7 +155,7 @@ export function createContractIntelligencePipeline({
         const relationships = await aviationRelationshipRepository.materializeContractRelationships({
           organizationId,
           contractId: scope.contractId,
-          relationshipType: relationshipTypeFor(profile.classification.type),
+          relationshipType: relationshipTypeFor(profile.classification),
           identifiers: profile.aircraftIdentifiers,
         });
         pipelineStage = "analysis_run_state";
