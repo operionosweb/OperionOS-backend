@@ -250,6 +250,10 @@
 .od-shell .od-honesty-note { border-left-color: #d18a1c; }
 
 .od-shell .od-dashboard-aviation {
+  display: block;
+  height: auto;
+  min-width: 0;
+  overflow: visible;
   margin: 0 0 20px;
   padding: clamp(17px, 2vw, 27px);
   border: 1px solid rgba(210, 225, 239, 0.95);
@@ -310,10 +314,10 @@
 }
 .od-shell .od-dashboard-flight-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: center;
   gap: 10px;
-  margin-bottom: 14px;
+  margin: 0;
 }
 .od-shell .od-dashboard-flight-stat {
   min-width: 0;
@@ -331,7 +335,7 @@
 .od-shell .od-dashboard-flight-stat > span { grid-row: span 2; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; background: #eaf3ff; color: #0066d9; }
 .od-shell .od-dashboard-flight-stat small { color: #687b90; font-size: 10px !important; }
 .od-shell .od-dashboard-flight-stat strong { color: #0b192c; font: 700 18px/1.2 var(--op-font-display); }
-.od-shell .od-dashboard-globe-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; }
+.od-shell .od-dashboard-globe-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .od-shell .od-dashboard-globe-panel {
   min-width: 0;
   overflow: hidden;
@@ -354,9 +358,9 @@
 .od-shell .od-globe-layer-controls { border-color: rgba(178, 207, 232, 0.17); background: rgba(10, 35, 59, 0.85); }
 .od-shell .od-globe-layer-controls button { color: #c7d7e7; }
 .od-shell .od-globe-layer-controls button.is-active { border-color: rgba(99, 178, 255, 0.35); background: rgba(0, 102, 245, 0.3); color: #fff; }
-.od-shell .od-dashboard-globe-panel .od-cesium-shell { height: clamp(350px, 37vw, 510px); }
+.od-shell .od-dashboard-globe-panel .od-cesium-shell { position: relative; height: clamp(440px, 58vh, 760px); }
 .od-shell .od-dashboard-globe-panel .od-cesium-globe { background: #06172a; }
-.od-shell .od-dashboard-globe-panel .od-map-controls { right: 12px; bottom: 12px; }
+.od-shell .od-dashboard-globe-panel .od-map-controls { top: auto; right: 12px; bottom: 12px; }
 .od-shell .od-dashboard-globe-footer {
   min-height: 33px;
   padding: 7px 13px;
@@ -371,11 +375,23 @@
 .od-shell .od-dashboard-globe-footer > span:first-child { display: inline-flex; align-items: center; gap: 8px; color: #bde8d6; }
 .od-shell .od-dashboard-flight-inspector {
   min-width: 0;
-  padding: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 16px;
+}
+.od-shell .od-dashboard-flight-details,
+.od-shell .od-dashboard-fleet-card {
+  min-width: 0;
+  padding: 20px;
   border: 1px solid #e0e9f2;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.94);
 }
+.od-shell .od-dashboard-fleet-card > h3 { margin: 0 0 6px; font-size: 16px; }
+.od-shell .od-dashboard-fleet-card > p { margin: 0; color: #64768a; font-size: 12px; line-height: 1.5; }
+.od-shell .od-dashboard-page > .od-page-header h1 { font-size: clamp(2rem, 3.5vw, 3.5rem) !important; line-height: 1.05 !important; }
+.od-shell .od-dashboard-center { min-width: 0; }
+.od-shell .od-dashboard-flight-details .od-dashboard-flight-facts { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 0; }
 .od-shell .od-dashboard-selected-heading { display: flex; align-items: center; gap: 9px; }
 .od-shell .od-dashboard-selected-heading > div { min-width: 0; flex: 1; }
 .od-shell .od-dashboard-plane-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 11px; background: #eaf3ff; color: #0066d9; }
@@ -434,20 +450,12 @@
   .od-shell .od-system-status > span:last-child { display: none; }
   .od-shell .od-dashboard-aviation-header { align-items: flex-start; flex-direction: column; }
   .od-shell .od-dashboard-flight-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .od-shell .od-dashboard-flight-stats > .od-badge { grid-column: 1 / -1; }
-  .od-shell .od-dashboard-globe-layout { grid-template-columns: minmax(0, 1fr) 270px; }
 }
 
 @media (max-width: 900px) {
   .od-shell .od-sidebar { width: 258px; }
   .od-shell .od-frame { margin-left: 0; }
-  .od-shell .od-dashboard-globe-layout { grid-template-columns: minmax(0, 1fr); }
-  .od-shell .od-dashboard-flight-inspector { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 0.8fr); gap: 0 16px; }
-  .od-shell .od-dashboard-selected-heading,
-  .od-shell .od-dashboard-flight-operator,
-  .od-shell .od-dashboard-route,
-  .od-shell .od-dashboard-flight-facts { grid-column: 1; }
-  .od-shell .od-dashboard-aircraft-list { grid-column: 2; grid-row: 1 / span 4; align-content: start; margin-top: 0; }
+  .od-shell .od-dashboard-flight-inspector { grid-template-columns: minmax(0, 1fr); }
   .od-shell .od-system-status { margin-left: auto; }
 }
 
@@ -468,9 +476,11 @@
   .od-shell .od-dashboard-globe-toolbar { align-items: flex-start; flex-direction: column; }
   .od-shell .od-globe-layer-controls { width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .od-shell .od-globe-layer-controls button { padding-inline: 4px; font-size: 9px !important; }
-  .od-shell .od-dashboard-globe-panel .od-cesium-shell { height: 340px; }
+  .od-shell .od-dashboard-globe-panel .od-cesium-shell { height: clamp(360px, 55vh, 520px); }
   .od-shell .od-dashboard-globe-footer { align-items: flex-start; flex-direction: column; gap: 5px; }
-  .od-shell .od-dashboard-flight-inspector { display: block; }
+  .od-shell .od-dashboard-flight-details,
+  .od-shell .od-dashboard-fleet-card { padding: 16px; }
+  .od-shell .od-dashboard-flight-details .od-dashboard-flight-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .od-shell .od-dashboard-aircraft-list { margin-top: 10px; }
   .od-shell .od-bottom-nav a.is-active { color: #0066d9; }
   .od-shell .od-bottom-nav { border-color: #dfe7f0; box-shadow: 0 -8px 24px rgba(11, 25, 44, 0.06); }

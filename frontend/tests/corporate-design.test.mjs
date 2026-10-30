@@ -264,3 +264,58 @@ test("demo request retains submission success and failure states without contact
     await page.locator(".op-request-status[role='alert']").waitFor();
   } finally { await context.close(); }
 });
+
+for (const width of [1440, 1024, 768, 390, 320]) {
+  test(`demo cockpit keeps the globe full-width and information below it at ${width}px`, async () => {
+    const { context, page } = await createPage(width);
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    try {
+      await page.goto(`${target.origin}/demo/dashboard`);
+      const workspace = page.locator(".od-dashboard-globe-layout");
+      const globe = page.locator(".od-dashboard-globe-panel");
+      await globe.locator("canvas").waitFor();
+      const workspaceBox = await workspace.boundingBox();
+      const globeBox = await globe.boundingBox();
+      assert.ok(Math.abs(workspaceBox.width - globeBox.width) <= 2, "Globe fills the workspace width");
+      assert.ok(globeBox.height >= 400, "Globe has a substantial viewing area");
+      const controlsBox = await globe.locator(".od-map-controls").boundingBox();
+      assert.ok(controlsBox.x >= globeBox.x && controlsBox.x + controlsBox.width <= globeBox.x + globeBox.width, "View controls stay inside the globe horizontally");
+      assert.ok(controlsBox.y >= globeBox.y && controlsBox.y + controlsBox.height <= globeBox.y + globeBox.height, "View controls stay inside the globe vertically");
+      for (const selector of [".od-dashboard-flight-stats", ".od-dashboard-flight-inspector", ".od-dashboard-layout"]) {
+        const box = await page.locator(selector).boundingBox();
+        assert.ok(box.y >= globeBox.y + globeBox.height - 1, `${selector} stays below the globe`);
+      }
+      const dimensions = await page.evaluate(() => ({ viewport: innerWidth, content: document.documentElement.scrollWidth }));
+      assert.ok(dimensions.content <= dimensions.viewport + 1, "Cockpit does not overflow horizontally");
+      assert.equal(await page.locator(".od-dashboard-flight-stat").count(), 4);
+      assert.deepEqual(errors, []);
+    } finally { await context.close(); }
+  });
+}
+
+test("demo cockpit fleet selection, filters and globe layers remain interactive", async () => {
+  const { context, page } = await createPage();
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  try {
+    await page.goto(`${target.origin}/demo/dashboard`);
+    const cockpit = page.locator(".od-dashboard-aviation");
+    await cockpit.locator("canvas").waitFor();
+    const initial = await cockpit.locator(".od-dashboard-selected-heading h3").innerText();
+    await cockpit.locator(".od-dashboard-aircraft-list button").nth(1).click();
+    assert.notEqual(await cockpit.locator(".od-dashboard-selected-heading h3").innerText(), initial);
+    for (const name of ["Company fleet", "Operational watch", "All flights"]) {
+      await cockpit.getByRole("button", { name, exact: true }).click();
+      assert.equal(await cockpit.getByRole("button", { name, exact: true }).getAttribute("aria-pressed"), "true");
+      await cockpit.locator("canvas").waitFor();
+    }
+    for (const name of ["Map", "Weather", "Globe"]) {
+      await cockpit.getByRole("button", { name, exact: true }).click();
+      assert.equal(await cockpit.getByRole("button", { name, exact: true }).getAttribute("aria-pressed"), "true");
+    }
+    await cockpit.getByRole("button", { name: "Satellite", exact: true }).click();
+    await cockpit.getByRole("button", { name: "Standard", exact: true }).waitFor();
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});

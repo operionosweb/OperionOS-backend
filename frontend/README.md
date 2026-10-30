@@ -54,3 +54,9 @@ success/error states. External requests are blocked,
 and no real contact request or database
 operation is performed. `CORPORATE_TEST_URL` may select another loopback frontend.
 The authenticated acceptance harness remains separate and disabled.
+
+The demo Executive Cockpit gives the interactive globe the full workspace width.
+Synthetic fleet totals, selected-flight details and fleet selection sit below it;
+contract metrics and intelligence cards follow in a separate section. The UI suite
+also checks this layout at 1440, 1024, 768, 390 and 320px and exercises fleet
+selection, filters and globe layers.

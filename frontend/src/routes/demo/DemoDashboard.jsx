@@ -76,19 +76,6 @@ function DashboardAviation() {
         <Link className="od-button" to="/demo/live-tracking">Open tracking <Globe2 size={15}/></Link>
       </div>
     </header>
-    <div className="od-dashboard-flight-stats" aria-label="Synthetic aviation summary">
-      {[
-        ["Live flights", summary.liveFlights, Plane],
-        ["Tracked aircraft", summary.trackedAircraft, Radio],
-        ["Active routes", summary.activeRoutes, Globe2],
-        ["Flight alerts", summary.flightAlerts, ShieldAlert],
-      ].map(([label, value, Icon]) =>
-        <div className="od-dashboard-flight-stat" key={label}>
-          <span><Icon size={16}/></span><small>{label}</small><strong>{value.toLocaleString()}</strong>
-        </div>
-      )}
-      <DemoBadge>DEMO AGGREGATES</DemoBadge>
-    </div>
     <div className="od-dashboard-globe-layout">
       <section className="od-dashboard-globe-panel" aria-label="Interactive flight globe">
         <div className="od-dashboard-globe-toolbar">
@@ -105,8 +92,21 @@ function DashboardAviation() {
         </Suspense> : <div className="od-globe-empty"><Plane size={24}/><strong>No aircraft match this filter</strong><button type="button" onClick={() => setFilter("all")}>Show all flights</button></div>}
         <footer className="od-dashboard-globe-footer"><span><i/>Prepared synthetic positions</span><span>{visibleAircraft.length} aircraft shown</span><span>Not a live aviation feed</span></footer>
       </section>
+      <div className="od-dashboard-flight-stats" aria-label="Synthetic aviation summary">
+        {[
+          ["Synthetic flights", summary.liveFlights, Plane],
+          ["Tracked aircraft", summary.trackedAircraft, Radio],
+          ["Active routes", summary.activeRoutes, Globe2],
+          ["Flight alerts", summary.flightAlerts, ShieldAlert],
+        ].map(([label, value, Icon]) =>
+          <div className="od-dashboard-flight-stat" key={label}>
+            <span><Icon size={16}/></span><small>{label}</small><strong>{value.toLocaleString()}</strong>
+          </div>
+        )}
+      </div>
       <aside className="od-dashboard-flight-inspector" aria-label="Selected flight details">
         {selected ? <>
+          <div className="od-dashboard-flight-details">
           <div className="od-dashboard-selected-heading">
             <span className="od-dashboard-plane-icon"><Plane size={18}/></span>
             <div><small>Selected aircraft</small><h3>{selected.registration}</h3></div>
@@ -124,6 +124,10 @@ function DashboardAviation() {
             <div><dt>Heading</dt><dd>{selected.heading}°</dd></div>
             <div><dt>Flight phase</dt><dd>{selected.phase}</dd></div>
           </dl>
+          </div>
+          <div className="od-dashboard-fleet-card">
+          <h3>Explore the fleet</h3>
+          <p>Select an aircraft to inspect its route and flight details.</p>
           <div className="od-dashboard-aircraft-list" aria-label="Choose an aircraft">
             {visibleAircraft.slice(0, 5).map((item) =>
               <button type="button" className={item.id === selected.id ? "is-active" : ""} aria-pressed={item.id === selected.id} onClick={() => setSelectedId(item.id)} key={item.id}>
@@ -132,6 +136,7 @@ function DashboardAviation() {
                 <span>{item.status}</span>
               </button>
             )}
+          </div>
           </div>
         </> : <div className="od-data-unavailable"><Plane size={18}/><strong>No aircraft available in this view.</strong></div>}
       </aside>
