@@ -634,7 +634,8 @@ export default function AviationIntelligenceMap() {
         }
       />
       <FlightOperations selectedAircraftId={selectedId} onAircraftSelect={syncSelectedAircraft}/>
-      <section className="od-tracking-contract-context" aria-label="Additional aircraft contract workspace">
+      <details className="od-tracking-contract-context">
+        <summary>Additional aircraft contract workspace</summary>
         {selected && (
           <SelectedAircraftPanel
             aircraft={selected}
@@ -645,7 +646,7 @@ export default function AviationIntelligenceMap() {
             navigate={navigate}
           />
         )}
-      </section>
+      </details>
       {selected && (
         <IntelligenceSummary
           relationships={relationships}

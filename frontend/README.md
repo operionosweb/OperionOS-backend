@@ -157,7 +157,12 @@ operation is performed. `CORPORATE_TEST_URL` may select another loopback fronten
 The authenticated acceptance harness remains separate and disabled.
 
 The demo Executive Cockpit gives the interactive globe the full workspace width.
-Synthetic fleet totals, selected-flight details and fleet selection sit below it;
+Selected-aircraft infocards appear as dismissible, scrollable popups **inside**
+the globe, including fullscreen. Clicking an aircraft/route or choosing a fleet
+entry opens the same popup on Home, Platform, Dashboard and tracking. Close with
+the close button or Escape while focused inside the card; map navigation remains
+available alongside it. On small screens the card uses a bounded bottom panel.
+Synthetic fleet totals and fleet selection sit below it;
 contract metrics and intelligence cards follow in a separate section. The UI suite
 also checks this layout at 1440, 1024, 768, 390 and 320px and exercises fleet
 selection, filters and globe layers.

@@ -113,3 +113,68 @@ test("all globe routes have identical schema controls, composable filters and ke
     }
   } finally { await context.close(); }
 });
+
+for (const width of [1440, 390, 320]) {
+  test(`aircraft clicks open an infocard inside every globe at ${width}px`, { timeout: 180000 }, async () => {
+    const { context, page } = await createPage(width);
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    try {
+      for (const route of ["/", "/product", "/demo/dashboard", "/demo/live-tracking"]) {
+        await page.goto(`${origin}${route}`, { waitUntil: "domcontentloaded" });
+        const globe = page.locator(".od-cesium-shell");
+        const canvas = globe.locator("canvas");
+        await canvas.waitFor();
+        const popup = globe.getByRole("dialog", { name: "G-OPER", exact: true });
+        await popup.waitFor();
+        await popup.getByRole("button", { name: "Close aircraft infocard", exact: true }).click();
+        assert.equal(await globe.getByRole("dialog").count(), 0);
+        await canvas.scrollIntoViewIfNeeded();
+        // The selected aircraft is centred by the real Cesium camera. Click its
+        // rendered marker, exercising Cesium picking rather than a React handler.
+        const position = await canvas.evaluate((element) => {
+          const gl = element.getContext("webgl2") || element.getContext("webgl");
+          const pixels = new Uint8Array(element.width * element.height * 4);
+          gl.readPixels(0, 0, element.width, element.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+          let best = null, distance = Infinity;
+          for (let y = 0; y < element.height; y++) {
+            for (let x = 0; x < element.width; x++) {
+              const i = (y * element.width + x) * 4;
+              if (Math.abs(pixels[i] - 76) > 5 || Math.abs(pixels[i + 1] - 209) > 5 || Math.abs(pixels[i + 2] - 140) > 5) continue;
+              const next = (x - element.width / 2) ** 2 + (y - element.height / 2) ** 2;
+              if (next < distance) { distance = next; best = { x: x * element.clientWidth / element.width, y: (element.height - y - 1) * element.clientHeight / element.height }; }
+            }
+          }
+          return best;
+        });
+        assert.ok(position, `${route}: the actual selected aircraft marker is rendered`);
+        await canvas.click({ position });
+        await popup.waitFor();
+        const bounds = await popup.boundingBox();
+        const mapBounds = await globe.boundingBox();
+        assert.ok(bounds.x >= mapBounds.x && bounds.y >= mapBounds.y, "Popup starts within the globe");
+        assert.ok(bounds.x + bounds.width <= mapBounds.x + mapBounds.width + 1 && bounds.y + bounds.height <= mapBounds.y + mapBounds.height + 1, "Popup stays inside the globe on desktop/mobile");
+        const controls = await globe.locator(".od-map-controls").boundingBox();
+        assert.ok(bounds.x + bounds.width <= controls.x, "Popup leaves map controls accessible");
+        assert.equal(await page.locator(".od-dashboard-flight-inspector .od-dashboard-flight-details").count(), 0, "No duplicate infocard below the globe");
+        assert.match(await popup.innerText(), /Skyward Airlines/);
+        assert.match(await popup.getByRole("link").first().getAttribute("href"), /\/demo\/contracts\//);
+        await popup.getByRole("button", { name: "Close aircraft infocard", exact: true }).focus();
+        await page.keyboard.press("Escape");
+        assert.equal(await globe.getByRole("dialog").count(), 0);
+        await page.locator(".od-dashboard-aircraft-list button").nth(1).click();
+        await globe.getByRole("dialog", { name: "G-OPRA", exact: true }).waitFor();
+        if (route === "/demo/dashboard" && width === 1440) {
+          await page.getByRole("button", { name: "Full screen", exact: true }).click();
+          await page.getByRole("button", { name: "Exit full screen", exact: true }).waitFor();
+          assert.equal(await globe.getByRole("dialog").evaluate((element) => document.fullscreenElement?.contains(element)), true, "Popup remains inside fullscreen content");
+          await page.getByRole("button", { name: "Exit full screen", exact: true }).click();
+          await page.getByRole("button", { name: "Full screen", exact: true }).waitFor();
+        }
+        const dimensions = await page.evaluate(() => ({ viewport: innerWidth, content: document.documentElement.scrollWidth }));
+        assert.ok(dimensions.content <= dimensions.viewport + 1);
+      }
+      assert.deepEqual(errors, []);
+    } finally { await context.close(); }
+  });
+}

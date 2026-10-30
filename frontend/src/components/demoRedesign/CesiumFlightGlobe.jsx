@@ -21,7 +21,7 @@ import { getAviationMapStyle } from "../../demo/aviationMapLayers";
 import WeatherMapLayers from "../aviation/WeatherMapLayers";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
-export default function CesiumFlightGlobe({ aircraft, visibleIds, selectedId, onSelect, viewMode = "globe", mapStyle = "standard", weather, weatherEnabled = false, cloudsEnabled = weatherEnabled, windEnabled = false, routesEnabled = true, playing = true, spatialObjects = [], visibleLayers = ["aircraft"], onObjectSelect }) {
+export default function CesiumFlightGlobe({ aircraft, visibleIds, selectedId, onSelect, viewMode = "globe", mapStyle = "standard", weather, weatherEnabled = false, cloudsEnabled = weatherEnabled, windEnabled = false, routesEnabled = true, playing = true, spatialObjects = [], visibleLayers = ["aircraft"], onObjectSelect, children }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
   const imageryLayerRef = useRef(null);
@@ -198,7 +198,7 @@ export default function CesiumFlightGlobe({ aircraft, visibleIds, selectedId, on
 
   useEffect(() => {
     const syncFullscreen = () => {
-      const workspace = containerRef.current?.closest(".od-aviation-workspace");
+      const workspace = containerRef.current?.closest(".od-dashboard-globe-panel");
       setIsFullscreen(Boolean(workspace && document.fullscreenElement === workspace));
     };
     document.addEventListener("fullscreenchange", syncFullscreen);
@@ -283,7 +283,7 @@ export default function CesiumFlightGlobe({ aircraft, visibleIds, selectedId, on
   }
 
   async function toggleFullscreen() {
-    const workspace = containerRef.current?.closest(".od-aviation-workspace");
+    const workspace = containerRef.current?.closest(".od-dashboard-globe-panel");
     if (!workspace) return;
     try {
       setControlError("");
@@ -298,8 +298,9 @@ export default function CesiumFlightGlobe({ aircraft, visibleIds, selectedId, on
 
   return <div className="od-weather-map-frame"><WeatherMapLayers viewer={mapViewer} onActivityChange={setProviderWeatherActive}/><div className="od-cesium-shell">
     <div className="od-cesium-globe" ref={containerRef} aria-label={`Interactive demonstration flight ${viewMode}`}/>
-    {unavailable ? <div className="od-globe-unavailable" role="status"><strong>3D globe unavailable</strong><p>WebGL could not initialize. Aircraft search, selection, details and contract links remain available below.</p></div> :
+    {unavailable ? <div className="od-globe-unavailable" role="status"><strong>3D globe unavailable</strong><p>WebGL could not initialize. Select aircraft from the fleet list to inspect their infocards and contract links.</p></div> :
       <div className="od-map-controls" aria-label="Map controls"><button type="button" onClick={() => zoom(1)} aria-label="Zoom in" title="Zoom in"><Plus size={15}/></button><button type="button" onClick={() => zoom(-1)} aria-label="Zoom out" title="Zoom out"><Minus size={15}/></button><button type="button" onClick={resetView} aria-label="Reset view" title="Reset view"><LocateFixed size={15}/></button><button type="button" onClick={toggleFullscreen} aria-label={isFullscreen ? "Exit full screen" : "Full screen"} title={isFullscreen ? "Exit full screen" : "Full screen"}>{isFullscreen ? <Minimize2 size={15}/> : <Maximize2 size={15}/>}</button></div>}
     {controlError && <p className="od-globe-control-error" role="alert">{controlError}</p>}
+    {children}
   </div></div>;
 }

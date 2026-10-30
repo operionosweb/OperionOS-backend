@@ -1,12 +1,13 @@
-import React, { lazy, Suspense, useEffect, useId, useMemo, useState } from "react";
+import React, { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  CloudRain, Globe2, ImageOff, Layers, Map, Plane, Radio, Search, ShieldAlert, Wind,
+  CloudRain, Globe2, Layers, Map, Plane, Radio, Search, ShieldAlert, Wind,
 } from "lucide-react";
 import { DemoBadge, GlassCard } from "../../demo/DemoUI";
 import { getAviationProvider } from "../../demo/aviationDataProvider";
 import { DEMO_CONTRACTS } from "../../demo/DemoDataProvider";
 import { buildSpatialObjects, getFilterOptions, GLOBE_FILTERS, GLOBE_LAYERS, matchesGlobeFilters } from "./globeSchema";
+import AircraftInfoPopup from "./AircraftInfoPopup";
 
 const CesiumFlightGlobe = lazy(() => import("../demoRedesign/CesiumFlightGlobe"));
 const aviationProvider = getAviationProvider();
@@ -29,6 +30,19 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
   const [filters, setFilters] = useState({});
   const [layers, setLayers] = useState(() => GLOBE_LAYERS.filter((layer) => layer.initial).map((layer) => layer.id));
   const [selectedObject, setSelectedObject] = useState(null);
+  const [aircraftPopupOpen, setAircraftPopupOpen] = useState(true);
+  const workspaceRef = useRef(null);
+
+  function selectAircraft(id) {
+    setSelectedObject(null);
+    setSelectedId(id);
+    setAircraftPopupOpen(true);
+  }
+
+  function closeAircraftPopup() {
+    setAircraftPopupOpen(false);
+    workspaceRef.current?.querySelector(".od-cesium-globe canvas")?.focus({ preventScroll: true });
+  }
 
   useEffect(() => {
     let active = true;
@@ -86,7 +100,7 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
     return <GlassCard title="Flight operations unavailable" eyebrow="Aviation feed error"><p>The synthetic aviation provider could not be loaded. Contract intelligence remains available.</p></GlassCard>;
   }
 
-  return <section className="od-dashboard-aviation od-aviation-workspace" aria-labelledby={headingId}>
+  return <section ref={workspaceRef} className="od-dashboard-aviation od-aviation-workspace" aria-labelledby={headingId}>
     <header className="od-dashboard-aviation-header">
       <div>
         <span className="od-eyebrow">Spatial operations · synthetic positions</span>
@@ -146,7 +160,9 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
           </div>
         </div>
         {visibleAircraft.length ? <Suspense fallback={<div className="od-globe-loading"><Plane size={28}/><strong>Loading interactive globe</strong></div>}>
-          <CesiumFlightGlobe aircraft={aircraft} visibleIds={visibleIds} selectedId={selected?.id} onSelect={(id) => { setSelectedObject(null); setSelectedId(id); }} viewMode={viewMode} mapStyle={mapStyle} weather={weather} weatherEnabled={weatherEnabled} cloudsEnabled={cloudsEnabled} windEnabled={windEnabled} routesEnabled={routesEnabled} playing={playing} spatialObjects={objects} visibleLayers={layers} onObjectSelect={setSelectedObject}/>
+          <CesiumFlightGlobe aircraft={aircraft} visibleIds={visibleIds} selectedId={selected?.id} onSelect={selectAircraft} viewMode={viewMode} mapStyle={mapStyle} weather={weather} weatherEnabled={weatherEnabled} cloudsEnabled={cloudsEnabled} windEnabled={windEnabled} routesEnabled={routesEnabled} playing={playing} spatialObjects={objects} visibleLayers={layers} onObjectSelect={(item) => { setAircraftPopupOpen(false); setSelectedObject(item); }}>
+            {selected && aircraftPopupOpen && <AircraftInfoPopup aircraft={selected} contracts={selectedContracts} onClose={closeAircraftPopup}/>}
+          </CesiumFlightGlobe>
         </Suspense> : <div className="od-globe-empty"><Plane size={24}/><strong>No aircraft match this search and filter</strong><button type="button" onClick={resetFilters}>Show all flights</button></div>}
         <footer className="od-dashboard-globe-footer"><span><i/>Prepared synthetic positions</span><span role="status">{visibleAircraft.length} aircraft shown</span><span>Not a live aviation feed or navigation aid</span></footer>
       </section>
@@ -171,48 +187,14 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
             <div className="od-spatial-object-list">{objects.filter((item) => layers.includes(item.layer)).map((item) => <button type="button" className="od-button" key={item.id} onClick={() => setSelectedObject(item)}>{item.title} · {item.layer}</button>)}</div>
             {!objects.some((item) => layers.includes(item.layer)) && <p>Enable an available spatial layer to browse its records.</p>}
           </details>
-      <aside className="od-dashboard-flight-inspector" aria-label="Selected flight details">
+      <aside className="od-dashboard-flight-inspector" aria-label="Aircraft fleet selector">
         {selected ? <>
-          <div className="od-dashboard-flight-details">
-          <div className="od-dashboard-selected-heading">
-            <span className="od-dashboard-plane-icon"><Plane size={18}/></span>
-            <div><small>Selected aircraft</small><h3>{selected.registration}</h3></div>
-            <DemoBadge tone={selected.status === "On time" ? "success" : "neutral"}>{selected.status}</DemoBadge>
-          </div>
-          <p className="od-dashboard-flight-operator">{selected.operator} · {selected.type}</p>
-          <div className="od-aircraft-photo-unavailable" role="status">
-            <ImageOff size={24}/><strong>Aircraft photo unavailable</strong>
-            <p>This aircraft is part of a synthetic scenario. No verified, licensed photograph is available; a stock image would not identify this airframe.</p>
-          </div>
-          <div className="od-dashboard-route">
-            <span><small>ORIGIN</small><strong>{selected.origin}</strong><em>{selected.departure}</em></span>
-            <i aria-hidden="true"/><Plane size={16}/>
-            <span><small>DESTINATION</small><strong>{selected.destination}</strong><em>{selected.eta}</em></span>
-          </div>
-          <dl className="od-dashboard-flight-facts">
-            <div><dt>Altitude</dt><dd>{selected.altitude.toLocaleString()} m</dd></div>
-            <div><dt>Ground speed</dt><dd>{selected.speed} km/h</dd></div>
-            <div><dt>Heading</dt><dd>{selected.heading}°</dd></div>
-            <div><dt>Flight phase</dt><dd>{selected.phase}</dd></div>
-          </dl>
-          <div className="od-flight-contract-links">{selected.contractIds.map((id) => <Link className="od-button" key={id} to={`/demo/contracts/${id}`}>Inspect {id.replace("demo-", "").replaceAll("-", " ")} contract</Link>)}</div>
-          <details className="od-spatial-contract-context"><summary>Contract intelligence for {selected.registration}</summary>
-            <p>Prepared relationships only. MSN, live performance and supplier facility locations are unavailable. Non-lease demo records share sample legal evidence and require individual validation.</p>
-            {selectedContracts.map((contract) => <article key={contract.id}>
-              <h4>{contract.title} · {contract.contractId}</h4>
-              <p>{contract.counterparty} · {contract.status} · {contract.effective} – {contract.expiry}</p>
-              {contract.type === "Aircraft Operating Lease" && <p>Lessor: {contract.lessor} · Lessee: {contract.lessee}</p>}
-              <div className="od-flight-contract-links">{["clauses", "obligations", "deadlines", "risks", "financial-impact", "evidence"].map((section) =>
-                <Link key={section} to={`/demo/contracts/${contract.id}/${section}`}>{section.replaceAll("-", " ")}</Link>)}</div>
-            </article>)}
-          </details>
-          </div>
           <div className="od-dashboard-fleet-card">
           <h3>Explore the fleet</h3>
           <p>Select an aircraft to inspect its route and flight details.</p>
           <div className="od-dashboard-aircraft-list" aria-label="Choose an aircraft">
             {visibleAircraft.map((item) =>
-              <button type="button" className={item.id === selected.id ? "is-active" : ""} aria-pressed={item.id === selected.id} onClick={() => setSelectedId(item.id)} key={item.id}>
+              <button type="button" className={item.id === selected.id ? "is-active" : ""} aria-pressed={item.id === selected.id} onClick={() => selectAircraft(item.id)} key={item.id}>
                 <span className={`od-aircraft-status${item.status === "On time" ? " is-good" : " is-alert"}`}/>
                 <span><strong>{item.callsign}</strong><small>{item.origin} → {item.destination}</small></span>
                 <span>{item.status}</span>
