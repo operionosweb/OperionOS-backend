@@ -81,7 +81,7 @@ test("favicon and Apple touch icons are real square PNGs with valid served asset
 });
 
 for (const route of ["/", "/product", "/demo/dashboard", "/demo/live-tracking"]) {
-  test(`real mobile two-finger pan, pinch and rotation work on ${route}`, { timeout: 120000 }, async () => {
+  test(`real mobile one-finger drag and pinch work on ${route}`, { timeout: 120000 }, async () => {
     const { context, page } = await createPage(390, true);
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
@@ -111,7 +111,7 @@ for (const route of ["/", "/product", "/demo/dashboard", "/demo/live-tracking"])
       await canvas.tap({ position: aircraftPixel });
       await page.getByRole("dialog", { name: "G-OPER", exact: true }).waitFor();
       await close.click();
-      assert.equal(await canvas.getAttribute("data-touch-navigation"), "two-finger");
+      assert.equal(await canvas.getAttribute("data-touch-navigation"), "drag-pinch");
       assert.equal(await canvas.evaluate((element) => getComputedStyle(element).touchAction), "none");
       const cdp = await context.newCDPSession(page);
       const box = await canvas.boundingBox();
@@ -122,11 +122,10 @@ for (const route of ["/", "/product", "/demo/dashboard", "/demo/live-tracking"])
       await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [touch(1, x, y)] });
       await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [touch(1, x + 40, y + 20)] });
       await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-      assert.deepEqual(await canvas.screenshot(), start, "One-finger drag cannot move globe");
+      assert.notDeepEqual(await canvas.screenshot(), start, "One-finger drag rotates the actual globe");
+      assert.equal(await page.locator(".od-aircraft-popup").count(), 0, "Dragging does not select a marker");
       const gestures = [
-        [[x - 35, y], [x + 35, y], [x - 15, y + 35], [x + 55, y + 35], "pan"],
         [[x - 25, y], [x + 25, y], [x - 65, y], [x + 65, y], "pinch"],
-        [[x - 40, y], [x + 40, y], [x - 30, y - 25], [x + 30, y + 25], "twist"],
       ];
       for (const [a, b, nextA, nextB, kind] of gestures) {
         const before = await canvas.screenshot();
@@ -147,10 +146,10 @@ for (const route of ["/", "/product", "/demo/dashboard", "/demo/live-tracking"])
         await page.waitForTimeout(1000); // Cesium's configured globe-to-map morph takes 800ms.
         const mapBox = await canvas.boundingBox(), mx = mapBox.x + mapBox.width / 2, my = mapBox.y + mapBox.height / 2;
         const mapBefore = await canvas.screenshot();
-        await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [touch(1, mx - 35, my), touch(2, mx + 35, my)] });
-        await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [touch(1, mx - 5, my + 30), touch(2, mx + 65, my + 30)] });
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [touch(1, mx, my)] });
+        await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [touch(1, mx + 30, my + 30)] });
         await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-        assert.notDeepEqual(await canvas.screenshot(), mapBefore, "Two-finger pan also works in 2D map mode");
+        assert.notDeepEqual(await canvas.screenshot(), mapBefore, "One-finger pan also works in 2D map mode");
       }
       assert.equal(await page.locator(".cesium-widget-errorPanel, .od-globe-control-error").count(), 0);
       assert.deepEqual(errors, []);

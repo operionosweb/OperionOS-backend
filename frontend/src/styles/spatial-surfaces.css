@@ -152,6 +152,7 @@
   .od-shell .od-dashboard-globe-panel { border-inline: 0; border-radius: 12px; }
   .od-shell .od-dashboard-globe-panel .od-cesium-shell { height: clamp(560px, 80svh, 720px); }
   .od-shell .od-dashboard-globe-panel .od-map-controls { top: 8px; right: 6px; bottom: auto; display: grid; grid-template-columns: repeat(2, 44px); gap: 4px; }
+  .od-shell .od-dashboard-globe-panel .od-map-controls button { width: 44px; height: 44px; }
   .od-shell .od-globe-fleet-toggle { left: 6px; max-width: calc(100% - 110px); }
   .od-shell .od-aircraft-popup.od-dashboard-flight-details,
   .od-shell .od-globe-fleet-popup { left: 0; width: 100%; max-width: none; top: auto; bottom: 2px; max-height: calc(100% - 116px); border-radius: 12px; }

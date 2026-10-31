@@ -55,11 +55,16 @@ presentation and mobile-gutter layer, imported last.
   or keyboard focus, and can be pinned open. Mobile retains its navigation drawer
   and bottom navigation. Relationship-node badges and tracking actions use
   bounded, wrapping text rather than overflowing their cards or buttons.
-- Mobile globe navigation uses two fingers to pan/orbit, pinch to zoom and twist
-  to rotate the view. A single tap still selects an aircraft; a single-finger
-  drag cannot move the map. This shared touch controller is also used by the
+- Mobile globe navigation uses one finger to rotate the globe or pan the 2D map,
+  and two fingers to pinch to zoom. Pinching does not also pan or roll the camera.
+  A short stationary tap selects an aircraft; dragging cannot select markers.
+  Pointer-count changes rebase the gesture and release stops movement immediately.
+  Starting a gesture cancels an unfinished camera flight. This shared touch controller is also used by the
   authenticated production globe, without altering mouse controls. Touch gestures
   on the canvas are reserved for the globe; scroll the page outside the canvas.
+  The existing reset control restores a level overview and respects reduced
+  motion; authenticated tracking also exposes a 44px reset control. Double-tap
+  zoom is intentionally omitted to keep marker taps immediate and unambiguous.
 - The About page presents the company story, aviation-first focus, four explicit
   maturity stages, six principles and the founder's supplied photograph and
   first-person biography. Predictive risk, simulation and digital twins are not
@@ -206,9 +211,11 @@ npm.cmd run dev -- --host 127.0.0.1 --port 5173
 In another terminal:
 
 ```powershell
+$env:CORPORATE_TEST_URL = "http://127.0.0.1:5173"
 npm.cmd run test:corporate
 node --test tests/command-centre.test.mjs
 node --test --test-concurrency=1 tests\about-touch.test.mjs tests\globe-touch-controls.test.mjs
+node --test --test-concurrency=1 tests\globe-navigation.test.mjs
 node --test --test-concurrency=1 tests\spatial-surfaces.test.mjs
 ```
 
@@ -220,6 +227,10 @@ success/error states. External requests are blocked,
 and no real contact request or database
 operation is performed. `CORPORATE_TEST_URL` may select another loopback frontend.
 The authenticated acceptance harness remains separate and disabled.
+The navigation suite dispatches native Chromium touch events at 320, 360, 390,
+430, 768, 1024, 1440 and 1920px, checks release/reset and page scrolling, and
+exercises desktop mouse drag/wheel separately. Emulation is not physical-device
+certification for iOS Safari or Android Chrome.
 
 The demo Executive Cockpit gives the interactive globe the full workspace width.
 Selected-aircraft infocards appear as dismissible, scrollable popups **inside**

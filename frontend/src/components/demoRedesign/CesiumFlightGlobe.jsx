@@ -337,7 +337,7 @@ export default function CesiumFlightGlobe({ aircraft, visibleIds, selectedId, on
   function resetView() {
     const viewer = viewerRef.current;
     if (!viewer) return;
-    viewer.camera.flyTo({ destination: Cartesian3.fromDegrees(22, 30, viewMode === "map" ? 18000000 : 14500000), duration: 0.8 });
+    viewer.camera.flyTo({ destination: Cartesian3.fromDegrees(22, 30, viewMode === "map" ? 18000000 : 14500000), orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 }, duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 0.8 });
   }
 
   function zoom(multiplier) {

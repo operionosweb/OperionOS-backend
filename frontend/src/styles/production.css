@@ -940,6 +940,7 @@
 .op-aviation-stage.has-selection { grid-template-columns: minmax(0,1fr) 340px; }
 .op-globe-stage { min-width: 0; min-height: 610px; position: relative; }
 .op-aviation-globe { position: absolute; inset: 0; }
+.op-globe-reset { position: absolute; top: 8px; right: 8px; z-index: 2; display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #b7d4ee; border-radius: 8px; color: #174e78; background: #fff; cursor: pointer; }
 .op-aviation-globe .cesium-viewer-bottom,.op-aviation-globe .cesium-viewer-toolbar { display: none; }
 .op-aviation-unavailable { height: 100%; min-height: 610px; padding: 32px; display: grid; place-content: center; justify-items: center; text-align: center; color: #f2f5ff; background: radial-gradient(circle at 50% 62%,#162b4c 0,#091426 45%,#050b16 72%); }
 .op-aviation-unavailable .op-badge { margin: 14px 0 4px; }

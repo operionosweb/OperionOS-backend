@@ -164,7 +164,7 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
     <div className="od-dashboard-globe-layout">
       <section className="od-dashboard-globe-panel" aria-label="Interactive flight globe">
         <div className="od-dashboard-globe-toolbar">
-          <span className="od-globe-instructions"><i/>Mouse: drag to rotate, scroll to zoom. Touch: use two fingers to move, pinch or rotate; tap an aircraft to select.</span>
+          <span className="od-globe-instructions"><i/>Drag to explore. Pinch or scroll to zoom. Tap an aircraft to select.</span>
           <div className="od-globe-layer-controls">
             <button type="button" className={viewMode === "globe" ? "is-active" : ""} aria-pressed={viewMode === "globe"} onClick={() => setViewMode("globe")}><Globe2 size={14}/>Globe</button>
             <button type="button" className={viewMode === "map" ? "is-active" : ""} aria-pressed={viewMode === "map"} onClick={() => setViewMode("map")}><Map size={14}/>Map</button>

@@ -7,6 +7,7 @@ import LabelStyle from "@cesium/engine/Source/Scene/LabelStyle.js";
 import ScreenSpaceEventType from "@cesium/engine/Source/Core/ScreenSpaceEventType.js";
 import VerticalOrigin from "@cesium/engine/Source/Scene/VerticalOrigin.js";
 import Viewer from "@cesium/widgets/Source/Viewer/Viewer.js";
+import { LocateFixed } from "lucide-react";
 import { attachGlobeTouchControls } from "./globeTouchControls";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
@@ -58,5 +59,13 @@ export default function ProductionFlightGlobe({ aircraft, selectedId, onSelect }
     });
   }, [aircraft, selectedId]);
 
-  return <div className="op-aviation-globe" ref={hostRef} aria-label="Interactive production aviation globe" />;
+  function resetView() {
+    viewerRef.current?.camera.flyTo({
+      destination: Cartesian3.fromDegrees(10, 35, 14_000_000),
+      orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
+      duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : .8,
+    });
+  }
+
+  return <><div className="op-aviation-globe" ref={hostRef} aria-label="Interactive production aviation globe" /><button type="button" className="op-globe-reset" onClick={resetView} aria-label="Reset view" title="Reset view"><LocateFixed size={18}/></button></>;
 }
