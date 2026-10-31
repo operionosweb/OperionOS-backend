@@ -7,6 +7,7 @@ import Reveal from "../components/ui/Reveal";
 import Logo from "../components/ui/Logo";
 import { useAuth } from "../context/AuthContext";
 import { trackEvent } from "../components/analytics/Analytics";
+import PasswordRecovery, { recoveryRequest } from "../components/auth/PasswordRecovery.jsx";
 
 
 export default function Login() {
@@ -18,9 +19,9 @@ export default function Login() {
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState("error");
   const [submitting, setSubmitting] = useState(false);
-  const [resetting, setResetting] = useState(false);
+  const [recovering, setRecovering] = useState(recoveryRequest);
 
-  if (!auth?.loading && auth?.isAuthenticated) return <Navigate to="/app/dashboard" replace />;
+  if (!recovering && !auth?.loading && auth?.isAuthenticated) return <Navigate to="/app/dashboard" replace />;
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -44,39 +45,22 @@ export default function Login() {
     navigate(destination, { replace: true });
   }
 
-  async function handlePasswordReset() {
-    setMessage("");
-    if (!email) {
-      setMessageTone("error");
-      setMessage("Enter your business email to request a password reset.");
-      return;
-    }
-
-    setResetting(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/login`,
-    });
-    setResetting(false);
-    setMessageTone(error ? "error" : "success");
-    setMessage(error ? "We could not send the reset email. Please try again." : "Check your email for a password reset link.");
-  }
-
   return (
     <main className="op-login-page">
       <section className="op-login-hero">
         <Container><div className="op-login-grid">
           <Reveal className="op-login-copy"><p className="op-sales-label">OPERION / ACCOUNT ACCESS</p><h1>Access Operion.</h1><p>Sign in to access your Operion workspace and continue working with aviation contract intelligence.</p><Button to="/" variant="secondary">Back to Operion</Button></Reveal>
-          <Reveal as="form" className="op-login-panel" onSubmit={handleSubmit}>
+          {recovering ? <PasswordRecovery client={supabase} callbackPath="/login" callback={recovering === true} className="op-login-panel" onBack={() => setRecovering(false)} /> : <Reveal as="form" className="op-login-panel" onSubmit={handleSubmit}>
             <Logo size="sm" />
             <p className="op-sales-label">SECURE WORKSPACE</p>
             <h2>Sign in</h2>
             <label>Business email<input type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
             <label>Password<input type="password" required autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
-            <Button type="submit" disabled={submitting || resetting}>{submitting ? "Signing in…" : "Sign in"}</Button>
-            <button type="button" className="op-login-reset" onClick={handlePasswordReset} disabled={submitting || resetting}>{resetting ? "Sending reset link…" : "Forgot password?"}</button>
+            <Button type="submit" disabled={submitting}>{submitting ? "Signing in…" : "Sign in"}</Button>
+            <button type="button" className="op-login-reset" onClick={() => setRecovering('request')} disabled={submitting}>Forgot password?</button>
             {message && <p className={`op-login-message is-${messageTone}`} role={messageTone === "error" ? "alert" : "status"}>{message}</p>}
             <div className="op-login-demo-path"><p>Evaluating Operion?</p><Button to="/demo" variant="secondary" onClick={() => trackEvent("demo_access_click", { location: "login" })}>Access Demo</Button><Button to="/request-demo" variant="quiet">Request private access</Button></div>
-          </Reveal>
+          </Reveal>}
         </div></Container>
       </section>
     </main>

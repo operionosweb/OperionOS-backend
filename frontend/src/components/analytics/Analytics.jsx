@@ -1,17 +1,19 @@
 import React, { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { hasSensitiveCallbackLocation, safeAnalyticsLocation } from "../../lib/authCallback.js";
 
 const MEASUREMENT_ID = "G-KJRS5DWVD4";
 const CONSENT_KEY = "operion-analytics-consent";
 let videoPlayTracked = false;
 
 function loadAnalytics() {
+  if (hasSensitiveCallbackLocation()) return;
   if (document.querySelector("script[data-operion-ga4]")) return;
   window.dataLayer = window.dataLayer || [];
   window.gtag = function gtag() { window.dataLayer.push(arguments); };
   window.gtag("js", new Date());
   window.gtag("consent", "default", { analytics_storage: "granted" });
-  window.gtag("config", MEASUREMENT_ID, { send_page_view: false, anonymize_ip: true });
+  window.gtag("config", MEASUREMENT_ID, { send_page_view: false, anonymize_ip: true, ...safeAnalyticsLocation(), page_referrer: '' });
 
   const script = document.createElement("script");
   script.async = true;
@@ -21,7 +23,7 @@ function loadAnalytics() {
 }
 
 export function trackEvent(name, parameters = {}) {
-  if (localStorage.getItem(CONSENT_KEY) !== "granted") return;
+  if (localStorage.getItem(CONSENT_KEY) !== "granted" || hasSensitiveCallbackLocation()) return;
   if (name === "video_play") {
     if (videoPlayTracked) return;
     videoPlayTracked = true;
@@ -46,11 +48,11 @@ export default function Analytics() {
   }, []);
 
   useEffect(() => {
-    if (consent !== "granted") return;
+    if (consent !== "granted" || hasSensitiveCallbackLocation()) return;
     loadAnalytics();
     window.gtag("event", "page_view", {
-      page_location: window.location.href,
-      page_path: `${pathname}${search}`,
+      ...safeAnalyticsLocation(),
+      page_referrer: '',
       page_title: document.title,
     });
     const activeVideo = document.querySelector(".op-intel-video-frame video");

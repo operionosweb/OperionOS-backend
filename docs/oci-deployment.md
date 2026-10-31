@@ -200,6 +200,101 @@ reviewed release without unexpectedly breaking the public/customer service.
 The OCI-only transport does not prove the shared infrastructure secure. Account
 for both pool connection budgets when sizing database/hosting replicas.
 
+### Isolated password-recovery candidate (not deployed)
+
+The recovery-only candidate is based on commit
+`8f3599a5c035b11dee7e7c0b1242368469f09ced`, without the pending shared
+PostgreSQL TLS changes. It adds a shared recovery interface to public login and
+OCI without changing database connections, migrations, roles or dependencies.
+OCI remains non-operational; recovery never provisions or grants administrator
+access. No provider configuration or real account was changed.
+
+The callback module initializes with the authentication client before React renders.
+It captures explicit recovery callbacks in memory and immediately removes query/
+fragment credentials from browser history. The recovery component verifies the
+provider session and matching user ID, challenges an existing verified TOTP factor,
+validates password confirmation and submits the update directly to Supabase Auth.
+It explicitly handles expired/reused links, identity mismatch, MFA errors, password
+policy rejection and signout failure. Completion requires local session cleanup,
+then fresh login. It does not promise global session revocation.
+
+Only a non-sensitive pending marker is stored in sessionStorage. Interrupted
+recovery/reload requires a fresh link and cleanup rather than silently entering
+the customer workspace with a recovery session. Callback credentials are cleared
+from the in-memory capture after verification. Public authorization and organization
+requests are suppressed during recovery; ordinary login/session behavior is retained.
+
+Public hash navigation uses element IDs rather than arbitrary CSS selectors.
+Consented analytics retains ordinary page tracking but sanitizes callback parameters
+and excludes hashes/referrers from its page metadata. Analytics does not initialize
+while sensitive non-recovery callback parameters remain in the URL. These protections
+do not depend on the lazy recovery component loading. The public HTML now declares
+`no-referrer` before assets/scripts (OCI already does), because cleanup after
+JavaScript loading cannot protect initial subresource referrers. This deliberately
+removes browser referrers site-wide; ordinary non-sensitive analytics query tracking
+remains enabled. Initial incoming callback URLs still necessarily reach the serving
+HTTP endpoint; this client change cannot control provider/mail/server access logs.
+
+Provider acceptance gates, requiring separate owner approval:
+
+1. Verify SMTP/email delivery and exact approved public
+   `https://www.operionos.com/login?recovery=1` and OCI
+   `https://oci.operionos.com/?recovery=1` redirects. Verify apex entry behavior
+   separately; do not change redirect allowlists during candidate preparation.
+2. Rehearse the provider's actual implicit, PKCE or token-hash recovery template.
+   OCI PKCE requires the originating browser/tab verifier. For cross-device
+   recovery, the officially supported token-hash method must be configured and
+   tested by the owner. An example for these redirects (which already contain
+   `?recovery=1`) is:
+
+   ```html
+   <a href="{{ .RedirectTo }}&amp;token_hash={{ .TokenHash }}&amp;type=recovery">Reset password</a>
+   ```
+
+   This example is not evidence of the currently configured template. Review its
+   effect on all shared customer flows before any provider change.
+3. Test real controlled accounts: eligible/nonexistent email handling, expiry,
+   one-use links, existing-session/account switching, enrolled TOTP, provider
+   password policy, password update and local session cleanup. Lost MFA uses the
+   provider's audited recovery procedure, never this UI as a bypass.
+4. Inspect actual production analytics/referrer behavior, serving deployment
+   identity, preview isolation and frontend rollback permissions before release.
+   A Git push can rebuild the backend even if its source is unchanged.
+
+Candidate tests intercept all provider/API/analytics transports; no real emails or
+password updates occur. Browser emulation is not physical iOS/Android verification.
+Production readiness remains blocked on real provider acceptance and owner approval.
+Do not deploy OCI or change its database/DNS/provisioning gates as part of recovery.
+
+Local candidate validation: 26 browser tests passed against offline production
+artifacts, with an additional real development React StrictMode case in that suite;
+nine unchanged customer authorization tests and 38 unchanged offline OCI backend
+tests passed. Standard public and OCI production builds passed. The public build
+retains its existing large-chunk warning. Responsive public recovery and OCI
+layouts passed at 320, 360, 390, 430, 768, 1024, 1440 and 1920px.
+Production callback tests cover cold lazy loading, pre-granted analytics consent,
+implicit fragments, PKCE, token-hash links, sensitive event/referrer rejection,
+ordinary analytics/anchors, existing sessions, invalid credentials, expired
+sessions, identity mismatch, interrupted recovery, retries, MFA and password
+policy failures. All service transports were mocked; no physical-device or real
+provider acceptance testing is claimed.
+
+The Vite development server injects its tooling client ahead of document metadata;
+synthetic testing exposed a query-bearing referrer on that local development-only
+request. Referrer acceptance was therefore tested on the actual production HTML
+and bundles, without excluding tooling requests from a production assertion.
+Do not open real emailed callback credentials on a Vite development server;
+use an owner-approved, production-built test target for provider acceptance.
+The development StrictMode test uses synthetic credentials only.
+
+Release isolation checks confirm that the TLS commit is not an ancestor and that
+shared TLS files/scripts are absent. Backend sources, migrations, root/frontend
+manifests and lockfiles, and deployment configuration match the baseline under Git
+normalization (Windows checkout line endings do not indicate a source change).
+The candidate is maintained on local branch `release/password-recovery-isolated`.
+Its recovery changes are **PREPARED — READY FOR OWNER REVIEW**, not approved for
+publication, deployment or OCI activation.
+
 ## 5. Create the independent Vercel project and DNS
 
 1. Create an independent OCI Vercel project connected to this repository's `main`.

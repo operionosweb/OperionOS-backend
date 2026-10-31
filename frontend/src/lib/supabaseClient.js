@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { isRecoveryRequest } from "./authCallback.js";
 
 /* ===============================
    SUPABASE CLIENT
@@ -7,6 +8,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const explicitRecovery = isRecoveryRequest();
 
 /* ===============================
    SAFETY CHECK (helps debugging)
@@ -29,7 +31,7 @@ export const supabase = createClient(
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: true
+      detectSessionInUrl: !explicitRecovery
     }
   }
 );

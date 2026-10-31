@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { apiRequest } from "../lib/apiClient";
+import { isRecoveryRequest } from "../lib/authCallback.js";
 
 const AuthContext = createContext();
 
@@ -15,6 +16,7 @@ export function AuthProvider({ children }) {
 
     async function restoreAuthorization(nextSession) {
       if (!active) return;
+      if (isRecoveryRequest()) nextSession = null;
       setSession(nextSession);
       setAuthorizationLoading(Boolean(nextSession));
       if (!nextSession) {
@@ -39,7 +41,8 @@ export function AuthProvider({ children }) {
       .finally(() => active && setLoading(false));
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      restoreAuthorization(nextSession);
+      // Provider callbacks hold the auth lock; API helpers read the session.
+      window.setTimeout(() => restoreAuthorization(nextSession), 0);
     });
 
     return () => {

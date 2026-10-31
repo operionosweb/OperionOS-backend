@@ -2,57 +2,109 @@ import test, { before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { createServer } from 'vite'
+import { build, createServer as createViteServer } from 'vite'
+import { createServer } from 'node:http'
+import { readFile } from 'node:fs/promises'
 import { chromium } from '@playwright/test'
 import { OCI_MODULES, OCI_STAGES } from '../../shared/ociContracts.js'
 
-// This suite owns an ephemeral local Vite listener and intercepts every auth/API request.
+// Production artifacts use only synthetic service configuration and intercepted transports.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const authOrigin = 'http://127.0.0.1:59998'
 process.env.VITE_SUPABASE_URL = authOrigin
 process.env.VITE_SUPABASE_ANON_KEY = 'oci-offline-anon-key'
 process.env.VITE_API_BASE_URL = ''
-let server, browser, origin
+let server, devServer, browser, origin, devOrigin
 const now = Math.floor(Date.now() / 1000)
 const userId = '00000000-0000-4000-8000-000000000001'
-const token = (aal = 'aal2') => [Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url'), Buffer.from(JSON.stringify({ sub: userId, exp: now + 3600, iat: now, role: 'authenticated', aal })).toString('base64url'), 'offline-signature'].join('.')
+const token = (aal = 'aal2') => [Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url'), Buffer.from(JSON.stringify({ sub: userId, exp: now + 3600, iat: now, role: 'authenticated', aal })).toString('base64url'), Buffer.from('offline-signature').toString('base64url')].join('.')
 const user = { id: userId, email: 'admin@example.test', aud: 'authenticated', role: 'authenticated', app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString(), factors: [] }
 const session = (aal = 'aal2') => ({ access_token: token(aal), refresh_token: 'offline-refresh', token_type: 'bearer', expires_in: 3600, expires_at: now + 3600, user })
 const record = (kind, data, id = `${kind}-1`, accountId = null) => ({ id, kind, data, account_id: accountId, opportunity_id: null, version: 1, status: 'active', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), created_by: userId, updated_by: userId })
 
 before(async () => {
-  server = await createServer({ root, configFile: path.join(root, 'vite.oci.config.js'), mode: 'oci-offline', server: { host: '127.0.0.1', port: 0, strictPort: false, hmr: false }, logLevel: 'error' })
-  await server.listen()
-  origin = `http://127.0.0.1:${server.httpServer.address().port}`
+  await build({ root, configFile: path.join(root, 'vite.config.js'), mode: 'recovery-offline', logLevel: 'error' })
+  await build({ root, configFile: path.join(root, 'vite.oci.config.js'), mode: 'recovery-offline', logLevel: 'error' })
+  server = createServer(async (request, response) => {
+    const pathname = new URL(request.url, 'http://localhost').pathname
+    const candidates = pathname.startsWith('/assets/') || pathname.startsWith('/cesium/')
+      ? ['dist', 'dist-oci'].map(folder => path.join(root, folder, pathname))
+      : [path.join(root, pathname === '/oci.html' ? 'dist-oci/oci.html' : 'dist/index.html')]
+    for (const file of candidates) {
+      try {
+        const content = await readFile(file)
+        const types = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.png': 'image/png' }
+        response.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream' })
+        response.end(content)
+        return
+      } catch (error) {
+        if (error.code !== 'ENOENT') { response.writeHead(500); response.end('Offline artifact unavailable'); return }
+      }
+    }
+    response.writeHead(404); response.end('Offline asset unavailable')
+  })
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  origin = `http://127.0.0.1:${server.address().port}`
+  devServer = await createViteServer({ root, configFile: path.join(root, 'vite.config.js'), mode: 'recovery-offline', server: { host: '127.0.0.1', port: 0, hmr: false }, logLevel: 'error' })
+  await devServer.listen()
+  devOrigin = `http://127.0.0.1:${devServer.httpServer.address().port}`
   browser = await chromium.launch({ headless: true })
 })
-after(async () => { await browser?.close(); await server?.close() })
+after(async () => { await browser?.close(); await devServer?.close(); if (server) await new Promise(resolve => server.close(resolve)) })
 
-async function fixture({ restore = true, denial = false, mfa = false, enrolled = true, accessError = false, userError = false, records: initial = {}, revenueSummary = { financials: [], pipeline: [] } } = {}) {
+async function fixture({ restore = true, denial = false, mfa = false, enrolled = true, accessError = false, userError = false, recovery = '', recoveryError = false, pkceFlow = false, publicLogin = false, analyticsConsent = false, coldDelay = 0, loginError = false, identityMismatch = false, expiredSession = false, devStrict = false, records: initial = {}, revenueSummary = { financials: [], pipeline: [] } } = {}) {
+  const baseOrigin = devStrict ? devOrigin : origin
   const context = await browser.newContext()
   await context.routeWebSocket('**/*', (socket) => socket.close())
   const page = await context.newPage()
-  page.setDefaultTimeout(10000)
-  const state = { denial, mfa, accessError, aal: mfa ? 'aal1' : 'aal2', requests: [], auth: [], records: structuredClone(initial), stages: [...OCI_STAGES], conflict: false, apiError: false, userError, revoked: false }
-  if (restore) await context.addInitScript(({ stored }) => sessionStorage.setItem('operion-oci-auth', JSON.stringify(stored)), { stored: session(state.aal) })
+  page.setDefaultTimeout(30000)
+  const state = { denial, mfa, accessError, aal: mfa ? 'aal1' : 'aal2', requests: [], auth: [], network: [], javascriptErrors: [], records: structuredClone(initial), stages: [...OCI_STAGES], conflict: false, apiError: false, userError, revoked: false, recoveryError, passwordError: false, logoutError: false, mfaError: false, loginError, identityMismatch, expiredSession }
+  page.on('pageerror', error => state.javascriptErrors.push(error.message))
+  const storageKey = publicLogin ? `sb-${new URL(authOrigin).hostname.split('.')[0]}-auth-token` : 'operion-oci-auth'
+  if (restore) await context.addInitScript(({ stored, key, isPublic }) => {
+    (isPublic ? localStorage : sessionStorage).setItem(key, JSON.stringify(stored))
+  }, { stored: { ...session(state.aal), ...(expiredSession ? { expires_at: now - 10 } : {}) }, key: storageKey, isPublic: publicLogin })
+  if (analyticsConsent) await context.addInitScript(() => localStorage.setItem('operion-analytics-consent', 'granted'))
+  if (pkceFlow) await context.addInitScript(({ key, isPublic }) => {
+    const storage = isPublic ? localStorage : sessionStorage
+    storage.setItem(`${key}-flow-offline-flow-1-code-verifier`, JSON.stringify('offline-flow-verifier/recovery'))
+    storage.setItem(`${key}-code-verifier`, JSON.stringify('wrong-concurrent-verifier/recovery'))
+  }, { key: storageKey, isPublic: publicLogin })
+  await context.addInitScript(() => {
+    window.scrolledAnchors = []
+    Element.prototype.scrollIntoView = function () { window.scrolledAnchors.push(this.id) }
+    document.addEventListener('DOMContentLoaded', () => {
+      const anchor = document.createElement('div')
+      anchor.id = 'recovery-test-anchor'
+      document.body.appendChild(anchor)
+    })
+  })
   await context.route('**/*', async (route) => {
     const request = route.request()
     const url = new URL(request.url())
+    state.network.push({ url: request.url(), referrer: request.headers().referer || '' })
     const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
+    if (url.hostname === 'www.googletagmanager.com') return route.fulfill({ contentType: 'application/javascript', body: '' })
     if (url.origin === authOrigin) {
-      state.auth.push({ path: url.pathname, method: request.method(), body: request.postDataJSON() })
-      if (url.pathname.endsWith('/token')) return json(session(state.aal))
-      if (url.pathname.endsWith('/logout')) return json({})
+      state.auth.push({ path: url.pathname, query: url.search, method: request.method(), body: request.postDataJSON() })
+      if (url.pathname.endsWith('/recover')) return state.recoveryError ? json({ message: 'Rate limited' }, 429) : json({})
+      if (url.pathname === '/auth/v1/verify') return state.recoveryError ? json({ message: 'Expired recovery token' }, 403) : json(session('aal1'))
+      if (url.pathname.endsWith('/token')) return state.loginError || state.expiredSession ? json({ message: 'Invalid credentials or expired session' }, 400) : json(session(state.aal))
+      if (url.pathname.endsWith('/logout')) return state.logoutError ? json({ message: 'Sign out failed' }, 503) : json({})
       if (url.pathname.endsWith('/user')) {
+        if (request.method() === 'PUT') return state.passwordError ? json({ message: 'Password policy' }, 422) : json(user)
         if (state.userError) return json({ message: 'Identity verification failed' }, 401)
-        return json({ ...user, factors: enrolled ? [{ id: 'factor-1', factor_type: 'totp', status: 'verified', friendly_name: 'OCI authenticator' }] : [] })
+        return json({ ...user, ...(state.identityMismatch ? { id: '00000000-0000-4000-8000-000000000099' } : {}), factors: enrolled ? [{ id: 'factor-1', factor_type: 'totp', status: 'verified', friendly_name: 'OCI authenticator' }] : [] })
       }
       if (url.pathname.endsWith('/factors') && request.method() === 'POST') return json({ id: 'factor-new', type: 'totp', totp: { qr_code: '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"></svg>', secret: 'OFFLINETESTSECRET', uri: 'otpauth://totp/OCI?secret=OFFLINETESTSECRET' } })
       if (url.pathname.endsWith('/challenge')) return json({ id: 'challenge-1', expires_at: now + 300 })
-      if (url.pathname.endsWith('/verify')) { state.mfa = false; state.aal = 'aal2'; return json(session('aal2')) }
+      if (url.pathname.endsWith('/verify')) {
+        if (state.mfaError) return json({ message: 'Invalid authenticator code' }, 422)
+        state.mfa = false; state.aal = 'aal2'; return json(session('aal2'))
+      }
       return json({ all: [], totp: [] })
     }
-    if (url.origin === origin && url.pathname.startsWith('/api/oci')) {
+    if (url.origin === baseOrigin && url.pathname.startsWith('/api/oci')) {
       const path = url.pathname.slice('/api/oci'.length)
       const body = request.postDataJSON()
       state.requests.push({ path, query: url.searchParams, method: request.method(), body, authorization: request.headers().authorization })
@@ -113,10 +165,14 @@ async function fixture({ restore = true, denial = false, mfa = false, enrolled =
       }
       return json({ success: false, error: 'Unknown mocked endpoint' }, 404)
     }
-    if (url.origin === origin) return route.continue()
+    if (url.origin === baseOrigin && url.pathname.startsWith('/api/')) return json({ roles: [], permissions: [] })
+    if (url.origin === baseOrigin) {
+      if (coldDelay && /^\/assets\/Login-.*\.js$/.test(url.pathname)) await new Promise(resolve => setTimeout(resolve, coldDelay))
+      return route.continue()
+    }
     throw new Error(`Unexpected outbound request blocked: ${url.origin}`)
   })
-  await page.goto(`${origin}/oci.html`)
+  await page.goto(`${baseOrigin}/${publicLogin ? 'login' : 'oci.html'}${recovery}`, { waitUntil: 'domcontentloaded', timeout: 30000 })
   return { page, state, context }
 }
 async function ready(page) { await page.getByRole('heading', { name: 'Command centre', exact: true }).waitFor() }
@@ -133,7 +189,7 @@ async function fillRequired(page, module, name) {
   }
 }
 
-test('restore checks getUser and server access before commercial requests; logout is tab-local', { timeout: 30000 }, async () => {
+test('restore checks getUser and server access before commercial requests; logout is tab-local', { timeout: 120000 }, async () => {
   const { page, state, context } = await fixture()
   try {
     await ready(page)
@@ -145,6 +201,272 @@ test('restore checks getUser and server access before commercial requests; logou
     assert.equal(await page.evaluate(() => localStorage.getItem('operion-oci-auth')), null)
     assert.equal(await page.evaluate(() => sessionStorage.getItem('operion-oci-auth')), null)
   } finally { await context.close() }
+})
+
+test('OCI forgot-password requests are validated, generic and surface provider failure', async () => {
+  const { page, state, context } = await fixture({ restore: false })
+  try {
+    await page.getByRole('button', { name: 'Forgot password?' }).click()
+    await page.getByRole('button', { name: 'Send reset link' }).click()
+    assert.equal(state.auth.filter(item => item.path.endsWith('/recover')).length, 0)
+    await page.getByLabel('Email', { exact: true }).fill('admin@example.test')
+    state.recoveryError = true
+    await page.getByRole('button', { name: 'Send reset link' }).click()
+    await page.getByRole('alert').filter({ hasText: 'could not request' }).waitFor()
+    state.recoveryError = false
+    await page.getByRole('button', { name: 'Send reset link' }).click()
+    await page.getByRole('status').filter({ hasText: 'eligible account' }).waitFor()
+    const requests = state.auth.filter(item => item.path.endsWith('/recover'))
+    assert.equal(requests.at(-1).body.email, 'admin@example.test')
+    assert.equal(new URLSearchParams(requests.at(-1).query).get('redirect_to'), `${origin}/?recovery=1`)
+    assert.equal(state.requests.length, 0)
+    assert.deepEqual(state.javascriptErrors, [])
+  } finally { await context.close() }
+})
+
+test('expired recovery token is rejected before password changes and recovery forms fit all widths', async () => {
+  const failed = await fixture({ restore: false, enrolled: false, recoveryError: true, recovery: '?token_hash=expired-test&type=recovery' })
+  try {
+    await failed.page.getByRole('button', { name: 'Request a new link' }).waitFor()
+    assert.equal(failed.state.requests.length, 0)
+    assert.equal(failed.state.auth.some(item => item.method === 'PUT'), false)
+  } finally { await failed.context.close() }
+  const { page, context, state } = await fixture({ restore: false, enrolled: false, recovery: '?token_hash=offline-recovery&type=recovery' })
+  try {
+    await page.getByRole('heading', { name: 'Choose a new password' }).waitFor()
+    for (const width of [320, 360, 390, 430, 768, 1024, 1440, 1920]) {
+      await page.setViewportSize({ width, height: 900 })
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${width}px recovery overflow`)
+      for (const button of await page.getByRole('button').all()) {
+        const box = await button.boundingBox()
+        assert.ok(box && box.width >= 44 && box.height >= 42)
+      }
+    }
+    assert.equal(state.requests.length, 0)
+  } finally { await context.close() }
+})
+
+test('OCI recovery scrubs link, enforces existing MFA, checks passwords and closes session', async () => {
+  const { page, state, context } = await fixture({ restore: false, recovery: '?token_hash=offline-recovery&type=recovery' })
+  try {
+    await page.getByRole('button', { name: 'Verify code', exact: true }).waitFor()
+    assert.equal(new URL(page.url()).search, '')
+    assert.equal(state.requests.length, 0)
+    assert.equal(state.auth.some(item => item.method === 'PUT'), false)
+    await page.getByLabel('Six-digit code').fill('123456')
+    await page.getByRole('button', { name: 'Verify code', exact: true }).click()
+    await page.getByLabel('New password', { exact: true }).fill('new-offline-password')
+    await page.getByLabel('Confirm new password').fill('different-password')
+    await page.getByRole('button', { name: 'Update password' }).click()
+    await page.getByRole('alert').filter({ hasText: 'do not match' }).waitFor()
+    assert.equal(state.auth.some(item => item.method === 'PUT'), false)
+    await page.getByLabel('Confirm new password').fill('new-offline-password')
+    state.passwordError = true
+    await page.getByRole('button', { name: 'Update password' }).click()
+    await page.getByRole('alert').filter({ hasText: 'could not complete' }).waitFor()
+    state.passwordError = false
+    state.logoutError = true
+    await page.getByRole('button', { name: 'Update password' }).click()
+    await page.getByRole('button', { name: 'Retry sign out' }).waitFor()
+    state.logoutError = false
+    await page.getByRole('button', { name: 'Retry sign out' }).click()
+    await page.getByRole('status').filter({ hasText: 'password was updated' }).waitFor()
+    assert.equal(await page.evaluate(() => sessionStorage.getItem('operion-oci-auth')), null)
+    assert.equal(state.requests.length, 0)
+    await page.getByRole('button', { name: 'Back to sign in' }).click()
+    await page.getByRole('heading', { name: 'Sign in to OCI' }).waitFor()
+  } finally { await context.close() }
+})
+
+test('incomplete OCI recovery cannot reuse an existing session or load commercial data', async () => {
+  const { page, state, context } = await fixture({ recovery: '?recovery=1' })
+  try {
+    await page.getByRole('button', { name: 'Request a new link' }).waitFor()
+    assert.equal(state.auth.some(item => item.method === 'PUT'), false)
+    assert.equal(state.requests.length, 0)
+    await page.getByRole('button', { name: 'Request a new link' }).click()
+    await page.getByRole('button', { name: 'Send reset link' }).waitFor()
+    assert.equal(await page.evaluate(() => sessionStorage.getItem('operion-oci-auth')), null)
+  } finally { await context.close() }
+})
+
+test('PKCE recovery preserves its flow-specific verifier after URL scrubbing; legacy fragments still work', async () => {
+  for (const options of [
+    { pkceFlow: true, recovery: '?code=offline-auth-code&recovery=1&sb_flow_id=offline-flow-1' },
+    { recovery: `#type=recovery&access_token=${token('aal1')}&refresh_token=offline-refresh` },
+  ]) {
+    const { page, context, state } = await fixture({ restore: false, enrolled: false, ...options })
+    try {
+      await page.getByRole('heading', { name: 'Choose a new password' }).waitFor()
+      assert.equal(new URL(page.url()).search, '')
+      assert.equal(new URL(page.url()).hash, '')
+      if (options.pkceFlow) {
+        const exchanged = state.auth.find(item => item.path.endsWith('/token'))
+        assert.equal(exchanged.body.code_verifier, 'offline-flow-verifier')
+        assert.equal(exchanged.body.auth_code, 'offline-auth-code')
+      }
+      assert.equal(state.requests.length, 0)
+      await page.getByRole('button', { name: 'Back to sign in' }).click()
+      await page.getByRole('heading', { name: 'Sign in to OCI' }).waitFor()
+    } finally { await context.close() }
+  }
+})
+
+test('public login recovery completes password update rather than redirecting to the dashboard', { timeout: 60000 }, async () => {
+  const { page, state, context } = await fixture({ restore: false, enrolled: false, publicLogin: true, recovery: '?token_hash=offline-recovery&type=recovery' })
+  try {
+    await page.getByRole('heading', { name: 'Choose a new password' }).waitFor()
+    assert.equal(new URL(page.url()).pathname, '/login')
+    assert.equal(new URL(page.url()).search, '')
+    for (const width of [320, 360, 390, 430, 768, 1024, 1440, 1920]) {
+      await page.setViewportSize({ width, height: 900 })
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${width}px public recovery overflow`)
+      for (const button of await page.getByRole('region', { name: 'Password recovery' }).getByRole('button').all()) {
+        const box = await button.boundingBox()
+        assert.ok(box && box.width >= 44 && box.height >= 42)
+      }
+    }
+    await page.getByLabel('New password', { exact: true }).fill('new-offline-password')
+    await page.getByLabel('Confirm new password').fill('new-offline-password')
+    await page.getByRole('button', { name: 'Update password' }).click()
+    await page.getByRole('status').filter({ hasText: 'password was updated' }).waitFor()
+    assert.equal(state.auth.filter(item => item.method === 'PUT').length, 1)
+    await page.getByRole('button', { name: 'Back to sign in' }).click()
+    await page.getByRole('heading', { name: 'Sign in', exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Forgot password?' }).click()
+    await page.getByLabel('Email', { exact: true }).fill('admin@example.test')
+    await page.getByRole('button', { name: 'Send reset link' }).click()
+    await page.getByRole('status').filter({ hasText: 'If an eligible account exists' }).waitFor()
+    const request = state.auth.find(item => item.path.endsWith('/recover'))
+    assert.equal(new URLSearchParams(request.query).get('redirect_to'), `${origin}/login?recovery=1`)
+    assert.deepEqual(state.javascriptErrors, [])
+  } finally { await context.close() }
+})
+
+test('public callbacks are scrubbed before cold lazy loading, consented analytics and referrers', { timeout: 120000 }, async () => {
+  for (const options of [
+    { recovery: `#type=recovery&access_token=${token('aal1')}&refresh_token=offline-refresh` },
+    { pkceFlow: true, recovery: '?code=offline-auth-code&recovery=1&sb_flow_id=offline-flow-1' },
+    { recovery: '?token_hash=offline-recovery&type=recovery&error_description=private-detail' },
+  ]) {
+    const { page, state, context } = await fixture({ restore: true, publicLogin: true, enrolled: false, analyticsConsent: true, coldDelay: 600, ...options })
+    try {
+      await page.getByRole('heading', { name: 'Choose a new password' }).waitFor()
+      assert.equal(new URL(page.url()).search, '')
+      assert.equal(new URL(page.url()).hash, '')
+      assert.deepEqual(state.javascriptErrors, [])
+      assert.equal(state.network.some(item => new URL(item.url).pathname.startsWith('/api/')), false, 'Recovery must not load customer authorization/data')
+      await page.waitForFunction(() => window.dataLayer?.some(item => item[0] === 'event' && item[1] === 'page_view'))
+      const events = await page.evaluate(() => window.dataLayer.map(item => Array.from(item)))
+      for (const item of events.filter(item => ['config', 'event'].includes(item[0]))) {
+        assert.equal(item[2].page_referrer, '')
+        assert.equal(item[2].page_location, `${origin}/login`)
+        assert.equal(item[2].page_path, '/login')
+      }
+      const serialized = JSON.stringify(events)
+      for (const secret of ['offline-refresh', 'offline-auth-code', 'offline-recovery', 'offline-flow-1', 'private-detail', token('aal1')]) {
+        assert.equal(serialized.includes(secret), false)
+        assert.equal(state.network.some(item => item.referrer.includes(secret)), false, `Synthetic ${secret} found in referrer for ${state.network.filter(item => item.referrer.includes(secret)).map(item => new URL(item.url).pathname).join(', ')}`)
+      }
+      assert.ok(state.network.every(item => !/(access_token=|refresh_token=|token_hash=|code=|sb_flow_id=|error_description=)/i.test(item.referrer)), 'Module/assets/auth/analytics referrers must contain no callback parameters')
+      assert.ok(state.network.filter(item => new URL(item.url).origin === authOrigin || new URL(item.url).hostname === 'www.googletagmanager.com').every(item => !item.referrer))
+      if (options.recovery.startsWith('?token_hash')) assert.equal(state.auth.filter(item => item.path === '/auth/v1/verify').length, 1, 'StrictMode must not consume token twice')
+      await page.getByRole('button', { name: 'Back to sign in' }).click()
+      await page.getByRole('heading', { name: 'Sign in', exact: true }).waitFor()
+    } finally { await context.close() }
+  }
+})
+
+test('development StrictMode consumes a public recovery callback only once', { timeout: 60000 }, async () => {
+  const { page, state, context } = await fixture({ devStrict: true, restore: false, publicLogin: true, enrolled: false, recovery: '?token_hash=offline-strict-recovery&type=recovery' })
+  try {
+    await page.getByRole('heading', { name: 'Choose a new password' }).waitFor()
+    assert.equal(state.auth.filter(item => item.path === '/auth/v1/verify').length, 1)
+    assert.deepEqual(state.javascriptErrors, [])
+    assert.equal(new URL(page.url()).search, '')
+  } finally { await context.close() }
+})
+
+test('ordinary analytics and ID anchors remain functional; malformed hashes are not selectors', { timeout: 60000 }, async () => {
+  const { page, state, context } = await fixture({ restore: false, publicLogin: true, analyticsConsent: true, recovery: '?utm_source=owner-review#recovery-test-anchor' })
+  try {
+    await page.getByRole('heading', { name: 'Sign in', exact: true }).waitFor()
+    await page.waitForFunction(() => window.dataLayer?.some(item => item[1] === 'page_view'))
+    assert.equal(await page.evaluate(() => window.dataLayer.find(item => item[1] === 'page_view')[2].page_path), '/login?utm_source=owner-review')
+    assert.ok(await page.evaluate(() => window.scrolledAnchors.includes('recovery-test-anchor')))
+    await page.goto(`${origin}/login#invalid[selector`, { waitUntil: 'domcontentloaded' })
+    await page.getByRole('heading', { name: 'Sign in', exact: true }).waitFor()
+    assert.deepEqual(state.javascriptErrors, [])
+    await page.goto(`${origin}/login?code=unrelated-private-code`, { waitUntil: 'domcontentloaded' })
+    await page.getByRole('heading', { name: 'Sign in', exact: true }).waitFor()
+    assert.equal(await page.evaluate(() => JSON.stringify(window.dataLayer || []).includes('unrelated-private-code')), false)
+  } finally { await context.close() }
+})
+
+test('public normal login, invalid credentials, session restoration and logout remain intact', { timeout: 120000 }, async () => {
+  const { page, state, context } = await fixture({ restore: false, publicLogin: true, loginError: true })
+  try {
+    await page.getByLabel('Business email').fill('admin@example.test')
+    await page.getByLabel('Password', { exact: true }).fill('offline-test-password')
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+    await page.getByRole('alert').filter({ hasText: 'could not sign you in' }).waitFor()
+    state.loginError = false
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+    await page.getByRole('heading', { name: 'Good morning' }).waitFor()
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await page.getByRole('heading', { name: 'Good morning' }).waitFor()
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click()
+    await page.getByRole('heading', { name: 'Sign in', exact: true }).waitFor()
+    assert.deepEqual(state.javascriptErrors, [])
+  } finally { await context.close() }
+  const expired = await fixture({ publicLogin: true, expiredSession: true })
+  try {
+    await expired.page.getByRole('heading', { name: 'Sign in', exact: true }).waitFor()
+    assert.equal(expired.state.network.some(item => new URL(item.url).pathname.startsWith('/api/')), false)
+  } finally { await expired.context.close() }
+})
+
+test('recovery identity mismatch and failed provider identity checks reject updates', async () => {
+  for (const option of [{ identityMismatch: true }, { userError: true }]) {
+    const { page, state, context } = await fixture({ restore: false, enrolled: false, recovery: '?token_hash=offline-recovery&type=recovery', ...option })
+    try {
+      await page.getByRole('button', { name: 'Request a new link' }).waitFor()
+      assert.equal(state.auth.some(item => item.method === 'PUT'), false)
+      assert.equal(state.requests.length, 0)
+    } finally { await context.close() }
+  }
+})
+
+test('recovery MFA failure, interrupted session, cleanup retry and reused token fail closed', { timeout: 120000 }, async () => {
+  for (const publicLogin of [false, true]) {
+    const { page, state, context } = await fixture({ restore: false, publicLogin, recovery: '?token_hash=offline-recovery&type=recovery' })
+    try {
+      await page.getByRole('button', { name: 'Verify code', exact: true }).waitFor()
+      state.mfaError = true
+      await page.getByLabel('Six-digit code').fill('111111')
+      await page.getByRole('button', { name: 'Verify code', exact: true }).click()
+      await page.getByRole('alert').filter({ hasText: 'could not be verified' }).waitFor()
+      assert.equal(state.auth.some(item => item.method === 'PUT'), false)
+      assert.equal(state.network.some(item => new URL(item.url).pathname.startsWith('/api/')), false)
+      state.mfaError = false
+      await page.getByRole('button', { name: 'Verify code', exact: true }).click()
+      await page.getByRole('heading', { name: 'Choose a new password' }).waitFor()
+      await page.reload({ waitUntil: 'domcontentloaded' })
+      await page.getByRole('button', { name: 'Request a new link' }).waitFor()
+      assert.equal(state.network.some(item => new URL(item.url).pathname.startsWith('/api/')), false)
+      state.logoutError = true
+      await page.getByRole('button', { name: 'Request a new link' }).click()
+      await page.getByRole('alert').filter({ hasText: 'could not be closed' }).waitFor()
+      state.logoutError = false
+      await page.getByRole('button', { name: 'Request a new link' }).click()
+      await page.getByRole('button', { name: 'Send reset link' }).waitFor()
+      state.recoveryError = true
+      await page.goto(`${origin}/${publicLogin ? 'login' : 'oci.html'}?token_hash=offline-recovery&type=recovery`, { waitUntil: 'domcontentloaded' })
+      await page.getByRole('button', { name: 'Request a new link' }).waitFor()
+      assert.equal(state.auth.some(item => item.method === 'PUT'), false)
+      assert.deepEqual(state.javascriptErrors, [])
+    } finally { await context.close() }
+  }
 })
 
 test('password-only login denial does not load schema or records', { timeout: 30000 }, async () => {

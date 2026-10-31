@@ -49,7 +49,7 @@ function ScrollToTop() {
 
   useEffect(() => {
     if (hash) {
-      window.requestAnimationFrame(() => document.querySelector(hash)?.scrollIntoView({ behavior: "smooth" }));
+      window.requestAnimationFrame(() => document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: "smooth" }));
       return;
     }
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });

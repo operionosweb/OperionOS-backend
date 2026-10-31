@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { ShieldCheck, LogOut } from 'lucide-react'
 import logo from '../assets/brand/operion-logo.webp'
 import { api, configurationError, supabase } from './client.js'
+import PasswordRecovery, { recoveryRequest } from '../components/auth/PasswordRecovery.jsx'
 
 export function Brand() {
   return <div className="oci-brand"><img src={logo} alt="Operion OS" /><span>Commercial<br /><strong>Intelligence</strong></span></div>
@@ -20,6 +21,7 @@ export default function Auth({ children }) {
   const [factorLoading, setFactorLoading] = useState(true)
   const [enrollment, setEnrollment] = useState(null)
   const epoch = useRef(0)
+  const [recovering, setRecovering] = useState(recoveryRequest)
 
   async function check() {
     const current = ++epoch.current
@@ -53,6 +55,7 @@ export default function Auth({ children }) {
 
   useEffect(() => {
     if (!supabase) { setState('error'); return }
+    if (recovering) return
     check()
     let refreshTimer
     const { data } = supabase.auth.onAuthStateChange((event) => {
@@ -68,7 +71,7 @@ export default function Auth({ children }) {
       }
     })
     return () => { ++epoch.current; clearTimeout(refreshTimer); data.subscription.unsubscribe() }
-  }, [])
+  }, [recovering])
 
   useEffect(() => {
     if (state !== 'mfa') return
@@ -138,6 +141,7 @@ export default function Auth({ children }) {
     finally { setBusy(false) }
   }
 
+  if (recovering && supabase) return <div className="oci-auth"><section className="oci-auth-story"><Brand /><p>Password recovery does not grant OCI access or remove MFA.</p></section><main className="oci-auth-panel"><PasswordRecovery client={supabase} callbackPath="/" callback={recovering === true} className="oci-stack" onBack={() => { setRecovering(false); setState('login') }} /></main></div>
   if (state === 'ready') return <><Notice>{error}</Notice>{children({ identity, logout, onUnauthorized: check })}</>
   return <div className="oci-auth">
     <section className="oci-auth-story"><Brand /><div><p className="oci-eyebrow">PRIVATE OPERATING SYSTEM</p><h1>Clarity across your commercial horizon.</h1><p>One secure workspace for relationships, pipeline, discovery and revenue.</p></div><span><ShieldCheck size={18} /> Restricted platform access · Multi-factor protected</span></section>
@@ -151,6 +155,7 @@ export default function Auth({ children }) {
         <label>Email<input name="email" type="email" autoComplete="username" required disabled={busy} /></label>
         <label>Password<input name="password" type="password" autoComplete="current-password" required disabled={busy} /></label>
         <button className="oci-primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+        <button type="button" disabled={busy} onClick={() => setRecovering('request')}>Forgot password?</button>
       </form>}
       {state === 'mfa' && <div className="oci-stack">
         <p>OCI requires a verified TOTP factor. Commercial data remains locked until the server verifies your session.</p>
