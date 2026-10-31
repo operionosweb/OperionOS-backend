@@ -26,6 +26,9 @@ import contactRoutes from "./routes/contactRoutes.js";
 import weatherMapRoutes from "./routes/weatherMapRoutes.js";
 import platformRoutes from "./routes/platformRoutes.js";
 import commercialIntelligenceRoutes from "./routes/commercialIntelligenceRoutes.js";
+import ociRoutes from "./routes/ociRoutes.js";
+import ociAccessRoutes from "./routes/ociAccessRoutes.js";
+import { createOciRateLimit, ociHttpBoundary } from "./middleware/ociAccessMiddleware.js";
 
 import copilotRoutes from "./routes/copilotRoutes.js";
 import operionRoutes from "./routes/operionRoutes.js";
@@ -62,6 +65,14 @@ app.set("trust proxy", 1);
  * =========================================
  */
 
+app.use("/api/oci", ociHttpBoundary, createOciRateLimit(), express.json({ limit: "64kb" }), ociAccessRoutes, ociRoutes, (_req, res) => {
+  res.status(404).json({ success: false, code: "OCI_ROUTE_NOT_FOUND", error: "OCI endpoint not found." });
+});
+app.use("/api/oci", (error, _req, res, _next) => {
+  const status = error.type === "entity.too.large" ? 413 : error instanceof SyntaxError ? 400 : 500;
+  if (status === 500) console.error("OCI request processing failed");
+  res.status(status).json({ success: false, code: "OCI_REQUEST_REJECTED", error: status === 413 ? "OCI request is too large." : status === 400 ? "Invalid JSON request." : "OCI request failed." });
+});
 app.use(cors());
 app.use("/api/weather-maps", weatherMapRoutes);
 

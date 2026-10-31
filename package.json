@@ -9,7 +9,9 @@
     "test:supabase": "node test/supabase-validation.js",
     "test:migrations:clean-room": "node test/clean-room-migration-rehearsal.js",
     "test:supabase:local": "node test/local-supabase-rehearsal.js",
-    "recovery:audit": "node scripts/offline-recovery-audit.js"
+    "recovery:audit": "node scripts/offline-recovery-audit.js",
+    "oci:bootstrap": "node scripts/bootstrap-oci-superadmin.js",
+    "test:oci": "node scripts/run-oci-tests.js"
   },
   "engines": {
     "node": ">=24"

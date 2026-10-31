@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:oci": "vite build --config vite.oci.config.js",
+    "dev:oci": "vite --config vite.oci.config.js",
+    "preview:oci": "vite preview --config vite.oci.config.js",
     "build:aircraft-model": "node scripts/export-aircraft-model.mjs",
     "preview": "vite preview",
     "test:corporate": "node --test tests/corporate-design.test.mjs",
