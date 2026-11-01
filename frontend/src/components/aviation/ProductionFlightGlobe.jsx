@@ -9,6 +9,7 @@ import VerticalOrigin from "@cesium/engine/Source/Scene/VerticalOrigin.js";
 import Viewer from "@cesium/widgets/Source/Viewer/Viewer.js";
 import { LocateFixed } from "lucide-react";
 import { attachGlobeTouchControls } from "./globeTouchControls";
+import { pickGlobeAircraft } from "./pickGlobeAircraft";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
 function validPosition(position) {
@@ -41,6 +42,11 @@ export default function ProductionFlightGlobe({ aircraft, selectedId, onSelect }
     });
     viewer.camera.setView({ destination: Cartesian3.fromDegrees(10, 35, 14_000_000), orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 } });
     const selectAtPosition = (position) => {
+      const aircraftId = pickGlobeAircraft(viewer, position);
+      if (aircraftId) {
+        selectRef.current?.(aircraftId);
+        return;
+      }
       const id = viewer.scene.pick(position)?.id?.id;
       if (id?.startsWith("aircraft-")) selectRef.current?.(id.slice(9));
     };

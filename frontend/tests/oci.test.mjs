@@ -652,6 +652,7 @@ test('public callbacks are scrubbed before cold lazy loading, consented analytic
     const { page, state, context } = await fixture({ restore: true, publicLogin: true, enrolled: false, analyticsConsent: true, coldDelay: 600, ...options })
     try {
       await page.getByRole('heading', { name: 'Choose a new password' }).waitFor()
+      assert.equal(await page.locator('meta[name="referrer"]').getAttribute('content'), 'no-referrer')
       assert.equal(new URL(page.url()).search, '')
       assert.equal(new URL(page.url()).hash, '')
       assert.deepEqual(state.javascriptErrors, [])
@@ -675,6 +676,28 @@ test('public callbacks are scrubbed before cold lazy loading, consented analytic
       await page.getByRole('heading', { name: 'Sign in', exact: true }).waitFor()
     } finally { await context.close() }
   }
+})
+
+test('ordinary public map tiles receive only the site origin, never URL parameters', async () => {
+  const { page, state, context } = await fixture({ restore: false, publicLogin: true, recovery: '?code=unrelated-private-code' })
+  try {
+    await page.getByRole('heading', { name: 'Sign in', exact: true }).waitFor()
+    assert.equal(await page.locator('meta[name="referrer"]').getAttribute('content'), 'origin')
+    let tileReferrer
+    await page.route('https://tile.openstreetmap.org/0/0/0.png', async route => {
+      tileReferrer = (await route.request().allHeaders()).referer
+      await route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9p8AAAAASUVORK5CYII=', 'base64') })
+    })
+    await page.evaluate(() => new Promise((resolve, reject) => {
+      const image = new Image()
+      image.onload = resolve
+      image.onerror = reject
+      image.src = 'https://tile.openstreetmap.org/0/0/0.png'
+    }))
+    assert.equal(tileReferrer, `${origin}/`)
+    assert.ok(state.network.filter(item => item.referrer).every(item => item.referrer === `${origin}/`))
+    assert.deepEqual(state.javascriptErrors, [])
+  } finally { await context.close() }
 })
 
 test('development StrictMode consumes a public recovery callback only once', { timeout: 60000 }, async () => {

@@ -36,6 +36,18 @@ OCI uses tab-scoped browser session storage, a separate authentication storage k
 and bearer requests instead of cross-subdomain cookies. Session tokens are never
 included in URLs. No signup, role-grant API or autonomous outreach is exposed.
 
+The public HTML entry uses origin-only referrers so the shared OpenStreetMap
+globe satisfies the tile provider's identification policy without disclosing
+URL paths or callback parameters. Recovery initialization switches that page
+to `no-referrer` before provider calls; the standalone OCI entry retains its
+`no-referrer` policy. Do not apply a blanket public `no-referrer` policy: it
+causes the tile service to return access-blocked imagery.
+
+Aircraft clicks use visible screen-space targets sized to the rendered model
+or point, with globe occlusion and nearest-aircraft checks, instead of a
+synchronous GPU picking pass. Exact picking remains available for route,
+label, and other spatial objects. Mouse and touch share this selection path.
+
 ## Current release status
 
 Implementation, offline checks and a build are not evidence that production data,

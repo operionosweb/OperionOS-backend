@@ -8,8 +8,8 @@ let browser;
 before(async () => { browser = await chromium.launch(); });
 after(async () => { await browser?.close(); });
 
-async function createPage(width, height = 1000) {
-  const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" });
+async function createPage(width, height = 1000, { touch = false } = {}) {
+  const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce", hasTouch: touch });
   await context.route("**/*", (route) => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
   const page = await context.newPage();
   page.setDefaultTimeout(30000);
@@ -107,6 +107,49 @@ test("desktop navigation folds, expands on hover and keyboard focus, and pins op
     assert.equal(await width(), 72);
   } finally { await context.close(); }
 });
+
+for (const width of [390, 1440]) {
+  test(`aircraft canvas selection avoids GPU readback and long input handlers at ${width}px`, { timeout: 120000 }, async () => {
+    const { context, page } = await createPage(width, 1000, { touch: width === 390 });
+    try {
+      await page.addInitScript(() => {
+        window.aircraftPickReadbacks = 0;
+        window.aircraftInputTimings = [];
+        for (const type of [WebGLRenderingContext, WebGL2RenderingContext]) {
+          const readPixels = type.prototype.readPixels;
+          type.prototype.readPixels = function(...args) {
+            window.aircraftPickReadbacks++;
+            return readPixels.apply(this, args);
+          };
+        }
+        new PerformanceObserver(list => {
+          for (const event of list.getEntries()) {
+            if (event.target?.tagName === "CANVAS" && ["pointerup", "mouseup", "click"].includes(event.name)) {
+              window.aircraftInputTimings.push({ handler: event.processingEnd - event.processingStart, duration: event.duration });
+            }
+          }
+        }).observe({ type: "event", durationThreshold: 16 });
+      });
+      await page.goto(`${origin}/demo/live-tracking`, { waitUntil: "domcontentloaded" });
+      await page.getByRole("button", { name: "Decline", exact: true }).click();
+      await page.waitForFunction(() => Number(document.querySelector(".od-cesium-globe")?.dataset.aircraftModelsReady) === 12);
+      const canvas = page.locator(".od-cesium-globe canvas");
+      await page.getByRole("button", { name: "Close aircraft infocard", exact: true }).click();
+      await canvas.scrollIntoViewIfNeeded();
+      const bounds = await canvas.boundingBox();
+      await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+      await page.evaluate(() => { window.aircraftPickReadbacks = 0; window.aircraftInputTimings = []; });
+      if (width === 390) await page.touchscreen.tap(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+      else await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+      await page.getByRole("dialog", { name: "G-OPER", exact: true }).waitFor();
+      await page.waitForTimeout(200);
+      const result = await page.evaluate(() => ({ readbacks: window.aircraftPickReadbacks, handlers: window.aircraftInputTimings }));
+      assert.equal(result.readbacks, 0, "Selecting an aircraft must not render/read a GPU picking buffer");
+      assert.ok(result.handlers.every(event => event.handler < 50), `Aircraft input handler exceeded 50ms: ${JSON.stringify(result.handlers)}`);
+      assert.ok(result.handlers.every(event => event.duration < 200), `Aircraft interaction exceeded 200ms: ${JSON.stringify(result.handlers)}`);
+    } finally { await context.close(); }
+  });
+}
 
 for (const width of [320, 390, 1440]) {
   test(`tracking action text and relationship badges remain inside their boxes at ${width}px`, async () => {

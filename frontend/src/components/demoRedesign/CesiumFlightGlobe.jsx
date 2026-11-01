@@ -22,6 +22,7 @@ import { getAviationMapStyle } from "../../demo/aviationMapLayers";
 import WeatherMapLayers from "../aviation/WeatherMapLayers";
 import { AIRCRAFT_MODEL_URL, AIRCRAFT_STATUS_COLORS, advanceAircraftPosition, aircraftOrientation, aircraftRoutePositions } from "../aviation/aircraftPose";
 import { attachGlobeTouchControls } from "../aviation/globeTouchControls";
+import { pickGlobeAircraft } from "../aviation/pickGlobeAircraft";
 import "cesium/Build/Cesium/Widgets/widgets.css";
 
 export default function CesiumFlightGlobe({ aircraft, visibleIds, selectedId, onSelect, viewMode = "globe", mapStyle = "standard", weather, weatherEnabled = false, cloudsEnabled = weatherEnabled, windEnabled = false, routesEnabled = true, playing = true, spatialObjects = [], visibleLayers = ["aircraft"], onObjectSelect, children }) {
@@ -209,6 +210,11 @@ export default function CesiumFlightGlobe({ aircraft, visibleIds, selectedId, on
 
     setup("camera", () => viewer.camera.setView({ destination: Cartesian3.fromDegrees(18, 42, 10500000) }));
     const selectAtPosition = (position) => {
+      const aircraftId = pickGlobeAircraft(viewer, position);
+      if (aircraftId) {
+        onSelectRef.current?.(aircraftId);
+        return;
+      }
       const picked = viewer.scene.pick(position);
       const entityId = typeof picked?.id === "string" ? picked.id : picked?.id?.id;
       if (entityId?.startsWith("spatial-")) objectSelectRef.current?.(spatialObjectsRef.current.find((item) => `spatial-${item.id}` === entityId));

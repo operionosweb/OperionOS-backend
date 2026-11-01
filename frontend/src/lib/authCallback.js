@@ -18,6 +18,10 @@ if (recoveryCallback) {
   recoveryCallback = { query: new URLSearchParams(), fragment: new URLSearchParams() }
 }
 
+if (recoveryCallback) {
+  document.querySelector('meta[name="referrer"]')?.setAttribute('content', 'no-referrer')
+}
+
 export function isRecoveryRequest() {
   return recoveryCallback !== null
 }
