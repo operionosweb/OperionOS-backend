@@ -1,4 +1,4 @@
-import { getSupabaseAuthClient } from "../config/supabaseAuth.js";
+import { getOciSupabaseAuthClient } from "../config/ociSupabaseAuth.js";
 import { query } from "../repositories/ociDatabase.js";
 
 export function ociError(status, code, message) {
@@ -6,8 +6,8 @@ export function ociError(status, code, message) {
 }
 
 export async function verifyOciIdentity(token, {
-  authClient = getSupabaseAuthClient(),
-  issuer = `${process.env.SUPABASE_URL?.replace(/\/$/, "")}/auth/v1`,
+  authClient = getOciSupabaseAuthClient(),
+  issuer = `${process.env.OCI_SUPABASE_URL?.replace(/\/$/, "")}/auth/v1`,
   now = Date.now(),
 } = {}) {
   const { data, error } = await authClient.auth.getUser(token);
@@ -29,7 +29,12 @@ export async function verifyOciIdentity(token, {
   if (!data.user.email_confirmed_at || !data.user.email) {
     throw ociError(403, "OCI_EMAIL_UNVERIFIED", "Verified email ownership is required.");
   }
-  return { id: data.user.id, email: data.user.email, mfaVerified: claims.aal === "aal2" };
+  return {
+    id: data.user.id,
+    email: data.user.email,
+    emailVerified: true,
+    mfaVerified: claims.aal === "aal2",
+  };
 }
 
 export function createOciRateLimit({ limit = 120, windowMs = 60000, now = Date.now } = {}) {
@@ -68,12 +73,11 @@ export function createOciAccessMiddleware({
       const match = req.headers.authorization?.match(/^Bearer ([^\s]+)$/);
       if (!match || match[1].length > 16384) throw ociError(401, "OCI_AUTH_REQUIRED", "Sign in to access OCI.");
       identity = await verify(match[1]);
-      const result = await queryFn(`select oci.user_id from public.oci_user_roles oci
-        join public.platform_user_roles platform on platform.user_id = oci.user_id
-        where oci.user_id = $1 and oci.role = 'super_admin' and oci.status = 'active'
-          and platform.role = 'SUPERADMIN' and platform.status = 'active'`, [identity.id]);
-      if (!result.rows.length) throw ociError(403, "OCI_ACCESS_DENIED", "OCI is restricted to authorised internal Super Administrators.");
+      if (!identity.emailVerified) throw ociError(403, "OCI_EMAIL_UNVERIFIED", "Verified email ownership is required.");
       if (!identity.mfaVerified) throw ociError(403, "OCI_MFA_REQUIRED", "Verify a second factor to access OCI.");
+      const result = await queryFn(`select user_id from public.oci_user_roles
+        where user_id = $1 and role = 'super_admin' and status = 'active'`, [identity.id]);
+      if (!result.rows.length) throw ociError(403, "OCI_ACCESS_DENIED", "OCI is restricted to authorised Super Administrators.");
       req.user = { id: identity.id, email: identity.email };
       req.ociIdentity = identity;
       await audit(identity.id, "ACCESS_GRANTED");

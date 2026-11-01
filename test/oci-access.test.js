@@ -5,7 +5,7 @@ import { createOciAccessMiddleware, createOciRateLimit, ociHttpBoundary, verifyO
 import { provisionOciSuperAdmin } from "../scripts/bootstrap-oci-superadmin.js";
 
 const userId = "fcaabfe0-83ee-4ec5-8721-c312b9317f54";
-const identity = { id: userId, email: "owner@example.test", mfaVerified: true };
+const identity = { id: userId, email: "meelis@operionos.com", emailVerified: true, mfaVerified: true };
 const issuer = "https://project.example.test/auth/v1";
 const claims = { sub: userId, iss: issuer, aud: "authenticated", exp: 2000000000, aal: "aal2" };
 const token = (value) => `header.${Buffer.from(JSON.stringify(value)).toString("base64url")}.signature`;
@@ -17,6 +17,7 @@ test("OCI trusts provider verification, not editable metadata or unverified JWT 
     await assert.rejects(verifyOciIdentity(token(altered), { authClient: provider(), issuer, now: 0 }), { code: "OCI_INVALID_SESSION" });
   }
   await assert.rejects(verifyOciIdentity(token(claims), { authClient: provider(null, new Error("untrusted signature")), issuer, now: 0 }), { code: "OCI_INVALID_SESSION" });
+  await assert.rejects(verifyOciIdentity(token(claims), { authClient: provider(null, { status: 401 }), issuer, now: 0 }), { code: "OCI_INVALID_SESSION" });
   await assert.rejects(verifyOciIdentity(token(claims), { authClient: provider(null, { status: 503 }), issuer, now: 0 }), { code: "OCI_AUTH_UNAVAILABLE" });
   await assert.rejects(verifyOciIdentity(token(claims), { authClient: provider({ id: userId, email: identity.email, user_metadata: { role: "super_admin" } }), issuer, now: 0 }), { code: "OCI_EMAIL_UNVERIFIED" });
   assert.equal((await verifyOciIdentity(token({ ...claims, aal: "aal1" }), { authClient: provider(), issuer, now: 0 })).mfaVerified, false);
@@ -35,15 +36,16 @@ async function requestMiddleware(options, headers = { authorization: "Bearer val
   } finally { await new Promise((resolve) => server.close(resolve)); }
 }
 
-test("direct OCI access rejects anonymous, ordinary, forged role and non-MFA sessions", async () => {
+test("direct OCI access requires the database-backed OCI role and MFA, not platform roles or client claims", async () => {
   const anon = await requestMiddleware({}, {});
   assert.equal(anon.status, 401);
   assert.equal(anon.accessed, false);
   assert.equal(anon.events[0].action, "ACCESS_DENIED");
   const ordinary = await requestMiddleware({ queryFn: async (sql, params) => {
     assert.deepEqual(params, [userId]);
-    assert.match(sql, /oci\.role = 'super_admin'/);
-    assert.match(sql, /platform\.role = 'SUPERADMIN'/);
+    assert.match(sql, /from public\.oci_user_roles/);
+    assert.match(sql, /role = 'super_admin'/);
+    assert.doesNotMatch(sql, /platform_user_roles|SUPERADMIN/);
     return { rows: [] };
   } }, { authorization: "Bearer valid-session", "x-role": "super_admin" });
   assert.equal(ordinary.status, 403);
@@ -55,6 +57,19 @@ test("direct OCI access rejects anonymous, ordinary, forged role and non-MFA ses
   assert.equal(valid.status, 200);
   assert.equal(valid.cache, "private, no-store");
   assert.equal(valid.events[0].action, "ACCESS_GRANTED");
+  assert.equal(valid.accessed, true);
+});
+
+test("unverified email is denied before OCI role resolution", async () => {
+  let queried = false;
+  const result = await requestMiddleware({
+    verify: async () => ({ ...identity, emailVerified: false }),
+    queryFn: async () => { queried = true; return { rows: [{ user_id: userId }] }; },
+  });
+  assert.equal(result.status, 403);
+  assert.equal(result.body.code, "OCI_EMAIL_UNVERIFIED");
+  assert.equal(queried, false);
+  assert.equal(result.accessed, false);
 });
 
 test("role lookup and audit outages fail closed", async () => {
@@ -92,15 +107,16 @@ test("OCI origin and bounded rate protection do not rely on client roles", () =>
   assert.equal(result.headers["Retry-After"], "60");
 });
 
-function bootstrapDatabase(existing = [], failAudit = false, platform = []) {
+function bootstrapDatabase(existing = [], failAudit = false) {
   const commands = [];
   let released = false;
   return { commands, get released() { return released; }, connect: async () => ({
     query: async (sql, params) => {
       commands.push({ sql, params });
       if (sql.startsWith("select user_id")) return { rows: existing };
-      if (sql.startsWith("select status")) return { rows: platform };
-      if (sql.startsWith("insert into public.platform_user_roles")) return { rows: [{ status: "active" }] };
+      if (sql.startsWith("insert into public.oci_user_roles")) {
+        return existing.length ? { rows: [] } : { rows: [{ user_id: userId }] };
+      }
       if (failAudit && sql.includes("oci_audit_events")) throw new Error("audit failed");
       return { rows: [] };
     },
@@ -110,41 +126,37 @@ function bootstrapDatabase(existing = [], failAudit = false, platform = []) {
 
 test("bootstrap requires verified email ownership and MFA, defaults to no mutation", async () => {
   const database = bootstrapDatabase();
-  const args = { token: "short-lived-session", email: identity.email, verify: async () => identity, database };
+  const args = { token: "short-lived-session", verify: async () => identity, database };
   assert.deepEqual(await provisionOciSuperAdmin(args), { verified: true, applied: false });
   assert.equal(database.commands.length, 0);
-  await assert.rejects(provisionOciSuperAdmin({ ...args, email: "different@example.test" }), { code: "OCI_BOOTSTRAP_IDENTITY" });
+  await assert.rejects(provisionOciSuperAdmin({ ...args, verify: async () => ({ ...identity, email: "attacker@example.test" }) }), { code: "OCI_BOOTSTRAP_IDENTITY" });
+  await assert.rejects(provisionOciSuperAdmin({ ...args, verify: async () => ({ ...identity, emailVerified: false }) }), { code: "OCI_BOOTSTRAP_IDENTITY" });
   await assert.rejects(provisionOciSuperAdmin({ ...args, verify: async () => ({ ...identity, mfaVerified: false }) }), { code: "OCI_BOOTSTRAP_IDENTITY" });
   assert.deepEqual(await provisionOciSuperAdmin({ ...args, apply: true }), { verified: true, applied: true });
   assert.equal(database.commands.at(-1).sql, "COMMIT");
   assert.ok(database.commands.some(({ sql }) => sql.includes("pg_advisory_xact_lock")));
   assert.ok(database.commands.some(({ sql }) => sql.includes("oci_audit_events")));
+  assert.ok(database.commands.some(({ sql }) => sql.startsWith("insert into public.oci_user_roles")));
+  assert.ok(database.commands.every(({ sql }) => !sql.includes("platform_user_roles")));
   assert.equal(database.released, true);
 });
 
-test("bootstrap never reactivates revoked platform access and active provisioning is idempotent", async () => {
-  const args = { token: "session", email: identity.email, apply: true, verify: async () => identity };
-  for (const database of [
-    bootstrapDatabase([], false, [{ status: "revoked" }]),
-    bootstrapDatabase([{ user_id: userId, status: "active" }]),
-  ]) {
+test("bootstrap refuses repeat provisioning and never grants customer-platform privileges", async () => {
+  const args = { token: "session", apply: true, verify: async () => identity };
+  for (const database of [bootstrapDatabase([{ user_id: userId, status: "active" }])]) {
     await assert.rejects(provisionOciSuperAdmin({ ...args, database }), { code: "OCI_BOOTSTRAP_CLOSED" });
     assert.equal(database.commands.at(-1).sql, "ROLLBACK");
     assert.ok(!database.commands.some(({ sql }) => sql.startsWith("insert")));
   }
-  const database = bootstrapDatabase([{ user_id: userId, status: "active" }], false, [{ status: "active" }]);
-  assert.deepEqual(await provisionOciSuperAdmin({ ...args, database }), { verified: true, applied: false, alreadyProvisioned: true });
-  assert.equal(database.commands.at(-1).sql, "COMMIT");
-  assert.ok(!database.commands.some(({ sql }) => sql.startsWith("insert")));
 });
 
-test("bootstrap is closed after another administrator or a revocation, and audit failure rolls back", async () => {
+test("bootstrap is closed for conflicting role rows and audit failure rolls back", async () => {
   for (const existing of [[{ user_id: "another-user", status: "active" }], [{ user_id: userId, status: "revoked" }]]) {
     const database = bootstrapDatabase(existing);
-    await assert.rejects(provisionOciSuperAdmin({ token: "session", email: identity.email, apply: true, verify: async () => identity, database }), { code: "OCI_BOOTSTRAP_CLOSED" });
+    await assert.rejects(provisionOciSuperAdmin({ token: "session", apply: true, verify: async () => identity, database }), { code: "OCI_BOOTSTRAP_CLOSED" });
     assert.equal(database.commands.at(-1).sql, "ROLLBACK");
   }
   const database = bootstrapDatabase([], true);
-  await assert.rejects(provisionOciSuperAdmin({ token: "session", email: identity.email, apply: true, verify: async () => identity, database }), /audit failed/);
+  await assert.rejects(provisionOciSuperAdmin({ token: "session", apply: true, verify: async () => identity, database }), /audit failed/);
   assert.equal(database.commands.at(-1).sql, "ROLLBACK");
 });

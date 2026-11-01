@@ -7,6 +7,7 @@ import { createServer } from 'node:http'
 import { readFile } from 'node:fs/promises'
 import { chromium } from '@playwright/test'
 import { OCI_MODULES, OCI_STAGES } from '../../shared/ociContracts.js'
+import { OCI_ACCOUNT_FIT_CRITERIA } from '../../shared/ociAccountFit.js'
 
 // Production artifacts use only synthetic service configuration and intercepted transports.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -52,7 +53,7 @@ before(async () => {
 })
 after(async () => { await browser?.close(); await devServer?.close(); if (server) await new Promise(resolve => server.close(resolve)) })
 
-async function fixture({ restore = true, denial = false, mfa = false, enrolled = true, accessError = false, userError = false, recovery = '', recoveryError = false, pkceFlow = false, publicLogin = false, analyticsConsent = false, coldDelay = 0, loginError = false, identityMismatch = false, expiredSession = false, devStrict = false, records: initial = {}, revenueSummary = { financials: [], pipeline: [] } } = {}) {
+async function fixture({ restore = true, denial = false, mfa = false, enrolled = true, accessError = false, userError = false, recovery = '', recoveryError = false, pkceFlow = false, publicLogin = false, analyticsConsent = false, coldDelay = 0, loginError = false, identityMismatch = false, expiredSession = false, devStrict = false, records: initial = {}, dashboardData = {}, revenueSummary = { financials: [], pipeline: [] } } = {}) {
   const baseOrigin = devStrict ? devOrigin : origin
   const context = await browser.newContext()
   await context.routeWebSocket('**/*', (socket) => socket.close())
@@ -119,12 +120,37 @@ async function fixture({ restore = true, denial = false, mfa = false, enrolled =
       assert.equal(state.denial, false, 'Commercial APIs must not be called after denial')
       if (state.apiError) return json({ success: false, error: 'Offline simulated API failure' }, 500)
       if (path === '/schema') return json({ success: true, modules: OCI_MODULES, stages: state.stages })
-      if (path === '/dashboard') return json({ success: true, metrics: { targetOrganisations: (state.records.accounts || []).length, activeOpportunities: (state.records.opportunities || []).length }, nextActions: [], revenueSummary })
+      if (path === '/geography/options') {
+        const options = (state.records.accounts || []).map((item) => ({
+          country_code: item.data.country_code, administrative_region: item.data.administrative_region,
+          city: item.data.city, airport: item.data.airport_iata || item.data.airport_icao,
+          segment: item.data.segment, company_type: item.data.company_type,
+        })).filter((item) => item.country_code || item.city || item.segment || item.company_type)
+        return json({ success: true, options, truncated: false })
+      }
+      if (path === '/dashboard') return json({
+        success: true, geographicScope: url.searchParams.get('geoScope') || 'EUROPE',
+        metrics: { targetOrganisations: (state.records.accounts || []).length, activeOpportunities: (state.records.opportunities || []).length },
+        nextActions: [], revenueSummary, accountsByCountry: [], accountsBySegment: [], opportunitiesByCountry: [],
+        pipelineByCountry: [], discoveryByCountry: [], pilotsByCountry: [], revenueByCountry: [],
+        priorityOpportunities: [], dataOrigins: [], unresolvedCoverage: [],
+        accountVerification: [], accountsAwaitingResearch: [], highPriorityEuropeanAccounts: [],
+        validatedCustomerProblems: [], potentialPilotCandidates: [], ...dashboardData,
+      })
       if (path === '/settings/stages') {
         if (request.method() === 'PUT') state.stages = body.stages
         return json({ success: true, stages: state.stages })
       }
       if (path === '/audit') return json({ success: true, events: state.requests.filter((item) => ['POST', 'PATCH', 'DELETE', 'PUT'].includes(item.method)).map((item, index) => ({ id: String(index), actor_id: userId, action: item.method, entity_kind: 'records', entity_id: 'test-record', metadata: { version: 1 }, created_at: new Date().toISOString() })) })
+      const recommendation = path.match(/^\/recommendations\/(accounts|contacts|discovery|opportunities|pilots|activities)\/([^/]+)\/accept$/)
+      if (recommendation && request.method() === 'POST') {
+        const source = state.records[recommendation[1]]?.find((item) => item.id === recommendation[2])
+        if (!source) return json({ success: false, error: 'Recommendation source unavailable' }, 404)
+        return json({ success: true, record: record('activities', {
+          title: 'Accepted synthetic recommendation', type: 'Research', activityStatus: 'Planned',
+          actionStatus: 'Accepted', dueDate: body.dueDate,
+        }, 'accepted-action', source.kind === 'accounts' ? source.id : source.account_id) }, 201)
+      }
       const erasure = path.match(/^\/records\/contacts\/([^/]+)\/erase$/)
       if (erasure) {
         const item = state.records.contacts?.find((entry) => entry.id === erasure[1])
@@ -200,6 +226,280 @@ test('restore checks getUser and server access before commercial requests; logou
     await page.getByRole('heading', { name: 'Sign in to OCI' }).waitFor()
     assert.equal(await page.evaluate(() => localStorage.getItem('operion-oci-auth')), null)
     assert.equal(await page.evaluate(() => sessionStorage.getItem('operion-oci-auth')), null)
+  } finally { await context.close() }
+})
+
+test('Europe is the default shared filter; filters persist across modules and reset without changing scope', async () => {
+  const { page, state, context } = await fixture()
+  try {
+    await ready(page)
+    await page.getByRole('combobox', { name: 'Market scope' }).waitFor()
+    assert.equal(await page.getByRole('combobox', { name: 'Market scope' }).inputValue(), 'EUROPE')
+    assert.ok(state.requests.some((item) => item.path === '/dashboard' && item.query.get('geoScope') === 'EUROPE'))
+    await page.getByRole('group', { name: 'Aviation segments' }).getByRole('checkbox', { name: 'Airline', exact: true }).check()
+    await page.getByRole('checkbox', { name: 'Spain', exact: true }).check()
+    await go(page, 'accounts')
+    const list = state.requests.find((item) => item.path === '/records/accounts' && item.query.get('geoCountries') === 'ES')
+    assert.ok(list, 'accounts list carries the selected European filter')
+    assert.equal(list.query.get('geoSegments'), 'Airline', 'unrelated segment facet is retained')
+    await go(page, 'market')
+    assert.ok(state.requests.some((item) => item.path === '/records/market' && item.query.get('geoCountries') === 'ES'))
+    await page.getByRole('button', { name: 'Reset filters' }).click()
+    assert.equal(await page.getByRole('combobox', { name: 'Market scope' }).inputValue(), 'EUROPE')
+    assert.equal(await page.getByRole('checkbox', { name: 'Spain', exact: true }).isChecked(), false)
+    assert.equal(await page.getByRole('group', { name: 'Aviation segments' }).getByRole('checkbox', { name: 'Airline', exact: true }).isChecked(), false)
+    assert.deepEqual(state.javascriptErrors, [])
+  } finally { await context.close() }
+})
+
+test('Global remains explicitly selectable and geographic context survives a workspace reload', async () => {
+  const { page, state, context } = await fixture()
+  try {
+    await ready(page)
+    await page.getByRole('combobox', { name: 'Market scope' }).selectOption('GLOBAL')
+    await page.getByRole('checkbox', { name: 'United States', exact: true }).check()
+    assert.ok(state.requests.some((item) => item.path === '/dashboard' && item.query.get('geoScope') === 'GLOBAL' && item.query.get('geoCountries') === 'US'))
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await ready(page)
+    assert.equal(await page.getByRole('combobox', { name: 'Market scope' }).inputValue(), 'GLOBAL')
+    assert.equal(await page.getByRole('checkbox', { name: 'United States', exact: true }).isChecked(), true)
+    assert.deepEqual(state.javascriptErrors, [])
+  } finally { await context.close() }
+})
+
+test('country, region, city and airport facets cascade from stored geography', async () => {
+  const account = record('accounts', {
+    name: 'Located organisation', country: 'Spain', country_code: 'ES',
+    administrative_region: 'Community of Madrid', city: 'Madrid', airport_iata: 'MAD',
+    segment: 'Airline', company_type: 'Airline',
+  }, 'located-account')
+  const { page, state, context } = await fixture({ records: { accounts: [account] } })
+  try {
+    await ready(page)
+    await page.getByRole('checkbox', { name: 'Spain', exact: true }).check()
+    await page.getByRole('checkbox', { name: 'Community of Madrid', exact: true }).check()
+    await page.getByRole('checkbox', { name: 'Madrid', exact: true }).check()
+    await page.getByRole('checkbox', { name: 'MAD', exact: true }).check()
+    const request = state.requests.find((item) => item.path === '/dashboard' &&
+      item.query.get('geoCountries') === 'ES' && item.query.get('geoRegions') === 'Community of Madrid' &&
+      item.query.get('geoCities') === 'Madrid' && item.query.get('geoAirports') === 'MAD')
+    assert.ok(request, 'the dashboard query carries every narrowed geographic facet')
+    assert.deepEqual(state.javascriptErrors, [])
+  } finally { await context.close() }
+})
+
+test('account-fit form separates hypotheses, verified ratings and unknowns and evidence-gates its score', async () => {
+  const { page, state, context } = await fixture()
+  try {
+    await ready(page)
+    await go(page, 'accounts')
+    await page.getByRole('button', { name: 'Create record' }).click()
+    const dialog = page.getByRole('dialog')
+    await fillRequired(page, OCI_MODULES.find((item) => item.id === 'accounts'), 'Synthetic fit account')
+    await dialog.getByLabel(OCI_ACCOUNT_FIT_CRITERIA[0].label).selectOption({ label: 'Verified — High' })
+    await dialog.getByLabel(OCI_ACCOUNT_FIT_CRITERIA[1].label).selectOption({ label: 'Hypothesis — Medium' })
+    await dialog.getByLabel('Professional/public source and evidence references').fill('Public annual report, reviewed 2026-10-31')
+    await dialog.getByLabel('Research date').fill('2026-10-31')
+    assert.equal(await dialog.locator('.oci-fit-summary h3').textContent(), 'Score unavailable')
+    assert.match(await dialog.locator('.oci-fit-summary').innerText(), /Assess at least 3 criteria/)
+    await dialog.getByLabel(OCI_ACCOUNT_FIT_CRITERIA[2].label).selectOption({ label: 'Hypothesis — Low' })
+    assert.match(await dialog.locator('.oci-fit-summary').innerText(), /Add criterion-specific source references/)
+    await dialog.getByLabel('Account-fit evidence and rationale (cite each assessed criterion)').fill(
+      'Contract complexity: annual report p. 18. Contract volume: hypothesis from disclosed fleet count. Aviation relevance: public annual report.',
+    )
+    await dialog.locator('.oci-fit-summary h3').filter({ hasText: /^\d+ \/ 100$/ }).waitFor()
+    const rubric = await dialog.locator('.oci-fit-summary').innerText()
+    assert.match(rubric, /3 of 9 criteria assessed/)
+    assert.match(rubric, /1 evidence-labelled verified/)
+    assert.match(rubric, /2 hypotheses/)
+    await dialog.getByRole('button', { name: 'Save record', exact: true }).click()
+    await dialog.waitFor({ state: 'hidden' })
+    const saved = state.records.accounts.find((item) => item.data.name === 'Synthetic fit account')
+    assert.equal(saved.data.fitContractComplexity, 'Verified — High')
+    assert.equal(saved.data.fitEvidence.includes('annual report'), true)
+    assert.equal(saved.data.accountStatus, '', 'fit does not auto-qualify a sales account')
+  } finally { await context.close() }
+})
+
+test('linked market research starts discovery without promoting research into customer validation', async () => {
+  const market = record('market', {
+    title: 'Synthetic European leasing research', classification: 'Research finding',
+    source: 'https://example.test/research', researchDate: '2026-10-31',
+    researchStatus: 'Researched', data_origin: 'Synthetic',
+  }, 'research-record', 'account-link')
+  const account = record('accounts', {
+    name: 'Synthetic leasing account', country: 'Spain', country_code: 'ES',
+    accountStatus: 'Target', classification: 'Assumption', data_origin: 'Synthetic',
+  }, 'account-link')
+  const { page, state, context } = await fixture({ records: { accounts: [account], market: [market] } })
+  try {
+    await ready(page)
+    await go(page, 'market')
+    await page.getByRole('button', { name: 'View Synthetic European leasing research' }).click()
+    await page.getByRole('button', { name: 'Start customer discovery' }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByRole('heading', { name: 'Create customer discovery' }).waitFor()
+    await dialog.getByLabel('Account').waitFor()
+    assert.equal(await dialog.getByLabel('Account').inputValue(), 'account-link')
+    const reference = await dialog.getByLabel('Linked market research reference (not customer validation)').inputValue()
+    assert.match(reference, /Synthetic European leasing research/)
+    assert.match(reference, /Research remains a hypothesis/)
+    await fillRequired(page, OCI_MODULES.find((item) => item.id === 'discovery'), 'Interview after research')
+    await dialog.getByLabel('Validation classification').selectOption({ label: 'Internal assumption' })
+    await dialog.getByLabel('Validation evidence').fill('Research follow-up interview note, synthetic test')
+    await dialog.getByLabel('Problems identified').fill('Synthetic test problem')
+    await dialog.getByRole('button', { name: 'Save record', exact: true }).click()
+    await dialog.waitFor({ state: 'hidden' })
+    const saved = state.records.discovery.find((item) => item.data.title === 'Interview after research')
+    assert.equal(saved.account_id, 'account-link')
+    assert.equal(saved.data.validation, 'Internal assumption')
+    assert.match(saved.data.researchReference, /market research/i)
+    assert.equal(state.records.opportunities?.length || 0, 0)
+    assert.deepEqual(state.javascriptErrors, [])
+  } finally { await context.close() }
+})
+
+test('European dashboard renders evidence status, research queue and validated pilot signals with origins', async () => {
+  const { page, context } = await fixture({ dashboardData: {
+    accountVerification: [{ verificationStatus: 'Verified', count: 2, dataOrigin: 'Real' }, { verificationStatus: 'Unverified / insufficient evidence', count: 1, dataOrigin: 'Synthetic' }],
+    highPriorityEuropeanAccounts: [{
+      name: 'Synthetic priority airline', countryCode: 'ES', city: 'Madrid', segment: 'Airline',
+      researchStatus: 'Needs verification', dataOrigin: 'Synthetic',
+      fitAssessment: {
+        fitContractComplexity: 'Hypothesis — High', fitContractVolume: 'Unknown',
+        fitAviationRelevance: 'Verified — High', fitEvidence: 'Synthetic fixtures only.',
+      },
+    }],
+    accountsAwaitingResearch: [{ name: 'Research queue airline', countryCode: 'FR', segment: 'Airline', researchStatus: 'Not researched', dataOrigin: 'Unclassified' }],
+    validatedCustomerProblems: [{ countryCode: 'DE', count: 3, dataOrigin: 'Real' }],
+    potentialPilotCandidates: [{ countryCode: 'IE', count: 1, dataOrigin: 'Real' }],
+  } })
+  try {
+    await ready(page)
+    await page.getByRole('heading', { name: 'Verified versus unverified accounts' }).waitFor()
+    await page.getByText('Synthetic priority airline', { exact: true }).waitFor()
+    await page.getByText('Research queue airline', { exact: true }).waitFor()
+    await page.getByRole('heading', { name: 'Customer-validated problems' }).waitFor()
+    await page.getByRole('heading', { name: 'Potential pilot candidates · discovery evidence only' }).waitFor()
+    assert.ok(await page.getByText('Synthetic', { exact: true }).count() >= 1)
+    assert.deepEqual(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
+  } finally { await context.close() }
+})
+
+test('Founder action centre explains synthetic recommendations and separates pipeline from classified revenue', async () => {
+  const action = {
+    id: 'synthetic-opportunity', kind: 'opportunities',
+    data: { name: 'Synthetic airline opportunity', stage: 'Qualified', data_origin: 'Synthetic' },
+    accountName: 'Synthetic European airline', countryCode: 'ES', city: 'Madrid', segment: 'Airline',
+    dueDate: '2026-10-30', urgency: 'Urgent',
+    recommendationReason: 'Qualified opportunity follow-up date has passed.',
+    recommendedAction: 'Review the opportunity and record a human-approved follow-up.',
+    evidence: 'Synthetic test discovery note',
+  }
+  const { page, state, context } = await fixture({ revenueSummary: {
+    financials: [{
+      currency: 'EUR', basis: 'Actual', revenueClass: 'Recognised actual', amount: 1250,
+      periodDate: '2026-10-01', countryCode: 'ES', segment: 'Airline', dataOrigin: 'Synthetic',
+      costComplete: false, marginBasis: 'Unknown',
+    }],
+    pipeline: [{
+      currency: 'EUR', countryCode: 'ES', segment: 'Airline', dataOrigin: 'Synthetic',
+      opportunityCount: 1, value: 10000, weightedValue: null, probabilityComplete: false,
+    }],
+  }, dashboardData: {
+    metrics: { activeOpportunities: 1, closedOpportunityWinRate: 50, recognisedRevenueRecords: 1, onHoldOpportunities: 0 },
+    nextActions: [action],
+    pipelineByCountry: [{
+      countryCode: 'ES', segment: 'Airline', currency: 'EUR', value: 10000,
+      weightedValue: null, probabilityComplete: false, dataOrigin: 'Synthetic',
+    }],
+  } })
+  try {
+    await ready(page)
+    await page.getByRole('heading', { name: 'Founder action centre' }).waitFor()
+    await page.getByText('Qualified opportunity follow-up date has passed.').waitFor()
+    await page.getByText('Synthetic test discovery note').waitFor()
+    await page.getByText('Review the opportunity and record a human-approved follow-up.').waitFor()
+    await page.getByText(/Recognised actual/).waitFor()
+    await page.getByText(/Unweighted opportunity pipeline/).waitFor()
+    await page.getByText(/Unavailable — at least one opportunity lacks a documented probability/).waitFor()
+    await page.getByText('50%', { exact: true }).waitFor()
+    for (const width of [320, 360, 390, 430, 768, 1024, 1440, 1920]) {
+      await page.setViewportSize({ width, height: 900 })
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `no horizontal overflow at ${width}px`)
+    }
+    assert.deepEqual(state.javascriptErrors, [])
+  } finally { await context.close() }
+})
+
+test('Founder can accept an evidenced recommendation and explicitly complete a linked action', async () => {
+  const sourceId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+  const accountId = sourceId
+  const recommendation = {
+    id: sourceId, kind: 'accounts', recommendationId: `accounts:${sourceId}:founder-next-step-v1`,
+    relatedRecordKind: 'accounts', relatedRecordId: sourceId, accountId, opportunityId: null,
+    actionCategory: 'Research', data: { name: 'Synthetic European lessor', data_origin: 'Synthetic' },
+    accountName: 'Synthetic European lessor', countryCode: 'ES', city: 'Madrid', segment: 'Aircraft lessor',
+    urgency: 'Routine', recommendationReason: 'The account needs source-backed research.',
+    recommendedAction: 'Verify the lessor portfolio from public sources.',
+    evidence: 'Synthetic research status: Not researched.',
+  }
+  const contactRecommendation = {
+    id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', kind: 'contacts',
+    recommendationId: 'contacts:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb:founder-next-step-v1',
+    sourceName: 'Synthetic aviation contact', accountName: 'Synthetic European lessor',
+    urgency: 'Routine', data: { data_origin: 'Synthetic' },
+    recommendationReason: 'A publicly identified contact is recorded.',
+    recommendedAction: 'Review the contact and decide whether to reach out.',
+    evidence: 'Synthetic public-source evidence.',
+  }
+  const existingAction = record('activities', {
+    title: 'Follow up on the sourced research', type: 'Follow-up', activityStatus: 'Planned',
+    actionStatus: 'Accepted', actionCategory: 'Follow-up',
+    recommendationId: `accounts:${sourceId}:founder-next-step-v1`,
+    recommendationReason: 'A human accepted the recommendation.',
+    recommendationEvidence: 'Synthetic source evidence.', expectedObjective: 'Complete research.',
+    relatedRecordKind: 'accounts', relatedRecordId: sourceId, actionScope: 'Account geography',
+    dueDate: '2026-11-01', nextAction: 'Complete research.',
+  }, 'existing-action', accountId)
+  const { page, state, context } = await fixture({
+    records: { accounts: [record('accounts', { name: 'Synthetic European lessor', country: 'Spain', country_code: 'ES' }, accountId)],
+      activities: [existingAction] },
+    dashboardData: {
+      nextActions: [recommendation, contactRecommendation],
+      executionActions: [{
+        id: existingAction.id, version: 1, accountId, opportunityId: null, data: existingAction.data,
+        accountName: 'Synthetic European lessor', countryCode: 'ES', city: 'Madrid', segment: 'Aircraft lessor',
+        geographicStatus: 'Account geography', dataOrigin: 'Synthetic', relatedRecordName: null,
+        dueDate: '2026-11-01', timeBucket: 'Today', priority: 'High',
+      }],
+      metrics: { outstandingActions: 1, overdueActions: 0, actionsDueToday: 1, actionsDueSoon: 0, staleActivityThresholdDays: 30 },
+    },
+  })
+  try {
+    await ready(page)
+    await page.getByText(/Accepted · High · Account geography · Synthetic/).waitFor()
+    await page.getByText(/Relevant contact: Synthetic aviation contact/).waitFor()
+    await page.locator('.oci-action-recommendation').first().getByRole('button', { name: 'Accept as action' }).click()
+    await page.getByRole('heading', { name: 'Accept recommendation as an action' }).waitFor()
+    await page.getByLabel('Due date', { exact: true }).fill('2026-11-06')
+    await page.getByRole('button', { name: 'Accept and record action' }).click()
+    await page.getByRole('dialog').waitFor({ state: 'hidden' })
+    const accepted = state.requests.find((item) => item.method === 'POST' && item.path === `/recommendations/accounts/${sourceId}/accept`)
+    assert.equal(accepted.body.dueDate, '2026-11-06')
+    await page.getByRole('button', { name: 'Complete', exact: true }).click()
+    await page.getByLabel('Outcome / completion notes').fill('Public portfolio source reviewed and recorded.')
+    await page.getByRole('button', { name: 'Confirm', exact: true }).click()
+    const completed = state.requests.find((item) => item.method === 'PATCH' && item.path === '/records/activities/existing-action')
+    assert.equal(completed.body.data.actionStatus, 'Completed')
+    assert.equal(completed.body.data.activityStatus, 'Completed')
+    assert.equal(completed.body.data.outcome, 'Public portfolio source reviewed and recorded.')
+    assert.equal(completed.body.data.completedDate, new Date().toISOString().slice(0, 10))
+    for (const width of [320, 390, 768, 1024, 1920]) {
+      await page.setViewportSize({ width, height: 900 })
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `no action centre overflow at ${width}px`)
+    }
+    assert.deepEqual(state.javascriptErrors, [])
   } finally { await context.close() }
 })
 
@@ -498,10 +798,11 @@ test('TOTP challenge guards all commercial data and uses elevated live bearer af
   const { page, state, context } = await fixture({ mfa: true })
   try {
     await page.getByLabel('Six-digit code').waitFor()
-    assert.deepEqual(state.requests.map((item) => item.path), ['/access'])
+    assert.deepEqual(state.requests, [])
     await page.getByLabel('Six-digit code').fill('123456')
     await page.getByRole('button', { name: 'Verify and continue' }).click()
     await ready(page)
+    assert.equal(state.requests[0].path, '/access')
     assert.ok(state.auth.some((item) => item.path.endsWith('/challenge')))
     assert.ok(state.auth.some((item) => item.path.endsWith('/verify')))
     assert.ok(state.requests.filter((item) => item.path !== '/access').every((item) => item.authorization === `Bearer ${token('aal2')}`))
@@ -513,10 +814,11 @@ test('TOTP enrollment stays gated until challenge verification', { timeout: 3000
   try {
     await page.getByRole('button', { name: 'Set up authenticator' }).click()
     await page.getByLabel('Setup key').waitFor()
-    assert.equal(state.requests.length, 1)
+    assert.equal(state.requests.length, 0)
     await page.getByLabel('Six-digit code').fill('123456')
     await page.getByRole('button', { name: 'Verify and continue' }).click()
     await ready(page)
+    assert.equal(state.requests[0].path, '/access')
     assert.ok(state.auth.some((item) => item.path.endsWith('/factors') && item.method === 'POST'))
   } finally { await context.close() }
 })
@@ -570,7 +872,7 @@ test('accounts CRUD, search, pagination, sort, archive confirmation, version con
     assert.equal(state.stages.at(-1), 'Review pending')
     state.apiError = true
     await go(page, 'contacts')
-    await page.getByRole('alert').filter({ hasText: 'Offline simulated API failure' }).waitFor()
+    await page.locator('.oci-main > .oci-notice.error').filter({ hasText: 'Offline simulated API failure' }).waitFor()
   } finally { await context.close() }
 })
 
@@ -684,15 +986,15 @@ test('failed getUser blocks access calls; revoked API permission immediately hid
 })
 
 test('revenue actual/forecast and currencies render separately without invented totals', { timeout: 30000 }, async () => {
-  const { page, context } = await fixture({ revenueSummary: { financials: [{ currency: 'EUR', basis: 'Actual', periodDate: '2026-10-01', amount: null, cost: null, grossMargin: null, grossMarginPercent: null, costComplete: false, marginBasis: 'Unknown', mrr: null }, { currency: 'USD', basis: 'Forecast', periodDate: '2026-11-01', amount: 5000, cost: 0, grossMargin: 5000, grossMarginPercent: 100, costComplete: true, marginBasis: 'Estimated', mrr: 0 }], pipeline: [{ currency: 'GBP', value: 800, weightedValue: 400 }] } })
+  const { page, context } = await fixture({ revenueSummary: { financials: [{ currency: 'EUR', basis: 'Actual', revenueClass: 'Recognised actual', dataOrigin: 'Unclassified', periodDate: '2026-10-01', amount: null, cost: null, grossMargin: null, grossMarginPercent: null, costComplete: false, marginBasis: 'Unknown', mrr: null }, { currency: 'USD', basis: 'Forecast', revenueClass: 'Speculative forecast', dataOrigin: 'Unclassified', periodDate: '2026-11-01', amount: 5000, cost: 0, grossMargin: 5000, grossMarginPercent: 100, costComplete: true, marginBasis: 'Estimated', mrr: 0 }], pipeline: [{ currency: 'GBP', countryCode: 'Unresolved', segment: 'Unclassified segment', dataOrigin: 'Unclassified', opportunityCount: 1, value: 800, weightedValue: 400, probabilityComplete: true }] } })
   try {
     await ready(page)
-    await page.getByText('Actual · EUR', { exact: true }).waitFor()
-    await page.getByText('Forecast · USD', { exact: true }).waitFor()
-    await page.getByText('Pipeline · GBP', { exact: true }).waitFor()
+    await page.getByText('Recognised actual · Actual · EUR · Unclassified', { exact: true }).waitFor()
+    await page.getByText('Speculative forecast · Forecast · USD · Unclassified', { exact: true }).waitFor()
+    await page.getByText(/Unweighted opportunity pipeline · GBP/).waitFor()
     assert.equal(await page.locator('.oci-financial-card').count(), 3)
     assert.equal(await page.getByText('No revenue recorded', { exact: true }).count(), 0)
-    const actual = page.locator('.oci-financial-card').filter({ hasText: 'Actual · EUR' })
+    const actual = page.locator('.oci-financial-card').filter({ hasText: 'Recognised actual · Actual · EUR · Unclassified' })
     assert.equal(await actual.locator('h3').textContent(), 'Not recorded')
     assert.equal(await actual.locator('dl > div').filter({ has: page.locator('dt', { hasText: /^Cost$/ }) }).locator('dd').textContent(), 'Not recorded')
     assert.equal(await actual.locator('dl > div').filter({ has: page.locator('dt', { hasText: /^Gross Margin$/ }) }).locator('dd').textContent(), 'Not recorded')

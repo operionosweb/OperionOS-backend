@@ -15,7 +15,10 @@ export function createOciRouter(service = createOciService(), authorize = requir
     }
   };
   router.get("/schema", endpoint(async (req, res) => res.json({ success: true, ...await service.schema() })));
-  router.get("/dashboard", endpoint(async (req, res) => res.json({ success: true, ...await service.dashboard() })));
+  router.get("/geography/options", endpoint(async (req, res) => res.json({ success: true, ...await service.geographyOptions(req.query) })));
+  router.get("/dashboard", endpoint(async (req, res) => res.json({ success: true, ...await service.dashboard(req.query) })));
+  router.post("/recommendations/:kind/:id/accept", endpoint(async (req, res) =>
+    res.status(201).json({ success: true, record: await service.acceptRecommendation(req.params.kind, req.params.id, req.body, actor(req)) })));
   router.get("/records/:kind", endpoint(async (req, res) => res.json({ success: true, ...await service.listRecords(req.params.kind, req.query) })));
   router.post("/records/:kind", endpoint(async (req, res) => res.status(201).json({ success: true, record: await service.createRecord(req.params.kind, req.body, actor(req)) })));
   router.patch("/records/:kind/:id", endpoint(async (req, res) => res.json({ success: true, record: await service.updateRecord(req.params.kind, req.params.id, req.body, actor(req)) })));

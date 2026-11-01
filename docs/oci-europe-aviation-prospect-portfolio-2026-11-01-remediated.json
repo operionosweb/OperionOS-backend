@@ -1,0 +1,2019 @@
+{
+  "format": "operion-oci-account-research-import-v1",
+  "researchDate": "2026-11-01",
+  "geographicScope": "EUROPE",
+  "importStatus": "Prepared only; not imported",
+  "recordModel": "Each record.data object contains existing OCI account fields. Do not import assessment or sources as account fields.",
+  "records": [
+    {
+      "data": {
+        "name": "IBERIA, Lineas Aereas de Espana, S.A. Operadora, Sociedad Unipersonal",
+        "website": "https://www.iberia.com/",
+        "country": "Spain",
+        "country_code": "ES",
+        "location": "Madrid",
+        "city": "Madrid",
+        "headquarters": "Madrid is described as a corporate base; the reviewed evidence does not establish the current legal seat.",
+        "operationalLocations": "Madrid hub; domestic, European and international network. [1][2]",
+        "segment": "Airline",
+        "company_type": "Airline",
+        "description": "Spanish airline within International Airlines Group. Its operating and network context is documented in IAG reporting and Iberia's official site. [1][2]",
+        "fleetPortfolio": "Aircraft portfolio is reported by IAG; no fleet quantity copied into this account record. [1]",
+        "contractActivities": "Hypotheses, not confirmed Iberia contract inventory: aircraft lease or acquisition obligations, maintenance and engine support, fuel supply, ground handling and other airline supplier agreements.",
+        "contractUseCases": "Hypothesis: extract party duties, maintenance/return conditions, notice periods, deadlines, service levels and supported financial terms from approved contract samples.",
+        "decisionDepartments": "Hypothesised entry: Legal / contract management, Fleet management, Procurement, Maintenance and Finance. No department need or buying signal is verified.",
+        "priority": "High",
+        "accountStatus": "Target",
+        "researchStatus": "Needs verification",
+        "stakeholderDepartment": "Legal / contract management",
+        "stakeholderStatus": "Unknown stakeholder",
+        "stakeholderEvidence": "No named professional in a relevant buying department was verified in the reviewed public sources. Department is a hypothesis; individual decision-maker remains unknown.",
+        "fitContractComplexity": "Hypothesis — Medium",
+        "fitAviationRelevance": "Verified — High",
+        "fitOperationalComplexity": "Hypothesis — Medium",
+        "fitGeographicPriority": "Hypothesis — High",
+        "fitEvidenceQuality": "Verified — High",
+        "fitEvidence": "Aviation relevance: official IAG report and Iberia site [1][2]. Geography: Spain is the user's highest-priority market. Contract and operational complexity are hypotheses from airline/network operations, not reviewed contract counts. Evidence quality reflects first-party source coverage. Contract volume, financial exposure, decision-maker access and commercial accessibility remain Unknown. Assessment coverage: five of nine rubric criteria (58.2% of total criterion weight); the same five criteria are assessed for every account. Unknown criteria remain Unknown; score is a partial-evidence index, not a complete account-fit or qualification score.",
+        "classification": "Research finding",
+        "source": "Annual reports - IAG | URL: https://www.iairgroup.com/investors-and-shareholders/financial-reporting/annual-reports/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: Iberia's group context and reported airline operations | Confidence: High\nIberia official website | URL: https://www.iberia.com/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: Company identity and passenger airline presence; corporate page was not readable to the research client | Confidence: Medium",
+        "researchDate": "2026-11-01",
+        "confidence": "Medium",
+        "researchNotes": "IAG annual-report page supports group context; Iberia's site returned HTTP 403. Madrid is described as a corporate base, not verified legal seat. No individual contact or customer need verified; all use cases remain hypotheses.",
+        "nextAction": "Use Iberia's official corporate contact route to request a short conversation with Legal / Contract Management or Fleet/Procurement; do not imply a known problem.",
+        "data_origin": "Real",
+        "geographic_source": "IAG annual-report page and Iberia official site [1][2]; city should be reconfirmed against current company legal information. Research date: 2026-11-01. Geographic claim references are itemized in the source register in this JSON; country code ES and country Spain are retained together.",
+        "geographic_confidence": "Medium",
+        "fitContractVolume": "Unknown",
+        "fitFinancialExposure": "Unknown",
+        "fitDecisionMakerAccess": "Unknown",
+        "fitCommercialAccessibility": "Unknown"
+      },
+      "assessment": {
+        "priorityGroup": "Priority 1",
+        "priorityRationale": "Highest-priority country; documented aviation operations and a strong plausible contract-intelligence fit. No customer validation, procurement signal or relationship is verified.",
+        "commercialProblemHypothesis": "Airline contract teams may need to find and monitor obligations across maintenance, fleet, supplier and service arrangements. This is not a verified Iberia problem.",
+        "currentOperionCapabilities": "Contract obligation and deadline extraction, evidence-linked findings, financial-term and risk review, and source traceability; validate current capability coverage before presenting.",
+        "discoveryQuestion": "Across fleet, maintenance and supplier agreements, which obligations are hardest to locate, assign and monitor today?",
+        "pilotHypothesis": "With written approval, test a small customer-selected sample using current extraction, deadline, financial-term and evidence-linking features. Agree reviewed ground truth and success measures with the customer first.",
+        "recommendedAction": "Request an introductory discovery conversation through the official company channel.",
+        "contacts": [],
+        "fitCoverage": {
+          "score": 87,
+          "assessedCriteria": 5,
+          "totalCriteria": 9,
+          "criteriaCoveragePercent": 55.6,
+          "assessedWeight": 6.4,
+          "totalWeight": 11,
+          "weightCoveragePercent": 58.2,
+          "assessedKeys": [
+            "fitContractComplexity",
+            "fitAviationRelevance",
+            "fitOperationalComplexity",
+            "fitGeographicPriority",
+            "fitEvidenceQuality"
+          ],
+          "unknownKeys": [
+            "fitContractVolume",
+            "fitFinancialExposure",
+            "fitDecisionMakerAccess",
+            "fitCommercialAccessibility"
+          ],
+          "interpretation": "Partial-evidence weighted mean across the same five assessed factors for all portfolio records; not a nine-factor score, sales probability, qualification, revenue estimate, or evidence of buyer access."
+        }
+      },
+      "sources": [
+        {
+          "title": "Annual reports - IAG",
+          "url": "https://www.iairgroup.com/investors-and-shareholders/financial-reporting/annual-reports/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Iberia's group context and reported airline operations"
+          ],
+          "confidence": "High"
+        },
+        {
+          "title": "Iberia official website",
+          "url": "https://www.iberia.com/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Company identity and passenger airline presence; corporate page was not readable to the research client"
+          ],
+          "confidence": "Medium"
+        }
+      ]
+    },
+    {
+      "data": {
+        "name": "Air Nostrum Lineas Aereas del Mediterraneo, S.A.",
+        "website": "https://www.airnostrum.es/",
+        "country": "Spain",
+        "country_code": "ES",
+        "location": "Valencia",
+        "city": "Valencia",
+        "headquarters": "Valencia is documented as the company's origin/location; the cited profile does not establish current legal headquarters.",
+        "operationalLocations": "Regional short/medium-haul routes; official profile describes 60 airports across nine European and North African countries. [1]",
+        "segment": "Airline",
+        "company_type": "Airline",
+        "description": "Spanish regional airline founded in Valencia. It operates under an exclusive franchise with Iberia Group as Iberia Regional Air Nostrum; it is a separate company, not an Iberia subsidiary per the cited profile. [1]",
+        "fleetPortfolio": "No fleet quantity included; the official company profile describes regional operations. [1]",
+        "contractActivities": "Hypotheses: airline franchise obligations, aircraft lease/support, maintenance, fuel and airport/ground-service agreements. The franchise relationship is verified; other contract categories are not.",
+        "contractUseCases": "Hypothesis: trace franchise duties, performance/service obligations, renewal and notice dates, maintenance responsibilities and evidence in approved agreements.",
+        "decisionDepartments": "Hypothesised entry: Legal / contract management, Operations, Fleet management and Maintenance.",
+        "priority": "High",
+        "accountStatus": "Target",
+        "researchStatus": "In progress",
+        "stakeholderDepartment": "Legal / contract management",
+        "stakeholderStatus": "Unknown stakeholder",
+        "stakeholderEvidence": "No publicly verified relevant decision-maker located in reviewed official material. Department is a hypothesis; named individual unknown.",
+        "fitContractComplexity": "Hypothesis — Medium",
+        "fitAviationRelevance": "Verified — High",
+        "fitOperationalComplexity": "Hypothesis — Medium",
+        "fitGeographicPriority": "Hypothesis — High",
+        "fitEvidenceQuality": "Verified — High",
+        "fitEvidence": "Official company profile verifies airline operations, Valencia origin and franchise relationship [1]. Spain is the top market by user strategy. Complexity/operations are hypotheses, not a claim about actual contract numbers or problems. Remaining four criteria Unknown. Assessment coverage: five of nine rubric criteria (58.2% of total criterion weight); the same five criteria are assessed for every account. Unknown criteria remain Unknown; score is a partial-evidence index, not a complete account-fit or qualification score.",
+        "classification": "Research finding",
+        "source": "Mission statement - Air Nostrum | URL: https://www.airnostrum.es/en/aboutus/descripciongeneral/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: Company name, Valencia, airline activity, franchise relationship, and network description | Confidence: High",
+        "researchDate": "2026-11-01",
+        "confidence": "Medium",
+        "researchNotes": "Official company profile confirms airline operations, Valencia origin and Iberia franchise. Valencia origin is not treated as verified legal headquarters. No individual contact or customer need verified; use cases remain hypotheses.",
+        "nextAction": "Request a discovery conversation through the official Air Nostrum channel with Legal / Contract Management or Operations.",
+        "data_origin": "Real",
+        "geographic_source": "Air Nostrum company profile [1]. Research date: 2026-11-01. Geographic claim references are itemized in the source register in this JSON; country code ES and country Spain are retained together.",
+        "geographic_confidence": "Medium",
+        "fitContractVolume": "Unknown",
+        "fitFinancialExposure": "Unknown",
+        "fitDecisionMakerAccess": "Unknown",
+        "fitCommercialAccessibility": "Unknown"
+      },
+      "assessment": {
+        "priorityGroup": "Priority 1",
+        "priorityRationale": "Spain-first target with a documented operating franchise relationship and distinct regional airline activity. This is market fit, not customer qualification.",
+        "commercialProblemHypothesis": "Coordination of responsibilities, deadlines and service obligations across a franchise and operational supplier agreements may be difficult; no evidence establishes this is currently a problem.",
+        "currentOperionCapabilities": "Obligation extraction, due-date identification, source-linked evidence and financial/risk terms.",
+        "discoveryQuestion": "How do you currently identify the party responsible for each operational or franchise obligation and track its deadline?",
+        "pilotHypothesis": "Evaluate a small, approved set of representative franchise/maintenance or supplier contracts against customer-reviewed obligation and deadline labels.",
+        "recommendedAction": "Ask for an introductory discussion about contract obligation monitoring; do not assume the franchise agreement is available for a pilot.",
+        "contacts": [],
+        "fitCoverage": {
+          "score": 87,
+          "assessedCriteria": 5,
+          "totalCriteria": 9,
+          "criteriaCoveragePercent": 55.6,
+          "assessedWeight": 6.4,
+          "totalWeight": 11,
+          "weightCoveragePercent": 58.2,
+          "assessedKeys": [
+            "fitContractComplexity",
+            "fitAviationRelevance",
+            "fitOperationalComplexity",
+            "fitGeographicPriority",
+            "fitEvidenceQuality"
+          ],
+          "unknownKeys": [
+            "fitContractVolume",
+            "fitFinancialExposure",
+            "fitDecisionMakerAccess",
+            "fitCommercialAccessibility"
+          ],
+          "interpretation": "Partial-evidence weighted mean across the same five assessed factors for all portfolio records; not a nine-factor score, sales probability, qualification, revenue estimate, or evidence of buyer access."
+        }
+      },
+      "sources": [
+        {
+          "title": "Mission statement - Air Nostrum",
+          "url": "https://www.airnostrum.es/en/aboutus/descripciongeneral/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Company name, Valencia, airline activity, franchise relationship, and network description"
+          ],
+          "confidence": "High"
+        }
+      ]
+    },
+    {
+      "data": {
+        "name": "Industria de Turbo Propulsores, S.A. (ITP Aero)",
+        "website": "https://www.itpaero.com/",
+        "country": "Spain",
+        "country_code": "ES",
+        "location": "Zamudio",
+        "city": "Zamudio",
+        "headquarters": "Parque Tecnologico de Bizkaia, Zamudio, Bizkaia, Spain",
+        "operationalLocations": "Zamudio registered office; broader operational footprint not enumerated in this record. [1]",
+        "segment": "MRO",
+        "company_type": "MRO organisation",
+        "description": "Spanish aerospace propulsion company. Its official website identifies products and services; its legal notice confirms the Zamudio registered office. MRO fit is relevant to its lifecycle-support activity; specific customer contract portfolio is unknown. [1][2]",
+        "fleetPortfolio": "Not applicable as an aircraft operator; no customer fleet or portfolio figures included.",
+        "contractActivities": "Hypotheses: engine support and maintenance agreements, component/repair services, OEM or supplier arrangements and technical service obligations. No specific customer contract was reviewed.",
+        "contractUseCases": "Hypothesis: identify responsibilities, performance conditions, service deadlines, warranty or support terms, and evidence across approved engine-support documents.",
+        "decisionDepartments": "Hypothesised entry: Legal / contract management, Maintenance / service operations, Procurement and Finance.",
+        "priority": "High",
+        "accountStatus": "Target",
+        "researchStatus": "Researched",
+        "stakeholderDepartment": "Legal / contract management",
+        "stakeholderStatus": "Unknown stakeholder",
+        "stakeholderEvidence": "No named professional in a relevant department was verified in the official pages reviewed. Individual decision-maker unknown.",
+        "fitContractComplexity": "Hypothesis — High",
+        "fitAviationRelevance": "Verified — High",
+        "fitOperationalComplexity": "Hypothesis — Medium",
+        "fitGeographicPriority": "Hypothesis — High",
+        "fitEvidenceQuality": "Verified — High",
+        "fitEvidence": "ITP Aero's official legal notice identifies the company and Zamudio seat; its official service/contact website supports aviation propulsion services [1][2]. The contract-complexity rating is a hypothesis from service lifecycle, not reviewed agreements. Geography reflects Spain-first strategy. Other four factors Unknown. Assessment coverage: five of nine rubric criteria (58.2% of total criterion weight); the same five criteria are assessed for every account. Unknown criteria remain Unknown; score is a partial-evidence index, not a complete account-fit or qualification score.",
+        "classification": "Research finding",
+        "source": "Legal notice - ITP Aero | URL: https://www.itpaero.com/en/legal-notice/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: Registered company identity and Zamudio registered office | Confidence: High\nITP Aero official website | URL: https://www.itpaero.com/en/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: Company products/services and propulsion-sector identity | Confidence: Medium\nMRO - ITP Aero | URL: https://www.itpaero.com/en/mro-en/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: Official MRO service page; content rendering was partial in the research client | Confidence: Medium",
+        "researchDate": "2026-11-01",
+        "confidence": "High",
+        "researchNotes": "Registered company name and Zamudio address are directly stated in the first-party legal notice. Do not infer the contents of ITP Aero customer or supplier contracts.",
+        "nextAction": "Request an introductory discovery conversation with Legal / Contract Management or Service Operations via the official contact route.",
+        "data_origin": "Real",
+        "geographic_source": "ITP Aero legal notice [1]. Research date: 2026-11-01. Geographic claim references are itemized in the source register in this JSON; country code ES and country Spain are retained together.",
+        "geographic_confidence": "High",
+        "fitContractVolume": "Unknown",
+        "fitFinancialExposure": "Unknown",
+        "fitDecisionMakerAccess": "Unknown",
+        "fitCommercialAccessibility": "Unknown"
+      },
+      "assessment": {
+        "priorityGroup": "Priority 1",
+        "priorityRationale": "Spain-first aerospace propulsion target with official company and legal identity evidence, and a plausible fit around technical support obligations. No product demand or access is established.",
+        "commercialProblemHypothesis": "Complex service and support commitments may be hard to track consistently across customer and supplier agreements; this remains an unvalidated hypothesis.",
+        "currentOperionCapabilities": "Contract clause/obligation extraction, deadline and condition identification, financial terms and evidence anchoring.",
+        "discoveryQuestion": "Which recurring obligations in engine support or maintenance agreements take the most effort to find, validate and monitor?",
+        "pilotHypothesis": "Use a customer-approved, small set of non-sensitive or appropriately protected service agreements to compare extracted duties, conditions and dates with a human-reviewed reference.",
+        "recommendedAction": "Request a short fit-discovery call through ITP Aero's public corporate channel.",
+        "contacts": [],
+        "fitCoverage": {
+          "score": 94,
+          "assessedCriteria": 5,
+          "totalCriteria": 9,
+          "criteriaCoveragePercent": 55.6,
+          "assessedWeight": 6.4,
+          "totalWeight": 11,
+          "weightCoveragePercent": 58.2,
+          "assessedKeys": [
+            "fitContractComplexity",
+            "fitAviationRelevance",
+            "fitOperationalComplexity",
+            "fitGeographicPriority",
+            "fitEvidenceQuality"
+          ],
+          "unknownKeys": [
+            "fitContractVolume",
+            "fitFinancialExposure",
+            "fitDecisionMakerAccess",
+            "fitCommercialAccessibility"
+          ],
+          "interpretation": "Partial-evidence weighted mean across the same five assessed factors for all portfolio records; not a nine-factor score, sales probability, qualification, revenue estimate, or evidence of buyer access."
+        }
+      },
+      "sources": [
+        {
+          "title": "Legal notice - ITP Aero",
+          "url": "https://www.itpaero.com/en/legal-notice/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Registered company identity and Zamudio registered office"
+          ],
+          "confidence": "High"
+        },
+        {
+          "title": "ITP Aero official website",
+          "url": "https://www.itpaero.com/en/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Company products/services and propulsion-sector identity"
+          ],
+          "confidence": "Medium"
+        },
+        {
+          "title": "MRO - ITP Aero",
+          "url": "https://www.itpaero.com/en/mro-en/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Official MRO service page; content rendering was partial in the research client"
+          ],
+          "confidence": "Medium"
+        }
+      ]
+    },
+    {
+      "data": {
+        "name": "Globalia Handling, S.A.U. (Groundforce)",
+        "website": "https://groundforce.aero/en/",
+        "country": "Spain",
+        "country_code": "ES",
+        "location": "Llucmajor",
+        "city": "Llucmajor",
+        "headquarters": "Llucmajor, Mallorca, Spain (registered address)",
+        "operationalLocations": "Ground handling at Spanish airports; the reviewed official service page identifies passenger, ramp, operations/load control, cargo and additional services. [1][2]",
+        "segment": "Ground handling",
+        "company_type": "Ground handler",
+        "description": "Groundforce is the handling brand of Globalia Handling. The official site presents it as a ground-handling provider and lists its operational service families. [1][2]",
+        "fleetPortfolio": "Not applicable; no aircraft fleet facts included.",
+        "contractActivities": "Hypotheses: airline ground-handling service agreements, ramp/passenger/cargo service levels, turnaround responsibilities, equipment or supplier agreements. No specific contract inventory is verified.",
+        "contractUseCases": "Hypothesis: surface service duties, service levels, incident/exception conditions, deadlines and evidence in customer-approved handling agreements.",
+        "decisionDepartments": "Hypothesised entry: Legal / contract management, Operations, Procurement and Finance.",
+        "priority": "High",
+        "accountStatus": "Target",
+        "researchStatus": "Researched",
+        "stakeholderDepartment": "Operations",
+        "stakeholderStatus": "Unknown stakeholder",
+        "stakeholderEvidence": "No named relevant decision-maker was verified. Operations is a hypothesis based on the published service categories; the person remains unknown.",
+        "fitContractComplexity": "Hypothesis — High",
+        "fitAviationRelevance": "Verified — High",
+        "fitOperationalComplexity": "Hypothesis — High",
+        "fitGeographicPriority": "Hypothesis — High",
+        "fitEvidenceQuality": "Verified — High",
+        "fitEvidence": "Official Groundforce service page confirms multiple ground-handling service categories [1]; Globalia page identifies handling brand/group context [2]. Complexity is a hypothesis from the service scope, not a measured contract count. Geography reflects Spain-first strategy. Remaining four factors Unknown. Assessment coverage: five of nine rubric criteria (58.2% of total criterion weight); the same five criteria are assessed for every account. Unknown criteria remain Unknown; score is a partial-evidence index, not a complete account-fit or qualification score.",
+        "classification": "Research finding",
+        "source": "Groundforce Services | URL: https://groundforce.aero/en/services/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: Ground-handling provider and service categories | Confidence: High\nGroundforce - Globalia | URL: https://www.globalia.com/en/groundforce | Publication date: Not stated | Research date: 2026-11-01 | Supports: Groundforce/Globalia brand and group relationship | Confidence: Medium",
+        "researchDate": "2026-11-01",
+        "confidence": "High",
+        "researchNotes": "Use the operating/legal name Globalia Handling with the Groundforce brand to prevent a duplicate account. No Air Europa account is included, avoiding another Globalia group company in this portfolio.",
+        "nextAction": "Contact the official Groundforce company channel and ask for an introduction to Operations or Legal / Contract Management.",
+        "data_origin": "Real",
+        "geographic_source": "Groundforce legal information and Globalia/groundforce official sites [1][2]; registered address city should be reconfirmed before formal account entry. Research date: 2026-11-01. Geographic claim references are itemized in the source register in this JSON; country code ES and country Spain are retained together.",
+        "geographic_confidence": "High",
+        "fitContractVolume": "Unknown",
+        "fitFinancialExposure": "Unknown",
+        "fitDecisionMakerAccess": "Unknown",
+        "fitCommercialAccessibility": "Unknown"
+      },
+      "assessment": {
+        "priorityGroup": "Priority 1",
+        "priorityRationale": "Spain-first target with publicly documented service lines that create plausible, concrete service-agreement use cases. This does not establish a current problem.",
+        "commercialProblemHypothesis": "A multi-service ground handler may have to monitor service-level, operational and supplier commitments across airline relationships; no evidence shows a failure or unmet need.",
+        "currentOperionCapabilities": "Obligation extraction, deadline/condition identification, financial terms and source evidence.",
+        "discoveryQuestion": "How do operational teams locate and escalate service-level obligations and exceptions in airline handling agreements?",
+        "pilotHypothesis": "On approved sample agreements, evaluate whether Operion can accurately identify service duties, trigger conditions, dates and clause evidence; jointly score against reviewed annotations.",
+        "recommendedAction": "Request an introductory conversation with a relevant operations or legal stakeholder.",
+        "contacts": [],
+        "fitCoverage": {
+          "score": 100,
+          "assessedCriteria": 5,
+          "totalCriteria": 9,
+          "criteriaCoveragePercent": 55.6,
+          "assessedWeight": 6.4,
+          "totalWeight": 11,
+          "weightCoveragePercent": 58.2,
+          "assessedKeys": [
+            "fitContractComplexity",
+            "fitAviationRelevance",
+            "fitOperationalComplexity",
+            "fitGeographicPriority",
+            "fitEvidenceQuality"
+          ],
+          "unknownKeys": [
+            "fitContractVolume",
+            "fitFinancialExposure",
+            "fitDecisionMakerAccess",
+            "fitCommercialAccessibility"
+          ],
+          "interpretation": "Partial-evidence weighted mean across the same five assessed factors for all portfolio records; not a nine-factor score, sales probability, qualification, revenue estimate, or evidence of buyer access."
+        }
+      },
+      "sources": [
+        {
+          "title": "Groundforce Services",
+          "url": "https://groundforce.aero/en/services/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Ground-handling provider and service categories"
+          ],
+          "confidence": "High"
+        },
+        {
+          "title": "Groundforce - Globalia",
+          "url": "https://www.globalia.com/en/groundforce",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Groundforce/Globalia brand and group relationship"
+          ],
+          "confidence": "Medium"
+        }
+      ]
+    },
+    {
+      "data": {
+        "name": "Binter Canarias, S.A.",
+        "website": "https://www.bintercanarias.com/",
+        "country": "Spain",
+        "country_code": "ES",
+        "location": "Telde, Gran Canaria",
+        "city": "Telde",
+        "headquarters": "Telde is reported by a third-party business-park listing; headquarters/legal seat is not confirmed by the reviewed first-party source.",
+        "operationalLocations": "Canary Islands regional operations and other destinations; official fleet page lists ATR 72 and Embraer E195-E2 aircraft. [1]",
+        "segment": "Airline",
+        "company_type": "Airline",
+        "description": "Canary Islands-based regional airline operating ATR 72 and Embraer E195-E2 aircraft, according to its official fleet page. [1]",
+        "fleetPortfolio": "Official site states 26 ATR 72 and 16 Embraer 195-E2 at research date; figures are time-sensitive and intentionally not imported into account facts. [1]",
+        "contractActivities": "Hypotheses: aircraft lease/support, engine and airframe maintenance, fuel supply, inter-island and airport handling, and service agreements. No specific agreements reviewed.",
+        "contractUseCases": "Hypothesis: locate operational duties, maintenance dependencies, triggers, time limits and supported financial terms in customer-approved contract documents.",
+        "decisionDepartments": "Hypothesised entry: Fleet management, Maintenance, Legal / contract management and Operations.",
+        "priority": "High",
+        "accountStatus": "Target",
+        "researchStatus": "Needs verification",
+        "stakeholderDepartment": "Fleet management",
+        "stakeholderStatus": "Unknown stakeholder",
+        "stakeholderEvidence": "No named relevant decision-maker was verified. Fleet management is a role hypothesis; individual unknown.",
+        "fitContractComplexity": "Hypothesis — Medium",
+        "fitAviationRelevance": "Verified — High",
+        "fitOperationalComplexity": "Hypothesis — Medium",
+        "fitGeographicPriority": "Hypothesis — High",
+        "fitEvidenceQuality": "Verified — Medium",
+        "fitEvidence": "Official fleet page establishes airline/fleet context [1]. Telde location is supported by a local business-park listing, not a first-party headquarters statement [2]. Spain is the first market. Contract complexity and operations remain hypotheses; four criteria Unknown. Assessment coverage: five of nine rubric criteria (58.2% of total criterion weight); the same five criteria are assessed for every account. Unknown criteria remain Unknown; score is a partial-evidence index, not a complete account-fit or qualification score.",
+        "classification": "Research finding",
+        "source": "Fleet - Binter | URL: https://www.bintercanarias.com/en/corporative/fleet | Publication date: Not stated | Research date: 2026-11-01 | Supports: Current published fleet types and regional aviation context | Confidence: High\nBinter - Parque Empresarial Melenara | URL: https://parqueempresarialmelenara.es/empresa/binter/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: Telde operating/company location, not first-party HQ confirmation | Confidence: Medium",
+        "researchDate": "2026-11-01",
+        "confidence": "Medium",
+        "researchNotes": "Official fleet/corporate pages confirm airline context. Telde location is supported by a third-party business-park listing, not a first-party headquarters statement. No customer problem or contact verified.",
+        "nextAction": "Verify the legal/operating office via the official corporate channel, then seek a discovery conversation with Fleet or Maintenance.",
+        "data_origin": "Real",
+        "geographic_source": "Official Binter fleet page and local business-park listing [1][2]. Research date: 2026-11-01. Geographic claim references are itemized in the source register in this JSON; country code ES and country Spain are retained together.",
+        "geographic_confidence": "Medium",
+        "fitContractVolume": "Unknown",
+        "fitFinancialExposure": "Unknown",
+        "fitDecisionMakerAccess": "Unknown",
+        "fitCommercialAccessibility": "Unknown"
+      },
+      "assessment": {
+        "priorityGroup": "Priority 2",
+        "priorityRationale": "Spain-first airline with official fleet evidence; exact headquarters and contract inventory need confirmation before the record is treated as fully verified.",
+        "commercialProblemHypothesis": "Regional fleet and maintenance obligations could require disciplined deadline and evidence tracking; no problem is established.",
+        "currentOperionCapabilities": "Obligation extraction, deadlines, conditions, financial exposure classification and source evidence.",
+        "discoveryQuestion": "Which maintenance or fleet-related obligations are most difficult to monitor across your regional operations?",
+        "pilotHypothesis": "A small approved sample of maintenance or supplier agreements could be reviewed for duty, trigger, deadline and source-span accuracy.",
+        "recommendedAction": "Confirm corporate location and identify the correct Fleet or Maintenance department through public company channels.",
+        "contacts": [],
+        "fitCoverage": {
+          "score": 80,
+          "assessedCriteria": 5,
+          "totalCriteria": 9,
+          "criteriaCoveragePercent": 55.6,
+          "assessedWeight": 6.4,
+          "totalWeight": 11,
+          "weightCoveragePercent": 58.2,
+          "assessedKeys": [
+            "fitContractComplexity",
+            "fitAviationRelevance",
+            "fitOperationalComplexity",
+            "fitGeographicPriority",
+            "fitEvidenceQuality"
+          ],
+          "unknownKeys": [
+            "fitContractVolume",
+            "fitFinancialExposure",
+            "fitDecisionMakerAccess",
+            "fitCommercialAccessibility"
+          ],
+          "interpretation": "Partial-evidence weighted mean across the same five assessed factors for all portfolio records; not a nine-factor score, sales probability, qualification, revenue estimate, or evidence of buyer access."
+        }
+      },
+      "sources": [
+        {
+          "title": "Fleet - Binter",
+          "url": "https://www.bintercanarias.com/en/corporative/fleet",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Current published fleet types and regional aviation context"
+          ],
+          "confidence": "High"
+        },
+        {
+          "title": "Binter - Parque Empresarial Melenara",
+          "url": "https://parqueempresarialmelenara.es/empresa/binter/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Telde operating/company location, not first-party HQ confirmation"
+          ],
+          "confidence": "Medium"
+        }
+      ]
+    },
+    {
+      "data": {
+        "name": "Volotea, S.L.",
+        "website": "https://www.volotea.com/",
+        "country": "Spain",
+        "country_code": "ES",
+        "location": "Barcelona",
+        "city": "Barcelona",
+        "headquarters": "Operational headquarters: Travessera de Gr?cia 56, Barcelona, Spain. Registered address: Asturias Airport, Santiago del Monte (Castrill?n), Spain.",
+        "operationalLocations": "Operational headquarters in Barcelona; registered address at Asturias Airport, Santiago del Monte (Castrill?n). The company profile lists European operating bases. [1][2]",
+        "segment": "Airline",
+        "company_type": "Airline",
+        "description": "Spanish airline operating an all-Airbus A319/A320 fleet and a network of European city routes, according to its official company profile. [1]",
+        "fleetPortfolio": "Official profile provides time-dependent fleet estimates; no number imported.",
+        "contractActivities": "Hypotheses: aircraft lease/acquisition, maintenance and engine support, fuel, ground handling and other airline supplier agreements. No specific contracts reviewed.",
+        "contractUseCases": "Hypothesis: identify recurring duties, service obligations, deadlines and conditions across approved fleet and supplier agreements.",
+        "decisionDepartments": "Hypothesised entry: Fleet management, Procurement, Legal / contract management and Maintenance.",
+        "priority": "Medium",
+        "accountStatus": "Target",
+        "researchStatus": "Researched",
+        "stakeholderDepartment": "Fleet management",
+        "stakeholderStatus": "Unknown stakeholder",
+        "stakeholderEvidence": "No relevant named decision-maker verified in the official source reviewed; individual unknown.",
+        "fitContractComplexity": "Hypothesis — Medium",
+        "fitAviationRelevance": "Verified — High",
+        "fitOperationalComplexity": "Hypothesis — Medium",
+        "fitGeographicPriority": "Hypothesis — High",
+        "fitEvidenceQuality": "Verified — High",
+        "fitEvidence": "Official Volotea profile verifies airline operations and European bases [1]. Spain is the user's highest-priority country. Contract/operational complexity are hypotheses; volume, exposure, access and buying roles are Unknown. Assessment coverage: five of nine rubric criteria (58.2% of total criterion weight); the same five criteria are assessed for every account. Unknown criteria remain Unknown; score is a partial-evidence index, not a complete account-fit or qualification score.",
+        "classification": "Research finding",
+        "source": "About us - Volotea | URL: https://www.volotea.com/en/press-room/about-us/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: Airline identity, aircraft family and operating bases | Confidence: High\nImpressum - Volotea | URL: https://www.volotea.com/de/gesetzliche-bedingungen/impressum/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: Volotea S.L. registered address at Asturias Airport, Castrill?n; Operational headquarters at Travessera de Gr?cia 56, Barcelona | Confidence: High",
+        "researchDate": "2026-11-01",
+        "confidence": "High",
+        "researchNotes": "Official company profile confirms airline operations. Official Impressum distinguishes Barcelona operational headquarters from the Castrill?n registered address. No buying contact or customer need verified; commercial uses remain hypotheses.",
+        "nextAction": "Use the official corporate contact route to request a short conversation with Fleet or Legal / Contract Management.",
+        "data_origin": "Real",
+        "geographic_source": "Official Volotea Impressum distinguishes its Barcelona operational headquarters from its registered address in Castrill?n: https://www.volotea.com/de/gesetzliche-bedingungen/impressum/ (accessed 2026-11-01). Research date: 2026-11-01. Geographic claim references are itemized in the source register in this JSON; country code ES and country Spain are retained together.",
+        "geographic_confidence": "High",
+        "fitContractVolume": "Unknown",
+        "fitFinancialExposure": "Unknown",
+        "fitDecisionMakerAccess": "Unknown",
+        "fitCommercialAccessibility": "Unknown"
+      },
+      "assessment": {
+        "priorityGroup": "Priority 2",
+        "priorityRationale": "Spain-first airline with a verified European operating profile; no purchase, contract volume or customer need evidence.",
+        "commercialProblemHypothesis": "Multi-base operations may make it valuable to locate dependencies and dates in supplier/fleet agreements; this is not a verified issue.",
+        "currentOperionCapabilities": "Obligation, due-date, condition, financial-term and evidence extraction.",
+        "discoveryQuestion": "How does the team currently identify and monitor obligations that span aircraft, maintenance and airport suppliers?",
+        "pilotHypothesis": "Evaluate a limited, approved sample for obligation completeness and source-span traceability, with customer-reviewed expected outputs.",
+        "recommendedAction": "Initiate research-led outreach through the official company channel.",
+        "contacts": [],
+        "fitCoverage": {
+          "score": 87,
+          "assessedCriteria": 5,
+          "totalCriteria": 9,
+          "criteriaCoveragePercent": 55.6,
+          "assessedWeight": 6.4,
+          "totalWeight": 11,
+          "weightCoveragePercent": 58.2,
+          "assessedKeys": [
+            "fitContractComplexity",
+            "fitAviationRelevance",
+            "fitOperationalComplexity",
+            "fitGeographicPriority",
+            "fitEvidenceQuality"
+          ],
+          "unknownKeys": [
+            "fitContractVolume",
+            "fitFinancialExposure",
+            "fitDecisionMakerAccess",
+            "fitCommercialAccessibility"
+          ],
+          "interpretation": "Partial-evidence weighted mean across the same five assessed factors for all portfolio records; not a nine-factor score, sales probability, qualification, revenue estimate, or evidence of buyer access."
+        }
+      },
+      "sources": [
+        {
+          "title": "About us - Volotea",
+          "url": "https://www.volotea.com/en/press-room/about-us/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Airline identity, aircraft family and operating bases"
+          ],
+          "confidence": "High"
+        },
+        {
+          "title": "Impressum - Volotea",
+          "url": "https://www.volotea.com/de/gesetzliche-bedingungen/impressum/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Volotea S.L. registered address at Asturias Airport, Castrill?n",
+            "Operational headquarters at Travessera de Gr?cia 56, Barcelona"
+          ],
+          "confidence": "High"
+        }
+      ]
+    },
+    {
+      "data": {
+        "name": "AERTEC Solutions, S.L.",
+        "website": "https://aertecsolutions.com/en/",
+        "country": "Spain",
+        "country_code": "ES",
+        "location": "Malaga",
+        "city": "Malaga",
+        "headquarters": "Malaga is reported in a sector-association profile; current legal headquarters is not established by the reviewed first-party page.",
+        "operationalLocations": "Projects across airport, aerospace and defence domains in multiple countries; individual project sites not included. [1]",
+        "segment": "Aviation consultancy",
+        "company_type": "Consultancy",
+        "description": "Spanish aeronautics technology, engineering and consulting company working in aerospace, airport and defence sectors. [1][2]",
+        "fleetPortfolio": "Not an airline or aircraft lessor; no fleet portfolio applicable.",
+        "contractActivities": "Hypotheses: professional-services statements of work, engineering deliverables, subcontractor/supplier terms, service levels and software/technology agreements. No specific client contract reviewed.",
+        "contractUseCases": "Hypothesis: extract deliverables, acceptance criteria, milestones, dependencies, change/notice clauses and financial terms from approved project agreements.",
+        "decisionDepartments": "Hypothesised entry: Legal / contract management, Project Operations, Procurement and Finance.",
+        "priority": "Medium",
+        "accountStatus": "Target",
+        "researchStatus": "Needs verification",
+        "stakeholderDepartment": "Legal / contract management",
+        "stakeholderStatus": "Unknown stakeholder",
+        "stakeholderEvidence": "No publicly verified relevant named buyer was identified in reviewed sources. Individual remains unknown.",
+        "fitContractComplexity": "Hypothesis — Medium",
+        "fitAviationRelevance": "Verified — High",
+        "fitOperationalComplexity": "Hypothesis — Medium",
+        "fitGeographicPriority": "Hypothesis — High",
+        "fitEvidenceQuality": "Verified — Medium",
+        "fitEvidence": "First-party AERTEC site describes aeronautical, airport and defence work [1]; Andalucía Aerospace lists AERTEC as a partner and gives its sector classification/location [2]. Consultancy fit is evidenced by association description; commercial complexity remains a hypothesis. Four criteria Unknown. Assessment coverage: five of nine rubric criteria (58.2% of total criterion weight); the same five criteria are assessed for every account. Unknown criteria remain Unknown; score is a partial-evidence index, not a complete account-fit or qualification score.",
+        "classification": "Research finding",
+        "source": "AERTEC official site | URL: https://aertecsolutions.com/en/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: Aeronautical, airport and defence company activities | Confidence: High\nAERTEC Solutions - Andalucia Aerospace | URL: https://andaluciaaerospace.com/en/full_partners/aertec-solutions/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: Aviation engineering/consultancy categorisation and Malaga location | Confidence: Medium",
+        "researchDate": "2026-11-01",
+        "confidence": "Medium",
+        "researchNotes": "Official site confirms aeronautics, airport and defence engineering activity. The aviation-consultancy label and Malaga location rely partly on an industry association profile; legal headquarters is not confirmed. Commercial fit remains a hypothesis.",
+        "nextAction": "Ask through the official contact route whether project/engineering contracts are a priority for obligation intelligence.",
+        "data_origin": "Real",
+        "geographic_source": "AERTEC site and Andalucía Aerospace member profile [1][2]. Research date: 2026-11-01. Geographic claim references are itemized in the source register in this JSON; country code ES and country Spain are retained together.",
+        "geographic_confidence": "Medium",
+        "fitContractVolume": "Unknown",
+        "fitFinancialExposure": "Unknown",
+        "fitDecisionMakerAccess": "Unknown",
+        "fitCommercialAccessibility": "Unknown"
+      },
+      "assessment": {
+        "priorityGroup": "Priority 2",
+        "priorityRationale": "Spain-based aeronautics consultancy/engineering target. Fit depends on whether client project agreements involve sufficient contract-intelligence needs.",
+        "commercialProblemHypothesis": "Milestone and acceptance obligations may be difficult to coordinate across technical projects; no evidence confirms this occurs at AERTEC.",
+        "currentOperionCapabilities": "Extract obligations, deadlines, conditions, financial terms and source evidence from contracts.",
+        "discoveryQuestion": "Do your project teams need a faster, evidence-linked way to track contractual deliverables and acceptance obligations?",
+        "pilotHypothesis": "A small, approved and non-confidential project agreement sample could test deliverable, milestone and evidence extraction.",
+        "recommendedAction": "Ask for a brief discovery call with Legal / Project Operations through AERTEC's official channel.",
+        "contacts": [],
+        "fitCoverage": {
+          "score": 80,
+          "assessedCriteria": 5,
+          "totalCriteria": 9,
+          "criteriaCoveragePercent": 55.6,
+          "assessedWeight": 6.4,
+          "totalWeight": 11,
+          "weightCoveragePercent": 58.2,
+          "assessedKeys": [
+            "fitContractComplexity",
+            "fitAviationRelevance",
+            "fitOperationalComplexity",
+            "fitGeographicPriority",
+            "fitEvidenceQuality"
+          ],
+          "unknownKeys": [
+            "fitContractVolume",
+            "fitFinancialExposure",
+            "fitDecisionMakerAccess",
+            "fitCommercialAccessibility"
+          ],
+          "interpretation": "Partial-evidence weighted mean across the same five assessed factors for all portfolio records; not a nine-factor score, sales probability, qualification, revenue estimate, or evidence of buyer access."
+        }
+      },
+      "sources": [
+        {
+          "title": "AERTEC official site",
+          "url": "https://aertecsolutions.com/en/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Aeronautical, airport and defence company activities"
+          ],
+          "confidence": "High"
+        },
+        {
+          "title": "AERTEC Solutions - Andalucia Aerospace",
+          "url": "https://andaluciaaerospace.com/en/full_partners/aertec-solutions/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Aviation engineering/consultancy categorisation and Malaga location"
+          ],
+          "confidence": "Medium"
+        }
+      ]
+    },
+    {
+      "data": {
+        "name": "Air Corsica (AIR CORSICA)",
+        "website": "https://www.aircorsica.com/",
+        "country": "France",
+        "country_code": "FR",
+        "location": "Ajaccio",
+        "city": "Ajaccio",
+        "headquarters": "Ajaccio is stated in the cited government registry URL, but the registry content was blocked during review and requires direct confirmation.",
+        "operationalLocations": "Corsica and mainland France routes; specific route-level facts not included.",
+        "segment": "Airline",
+        "company_type": "Airline",
+        "description": "French airline operating passenger air transport; French government company registry identifies the Ajaccio seat and aviation activity. [1][2]",
+        "fleetPortfolio": "Not included; fleet details were not needed for this commercial qualification.",
+        "contractActivities": "Hypotheses: aircraft and maintenance support, fuel, ground handling, regional route/public-service obligations and supplier agreements. No individual agreement reviewed.",
+        "contractUseCases": "Hypothesis: trace parties, conditions, deadlines, service obligations and source passages across approved contracts.",
+        "decisionDepartments": "Hypothesised entry: Legal / contract management, Operations, Fleet and Procurement.",
+        "priority": "Low",
+        "accountStatus": "Target",
+        "researchStatus": "Needs verification",
+        "stakeholderDepartment": "Legal / contract management",
+        "stakeholderStatus": "Unknown stakeholder",
+        "stakeholderEvidence": "No named relevant professional verified in reviewed sources. Individual decision-maker unknown.",
+        "fitContractComplexity": "Hypothesis — Medium",
+        "fitAviationRelevance": "Verified — High",
+        "fitOperationalComplexity": "Hypothesis — Medium",
+        "fitGeographicPriority": "Hypothesis — Medium",
+        "fitEvidenceQuality": "Verified — High",
+        "fitEvidence": "French company registry confirms the Ajaccio registered seat [2]; Air Corsica official site confirms active passenger airline service [1]. Operational/contract complexity remains hypothesis. Four criteria Unknown. Assessment coverage: five of nine rubric criteria (58.2% of total criterion weight); the same five criteria are assessed for every account. Unknown criteria remain Unknown; score is a partial-evidence index, not a complete account-fit or qualification score.",
+        "classification": "Research finding",
+        "source": "Air Corsica official site | URL: https://www.aircorsica.com/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: Operating passenger airline presence | Confidence: High\nAIR CORSICA - French government company registry | URL: https://annuaire-entreprises.data.gouv.fr/entreprise/air-corsica-air-corsica-349638395 | Publication date: Not stated | Research date: 2026-11-01 | Supports: Legal name, activity and registered seat in Ajaccio; Source URL was not directly retrievable in the audit client; claim requires accessible-source confirmation. | Confidence: Medium",
+        "researchDate": "2026-11-01",
+        "confidence": "Medium",
+        "researchNotes": "Official website confirms passenger airline operations. The linked French registry was not retrievable in the audit client; confirm legal name and Ajaccio seat directly before import. No customer need or contact verified.",
+        "nextAction": "Use Air Corsica's public corporate contact route to identify an appropriate legal or operations contact.",
+        "data_origin": "Real",
+        "geographic_source": "French government registry and Air Corsica official site [1][2]. Research date: 2026-11-01. Geographic claim references are itemized in the source register in this JSON; country code FR and country France are retained together.",
+        "geographic_confidence": "Low",
+        "fitContractVolume": "Unknown",
+        "fitFinancialExposure": "Unknown",
+        "fitDecisionMakerAccess": "Unknown",
+        "fitCommercialAccessibility": "Unknown"
+      },
+      "assessment": {
+        "priorityGroup": "Priority 3",
+        "priorityRationale": "Verified European airline but outside the first five named national priorities; research is sufficient for a target record, not for qualification.",
+        "commercialProblemHypothesis": "Regional airline obligations may involve service and operational dependencies; no current need or contract issue is known.",
+        "currentOperionCapabilities": "Obligation and deadline extraction with source-linked evidence.",
+        "discoveryQuestion": "Which agreements create the most important operational deadlines or dependencies for your route network?",
+        "pilotHypothesis": "A customer-approved sample of one contract category could test obligation and source-span extraction.",
+        "recommendedAction": "Prioritise after the first Spanish and larger market targets; do not infer urgency.",
+        "contacts": [],
+        "fitCoverage": {
+          "score": 82,
+          "assessedCriteria": 5,
+          "totalCriteria": 9,
+          "criteriaCoveragePercent": 55.6,
+          "assessedWeight": 6.4,
+          "totalWeight": 11,
+          "weightCoveragePercent": 58.2,
+          "assessedKeys": [
+            "fitContractComplexity",
+            "fitAviationRelevance",
+            "fitOperationalComplexity",
+            "fitGeographicPriority",
+            "fitEvidenceQuality"
+          ],
+          "unknownKeys": [
+            "fitContractVolume",
+            "fitFinancialExposure",
+            "fitDecisionMakerAccess",
+            "fitCommercialAccessibility"
+          ],
+          "interpretation": "Partial-evidence weighted mean across the same five assessed factors for all portfolio records; not a nine-factor score, sales probability, qualification, revenue estimate, or evidence of buyer access."
+        }
+      },
+      "sources": [
+        {
+          "title": "Air Corsica official site",
+          "url": "https://www.aircorsica.com/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Operating passenger airline presence"
+          ],
+          "confidence": "High"
+        },
+        {
+          "title": "AIR CORSICA - French government company registry",
+          "url": "https://annuaire-entreprises.data.gouv.fr/entreprise/air-corsica-air-corsica-349638395",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Legal name, activity and registered seat in Ajaccio",
+            "Source URL was not directly retrievable in the audit client; claim requires accessible-source confirmation."
+          ],
+          "confidence": "Medium"
+        }
+      ]
+    },
+    {
+      "data": {
+        "name": "Air France Industries KLM Engineering & Maintenance (AFI KLM E&M)",
+        "website": "https://www.afiklmem.com/en",
+        "country": "France",
+        "country_code": "FR",
+        "location": "Paris",
+        "city": "Paris",
+        "headquarters": "Paris-area MRO activity is cited; the standalone contracting entity and registered seat are not confirmed.",
+        "operationalLocations": "Paris-area and Amsterdam-area maintenance operations are described by Air France-KLM; do not create a separate KLM airline account in this portfolio. [1]",
+        "segment": "MRO",
+        "company_type": "MRO organisation",
+        "description": "Air France-KLM group's aircraft maintenance business, covering maintenance, repair and overhaul services. It is a group business unit, not asserted here as an independent legal company. [1][2]",
+        "fleetPortfolio": "Supports customer aircraft; no fleet count included.",
+        "contractActivities": "Hypotheses: engine, component, airframe and line-maintenance agreements; parts supply and service-level terms. No individual service contract reviewed.",
+        "contractUseCases": "Hypothesis: identify maintenance scope, dependencies, service obligations, time limits, conditions and supported financial clauses.",
+        "decisionDepartments": "Hypothesised entry: Legal / contract management, Maintenance operations, Procurement and Finance.",
+        "priority": "Medium",
+        "accountStatus": "Target",
+        "researchStatus": "Needs verification",
+        "stakeholderDepartment": "Maintenance",
+        "stakeholderStatus": "Unknown stakeholder",
+        "stakeholderEvidence": "No named relevant professional verified in reviewed sources; individual decision-maker unknown.",
+        "fitContractComplexity": "Hypothesis — High",
+        "fitAviationRelevance": "Verified — High",
+        "fitOperationalComplexity": "Hypothesis — High",
+        "fitGeographicPriority": "Hypothesis — Medium",
+        "fitEvidenceQuality": "Verified — High",
+        "fitEvidence": "First-party Air France-KLM sources describe maintenance operations and group MRO activity [1][2]. Contract complexity is a reasonable hypothesis, but actual contracts and contract counts are unknown. Four criteria Unknown. Assessment coverage: five of nine rubric criteria (58.2% of total criterion weight); the same five criteria are assessed for every account. Unknown criteria remain Unknown; score is a partial-evidence index, not a complete account-fit or qualification score.",
+        "classification": "Research finding",
+        "source": "Aircraft maintenance - Air France-KLM | URL: https://www.airfranceklm.com/en/our-strengths/aircraft-maintenance | Publication date: Not stated | Research date: 2026-11-01 | Supports: Group aircraft maintenance services and location context; Source URL was not directly retrievable in the audit client; claim requires accessible-source confirmation. | Confidence: Medium\nAFI KLM E&M official site | URL: https://www.afiklmem.com/en | Publication date: Not stated | Research date: 2026-11-01 | Supports: MRO business-unit identity and services; Source URL was not directly retrievable in the audit client; claim requires accessible-source confirmation. | Confidence: Medium",
+        "researchDate": "2026-11-01",
+        "confidence": "Medium",
+        "researchNotes": "Group MRO activity is cited, but the business unit's contracting entity and registered seat are not confirmed. Resolve the legal account identity before import. No buyer or customer need verified.",
+        "nextAction": "Confirm the relevant contracting entity and ask for a discovery conversation with MRO Legal or Maintenance Operations.",
+        "data_origin": "Real",
+        "geographic_source": "Air France-KLM maintenance page [1]; business-unit seat not confirmed. Research date: 2026-11-01. Geographic claim references are itemized in the source register in this JSON; country code FR and country France are retained together.",
+        "geographic_confidence": "Low",
+        "fitContractVolume": "Unknown",
+        "fitFinancialExposure": "Unknown",
+        "fitDecisionMakerAccess": "Unknown",
+        "fitCommercialAccessibility": "Unknown"
+      },
+      "assessment": {
+        "priorityGroup": "Priority 2",
+        "priorityRationale": "Credible MRO use case with official group-level evidence, but legal contracting entity and stakeholder access need research.",
+        "commercialProblemHypothesis": "Maintenance work scopes and service dependencies may contain many obligations requiring evidence-based monitoring; not verified as a customer problem.",
+        "currentOperionCapabilities": "Obligation, deadline, condition and financial-term extraction with source traceability.",
+        "discoveryQuestion": "Which obligations in customer maintenance agreements are most difficult to monitor across a work package?",
+        "pilotHypothesis": "Test current extraction on a small, approved and de-identified sample if the correct legal entity approves it.",
+        "recommendedAction": "Clarify group business-unit versus contracting-entity identity before outreach.",
+        "contacts": [],
+        "fitCoverage": {
+          "score": 95,
+          "assessedCriteria": 5,
+          "totalCriteria": 9,
+          "criteriaCoveragePercent": 55.6,
+          "assessedWeight": 6.4,
+          "totalWeight": 11,
+          "weightCoveragePercent": 58.2,
+          "assessedKeys": [
+            "fitContractComplexity",
+            "fitAviationRelevance",
+            "fitOperationalComplexity",
+            "fitGeographicPriority",
+            "fitEvidenceQuality"
+          ],
+          "unknownKeys": [
+            "fitContractVolume",
+            "fitFinancialExposure",
+            "fitDecisionMakerAccess",
+            "fitCommercialAccessibility"
+          ],
+          "interpretation": "Partial-evidence weighted mean across the same five assessed factors for all portfolio records; not a nine-factor score, sales probability, qualification, revenue estimate, or evidence of buyer access."
+        }
+      },
+      "sources": [
+        {
+          "title": "Aircraft maintenance - Air France-KLM",
+          "url": "https://www.airfranceklm.com/en/our-strengths/aircraft-maintenance",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Group aircraft maintenance services and location context",
+            "Source URL was not directly retrievable in the audit client; claim requires accessible-source confirmation."
+          ],
+          "confidence": "Medium"
+        },
+        {
+          "title": "AFI KLM E&M official site",
+          "url": "https://www.afiklmem.com/en",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "MRO business-unit identity and services",
+            "Source URL was not directly retrievable in the audit client; claim requires accessible-source confirmation."
+          ],
+          "confidence": "Medium"
+        }
+      ]
+    },
+    {
+      "data": {
+        "name": "Dassault Falcon Service",
+        "website": "https://www.dassaultfalconservice.com/en/",
+        "country": "France",
+        "country_code": "FR",
+        "location": "Le Bourget",
+        "city": "Le Bourget",
+        "headquarters": "Le Bourget is a service/maintenance location; legal seat and exact contracting entity are not confirmed by the retrieved source.",
+        "operationalLocations": "Le Bourget Falcon maintenance center and other service locations described by the company. [1][2]",
+        "segment": "MRO",
+        "company_type": "MRO organisation",
+        "description": "Dassault Aviation subsidiary providing maintenance services for Falcon business aircraft. [1][2]",
+        "fleetPortfolio": "Not an airline; supports Falcon customer aircraft. No fleet count included.",
+        "contractActivities": "Hypotheses: aircraft maintenance, modification, technical support, spare parts and aircraft-management agreements. No individual contract reviewed.",
+        "contractUseCases": "Hypothesis: surface work scope, conditions, deadlines, parts responsibilities and financial clauses from approved customer agreements.",
+        "decisionDepartments": "Hypothesised entry: Maintenance, Legal / contract management, Procurement and Finance.",
+        "priority": "Medium",
+        "accountStatus": "Target",
+        "researchStatus": "Needs verification",
+        "stakeholderDepartment": "Maintenance",
+        "stakeholderStatus": "Unknown stakeholder",
+        "stakeholderEvidence": "No named commercial or legal decision-maker verified in the public sources reviewed.",
+        "fitContractComplexity": "Hypothesis — Medium",
+        "fitAviationRelevance": "Verified — High",
+        "fitOperationalComplexity": "Hypothesis — Medium",
+        "fitGeographicPriority": "Hypothesis — Medium",
+        "fitEvidenceQuality": "Verified — High",
+        "fitEvidence": "Dassault Group identifies DFS as a subsidiary; DFS official page describes maintenance services [1][2]. Contract complexity remains a hypothesis. Four criteria Unknown. Assessment coverage: five of nine rubric criteria (58.2% of total criterion weight); the same five criteria are assessed for every account. Unknown criteria remain Unknown; score is a partial-evidence index, not a complete account-fit or qualification score.",
+        "classification": "Research finding",
+        "source": "Dassault Falcon Service - Dassault Group | URL: https://dassault.fr/en/subsidiary/dassault-falcon-service | Publication date: Not stated | Research date: 2026-11-01 | Supports: Parent/subsidiary relationship and MRO identity | Confidence: High\nMaintenance - Dassault Falcon Service | URL: https://www.dassaultfalconservice.com/en/maintenance-center/maintenance | Publication date: Not stated | Research date: 2026-11-01 | Supports: Maintenance services and Le Bourget center; Source URL was not directly retrievable in the audit client; claim requires accessible-source confirmation. | Confidence: Medium",
+        "researchDate": "2026-11-01",
+        "confidence": "Medium",
+        "researchNotes": "Dassault Group source supports subsidiary and Falcon service activity. Le Bourget is a service location; direct DFS legal page was unavailable, so verify legal seat and contracting entity. No customer need or contact verified.",
+        "nextAction": "Use the official DFS channel to request a discussion with Maintenance or Legal / Contract Management.",
+        "data_origin": "Real",
+        "geographic_source": "Dassault Group and DFS official maintenance pages [1][2]. Research date: 2026-11-01. Geographic claim references are itemized in the source register in this JSON; country code FR and country France are retained together.",
+        "geographic_confidence": "Medium",
+        "fitContractVolume": "Unknown",
+        "fitFinancialExposure": "Unknown",
+        "fitDecisionMakerAccess": "Unknown",
+        "fitCommercialAccessibility": "Unknown"
+      },
+      "assessment": {
+        "priorityGroup": "Priority 2",
+        "priorityRationale": "Documented MRO service profile with a plausible, bounded contract use case; no contract portfolio volume or buyer access is known.",
+        "commercialProblemHypothesis": "Technical support, maintenance and modification agreements may include time-bound duties and conditions; no evidence confirms a current tracking problem.",
+        "currentOperionCapabilities": "Contract obligation and deadline extraction with clause/source references.",
+        "discoveryQuestion": "How do maintenance teams find and track the obligations and conditions that govern a customer work package?",
+        "pilotHypothesis": "Evaluate a customer-approved maintenance agreement against a human-reviewed list of duties, triggers, dates and clauses.",
+        "recommendedAction": "Request an introductory conversation through the official DFS corporate channel.",
+        "contacts": [],
+        "fitCoverage": {
+          "score": 82,
+          "assessedCriteria": 5,
+          "totalCriteria": 9,
+          "criteriaCoveragePercent": 55.6,
+          "assessedWeight": 6.4,
+          "totalWeight": 11,
+          "weightCoveragePercent": 58.2,
+          "assessedKeys": [
+            "fitContractComplexity",
+            "fitAviationRelevance",
+            "fitOperationalComplexity",
+            "fitGeographicPriority",
+            "fitEvidenceQuality"
+          ],
+          "unknownKeys": [
+            "fitContractVolume",
+            "fitFinancialExposure",
+            "fitDecisionMakerAccess",
+            "fitCommercialAccessibility"
+          ],
+          "interpretation": "Partial-evidence weighted mean across the same five assessed factors for all portfolio records; not a nine-factor score, sales probability, qualification, revenue estimate, or evidence of buyer access."
+        }
+      },
+      "sources": [
+        {
+          "title": "Dassault Falcon Service - Dassault Group",
+          "url": "https://dassault.fr/en/subsidiary/dassault-falcon-service",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Parent/subsidiary relationship and MRO identity"
+          ],
+          "confidence": "High"
+        },
+        {
+          "title": "Maintenance - Dassault Falcon Service",
+          "url": "https://www.dassaultfalconservice.com/en/maintenance-center/maintenance",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Maintenance services and Le Bourget center",
+            "Source URL was not directly retrievable in the audit client; claim requires accessible-source confirmation."
+          ],
+          "confidence": "Medium"
+        }
+      ]
+    },
+    {
+      "data": {
+        "name": "Condor Flugdienst GmbH",
+        "website": "https://www.condor.com/",
+        "country": "Germany",
+        "country_code": "DE",
+        "location": "Frankfurt",
+        "city": "Frankfurt",
+        "headquarters": "Frankfurt is an operating hub; legal headquarters was not confirmed by the cited company portrait.",
+        "operationalLocations": "Frankfurt hub, European and long-haul network; the airline's own maintenance operation is Condor Technik GmbH at Frankfurt and Dusseldorf. [1]",
+        "segment": "Airline",
+        "company_type": "Airline",
+        "description": "German leisure airline with published scheduled operations and in-house maintenance operation. [1]",
+        "fleetPortfolio": "Official portrait gives approximate fleet and renewal information; no aircraft count included in the account payload. [1]",
+        "contractActivities": "Hypotheses: aircraft acquisition/lease, maintenance, engine support, fuel, ground handling and supplier agreements. No individual contract verified.",
+        "contractUseCases": "Hypothesis: track maintenance, fleet transition, service and supplier obligations, time conditions and source evidence.",
+        "decisionDepartments": "Hypothesised entry: Fleet management, Maintenance, Legal / contract management, Procurement.",
+        "priority": "Low",
+        "accountStatus": "Target",
+        "researchStatus": "In progress",
+        "stakeholderDepartment": "Fleet management",
+        "stakeholderStatus": "Unknown stakeholder",
+        "stakeholderEvidence": "No named relevant decision-maker verified. Individual unknown.",
+        "fitContractComplexity": "Hypothesis — Medium",
+        "fitAviationRelevance": "Verified — High",
+        "fitOperationalComplexity": "Hypothesis — Medium",
+        "fitGeographicPriority": "Hypothesis — Medium",
+        "fitEvidenceQuality": "Verified — High",
+        "fitEvidence": "Condor's company portrait confirms airline operations and in-house Condor Technik locations [1]. Frankfurt is operational hub, not confirmed legal HQ. Complexity is a hypothesis; other four factors Unknown. Assessment coverage: five of nine rubric criteria (58.2% of total criterion weight); the same five criteria are assessed for every account. Unknown criteria remain Unknown; score is a partial-evidence index, not a complete account-fit or qualification score.",
+        "classification": "Research finding",
+        "source": "Company Portrait - Condor | URL: https://condor-newsroom.condor.com/en/de/about-us/company-portrait/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: Airline operation, Frankfurt hub, fleet-renewal context and Condor Technik locations | Confidence: High",
+        "researchDate": "2026-11-01",
+        "confidence": "Medium",
+        "researchNotes": "Official company portrait confirms airline operations, Frankfurt hub and Condor Technik maintenance sites. Frankfurt is retained as an operating hub, not asserted as legal headquarters. No customer need or contact verified.",
+        "nextAction": "Verify the contracting entity/legal seat and route a discovery request to Fleet or Maintenance.",
+        "data_origin": "Real",
+        "geographic_source": "Condor company portrait [1]; Frankfurt location is an operational hub. Research date: 2026-11-01. Geographic claim references are itemized in the source register in this JSON; country code DE and country Germany are retained together.",
+        "geographic_confidence": "Medium",
+        "fitContractVolume": "Unknown",
+        "fitFinancialExposure": "Unknown",
+        "fitDecisionMakerAccess": "Unknown",
+        "fitCommercialAccessibility": "Unknown"
+      },
+      "assessment": {
+        "priorityGroup": "Priority 3",
+        "priorityRationale": "Credible German airline account, but lower geographic priority and unresolved legal-HQ detail reduce immediate readiness.",
+        "commercialProblemHypothesis": "Fleet transition and in-house maintenance obligations may require coordination; no customer problem is evidenced.",
+        "currentOperionCapabilities": "Contract obligations, deadlines, conditions, financial terms and source references.",
+        "discoveryQuestion": "Which contract obligations are most important to keep visible during fleet transition and maintenance planning?",
+        "pilotHypothesis": "A small approved set of maintenance or transition contracts could test extraction quality with human-reviewed output.",
+        "recommendedAction": "Confirm legal entity and primary contact route before investing in outreach.",
+        "contacts": [],
+        "fitCoverage": {
+          "score": 82,
+          "assessedCriteria": 5,
+          "totalCriteria": 9,
+          "criteriaCoveragePercent": 55.6,
+          "assessedWeight": 6.4,
+          "totalWeight": 11,
+          "weightCoveragePercent": 58.2,
+          "assessedKeys": [
+            "fitContractComplexity",
+            "fitAviationRelevance",
+            "fitOperationalComplexity",
+            "fitGeographicPriority",
+            "fitEvidenceQuality"
+          ],
+          "unknownKeys": [
+            "fitContractVolume",
+            "fitFinancialExposure",
+            "fitDecisionMakerAccess",
+            "fitCommercialAccessibility"
+          ],
+          "interpretation": "Partial-evidence weighted mean across the same five assessed factors for all portfolio records; not a nine-factor score, sales probability, qualification, revenue estimate, or evidence of buyer access."
+        }
+      },
+      "sources": [
+        {
+          "title": "Company Portrait - Condor",
+          "url": "https://condor-newsroom.condor.com/en/de/about-us/company-portrait/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Airline operation, Frankfurt hub, fleet-renewal context and Condor Technik locations"
+          ],
+          "confidence": "High"
+        }
+      ]
+    },
+    {
+      "data": {
+        "name": "Lufthansa Technik AG",
+        "website": "https://www.lufthansa-technik.com/en",
+        "country": "Germany",
+        "country_code": "DE",
+        "location": "Hamburg",
+        "city": "Hamburg",
+        "headquarters": "Hamburg, Germany. [1]",
+        "operationalLocations": "Global maintenance network; Hamburg is headquarters and a major competence/maintenance center. [1][2]",
+        "segment": "MRO",
+        "company_type": "MRO organisation",
+        "description": "Aircraft maintenance, repair and overhaul provider. Its official headquarters page describes extensive engineering and engine-repair operations in Hamburg. [1]",
+        "fleetPortfolio": "Supports customer aircraft; no portfolio count included.",
+        "contractActivities": "Hypotheses: airframe, engine, component and landing-gear maintenance agreements, warranties, support and parts supply. No customer agreement reviewed.",
+        "contractUseCases": "Hypothesis: extract maintenance scope, service obligations, dependencies, deadlines, conditions and financial terms.",
+        "decisionDepartments": "Hypothesised entry: Legal / contract management, Maintenance, Procurement and Finance.",
+        "priority": "Medium",
+        "accountStatus": "Target",
+        "researchStatus": "Researched",
+        "stakeholderDepartment": "Legal / contract management",
+        "stakeholderStatus": "Unknown stakeholder",
+        "stakeholderEvidence": "No named professional in a relevant buying role verified in reviewed official pages.",
+        "fitContractComplexity": "Hypothesis — High",
+        "fitAviationRelevance": "Verified — High",
+        "fitOperationalComplexity": "Hypothesis — High",
+        "fitGeographicPriority": "Hypothesis — Medium",
+        "fitEvidenceQuality": "Verified — High",
+        "fitEvidence": "Official headquarters page verifies Hamburg and engine-support activities; official locations page documents global presence [1][2]. Contract count, exposure and commercial accessibility remain Unknown. Assessment coverage: five of nine rubric criteria (58.2% of total criterion weight); the same five criteria are assessed for every account. Unknown criteria remain Unknown; score is a partial-evidence index, not a complete account-fit or qualification score.",
+        "classification": "Research finding",
+        "source": "Lufthansa Technik Headquarters | URL: https://www.lufthansa-technik.com/en/headquarters | Publication date: Not stated | Research date: 2026-11-01 | Supports: Hamburg headquarters and engine-repair/engineering activities | Confidence: High\nLocations Worldwide - Lufthansa Technik | URL: https://www.lufthansa-technik.com/en/locations | Publication date: Not stated | Research date: 2026-11-01 | Supports: Global operating locations | Confidence: High",
+        "researchDate": "2026-11-01",
+        "confidence": "High",
+        "researchNotes": "Lufthansa Technik is included without Lufthansa airline, which avoids a same-group duplicate account. Published operational complexity does not establish contract volume or customer need.",
+        "nextAction": "Request a discovery conversation through the official company channel with Legal / Contract Management or Maintenance.",
+        "data_origin": "Real",
+        "geographic_source": "Lufthansa Technik headquarters and locations pages [1][2]. Research date: 2026-11-01. Geographic claim references are itemized in the source register in this JSON; country code DE and country Germany are retained together.",
+        "geographic_confidence": "High",
+        "fitContractVolume": "Unknown",
+        "fitFinancialExposure": "Unknown",
+        "fitDecisionMakerAccess": "Unknown",
+        "fitCommercialAccessibility": "Unknown"
+      },
+      "assessment": {
+        "priorityGroup": "Priority 2",
+        "priorityRationale": "Strong, explicit MRO identity and complex operational scope; Germany is a secondary market and no buyer access is verified.",
+        "commercialProblemHypothesis": "Broad maintenance and repair scopes may create a need to locate contractual obligations across work packages; not a verified Lufthansa Technik problem.",
+        "currentOperionCapabilities": "Obligation/deadline extraction, conditions, financial terms, and clause-level evidence.",
+        "discoveryQuestion": "Where do teams spend the most effort locating customer or supplier obligations in maintenance work scopes?",
+        "pilotHypothesis": "Use a customer-approved sample of one document category, with a reviewer-confirmed obligation and source-span benchmark.",
+        "recommendedAction": "Research the relevant contracting entity and initiate a low-pressure discovery request.",
+        "contacts": [],
+        "fitCoverage": {
+          "score": 95,
+          "assessedCriteria": 5,
+          "totalCriteria": 9,
+          "criteriaCoveragePercent": 55.6,
+          "assessedWeight": 6.4,
+          "totalWeight": 11,
+          "weightCoveragePercent": 58.2,
+          "assessedKeys": [
+            "fitContractComplexity",
+            "fitAviationRelevance",
+            "fitOperationalComplexity",
+            "fitGeographicPriority",
+            "fitEvidenceQuality"
+          ],
+          "unknownKeys": [
+            "fitContractVolume",
+            "fitFinancialExposure",
+            "fitDecisionMakerAccess",
+            "fitCommercialAccessibility"
+          ],
+          "interpretation": "Partial-evidence weighted mean across the same five assessed factors for all portfolio records; not a nine-factor score, sales probability, qualification, revenue estimate, or evidence of buyer access."
+        }
+      },
+      "sources": [
+        {
+          "title": "Lufthansa Technik Headquarters",
+          "url": "https://www.lufthansa-technik.com/en/headquarters",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Hamburg headquarters and engine-repair/engineering activities"
+          ],
+          "confidence": "High"
+        },
+        {
+          "title": "Locations Worldwide - Lufthansa Technik",
+          "url": "https://www.lufthansa-technik.com/en/locations",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Global operating locations"
+          ],
+          "confidence": "High"
+        }
+      ]
+    },
+    {
+      "data": {
+        "name": "MTU Maintenance Hannover GmbH",
+        "website": "https://www.mtu.de/",
+        "country": "Germany",
+        "country_code": "DE",
+        "location": "Langenhagen (Hannover)",
+        "city": "Langenhagen",
+        "headquarters": "Langenhagen is the maintenance site; exact contracting entity/legal seat was not reverified because the cited official page was blocked.",
+        "operationalLocations": "Hannover/Langenhagen is the engine-maintenance location documented by MTU. [1]",
+        "segment": "MRO",
+        "company_type": "MRO organisation",
+        "description": "MTU Maintenance location specializing in commercial engine maintenance, repair and overhaul. [1]",
+        "fleetPortfolio": "Not an airline; supports aircraft engines and customer fleets.",
+        "contractActivities": "Hypotheses: engine MRO, on-wing/on-site support, parts and repair services, engine leasing or care agreements. No individual contract reviewed.",
+        "contractUseCases": "Hypothesis: identify scope, work conditions, turnaround-related obligations, dependencies, maintenance triggers and financial terms.",
+        "decisionDepartments": "Hypothesised entry: Maintenance, Legal / contract management, Procurement and Finance.",
+        "priority": "Medium",
+        "accountStatus": "Target",
+        "researchStatus": "Needs verification",
+        "stakeholderDepartment": "Maintenance",
+        "stakeholderStatus": "Unknown stakeholder",
+        "stakeholderEvidence": "No named relevant decision-maker verified in public sources reviewed.",
+        "fitContractComplexity": "Hypothesis — High",
+        "fitAviationRelevance": "Verified — High",
+        "fitOperationalComplexity": "Hypothesis — Medium",
+        "fitGeographicPriority": "Hypothesis — Medium",
+        "fitEvidenceQuality": "Verified — High",
+        "fitEvidence": "MTU's official global site identifies Hannover Maintenance and engine MRO activity [1]. Contract use-case rating is hypothesis. Legal account seat and contract counts remain unverified; other four criteria Unknown. Assessment coverage: five of nine rubric criteria (58.2% of total criterion weight); the same five criteria are assessed for every account. Unknown criteria remain Unknown; score is a partial-evidence index, not a complete account-fit or qualification score.",
+        "classification": "Research finding",
+        "source": "MTU Maintenance Hannover - MTU Aero Engines | URL: https://www.mtu.de/about-us/mtu-worldwide/mtu-maintenance-hannover/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: Hannover maintenance location and engine MRO services; Source URL was not directly retrievable in the audit client; claim requires accessible-source confirmation. | Confidence: Medium",
+        "researchDate": "2026-11-01",
+        "confidence": "Medium",
+        "researchNotes": "Cited MTU page identifies the Hannover maintenance site, but returned HTTP 403 during audit. Confirm the current operating/contracting entity and legal seat from accessible primary evidence. No customer need or contact verified.",
+        "nextAction": "Confirm the contracting entity then request discovery with Maintenance or Legal / Contract Management.",
+        "data_origin": "Real",
+        "geographic_source": "MTU Maintenance Hannover official page [1]. Research date: 2026-11-01. Geographic claim references are itemized in the source register in this JSON; country code DE and country Germany are retained together.",
+        "geographic_confidence": "Medium",
+        "fitContractVolume": "Unknown",
+        "fitFinancialExposure": "Unknown",
+        "fitDecisionMakerAccess": "Unknown",
+        "fitCommercialAccessibility": "Unknown"
+      },
+      "assessment": {
+        "priorityGroup": "Priority 2",
+        "priorityRationale": "Direct engine-MRO evidence provides a plausible use case; exact legal contracting entity and stakeholder access need confirmation.",
+        "commercialProblemHypothesis": "Engine work packages may contain dependencies and due dates that are hard to track across service agreements; this remains unvalidated.",
+        "currentOperionCapabilities": "Obligation, deadline, condition, financial-term and evidence extraction.",
+        "discoveryQuestion": "Which engine-service obligations or dependencies are hardest for teams to monitor from contracts?",
+        "pilotHypothesis": "Review a small customer-approved engine-service sample against manually confirmed obligations and source locations.",
+        "recommendedAction": "Validate which MTU legal entity owns the relevant agreements before account outreach.",
+        "contacts": [],
+        "fitCoverage": {
+          "score": 89,
+          "assessedCriteria": 5,
+          "totalCriteria": 9,
+          "criteriaCoveragePercent": 55.6,
+          "assessedWeight": 6.4,
+          "totalWeight": 11,
+          "weightCoveragePercent": 58.2,
+          "assessedKeys": [
+            "fitContractComplexity",
+            "fitAviationRelevance",
+            "fitOperationalComplexity",
+            "fitGeographicPriority",
+            "fitEvidenceQuality"
+          ],
+          "unknownKeys": [
+            "fitContractVolume",
+            "fitFinancialExposure",
+            "fitDecisionMakerAccess",
+            "fitCommercialAccessibility"
+          ],
+          "interpretation": "Partial-evidence weighted mean across the same five assessed factors for all portfolio records; not a nine-factor score, sales probability, qualification, revenue estimate, or evidence of buyer access."
+        }
+      },
+      "sources": [
+        {
+          "title": "MTU Maintenance Hannover - MTU Aero Engines",
+          "url": "https://www.mtu.de/about-us/mtu-worldwide/mtu-maintenance-hannover/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Hannover maintenance location and engine MRO services",
+            "Source URL was not directly retrievable in the audit client; claim requires accessible-source confirmation."
+          ],
+          "confidence": "Medium"
+        }
+      ]
+    },
+    {
+      "data": {
+        "name": "Fokker Services Group B.V.",
+        "website": "https://fokkerservicesgroup.com/",
+        "country": "Netherlands",
+        "country_code": "NL",
+        "location": "Hoofddorp",
+        "city": "Hoofddorp",
+        "headquarters": "Hoofddorp is the location stated in the original dataset; the reviewed official About page does not establish current legal seat/headquarters.",
+        "operationalLocations": "Five facilities across Europe, Asia and the Americas, according to the company profile. [1]",
+        "segment": "MRO",
+        "company_type": "MRO organisation",
+        "description": "Independent aerospace services company offering aircraft MRO, engineering, component/material, airframe and completion/conversion capabilities. [1]",
+        "fleetPortfolio": "Supports customer aircraft; no aircraft count included.",
+        "contractActivities": "Hypotheses: airframe and component MRO, aircraft modification/conversion, parts supply, lease-transition and engineering service agreements. No specific contracts reviewed.",
+        "contractUseCases": "Hypothesis: identify work scope, deliverables, service duties, dependencies, deadlines and price/financial terms.",
+        "decisionDepartments": "Hypothesised entry: Legal / contract management, Maintenance, Procurement and Operations.",
+        "priority": "Low",
+        "accountStatus": "Target",
+        "researchStatus": "In progress",
+        "stakeholderDepartment": "Legal / contract management",
+        "stakeholderStatus": "Unknown stakeholder",
+        "stakeholderEvidence": "No named relevant professional verified in source review; individual decision-maker unknown.",
+        "fitContractComplexity": "Hypothesis — High",
+        "fitAviationRelevance": "Verified — High",
+        "fitOperationalComplexity": "Hypothesis — High",
+        "fitGeographicPriority": "Hypothesis — Low",
+        "fitEvidenceQuality": "Verified — High",
+        "fitEvidence": "First-party profile verifies MRO and multiple service lines/sites [1]. Netherlands is below the first five countries in the user's sequence. Actual contract volume, exposure and accessibility remain Unknown. Assessment coverage: five of nine rubric criteria (58.2% of total criterion weight); the same five criteria are assessed for every account. Unknown criteria remain Unknown; score is a partial-evidence index, not a complete account-fit or qualification score.",
+        "classification": "Research finding",
+        "source": "About us - Fokker Services Group | URL: https://fokkerservicesgroup.com/about-us | Publication date: Not stated | Research date: 2026-11-01 | Supports: MRO/service lines and global facilities | Confidence: High\nLocations - Fokker Services Group | URL: https://fokkerservicesgroup.com/locations | Publication date: Not stated | Research date: 2026-11-01 | Supports: Company locations | Confidence: High",
+        "researchDate": "2026-11-01",
+        "confidence": "Medium",
+        "researchNotes": "Official company profile confirms aviation lifecycle and MRO services. Hoofddorp legal seat/headquarters was not established by the retrieved page; confirm before import. No customer need or contact verified.",
+        "nextAction": "Use the official group channel to request a discussion about MRO contract obligations and workflow.",
+        "data_origin": "Real",
+        "geographic_source": "Fokker Services Group official About and Locations pages [1]. Research date: 2026-11-01. Geographic claim references are itemized in the source register in this JSON; country code NL and country Netherlands are retained together.",
+        "geographic_confidence": "Medium",
+        "fitContractVolume": "Unknown",
+        "fitFinancialExposure": "Unknown",
+        "fitDecisionMakerAccess": "Unknown",
+        "fitCommercialAccessibility": "Unknown"
+      },
+      "assessment": {
+        "priorityGroup": "Priority 3",
+        "priorityRationale": "Strong MRO service fit, but geographically lower in the initial country sequence and legal-seat confirmation is still required.",
+        "commercialProblemHypothesis": "Multi-facility service obligations may require cross-contract tracking; no customer problem is verified.",
+        "currentOperionCapabilities": "Obligation and deadline extraction with source evidence and financial terms.",
+        "discoveryQuestion": "How do teams coordinate obligations across modification, component and airframe service agreements?",
+        "pilotHypothesis": "Test a customer-approved contract sample for work scope, party duty, trigger, date and source-span accuracy.",
+        "recommendedAction": "Keep in the research queue after Spain/France/Germany priorities; verify the current contracting entity.",
+        "contacts": [],
+        "fitCoverage": {
+          "score": 90,
+          "assessedCriteria": 5,
+          "totalCriteria": 9,
+          "criteriaCoveragePercent": 55.6,
+          "assessedWeight": 6.4,
+          "totalWeight": 11,
+          "weightCoveragePercent": 58.2,
+          "assessedKeys": [
+            "fitContractComplexity",
+            "fitAviationRelevance",
+            "fitOperationalComplexity",
+            "fitGeographicPriority",
+            "fitEvidenceQuality"
+          ],
+          "unknownKeys": [
+            "fitContractVolume",
+            "fitFinancialExposure",
+            "fitDecisionMakerAccess",
+            "fitCommercialAccessibility"
+          ],
+          "interpretation": "Partial-evidence weighted mean across the same five assessed factors for all portfolio records; not a nine-factor score, sales probability, qualification, revenue estimate, or evidence of buyer access."
+        }
+      },
+      "sources": [
+        {
+          "title": "About us - Fokker Services Group",
+          "url": "https://fokkerservicesgroup.com/about-us",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "MRO/service lines and global facilities"
+          ],
+          "confidence": "High"
+        },
+        {
+          "title": "Locations - Fokker Services Group",
+          "url": "https://fokkerservicesgroup.com/locations",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Company locations"
+          ],
+          "confidence": "High"
+        }
+      ]
+    },
+    {
+      "data": {
+        "name": "TrueNoord",
+        "website": "https://www.truenoord.com/",
+        "country": "Netherlands",
+        "country_code": "NL",
+        "location": "Amsterdam",
+        "city": "Amsterdam",
+        "headquarters": "Amsterdam office is confirmed; registered seat/headquarters is not expressly stated in the reviewed official pages.",
+        "operationalLocations": "Official company page confirms offices in Amsterdam, Dublin and Singapore. [1]",
+        "segment": "Aircraft lessor",
+        "company_type": "Leasing company",
+        "description": "Specialist regional aircraft lessor providing operating leases and lease-management services. [1][2]",
+        "fleetPortfolio": "Official site publishes portfolio metrics as of 30 September 2026; quantities are time-sensitive and not copied into OCI fields. [2]",
+        "contractActivities": "Verified category: operating leases and lease-management services. Potential adjacent categories such as financing, asset management and maintenance are not assumed as the company's own active contract inventory.",
+        "contractUseCases": "Hypothesis: trace lease duties, conditions, notice/return dates, maintenance dependencies and supported financial terms from approved lease documents.",
+        "decisionDepartments": "Hypothesised entry: Legal / contract management, Asset Management, Fleet/Technical and Finance.",
+        "priority": "Medium",
+        "accountStatus": "Target",
+        "researchStatus": "In progress",
+        "stakeholderDepartment": "Legal / contract management",
+        "stakeholderStatus": "Unknown stakeholder",
+        "stakeholderEvidence": "No named legal or contract-management person was verified in reviewed pages; individual decision-maker unknown.",
+        "fitContractComplexity": "Hypothesis — High",
+        "fitAviationRelevance": "Verified — High",
+        "fitOperationalComplexity": "Hypothesis — Medium",
+        "fitGeographicPriority": "Hypothesis — Low",
+        "fitEvidenceQuality": "Verified — High",
+        "fitEvidence": "First-party pages confirm leasing/lease management and Amsterdam office [1][2]. High contract-complexity rating is a hypothesis based on the lease product, not any reviewed lease. Legal seat and four other fit criteria Unknown. Assessment coverage: five of nine rubric criteria (58.2% of total criterion weight); the same five criteria are assessed for every account. Unknown criteria remain Unknown; score is a partial-evidence index, not a complete account-fit or qualification score.",
+        "classification": "Research finding",
+        "source": "Contact - TrueNoord | URL: https://www.truenoord.com/contact/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: Aircraft leasing, lease management and Amsterdam office | Confidence: High\nAbout us - TrueNoord | URL: https://www.truenoord.com/about-us/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: Operating lease activity and published portfolio context | Confidence: High",
+        "researchDate": "2026-11-01",
+        "confidence": "Medium",
+        "researchNotes": "Official pages confirm aircraft leasing/lease management and an Amsterdam office. Amsterdam is recorded as office location, not verified legal seat/headquarters. No buyer or customer need verified.",
+        "nextAction": "Confirm legal entity and ask whether lease obligation monitoring is an active workflow priority.",
+        "data_origin": "Real",
+        "geographic_source": "TrueNoord official contact/about pages [1][2]. Research date: 2026-11-01. Geographic claim references are itemized in the source register in this JSON; country code NL and country Netherlands are retained together.",
+        "geographic_confidence": "Medium",
+        "fitContractVolume": "Unknown",
+        "fitFinancialExposure": "Unknown",
+        "fitDecisionMakerAccess": "Unknown",
+        "fitCommercialAccessibility": "Unknown"
+      },
+      "assessment": {
+        "priorityGroup": "Priority 2",
+        "priorityRationale": "Strong direct lessor fit supported by its stated operating-lease business; legal location and commercial access are unresolved.",
+        "commercialProblemHypothesis": "Lease terms can contain interdependent duties and time conditions, but no evidence shows TrueNoord has a tracking problem.",
+        "currentOperionCapabilities": "Obligation extraction, deadline/condition interpretation, financial-term identification and evidence traceability.",
+        "discoveryQuestion": "How do teams identify and monitor key duties and dates across operating lease documents and amendments?",
+        "pilotHypothesis": "With explicit authorization, compare extracted obligations and exact clause spans against a human-reviewed small lease sample.",
+        "recommendedAction": "Verify legal seat/contracting entity and seek a discovery conversation with Legal or Asset Management.",
+        "contacts": [],
+        "fitCoverage": {
+          "score": 83,
+          "assessedCriteria": 5,
+          "totalCriteria": 9,
+          "criteriaCoveragePercent": 55.6,
+          "assessedWeight": 6.4,
+          "totalWeight": 11,
+          "weightCoveragePercent": 58.2,
+          "assessedKeys": [
+            "fitContractComplexity",
+            "fitAviationRelevance",
+            "fitOperationalComplexity",
+            "fitGeographicPriority",
+            "fitEvidenceQuality"
+          ],
+          "unknownKeys": [
+            "fitContractVolume",
+            "fitFinancialExposure",
+            "fitDecisionMakerAccess",
+            "fitCommercialAccessibility"
+          ],
+          "interpretation": "Partial-evidence weighted mean across the same five assessed factors for all portfolio records; not a nine-factor score, sales probability, qualification, revenue estimate, or evidence of buyer access."
+        }
+      },
+      "sources": [
+        {
+          "title": "Contact - TrueNoord",
+          "url": "https://www.truenoord.com/contact/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Aircraft leasing, lease management and Amsterdam office"
+          ],
+          "confidence": "High"
+        },
+        {
+          "title": "About us - TrueNoord",
+          "url": "https://www.truenoord.com/about-us/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Operating lease activity and published portfolio context"
+          ],
+          "confidence": "High"
+        }
+      ]
+    },
+    {
+      "data": {
+        "name": "AerCap Holdings N.V.",
+        "website": "https://www.aercap.com/",
+        "country": "Ireland",
+        "country_code": "IE",
+        "location": "Dublin",
+        "city": "Dublin",
+        "headquarters": "Dublin corporate headquarters; registered office in Amsterdam is separately disclosed. [1][2]",
+        "operationalLocations": "Dublin, Shannon, Amsterdam and other global offices. [1]",
+        "segment": "Aircraft lessor",
+        "company_type": "Leasing company",
+        "description": "Global aviation leasing company serving airline customers with aircraft, engines and helicopter fleet solutions. [1]",
+        "fleetPortfolio": "Official company profile describes a broad aircraft/engine/helicopter portfolio; no mutable quantities included.",
+        "contractActivities": "Verified category: aircraft leasing and fleet solutions. Hypothesized adjacent categories include engine leasing/maintenance and asset transactions; verify before asserting as contract inventory.",
+        "contractUseCases": "Hypothesis: identify party obligations, conditions, notice dates, delivery/return duties and financial clauses in approved lease documents.",
+        "decisionDepartments": "Hypothesised entry: Legal / contract management, Asset Management, Fleet/Technical and Finance.",
+        "priority": "High",
+        "accountStatus": "Target",
+        "researchStatus": "Researched",
+        "stakeholderDepartment": "Legal / contract management",
+        "stakeholderStatus": "Unknown stakeholder",
+        "stakeholderEvidence": "No named relevant professional verified in company profile/contact pages. Individual buyer unknown.",
+        "fitContractComplexity": "Hypothesis — High",
+        "fitAviationRelevance": "Verified — High",
+        "fitOperationalComplexity": "Hypothesis — High",
+        "fitGeographicPriority": "Hypothesis — Medium",
+        "fitEvidenceQuality": "Verified — High",
+        "fitEvidence": "AerCap's official company profile confirms leasing activity and Dublin headquarters; its official contact page lists Dublin and Amsterdam offices [1][2]. Contract complexity is a hypothesis from leasing activity; volume, exposure and access remain Unknown. Assessment coverage: five of nine rubric criteria (58.2% of total criterion weight); the same five criteria are assessed for every account. Unknown criteria remain Unknown; score is a partial-evidence index, not a complete account-fit or qualification score.",
+        "classification": "Research finding",
+        "source": "About AerCap | URL: https://www.aercap.com/investors/about-aercap | Publication date: Not stated | Research date: 2026-11-01 | Supports: Aircraft leasing, customer fleet solutions and Dublin headquarters | Confidence: High\nContact - AerCap | URL: https://www.aercap.com/contact | Publication date: Not stated | Research date: 2026-11-01 | Supports: Dublin headquarters and Amsterdam office/registered entity distinction | Confidence: High",
+        "researchDate": "2026-11-01",
+        "confidence": "High",
+        "researchNotes": "Dublin corporate headquarters and Amsterdam registered office are not interchangeable. Ireland is geographical Europe, EU and EEA.",
+        "nextAction": "Request discovery through AerCap's official contact route and ask whether lease obligation intelligence is a relevant topic.",
+        "data_origin": "Real",
+        "geographic_source": "AerCap official profile/contact pages [1][2]. Research date: 2026-11-01. Geographic claim references are itemized in the source register in this JSON; country code IE and country Ireland are retained together.",
+        "geographic_confidence": "High",
+        "fitContractVolume": "Unknown",
+        "fitFinancialExposure": "Unknown",
+        "fitDecisionMakerAccess": "Unknown",
+        "fitCommercialAccessibility": "Unknown"
+      },
+      "assessment": {
+        "priorityGroup": "Priority 1",
+        "priorityRationale": "Tied candidate for the fifth initial discovery slot. Both are Ireland-based aircraft lessors with official-source evidence of leasing activity and a Dublin office/headquarters; their nine-factor ratings and partial scores are identical. No evidence establishes different decision-maker access, customer need or commercial accessibility, so neither is ranked above the other.",
+        "commercialProblemHypothesis": "Lease obligations and dates may be difficult to monitor across a broad leasing operation; this is not a verified need.",
+        "currentOperionCapabilities": "Contract obligation, deadline, condition and financial-term extraction with source evidence.",
+        "discoveryQuestion": "Which lease obligations or key dates are most costly to locate and verify across the team's document workflow?",
+        "pilotHypothesis": "Run a human-reviewed comparison on a small, approved set of lease documents; assess extraction completeness and source-span accuracy.",
+        "recommendedAction": "Use the official contact route to test relevance; do not imply current procurement or a known exposure.",
+        "contacts": [],
+        "fitCoverage": {
+          "score": 95,
+          "assessedCriteria": 5,
+          "totalCriteria": 9,
+          "criteriaCoveragePercent": 55.6,
+          "assessedWeight": 6.4,
+          "totalWeight": 11,
+          "weightCoveragePercent": 58.2,
+          "assessedKeys": [
+            "fitContractComplexity",
+            "fitAviationRelevance",
+            "fitOperationalComplexity",
+            "fitGeographicPriority",
+            "fitEvidenceQuality"
+          ],
+          "unknownKeys": [
+            "fitContractVolume",
+            "fitFinancialExposure",
+            "fitDecisionMakerAccess",
+            "fitCommercialAccessibility"
+          ],
+          "interpretation": "Partial-evidence weighted mean across the same five assessed factors for all portfolio records; not a nine-factor score, sales probability, qualification, revenue estimate, or evidence of buyer access."
+        }
+      },
+      "sources": [
+        {
+          "title": "About AerCap",
+          "url": "https://www.aercap.com/investors/about-aercap",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Aircraft leasing, customer fleet solutions and Dublin headquarters"
+          ],
+          "confidence": "High"
+        },
+        {
+          "title": "Contact - AerCap",
+          "url": "https://www.aercap.com/contact",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Dublin headquarters and Amsterdam office/registered entity distinction"
+          ],
+          "confidence": "High"
+        }
+      ]
+    },
+    {
+      "data": {
+        "name": "Avolon Holdings Limited",
+        "website": "https://www.avolon.aero/",
+        "country": "Ireland",
+        "country_code": "IE",
+        "location": "Dublin",
+        "city": "Dublin",
+        "headquarters": "Dublin office is confirmed; the cited contact page does not itself establish legal seat/headquarters.",
+        "operationalLocations": "Dublin, Dubai, Singapore and Hong Kong offices listed on the company contact page. [1]",
+        "segment": "Aircraft lessor",
+        "company_type": "Leasing company",
+        "description": "Global aircraft leasing business; its official about page describes its position in aircraft leasing and its contact page lists a Dublin office. [1][2]",
+        "fleetPortfolio": "No fleet count included; avoid date-sensitive quantities.",
+        "contractActivities": "Verified category: aircraft leasing. Hypothesized adjacent categories: lease management, aircraft sales/acquisitions and asset transactions; verify against the contracting entity.",
+        "contractUseCases": "Hypothesis: extract lease duties, conditions, delivery/return requirements, notices and supported financial obligations.",
+        "decisionDepartments": "Hypothesised entry: Legal / contract management, Asset Management, Fleet/Technical and Finance.",
+        "priority": "High",
+        "accountStatus": "Target",
+        "researchStatus": "In progress",
+        "stakeholderDepartment": "Legal / contract management",
+        "stakeholderStatus": "Unknown stakeholder",
+        "stakeholderEvidence": "No named relevant decision-maker verified in reviewed first-party material; individual unknown.",
+        "fitContractComplexity": "Hypothesis — High",
+        "fitAviationRelevance": "Verified — High",
+        "fitOperationalComplexity": "Hypothesis — High",
+        "fitGeographicPriority": "Hypothesis — Medium",
+        "fitEvidenceQuality": "Verified — High",
+        "fitEvidence": "Official Avolon pages describe aircraft leasing and show multiple international offices including Dublin [1][2]. Contract complexity is a hypothesis based on product category. Contract volume, exposure and access remain Unknown. Assessment coverage: five of nine rubric criteria (58.2% of total criterion weight); the same five criteria are assessed for every account. Unknown criteria remain Unknown; score is a partial-evidence index, not a complete account-fit or qualification score.",
+        "classification": "Research finding",
+        "source": "Avolon Contact | URL: https://www.avolon.aero/contact | Publication date: Not stated | Research date: 2026-11-01 | Supports: Dublin office and other listed locations | Confidence: High\nA Global Leader in Aircraft Leasing - Avolon | URL: https://www.avolon.aero/about-us | Publication date: Not stated | Research date: 2026-11-01 | Supports: Aircraft-leasing company activity | Confidence: High",
+        "researchDate": "2026-11-01",
+        "confidence": "Medium",
+        "researchNotes": "Official profile confirms aircraft leasing and contact page lists a Dublin office. The cited material does not itself establish legal seat/headquarters. No buyer, contract volume or customer need verified.",
+        "nextAction": "Request a short discovery conversation through the official Dublin corporate contact route.",
+        "data_origin": "Real",
+        "geographic_source": "Avolon official about/contact pages [1][2]. Research date: 2026-11-01. Geographic claim references are itemized in the source register in this JSON; country code IE and country Ireland are retained together.",
+        "geographic_confidence": "Medium",
+        "fitContractVolume": "Unknown",
+        "fitFinancialExposure": "Unknown",
+        "fitDecisionMakerAccess": "Unknown",
+        "fitCommercialAccessibility": "Unknown"
+      },
+      "assessment": {
+        "priorityGroup": "Priority 1",
+        "priorityRationale": "Tied candidate for the fifth initial discovery slot. Both are Ireland-based aircraft lessors with official-source evidence of leasing activity and a Dublin office/headquarters; their nine-factor ratings and partial scores are identical. No evidence establishes different decision-maker access, customer need or commercial accessibility, so neither is ranked above the other.",
+        "commercialProblemHypothesis": "A lease-management business may need reliable traceability of obligations, trigger conditions and dates; this is not a claim about Avolon's workflow.",
+        "currentOperionCapabilities": "Obligations, deadlines, conditions, financial terms and evidence anchoring.",
+        "discoveryQuestion": "How do teams ensure lease obligations and condition-dependent dates are identified and traceable across documents?",
+        "pilotHypothesis": "Subject to explicit data approval, test a small anonymized or customer-selected lease sample and evaluate against customer-reviewed annotations.",
+        "recommendedAction": "Ask through the official contact route for a discussion with Legal / Lease Management; no unsolicited message is sent.",
+        "contacts": [],
+        "fitCoverage": {
+          "score": 95,
+          "assessedCriteria": 5,
+          "totalCriteria": 9,
+          "criteriaCoveragePercent": 55.6,
+          "assessedWeight": 6.4,
+          "totalWeight": 11,
+          "weightCoveragePercent": 58.2,
+          "assessedKeys": [
+            "fitContractComplexity",
+            "fitAviationRelevance",
+            "fitOperationalComplexity",
+            "fitGeographicPriority",
+            "fitEvidenceQuality"
+          ],
+          "unknownKeys": [
+            "fitContractVolume",
+            "fitFinancialExposure",
+            "fitDecisionMakerAccess",
+            "fitCommercialAccessibility"
+          ],
+          "interpretation": "Partial-evidence weighted mean across the same five assessed factors for all portfolio records; not a nine-factor score, sales probability, qualification, revenue estimate, or evidence of buyer access."
+        }
+      },
+      "sources": [
+        {
+          "title": "Avolon Contact",
+          "url": "https://www.avolon.aero/contact",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Dublin office and other listed locations"
+          ],
+          "confidence": "High"
+        },
+        {
+          "title": "A Global Leader in Aircraft Leasing - Avolon",
+          "url": "https://www.avolon.aero/about-us",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Aircraft-leasing company activity"
+          ],
+          "confidence": "High"
+        }
+      ]
+    },
+    {
+      "data": {
+        "name": "Menzies Aviation (John Menzies Limited)",
+        "website": "https://menziesaviation.com/",
+        "country": "United Kingdom",
+        "country_code": "GB",
+        "location": "Edinburgh",
+        "city": "Edinburgh",
+        "headquarters": "Registered office at Edinburgh Park, Edinburgh, Scotland, United Kingdom. [1]",
+        "operationalLocations": "Official company site describes aviation services at airports across multiple countries. [2]",
+        "segment": "Ground handling",
+        "company_type": "Ground handler",
+        "description": "Aviation services provider whose official website describes services for customers; the UK site legal terms identify John Menzies Limited and its registered office. [1][2]",
+        "fleetPortfolio": "Not applicable.",
+        "contractActivities": "Hypotheses: airline ground handling, air cargo, fuelling and airport service agreements; only service categories currently advertised, not specific customer contracts. [2]",
+        "contractUseCases": "Hypothesis: find service scope, duties, service-level commitments, triggers, exceptions and deadlines in customer-approved agreements.",
+        "decisionDepartments": "Hypothesised entry: Operations, Legal / contract management, Procurement and Finance.",
+        "priority": "Low",
+        "accountStatus": "Target",
+        "researchStatus": "Researched",
+        "stakeholderDepartment": "Operations",
+        "stakeholderStatus": "Unknown stakeholder",
+        "stakeholderEvidence": "No named relevant buyer verified in reviewed official material.",
+        "fitContractComplexity": "Hypothesis — High",
+        "fitAviationRelevance": "Verified — High",
+        "fitOperationalComplexity": "Hypothesis — High",
+        "fitGeographicPriority": "Hypothesis — Low",
+        "fitEvidenceQuality": "Verified — High",
+        "fitEvidence": "Official terms establish registered office and legal website operator; official site describes aviation services and network [1][2]. Contract complexity is a hypothesis; customer contract counts, exposures and accessibility are Unknown. Assessment coverage: five of nine rubric criteria (58.2% of total criterion weight); the same five criteria are assessed for every account. Unknown criteria remain Unknown; score is a partial-evidence index, not a complete account-fit or qualification score.",
+        "classification": "Research finding",
+        "source": "Terms - Menzies | URL: https://menziesaviation.com/terms/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: John Menzies Limited legal operator and Edinburgh registered office | Confidence: High\nMenzies Aviation official site | URL: https://menziesaviation.com/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: Aviation services and operating footprint | Confidence: High",
+        "researchDate": "2026-11-01",
+        "confidence": "High",
+        "researchNotes": "United Kingdom is geographical Europe but is neither EU nor EEA. Brand/company ownership has changed; verify the current contracting legal entity before record creation.",
+        "nextAction": "Confirm contracting entity under the current ownership structure and route an introductory request to Operations or Legal.",
+        "data_origin": "Real",
+        "geographic_source": "Menzies official terms [1]; geographic classification follows OCI's UN M49 Europe policy. Research date: 2026-11-01. Geographic claim references are itemized in the source register in this JSON; country code GB and country United Kingdom are retained together.",
+        "geographic_confidence": "High",
+        "fitContractVolume": "Unknown",
+        "fitFinancialExposure": "Unknown",
+        "fitDecisionMakerAccess": "Unknown",
+        "fitCommercialAccessibility": "Unknown"
+      },
+      "assessment": {
+        "priorityGroup": "Priority 3",
+        "priorityRationale": "Strong ground-services fit and official UK registration, but UK is sixth in the user sequence and current contracting entity should be reconfirmed.",
+        "commercialProblemHypothesis": "Service and operating commitments across ground operations may benefit from evidence-linked obligation tracking; this is unverified.",
+        "currentOperionCapabilities": "Obligation and deadline extraction, clause evidence and financial-term classification.",
+        "discoveryQuestion": "How do you locate and monitor service-level duties and operational exceptions across airline handling contracts?",
+        "pilotHypothesis": "Test a small approved handling agreement sample, measuring duty recall and clause/source-span accuracy.",
+        "recommendedAction": "Verify current account legal entity and consider outreach after higher-priority markets.",
+        "contacts": [],
+        "fitCoverage": {
+          "score": 90,
+          "assessedCriteria": 5,
+          "totalCriteria": 9,
+          "criteriaCoveragePercent": 55.6,
+          "assessedWeight": 6.4,
+          "totalWeight": 11,
+          "weightCoveragePercent": 58.2,
+          "assessedKeys": [
+            "fitContractComplexity",
+            "fitAviationRelevance",
+            "fitOperationalComplexity",
+            "fitGeographicPriority",
+            "fitEvidenceQuality"
+          ],
+          "unknownKeys": [
+            "fitContractVolume",
+            "fitFinancialExposure",
+            "fitDecisionMakerAccess",
+            "fitCommercialAccessibility"
+          ],
+          "interpretation": "Partial-evidence weighted mean across the same five assessed factors for all portfolio records; not a nine-factor score, sales probability, qualification, revenue estimate, or evidence of buyer access."
+        }
+      },
+      "sources": [
+        {
+          "title": "Terms - Menzies",
+          "url": "https://menziesaviation.com/terms/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "John Menzies Limited legal operator and Edinburgh registered office"
+          ],
+          "confidence": "High"
+        },
+        {
+          "title": "Menzies Aviation official site",
+          "url": "https://menziesaviation.com/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Aviation services and operating footprint"
+          ],
+          "confidence": "High"
+        }
+      ]
+    },
+    {
+      "data": {
+        "name": "Atitech S.p.A.",
+        "website": "https://www.atitech.it/",
+        "country": "Italy",
+        "country_code": "IT",
+        "location": "Naples",
+        "city": "Naples",
+        "headquarters": "Naples Capodichino is an operating base; legal seat is not established by the reviewed official page.",
+        "operationalLocations": "Naples Capodichino, Rome Fiumicino, Olbia and line-maintenance stations. [1]",
+        "segment": "MRO",
+        "company_type": "MRO organisation",
+        "description": "Independent aircraft MRO provider operating from three Italian bases and delivering base and line maintenance and technical design services. [1]",
+        "fleetPortfolio": "Supports aircraft operated by customer organisations; no fleet count included.",
+        "contractActivities": "Hypotheses: base and line maintenance, technical design, component/workshop service and parts agreements. No individual customer contract reviewed.",
+        "contractUseCases": "Hypothesis: extract maintenance scope, customer/supplier duties, conditions, dates and financial clauses with source passages.",
+        "decisionDepartments": "Hypothesised entry: Maintenance, Legal / contract management, Procurement and Finance.",
+        "priority": "Medium",
+        "accountStatus": "Target",
+        "researchStatus": "In progress",
+        "stakeholderDepartment": "Maintenance",
+        "stakeholderStatus": "Unknown stakeholder",
+        "stakeholderEvidence": "No named relevant decision-maker verified in reviewed company pages.",
+        "fitContractComplexity": "Hypothesis — High",
+        "fitAviationRelevance": "Verified — High",
+        "fitOperationalComplexity": "Hypothesis — High",
+        "fitGeographicPriority": "Hypothesis — Low",
+        "fitEvidenceQuality": "Verified — High",
+        "fitEvidence": "Atitech official site identifies independent MRO, bases and service categories [1]. Site contact page links to service and capability pages [2]. Contract counts, exposure and accessibility are Unknown. Assessment coverage: five of nine rubric criteria (58.2% of total criterion weight); the same five criteria are assessed for every account. Unknown criteria remain Unknown; score is a partial-evidence index, not a complete account-fit or qualification score.",
+        "classification": "Research finding",
+        "source": "Atitech official site | URL: https://www.atitech.it/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: Independent MRO identity, three Italian bases and service lines | Confidence: High\nContact us - Atitech | URL: https://www.atitech.it/contact-us/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: Official service/contact pathways | Confidence: High",
+        "researchDate": "2026-11-01",
+        "confidence": "Medium",
+        "researchNotes": "Official site confirms MRO activity and Italian bases. Naples Capodichino is an operating base; legal seat is not established by the reviewed material. No customer need or contact verified.",
+        "nextAction": "Ask Maintenance or Legal whether obligation intelligence is relevant to customer-facing MRO agreement workflows.",
+        "data_origin": "Real",
+        "geographic_source": "Atitech official home/contact pages [1][2]. Research date: 2026-11-01. Geographic claim references are itemized in the source register in this JSON; country code IT and country Italy are retained together.",
+        "geographic_confidence": "Medium",
+        "fitContractVolume": "Unknown",
+        "fitFinancialExposure": "Unknown",
+        "fitDecisionMakerAccess": "Unknown",
+        "fitCommercialAccessibility": "Unknown"
+      },
+      "assessment": {
+        "priorityGroup": "Priority 2",
+        "priorityRationale": "Direct MRO profile and multi-base evidence support a plausible use case, while Italy ranks below the initial target countries.",
+        "commercialProblemHypothesis": "Multiple maintenance services and bases may make it useful to centralize obligations and evidence; no current problem is known.",
+        "currentOperionCapabilities": "Obligation, trigger, condition, deadline, financial-term and evidence extraction.",
+        "discoveryQuestion": "Which agreement types create the greatest effort to keep maintenance scope, dependencies and deadlines visible?",
+        "pilotHypothesis": "On a small approved sample, measure whether outputs correctly identify duties, conditions and exact source passages.",
+        "recommendedAction": "Contact the official company channel for an exploratory maintenance-contract discussion.",
+        "contacts": [],
+        "fitCoverage": {
+          "score": 90,
+          "assessedCriteria": 5,
+          "totalCriteria": 9,
+          "criteriaCoveragePercent": 55.6,
+          "assessedWeight": 6.4,
+          "totalWeight": 11,
+          "weightCoveragePercent": 58.2,
+          "assessedKeys": [
+            "fitContractComplexity",
+            "fitAviationRelevance",
+            "fitOperationalComplexity",
+            "fitGeographicPriority",
+            "fitEvidenceQuality"
+          ],
+          "unknownKeys": [
+            "fitContractVolume",
+            "fitFinancialExposure",
+            "fitDecisionMakerAccess",
+            "fitCommercialAccessibility"
+          ],
+          "interpretation": "Partial-evidence weighted mean across the same five assessed factors for all portfolio records; not a nine-factor score, sales probability, qualification, revenue estimate, or evidence of buyer access."
+        }
+      },
+      "sources": [
+        {
+          "title": "Atitech official site",
+          "url": "https://www.atitech.it/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Independent MRO identity, three Italian bases and service lines"
+          ],
+          "confidence": "High"
+        },
+        {
+          "title": "Contact us - Atitech",
+          "url": "https://www.atitech.it/contact-us/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Official service/contact pathways"
+          ],
+          "confidence": "High"
+        }
+      ]
+    },
+    {
+      "data": {
+        "name": "TAP Air Portugal, S.A.",
+        "website": "https://www.flytap.com/",
+        "country": "Portugal",
+        "country_code": "PT",
+        "location": "Lisbon",
+        "city": "Lisbon",
+        "headquarters": "Lisbon Airport, Building 25, Lisbon, Portugal. [1]",
+        "operationalLocations": "Passenger airline operating from Portugal; no route or fleet quantities included.",
+        "segment": "Airline",
+        "company_type": "Airline",
+        "description": "Portuguese airline; official terms identify TAP Air Portugal as a Portuguese public limited company and state its Lisbon Airport headquarters. [1]",
+        "fleetPortfolio": "Not included; no fleet quantity needed to qualify this target.",
+        "contractActivities": "Hypotheses: aircraft leasing/acquisition, maintenance, fuel, ground handling, airport and supplier service agreements. No contract inventory verified.",
+        "contractUseCases": "Hypothesis: trace operating duties, maintenance conditions, time limits and evidence in approved airline agreements.",
+        "decisionDepartments": "Hypothesised entry: Legal / contract management, Fleet, Maintenance, Procurement and Finance.",
+        "priority": "Low",
+        "accountStatus": "Target",
+        "researchStatus": "Researched",
+        "stakeholderDepartment": "Legal / contract management",
+        "stakeholderStatus": "Unknown stakeholder",
+        "stakeholderEvidence": "No named relevant buyer verified in reviewed official sources.",
+        "fitContractComplexity": "Hypothesis — Medium",
+        "fitAviationRelevance": "Verified — High",
+        "fitOperationalComplexity": "Hypothesis — Medium",
+        "fitGeographicPriority": "Hypothesis — Low",
+        "fitEvidenceQuality": "Verified — High",
+        "fitEvidence": "TAP official terms verify Portuguese legal form and Lisbon Airport headquarters [1]. Other contract types are hypotheses. Four criteria Unknown. Assessment coverage: five of nine rubric criteria (58.2% of total criterion weight); the same five criteria are assessed for every account. Unknown criteria remain Unknown; score is a partial-evidence index, not a complete account-fit or qualification score.",
+        "classification": "Research finding",
+        "source": "General Terms, Policies and Conditions of Use - TAP Air Portugal | URL: https://www.flytap.com/en-us/legal-info/terms-and-conditions | Publication date: Not stated | Research date: 2026-11-01 | Supports: Legal name/form and Lisbon headquarters | Confidence: High\nTAP Air Portugal official website | URL: https://www.flytap.com/ | Publication date: Not stated | Research date: 2026-11-01 | Supports: Operating airline identity | Confidence: High",
+        "researchDate": "2026-11-01",
+        "confidence": "High",
+        "researchNotes": "Portugal is geographical Europe, EU and EEA. Headquarters is sourced from TAP's first-party legal information.",
+        "nextAction": "Request a short discovery conversation through TAP's public corporate channel.",
+        "data_origin": "Real",
+        "geographic_source": "TAP official legal information [1]. Research date: 2026-11-01. Geographic claim references are itemized in the source register in this JSON; country code PT and country Portugal are retained together.",
+        "geographic_confidence": "High",
+        "fitContractVolume": "Unknown",
+        "fitFinancialExposure": "Unknown",
+        "fitDecisionMakerAccess": "Unknown",
+        "fitCommercialAccessibility": "Unknown"
+      },
+      "assessment": {
+        "priorityGroup": "Priority 3",
+        "priorityRationale": "Verified Portuguese airline target, but Portugal is eighth in the user's country priority sequence and no buying access is evidenced.",
+        "commercialProblemHypothesis": "Airline contract dependencies may create a need for obligation monitoring; this is unverified.",
+        "currentOperionCapabilities": "Obligation extraction, deadlines, conditions, financial terms and evidence links.",
+        "discoveryQuestion": "Which agreement obligations most often require manual searching or coordination across teams?",
+        "pilotHypothesis": "Assess one customer-approved contract type with human-verified expected duties, dates and citations.",
+        "recommendedAction": "Keep in a later geographic wave; do not advance to opportunity without customer evidence.",
+        "contacts": [],
+        "fitCoverage": {
+          "score": 77,
+          "assessedCriteria": 5,
+          "totalCriteria": 9,
+          "criteriaCoveragePercent": 55.6,
+          "assessedWeight": 6.4,
+          "totalWeight": 11,
+          "weightCoveragePercent": 58.2,
+          "assessedKeys": [
+            "fitContractComplexity",
+            "fitAviationRelevance",
+            "fitOperationalComplexity",
+            "fitGeographicPriority",
+            "fitEvidenceQuality"
+          ],
+          "unknownKeys": [
+            "fitContractVolume",
+            "fitFinancialExposure",
+            "fitDecisionMakerAccess",
+            "fitCommercialAccessibility"
+          ],
+          "interpretation": "Partial-evidence weighted mean across the same five assessed factors for all portfolio records; not a nine-factor score, sales probability, qualification, revenue estimate, or evidence of buyer access."
+        }
+      },
+      "sources": [
+        {
+          "title": "General Terms, Policies and Conditions of Use - TAP Air Portugal",
+          "url": "https://www.flytap.com/en-us/legal-info/terms-and-conditions",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Legal name/form and Lisbon headquarters"
+          ],
+          "confidence": "High"
+        },
+        {
+          "title": "TAP Air Portugal official website",
+          "url": "https://www.flytap.com/",
+          "publicationDate": null,
+          "researchDate": "2026-11-01",
+          "supports": [
+            "Operating airline identity"
+          ],
+          "confidence": "High"
+        }
+      ]
+    }
+  ],
+  "remediation": {
+    "version": "2026-11-01.1",
+    "status": "Prepared for staging review; not imported",
+    "sourcePortfolio": "docs/oci-europe-aviation-prospect-portfolio-2026-11-01.json",
+    "auditReport": "docs/oci-europe-aviation-prospect-portfolio-audit.md",
+    "researchStatuses": {
+      "Researched": "Core identity, operating segment, and geographic account location are sufficiently supported by reviewed evidence.",
+      "In progress": "Core aviation activity is supported, but a location/entity or other material verification task remains.",
+      "Needs verification": "A material identity, contracting-entity, location, or primary-source evidence gap must be resolved before treating the record as researched."
+    },
+    "fitScoring": {
+      "rubricUnchanged": true,
+      "assessedCriteria": 5,
+      "totalCriteria": 9,
+      "criteriaCoveragePercent": 55.6,
+      "assessedWeight": 6.4,
+      "totalWeight": 11,
+      "weightCoveragePercent": 58.2,
+      "unknownCriteria": 4,
+      "scoreMeaning": "Partial-evidence normalized weighted mean only; Unknown criteria are not imputed."
+    },
+    "provenanceSerialization": {
+      "ociField": "data.source",
+      "fieldType": "textarea",
+      "maximumCharacters": 4000,
+      "structuredSourceRegisterAlsoRetained": true,
+      "geographicFields": [
+        "geographic_source",
+        "geographic_confidence",
+        "country_code",
+        "researchDate",
+        "confidence"
+      ],
+      "note": "The OCI account contract supports source as a free-text evidence field and geography/provenance fields listed above, but has no structured per-source child field. Each full source citation is serialized in data.source; the structured sources array remains in this research JSON. assessment and sources are envelopes, not OCI account fields."
+    },
+    "priorityTie": {
+      "accounts": [
+        "Avolon Holdings Limited",
+        "AerCap Holdings N.V."
+      ],
+      "group": "Priority 1",
+      "reason": "Identical nine-factor ratings and partial score; no evidence-backed differentiator."
+    }
+  }
+}

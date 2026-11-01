@@ -91,9 +91,29 @@ body:has(.oci-app) { margin: 0; background: #eef7fc; }
 .oci-loading { padding: 42px 16px; text-align: center; color: var(--oci-muted); }
 .oci-action-list { margin-top: 22px; }
 .oci-action-list a { display: flex; justify-content: space-between; align-items: center; gap: 16px; border-top: 1px solid var(--oci-line); padding: 20px 0; color: var(--oci-ink); }
+.oci-action-recommendation { display: flex; justify-content: space-between; align-items: start; gap: 18px; border-top: 1px solid var(--oci-line); padding: 20px 0; min-width: 0; }
+.oci-action-recommendation > div { min-width: 0; overflow-wrap: anywhere; }
+.oci-action-recommendation > a { display: inline-flex; align-items: center; gap: 7px; flex: 0 0 auto; padding: 9px 12px; border: 1px solid var(--oci-line); border-radius: 8px; }
+.oci-recommendation-controls { display: flex; flex: 0 0 auto; align-items: center; gap: 10px; }
+.oci-action-recommendation p { margin: 8px 0; }
+.oci-action-recommendation p strong { color: var(--oci-ink); }
 .oci-action-list h3 { margin: 8px 0; font-size: 16px; }
 .oci-action-list p { font-size: 13px; color: var(--oci-muted); }
 .oci-action-list a > span { display: flex; align-items: center; gap: 7px; font-size: 12px; }
+.oci-action-summary { display: flex; flex-wrap: wrap; gap: 9px; margin: 20px 0; }
+.oci-action-summary span { border: 1px solid var(--oci-line); border-radius: 999px; padding: 7px 12px; background: #f7fbfd; color: var(--oci-ink); font-size: 12px; font-weight: 650; }
+.oci-action-group { margin-top: 24px; }
+.oci-action-group h3 { margin: 0 0 10px; }
+.oci-execution-action { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; border-top: 1px solid var(--oci-line); padding: 16px 0; min-width: 0; }
+.oci-execution-action > div { min-width: 0; overflow-wrap: anywhere; }
+.oci-execution-action h4 { margin: 8px 0; }
+.oci-execution-action p { margin: 6px 0; font-size: 13px; }
+.oci-execution-action .oci-footnote { color: var(--oci-muted); font-size: 11px; }
+.oci-action-controls { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: 7px; max-width: 320px; }
+.oci-action-controls button { border: 1px solid var(--oci-line); border-radius: 7px; padding: 8px 10px; background: white; color: var(--oci-ink); font-size: 12px; }
+.oci-action-controls button:hover, .oci-action-controls button:focus-visible { border-color: var(--oci-accent); outline-color: var(--oci-accent); }
+.oci-action-evidence { padding: 12px 14px; border: 1px solid var(--oci-line); border-radius: 10px; background: #f7fbfd; margin: 16px 0; overflow-wrap: anywhere; }
+.oci-action-evidence p { margin: 7px 0; font-size: 13px; }
 .oci-tag { display: inline-block; padding: 4px 9px; background: #eaf7fc; border: 1px solid #d4eaf3; border-radius: 6px; color: #176785; font-size: 10px; font-weight: 700; }
 .oci-financial-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 16px; margin-top: 22px; }
 .oci-financial-card { background: #f8fcff; border: 1px solid var(--oci-line); border-radius: 12px; padding: 20px; min-width: 0; }
@@ -101,6 +121,30 @@ body:has(.oci-app) { margin: 0; background: #eef7fc; }
 .oci-toolbar { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; padding: 16px; border: 1px solid var(--oci-line); border-radius: 14px; background: white; margin-bottom: 24px; }
 .oci-toolbar form { display: flex; gap: 8px; flex: 1 1 270px; min-width: 0; }
 .oci-toolbar > label { flex: 0 1 165px; }
+.oci-geography { padding: 18px; border: 1px solid var(--oci-line); border-radius: 14px; background: white; margin: 20px 0 24px; }
+.oci-geography-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.oci-geography-heading > div { display: grid; gap: 3px; }
+.oci-geography-heading strong { font-size: 15px; }
+.oci-geography-heading span, .oci-geography-active { color: var(--oci-muted); font-size: 12px; }
+.oci-geography-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+.oci-geography-facets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.oci-geography-facets fieldset { min-width: 0; max-height: 190px; overflow: auto; border: 1px solid var(--oci-line); border-radius: 10px; padding: 10px; }
+.oci-geography-facets legend { padding: 0 5px; font-size: 12px; font-weight: 700; }
+.oci-geography-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 9px; }
+.oci-geography-options label { display: flex; flex-direction: row; align-items: center; gap: 7px; min-height: 32px; font-size: 11px; font-weight: 400; }
+.oci-geography-options input { width: 16px; min-height: 16px; flex: 0 0 16px; padding: 0; }
+.oci-geography-facets small { color: var(--oci-muted); font-size: 11px; }
+.oci-geography-active { margin-top: 12px !important; }
+.oci-table-wrap { width: 100%; overflow-x: auto; }
+.oci-data-table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+.oci-data-table th, .oci-data-table td { min-width: 100px; padding: 11px 9px; border-bottom: 1px solid var(--oci-line); }
+.oci-data-table th { color: var(--oci-muted); font-weight: 700; }
+.oci-fit-summary { border: 1px solid var(--oci-line); border-radius: 12px; padding: 18px; background: linear-gradient(130deg, #f8fdff, #edf7fd); margin: 18px 0; }
+.oci-fit-summary h3 { margin: 7px 0; font-size: 25px; }
+.oci-fit-summary > p:not(.oci-eyebrow), .oci-fit-summary small { color: var(--oci-muted); font-size: 12px; }
+.oci-fit-summary dl { margin-bottom: 12px; }
+.oci-fit-evidence { white-space: pre-wrap; border-left: 3px solid #65aabf; padding: 8px 12px; background: white; }
+.oci-fit-summary small { display: block; margin-top: 12px; }
 .oci-search { flex-direction: row !important; align-items: center; gap: 0 !important; flex: 1; position: relative; }
 .oci-search > svg { position: absolute; left: 12px; color: var(--oci-muted); }
 .oci-search input { padding-left: 38px; }
@@ -187,8 +231,16 @@ body:has(.oci-app) { margin: 0; background: #eef7fc; }
   .oci-metrics span { grid-column: 1; }
   .oci-surface { padding: 20px 14px; border-radius: 12px; margin: 18px 0; }
   .oci-section-head { align-items: start; flex-direction: column; gap: 12px; }
-  .oci-action-list a { align-items: start; flex-direction: column; }
+  .oci-action-list a, .oci-action-recommendation, .oci-execution-action { align-items: start; flex-direction: column; }
+  .oci-recommendation-controls, .oci-action-controls { justify-content: flex-start; max-width: 100%; }
   .oci-toolbar { padding: 12px 10px; gap: 10px; border-radius: 12px; }
+  .oci-geography { margin: 14px 8px 20px; padding: 13px 10px; }
+  .oci-fit-summary { padding: 13px 10px; }
+  .oci-geography-heading { align-items: start; flex-direction: column; }
+  .oci-geography-controls, .oci-geography-facets { grid-template-columns: minmax(0, 1fr); gap: 9px; }
+  .oci-geography-facets fieldset { max-height: 155px; }
+  .oci-geography-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .oci-data-table { min-width: 620px; }
   .oci-toolbar form { flex-basis: 100%; }
   .oci-toolbar > label { flex: 1 1 100px; }
   .oci-toolbar form button { padding: 9px 10px; }

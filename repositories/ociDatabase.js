@@ -1,17 +1,21 @@
 import pg from "pg";
 import { X509Certificate } from "node:crypto";
+import { assertDedicatedOciDatabaseTarget } from "../config/ociProjectTarget.js";
 
 function configError(code, message) {
   return Object.assign(new Error(message), { status: 503, code });
 }
 export function createOciDatabaseConfig(env = process.env) {
-  if (!env.DATABASE_URL) throw configError("OCI_DATABASE_NOT_CONFIGURED", "OCI database configuration is required");
   let url;
-  try { url = new URL(env.DATABASE_URL); } catch {
-    throw configError("OCI_DATABASE_INVALID_CONFIG", "OCI database URL is invalid");
+  try {
+    url = assertDedicatedOciDatabaseTarget({
+      target: env.OCI_DATABASE_TARGET,
+      projectRef: env.OCI_SUPABASE_PROJECT_REF,
+      databaseUrl: env.OCI_DATABASE_URL,
+    });
+  } catch {
+    throw configError("OCI_DATABASE_INVALID_TARGET", "OCI requires an explicit database endpoint for its dedicated Supabase project");
   }
-  if (!["postgres:", "postgresql:"].includes(url.protocol) || !url.hostname || !url.pathname || url.pathname === "/")
-    throw configError("OCI_DATABASE_INVALID_CONFIG", "OCI requires a PostgreSQL URL with host and database");
   // pg connection-string SSL parameters take precedence over the supplied SSL object.
   for (const key of [...url.searchParams.keys()]) {
     if (["ssl", "sslmode", "sslcert", "sslkey", "sslrootcert"].includes(key.toLowerCase()))

@@ -1,0 +1,356 @@
+{
+  "format": "operion-oci-prospect-portfolio-audit-v1",
+  "auditDate": "2026-11-01",
+  "verdict": "ACCEPT WITH SPECIFIC FIXES REQUIRED",
+  "scope": {
+    "readOnly": true,
+    "auditedFiles": [
+      "docs/oci-europe-aviation-prospect-portfolio-2026-11-01.md",
+      "docs/oci-europe-aviation-prospect-portfolio-2026-11-01.json",
+      "shared/ociContracts.js",
+      "shared/ociGeography.js",
+      "shared/ociAccountFit.js"
+    ],
+    "noDatabaseOrProductionAccess": true,
+    "noPortfolioOrApplicationChanges": true
+  },
+  "summary": {
+    "records": 20,
+    "portfolioOnlyUniqueNames": 20,
+    "geographicalEuropeRecords": 20,
+    "validOciAccountPayloads": 20,
+    "recordsWithContacts": 0,
+    "recordsWithOpportunities": 0,
+    "recordsMarkedResearched": 20,
+    "recordsRequiringFurtherIdentityOrLocationReview": 13,
+    "scoreRange": [77, 100],
+    "assessedCriteriaPerRecord": 5,
+    "totalCriteria": 9,
+    "verifiedRatingsPerRecord": 2,
+    "hypothesisRatingsPerRecord": 3,
+    "unknownCriteriaPerRecord": 4,
+    "unknownWeight": 4.6,
+    "totalWeight": 11.0,
+    "unknownWeightPercent": 41.8,
+    "imported": false,
+    "destinationDuplicateCheckPerformed": false
+  },
+  "findings": [
+    {
+      "id": "F-01",
+      "severity": "High",
+      "title": "Volotea headquarters is conflated with registered address",
+      "accounts": ["Volotea, S.L."],
+      "evidence": "Official Impressum states registered address at Asturias Airport, Castrillón, and separately states operational headquarters in Barcelona. Portfolio data calls the registered address its headquarters.",
+      "requiredAction": "Set headquarters to Barcelona and retain the Castrillón registered address as a separate legal-location fact before import."
+    },
+    {
+      "id": "F-02",
+      "severity": "Medium",
+      "title": "Research completion and record-level classification overstate evidence",
+      "accounts": ["Iberia", "Air Nostrum", "Binter Canarias", "AERTEC Solutions", "Air Corsica", "AFI KLM E&M", "Dassault Falcon Service", "Condor", "MTU Maintenance Hannover", "Fokker Services Group", "TrueNoord", "Avolon", "Atitech"],
+      "evidence": "These records include explicit unresolved headquarters, legal seat, contracting entity, or source-access caveats while all 20 records use researchStatus Researched; the dataset also uses Verified fact alongside hypotheses and unresolved location claims.",
+      "requiredAction": "Use Needs verification for incomplete records and an accurate record-level evidence classification; preserve individual fact/hypothesis labels."
+    },
+    {
+      "id": "F-03",
+      "severity": "Medium",
+      "title": "Partial-evidence scores can be mistaken for complete fit or readiness",
+      "accounts": ["All 20 accounts"],
+      "evidence": "The existing score function was independently recalculated and matches every displayed score. It averages 5 of 9 criteria; 4 unknown criteria carry 41.8% of total criterion weight. Scores range 77-100 despite no decision-maker, contract-volume, financial-exposure, or accessibility evidence.",
+      "requiredAction": "Show 5/9 coverage and all Unknown criteria beside the score. Do not interpret the score as probability, qualification, revenue, or readiness."
+    },
+    {
+      "id": "F-04",
+      "severity": "Medium",
+      "title": "Avolon and AerCap sequencing is not supported by a stated differentiator",
+      "accounts": ["Avolon Holdings Limited", "AerCap Holdings N.V."],
+      "evidence": "Both are Dublin-based aircraft lessors, both score 95, and neither has a verified buying contact; Avolon is Priority 1 and AerCap Priority 2.",
+      "requiredAction": "Treat them as tied first-wave candidates or record a human-reviewed, evidence-based sequencing reason."
+    },
+    {
+      "id": "F-05",
+      "severity": "Medium",
+      "title": "Detailed provenance is held outside the OCI account schema",
+      "accounts": ["All 20 accounts"],
+      "evidence": "The JSON explicitly identifies records[].assessment and records[].sources as non-account envelopes. The account payload has a free-text source field, but the structured source-to-claim mapping and source confidence are not OCI account fields.",
+      "requiredAction": "Retain the envelopes in a research/audit artifact or otherwise preserve supported source references before a payload-only import."
+    },
+    {
+      "id": "F-06",
+      "severity": "Medium",
+      "title": "Portfolio uniqueness does not establish destination uniqueness",
+      "accounts": ["All 20 accounts"],
+      "evidence": "The dataset has 20 distinct names, but no OCI database records were queried and aliases/parent-company relationships were not compared with the authorized destination.",
+      "requiredAction": "Perform a human-reviewed duplicate check in the authorized OCI environment before import; do not create related contacts or opportunities."
+    },
+    {
+      "id": "F-07",
+      "severity": "Low",
+      "title": "No named buying contacts or customer signals were verified",
+      "accounts": ["All 20 accounts"],
+      "evidence": "All contact arrays are empty and stakeholder status is Unknown stakeholder. No buyer access, customer problem, procurement signal, budget, or commitment is evidenced.",
+      "requiredAction": "Keep these records as targets only. Discover contacts lawfully and qualify opportunities only after customer evidence."
+    }
+  ],
+  "priorityRecommendations": {
+    "strongestInitialDiscoveryCandidates": [
+      "Industria de Turbo Propulsores, S.A. (ITP Aero)",
+      "Globalia Handling, S.A.U. (Groundforce)",
+      "Air Nostrum Lineas Aereas del Mediterraneo, S.A.",
+      "IBERIA, Lineas Aereas de Espana, S.A. Operadora, Sociedad Unipersonal",
+      "Avolon Holdings Limited"
+    ],
+    "fifthSlotTie": [
+      "Avolon Holdings Limited",
+      "AerCap Holdings N.V."
+    ],
+    "credibleSecondaryCandidates": [
+      "Lufthansa Technik AG",
+      "MTU Maintenance Hannover GmbH",
+      "Air France Industries KLM Engineering & Maintenance (AFI KLM E&M)",
+      "Volotea, S.L.",
+      "TrueNoord"
+    ],
+    "furtherResearch": [
+      "Binter Canarias, S.A.",
+      "AERTEC Solutions, S.L.",
+      "Air Corsica (AIR CORSICA)",
+      "Dassault Falcon Service",
+      "Condor Flugdienst GmbH",
+      "Fokker Services Group B.V.",
+      "Atitech S.p.A.",
+      "Menzies Aviation (John Menzies Limited)"
+    ],
+    "removeOrReplace": [],
+    "rationale": "These are discovery sequencing recommendations based on aviation activity, source readiness, Spain-first geography, and plausible current Contract Intelligence use. They do not assert customer need, buying access, or conversion probability."
+  },
+  "accountFindings": [
+    {
+      "name": "IBERIA, Lineas Aereas de Espana, S.A. Operadora, Sociedad Unipersonal",
+      "countryCode": "ES",
+      "segment": "Airline",
+      "originalPriority": "Priority 1",
+      "originalScore": 87,
+      "evidenceStatus": "Partial",
+      "sourceCheck": "IAG annual-report page retrieved; Iberia website returned HTTP 403.",
+      "finding": "Group and airline context are supported, but Madrid is described as a corporate base and the exact legal seat remains unconfirmed.",
+      "action": "Keep as target; use Needs verification until current entity/location evidence is attached."
+    },
+    {
+      "name": "Air Nostrum Lineas Aereas del Mediterraneo, S.A.",
+      "countryCode": "ES",
+      "segment": "Airline",
+      "originalPriority": "Priority 1",
+      "originalScore": 87,
+      "evidenceStatus": "Verified operations; location qualification needed",
+      "sourceCheck": "Official company profile retrieved; confirms regional airline, Valencia origin, and Iberia franchise.",
+      "finding": "The franchise relationship is not evidence that Air Nostrum is an Iberia subsidiary; the profile establishes origin/location, not a registry seat.",
+      "action": "Keep; qualify headquarters wording and retain contract use cases as hypotheses."
+    },
+    {
+      "name": "Industria de Turbo Propulsores, S.A. (ITP Aero)",
+      "countryCode": "ES",
+      "segment": "MRO",
+      "originalPriority": "Priority 1",
+      "originalScore": 94,
+      "evidenceStatus": "Verified",
+      "sourceCheck": "Official legal notice retrieved; confirms company identity and Zamudio registered office.",
+      "finding": "Propulsion/MRO activity is relevant; no contract inventory or customer problem was reviewed.",
+      "action": "Keep as a first-wave discovery target."
+    },
+    {
+      "name": "Globalia Handling, S.A.U. (Groundforce)",
+      "countryCode": "ES",
+      "segment": "Ground handling",
+      "originalPriority": "Priority 1",
+      "originalScore": 100,
+      "evidenceStatus": "Verified",
+      "sourceCheck": "Official service page and legal footer retrieved; supports service categories, legal operator, and Llucmajor address.",
+      "finding": "Groundforce is the operating brand; Globalia Handling is the legal entity. Do not duplicate the brand as a separate account.",
+      "action": "Keep as a first-wave discovery target; score is only 5/9 assessed criteria."
+    },
+    {
+      "name": "Binter Canarias, S.A.",
+      "countryCode": "ES",
+      "segment": "Airline",
+      "originalPriority": "Priority 2",
+      "originalScore": 80,
+      "evidenceStatus": "Partial",
+      "sourceCheck": "Official corporate and fleet pages retrieved; Telde location is supported by a third-party listing, not a first-party headquarters statement.",
+      "finding": "Airline/fleet activity is supported; exact legal identity and headquarters need primary evidence.",
+      "action": "Keep as target; set Needs verification pending location/entity confirmation."
+    },
+    {
+      "name": "Volotea, S.L.",
+      "countryCode": "ES",
+      "segment": "Airline",
+      "originalPriority": "Priority 2",
+      "originalScore": 87,
+      "evidenceStatus": "Verified operations; material location correction",
+      "sourceCheck": "Official company profile and Impressum retrieved.",
+      "finding": "Registered address is Asturias Airport, Castrillón; operational headquarters is Barcelona. The JSON currently labels the registered address as headquarters.",
+      "action": "Correct headquarters to Barcelona and retain the registered address separately before import."
+    },
+    {
+      "name": "AERTEC Solutions, S.L.",
+      "countryCode": "ES",
+      "segment": "Aviation consultancy",
+      "originalPriority": "Priority 2",
+      "originalScore": 80,
+      "evidenceStatus": "Partial",
+      "sourceCheck": "Official AERTEC site retrieved; Malaga/consultancy details rely partly on a sector-association profile.",
+      "finding": "Aviation engineering, airports, aerospace and defence are documented; this is a less direct operator-side customer hypothesis.",
+      "action": "Keep as lower-priority research; verify headquarters through a first-party or registry source."
+    },
+    {
+      "name": "Air Corsica (AIR CORSICA)",
+      "countryCode": "FR",
+      "segment": "Airline",
+      "originalPriority": "Priority 3",
+      "originalScore": 82,
+      "evidenceStatus": "Partial",
+      "sourceCheck": "Official airline site retrieved; French government company registry challenged by anti-bot protection.",
+      "finding": "Airline activity is supported, but Ajaccio legal-seat evidence was not retrievable during this audit.",
+      "action": "Keep as target; use Needs verification until an official registry source is reviewed."
+    },
+    {
+      "name": "Air France Industries KLM Engineering & Maintenance (AFI KLM E&M)",
+      "countryCode": "FR",
+      "segment": "MRO",
+      "originalPriority": "Priority 2",
+      "originalScore": 95,
+      "evidenceStatus": "Partial; contracting entity unresolved",
+      "sourceCheck": "Air France-KLM maintenance page returned HTTP 403; AFI KLM E&M site timed out.",
+      "finding": "MRO relevance is plausible, but the business unit is not established as the legal contracting entity and Paris-area activity is not a legal-seat proof.",
+      "action": "Keep for research; identify the customer-facing contracting entity and accessible primary sources before import."
+    },
+    {
+      "name": "Dassault Falcon Service",
+      "countryCode": "FR",
+      "segment": "MRO",
+      "originalPriority": "Priority 2",
+      "originalScore": 82,
+      "evidenceStatus": "Partial",
+      "sourceCheck": "Dassault Group subsidiary page retrieved; direct DFS legal and maintenance pages failed at transport/DNS level.",
+      "finding": "Subsidiary/MRO activity is supported; Le Bourget is a service location, not verified legal seat.",
+      "action": "Keep as research target; confirm legal entity and location semantics."
+    },
+    {
+      "name": "Condor Flugdienst GmbH",
+      "countryCode": "DE",
+      "segment": "Airline",
+      "originalPriority": "Priority 3",
+      "originalScore": 82,
+      "evidenceStatus": "Verified operations; legal location qualification needed",
+      "sourceCheck": "Official company portrait retrieved; confirms airline operations and Condor Technik sites.",
+      "finding": "Frankfurt is documented as operating hub, not confirmed legal headquarters.",
+      "action": "Keep; retain Frankfurt as hub/operating location and verify legal seat if that is the intended account location."
+    },
+    {
+      "name": "Lufthansa Technik AG",
+      "countryCode": "DE",
+      "segment": "MRO",
+      "originalPriority": "Priority 2",
+      "originalScore": 95,
+      "evidenceStatus": "Verified",
+      "sourceCheck": "Official headquarters and locations pages retrieved; Hamburg HQ and MRO operations confirmed.",
+      "finding": "Strong category relevance; buyer access and customer need remain unknown.",
+      "action": "Keep as a credible secondary discovery candidate."
+    },
+    {
+      "name": "MTU Maintenance Hannover GmbH",
+      "countryCode": "DE",
+      "segment": "MRO",
+      "originalPriority": "Priority 2",
+      "originalScore": 89,
+      "evidenceStatus": "Partial",
+      "sourceCheck": "Cited MTU official location page returned HTTP 403.",
+      "finding": "The dataset describes Langenhagen as a maintenance site; legal contracting entity/seat was not independently confirmed.",
+      "action": "Keep as a target; reverify on an accessible official source and set Needs verification meanwhile."
+    },
+    {
+      "name": "Fokker Services Group B.V.",
+      "countryCode": "NL",
+      "segment": "MRO",
+      "originalPriority": "Priority 3",
+      "originalScore": 90,
+      "evidenceStatus": "Partial",
+      "sourceCheck": "Official About page retrieved; confirms service lines and multiple facilities.",
+      "finding": "The retrieved page does not establish Hoofddorp as current legal seat or headquarters.",
+      "action": "Keep as a research target; verify current official legal location."
+    },
+    {
+      "name": "TrueNoord",
+      "countryCode": "NL",
+      "segment": "Aircraft lessor",
+      "originalPriority": "Priority 2",
+      "originalScore": 83,
+      "evidenceStatus": "Partial",
+      "sourceCheck": "Official contact and About pages retrieved; confirm aircraft leasing and Amsterdam office.",
+      "finding": "Office is verified; registered seat/headquarters is not expressly established.",
+      "action": "Keep as target; label Amsterdam as office unless a source verifies headquarters/legal seat."
+    },
+    {
+      "name": "AerCap Holdings N.V.",
+      "countryCode": "IE",
+      "segment": "Aircraft lessor",
+      "originalPriority": "Priority 2",
+      "originalScore": 95,
+      "evidenceStatus": "Verified operations and Dublin HQ",
+      "sourceCheck": "Official company profile and contact page retrieved; confirm leasing and Dublin HQ.",
+      "finding": "Distinguish the N.V. legal identity, Dublin headquarters, and separately named Amsterdam AerCap Group Services B.V. office.",
+      "action": "Keep as a first-wave candidate tied with Avolon; make HQ versus legal-domicile semantics explicit."
+    },
+    {
+      "name": "Avolon Holdings Limited",
+      "countryCode": "IE",
+      "segment": "Aircraft lessor",
+      "originalPriority": "Priority 1",
+      "originalScore": 95,
+      "evidenceStatus": "Verified leasing; Dublin office",
+      "sourceCheck": "Official About and Contact pages retrieved; confirm leasing activity and Dublin office.",
+      "finding": "The retrieved contact page establishes an office, not by itself the legal seat or company headquarters.",
+      "action": "Keep as a first-wave candidate; qualify the HQ field and rank alongside AerCap unless a distinction is documented."
+    },
+    {
+      "name": "Menzies Aviation (John Menzies Limited)",
+      "countryCode": "GB",
+      "segment": "Ground handling",
+      "originalPriority": "Priority 3",
+      "originalScore": 90,
+      "evidenceStatus": "Verified",
+      "sourceCheck": "Official terms and company homepage retrieved; support legal operator, Edinburgh registered office, and aviation services.",
+      "finding": "Brand and legal operator should remain one account; UK is geographical Europe but not EU/EEA.",
+      "action": "Keep as a later-wave target consistent with geography strategy."
+    },
+    {
+      "name": "Atitech S.p.A.",
+      "countryCode": "IT",
+      "segment": "MRO",
+      "originalPriority": "Priority 2",
+      "originalScore": 90,
+      "evidenceStatus": "Verified operations; legal location qualification needed",
+      "sourceCheck": "Official company and contact pages retrieved; confirm MRO services and Italian bases.",
+      "finding": "Naples Capodichino is an operating base; the reviewed source does not establish legal seat.",
+      "action": "Keep as target; confirm registered location and avoid representing the operating base as legal headquarters."
+    },
+    {
+      "name": "TAP Air Portugal, S.A.",
+      "countryCode": "PT",
+      "segment": "Airline",
+      "originalPriority": "Priority 3",
+      "originalScore": 77,
+      "evidenceStatus": "Verified",
+      "sourceCheck": "Official terms page retrieved; confirms legal form and Lisbon Airport headquarters. Official website confirms airline presence.",
+      "finding": "Location and segment are supported; Portugal is correctly a later geography in the stated market order.",
+      "action": "Keep as a later-wave target."
+    }
+  ],
+  "limitations": [
+    "No customer contracts, internal procurement activity, customer pain, budget, buying signal, buyer access, or willingness to pilot was verified.",
+    "Official pages do not consistently provide publication dates; the audit does not infer dates.",
+    "Some URLs were blocked or timed out in this retrieval client; that is reported as an access limitation, not as proof of a broken page.",
+    "No production database or destination OCI records were accessed; duplicate detection against the eventual import destination remains outstanding."
+  ]
+}

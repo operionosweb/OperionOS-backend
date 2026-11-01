@@ -37,9 +37,15 @@ export default function Auth({ children }) {
       if (!user.data.user) throw new Error('Unable to verify your identity.')
       if (current !== epoch.current) return
       setIdentity(user.data.user)
+      const assurance = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+      if (assurance.error) throw assurance.error
+      if (assurance.data.currentLevel !== 'aal2') {
+        setState('mfa')
+        return
+      }
       const access = await api('/access')
       if (current !== epoch.current) return
-      if (access.role !== 'super_admin') throw new Error('OCI access is restricted to platform super administrators.')
+      if (access.role !== 'super_admin') throw new Error('OCI access is restricted to authorised Super Administrators.')
       if (access.mfaRequired !== true || access.mfaVerified !== true) {
         setState('mfa')
       } else {

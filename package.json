@@ -11,6 +11,7 @@
     "test:supabase:local": "node test/local-supabase-rehearsal.js",
     "recovery:audit": "node scripts/offline-recovery-audit.js",
     "oci:bootstrap": "node scripts/bootstrap-oci-superadmin.js",
+    "oci:migrate": "node scripts/migrate-oci.js",
     "test:oci": "node scripts/run-oci-tests.js"
   },
   "engines": {

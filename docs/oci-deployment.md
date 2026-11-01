@@ -2,6 +2,10 @@
 
 ## Architecture and boundaries
 
+Europe-first geographic contract Increment A is documented in
+[OCI geography policy](oci-geography.md). It is a shared, versioned foundation;
+it does not yet change API filtering or the Command Centre's aggregate scope.
+
 OCI is a separate Vite application entry in the authoritative `OperionOS-backend`
 repository. Its independent Vercel project must build the OCI entry, not the public
 application. The public website continues to use its existing entry and deployment.
@@ -16,13 +20,17 @@ endpoints are called by the OCI frontend. Existing commercial-research tables an
 legacy internal screens are not migrated, deleted or silently presented as OCI
 records.
 
-Supabase remains the identity provider. Every OCI request verifies the bearer
-session with the provider, checks confirmed email ownership, verifies signed
-session claims and requires MFA assurance `aal2`. The database must contain both
-an active dedicated `oci_user_roles` assignment with role `super_admin` and the
-existing active platform `SUPERADMIN` assignment for the provider user UUID.
-Frontend metadata, email text, customer membership and editable role headers
-cannot establish authorization.
+OCI uses its own Supabase Auth project and PostgreSQL destination, selected by
+`OCI_SUPABASE_PROJECT_REF`. OCI authentication and database connections reject
+an Auth URL or PostgreSQL endpoint whose project reference does not match that
+explicit dedicated target; the
+generic customer `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `DATABASE_URL` are not
+OCI fallbacks. Every OCI request verifies the bearer session with the OCI
+provider, checks confirmed email ownership, verifies signed session claims and
+requires MFA assurance `aal2`. The sole OCI authorization source is an active
+`oci_user_roles` assignment with role `super_admin`. Frontend metadata, email
+text, customer membership and editable role headers cannot establish
+authorization.
 
 OCI uses tab-scoped browser session storage, a separate authentication storage key,
 and bearer requests instead of cross-subdomain cookies. Session tokens are never
@@ -45,10 +53,11 @@ Do not label OCI operational until all release checks below have passed.
 | Identity, MFA and HTTP boundary | [access middleware](../middleware/ociAccessMiddleware.js), [access route](../routes/ociAccessRoutes.js), [backend mounting](../index.js) |
 | Business API and persistence | [business routes](../routes/ociRoutes.js), [service validation](../services/ociService.js), [repository](../repositories/ociRepository.js), [verified-TLS transport](../repositories/ociDatabase.js), [shared contracts](../shared/ociContracts.js) |
 | Database | [022 OCI foundation migration](../supabase/migrations/022_oci_foundation.sql) |
-| Operator tooling | [verified identity bootstrap](../scripts/bootstrap-oci-superadmin.js), [offline runner](../scripts/run-oci-tests.js), [independent build helper](../scripts/build-oci.js) |
+| Operator tooling | [verified identity bootstrap](../scripts/bootstrap-oci-superadmin.js), [guarded OCI migration runner](../scripts/migrate-oci.js), [offline runner](../scripts/run-oci-tests.js), [independent build helper](../scripts/build-oci.js) |
+| Project isolation | [dedicated target checks](../config/ociProjectTarget.js), [OCI Auth client](../config/ociSupabaseAuth.js) |
 | Frontend | [entry](../frontend/oci.html), [mount](../frontend/src/oci/main.jsx), [workspace](../frontend/src/oci/App.jsx), [authentication](../frontend/src/oci/Auth.jsx), [client](../frontend/src/oci/client.js), [styles](../frontend/src/oci/oci.css) |
 | Deployment | [OCI Vite configuration](../frontend/vite.oci.config.js), [Git deployment root](../oci/vercel.json), [explicit CLI alternative](../frontend/vercel.oci.json), [backend environment template](../.env.oci.example), [frontend environment template](../frontend/.env.oci.example) |
-| Tests | [identity/bootstrap](../test/oci-access.test.js), [business workflows](../test/oci-workflows.test.js), [deployment isolation](../test/oci-deployment.test.js), [browser workflows](../frontend/tests/oci.test.mjs) |
+| Tests | [identity/bootstrap](../test/oci-access.test.js), [business workflows and TLS](../test/oci-workflows.test.js), [clean-project target and migration runner](../test/oci-migration-target.test.js), [deployment isolation](../test/oci-deployment.test.js), [browser workflows](../frontend/tests/oci.test.mjs) |
 
 Root/frontend package manifests add OCI commands only. Ignore rules exclude OCI
 build output and local Vercel linkage. Existing public/Demo components, globe,
@@ -96,14 +105,23 @@ exercise API workflows and authorization, not actual PostgreSQL persistence.
 The available Docker CLI could not reach a running engine during implementation;
 real migration/RLS verification remains an operator release gate.
 
-1. Identify the actual Supabase project used by the backend. Verify its project
-   identity using the provider console, not an unreviewed connection string.
-2. Back up the database using the approved production procedure.
-3. Rehearse the OCI migration on an isolated database with the existing prerequisite
-   migrations already applied. Review foreign keys, triggers, audit atomicity,
-   role assignments and service privileges.
-4. Apply `supabase/migrations/022_oci_foundation.sql` through the approved migration
-   process. Do not rerun all historical migrations against production blindly.
+1. Establish the dedicated OCI Supabase project and verify its exact project
+   reference and region in the provider console. The application cannot establish
+   project ownership or region from a connection URL.
+2. Set `OCI_DATABASE_TARGET=dedicated-oci`, `OCI_SUPABASE_PROJECT_REF`,
+   `OCI_SUPABASE_URL`, `OCI_SUPABASE_ANON_KEY`, and `OCI_DATABASE_URL` only in
+   the dedicated OCI backend environment. Auth URL and database host must match
+   the same project reference. Do not set customer `DATABASE_URL` as an OCI fallback.
+3. Back up the dedicated database using the approved provider procedure and
+   perform a real isolated rehearsal of the checked-in OCI migration before any
+   production execution. Offline tests verify SQL boundaries and runner guards;
+   they are not a PostgreSQL rehearsal.
+4. After review and separate authorization, run
+   `npm.cmd run oci:migrate -- --apply` with `OCI_MIGRATION_TARGET`,
+   `OCI_MIGRATION_PROJECT_REF`, and `OCI_MIGRATION_DATABASE_URL` set for that
+   same project. The runner applies only `022_oci_foundation.sql`, uses a
+   checksum ledger and advisory lock, and refuses checksum changes or an
+   incomplete prior attempt. It never applies migrations 001–021.
 5. Verify OCI tables exist, RLS is enabled, and `anon` and `authenticated` database
    roles have no table access. Verify service/backend access separately.
 6. Verify an unauthorized direct database client cannot read or modify OCI rows.
@@ -113,11 +131,10 @@ building or starting the application.
 
 ## 2. Configure Supabase authentication
 
-1. Disable public user signup for OCI. Because the identity provider is shared,
-   review customer signup requirements before changing project-wide settings.
-   If customer signup must remain public, it still must not grant OCI assignments;
-   use provider invitations for internal OCI identities.
-2. Invite the intended founder account through the authenticated provider admin
+1. Disable public user signup on the dedicated OCI Auth project. Use provider
+   invitations for the approved internal identity; customer-facing Auth settings
+   are not changed by this OCI configuration.
+2. Invite the founder identity `meelis@operionos.com` through the provider admin
    console. Do not create a hardcoded password or assume a profile proves ownership.
 3. The owner must complete email verification, choose their own credentials and
    enroll/verify a TOTP second factor. Configure provider authentication rate limits
@@ -126,21 +143,23 @@ building or starting the application.
    redirect allowances. OCI password/TOTP flows do not require URL session tokens.
 5. Verify the MFA factor is enrolled and the current session is `aal2`.
 
-For the first administrator, complete provider-backed MFA enrollment/challenge
-using an approved local Supabase SDK authentication workflow before bootstrap.
-The OCI interface cannot enroll an identity that has not yet received its internal
-role. Do not grant a temporary role or weaken the MFA check to work around this
-ordering requirement.
+Before an OCI role exists, the OCI login UI checks provider assurance before
+requesting `/api/oci/access`; it permits TOTP enrollment and challenge while at
+`aal1`, but does not load commercial data. The backend still requires `aal2` and
+an active OCI role on every protected request. This resolves the former first-user
+MFA cycle without a temporary role or relaxed authorization.
 
 MFA-required users receive a specific denial before commercial data is returned.
 MFA verification in a client alone is insufficient; the backend checks each request.
 
 ## 3. Initial Super Admin provisioning
 
-Use an operator-controlled terminal with the approved backend database
-configuration. Configure `OCI_BOOTSTRAP_EMAIL` for the exact intended founder
-email and `OCI_BOOTSTRAP_ACCESS_TOKEN` with that user's short-lived, verified
-MFA session. Obtain the token through an approved local provider session, not chat,
+Use an operator-controlled terminal with the dedicated OCI target variables from
+[`.env.oci.example`](../.env.oci.example). `OCI_BOOTSTRAP_PROJECT_REF` must equal
+`OCI_SUPABASE_PROJECT_REF`; the bootstrap database URL must match that reference.
+Set `OCI_BOOTSTRAP_ACCESS_TOKEN` to the founder's short-lived, verified MFA session.
+The founder email is fixed in the bootstrap code and is not configurable. Obtain
+the token through an approved local provider session, not chat,
 source control, CLI argument history, a public URL or an arbitrary generated token.
 
 ```powershell
@@ -154,17 +173,12 @@ reviewing the correct environment:
 npm.cmd run oci:bootstrap -- --apply
 ```
 
-The apply operation serializes initial provisioning, links the provider UUID,
-grants both dedicated and existing platform roles, and records an audit event
-inside one database transaction. It refuses bootstrap once another administrator
-has existed or the target OCI assignment has been revoked. Later administrator
-grants/revocations require a reviewed database operation and audit record; no
-self-service grant endpoint exists.
-
-The bootstrap also refuses to restore removed or revoked platform access.
-Repeating it for an already active assignment is a no-op. Record and settings
-actor UUIDs remain stable after provider identity deletion; they are provenance,
-not live identity grants.
+The apply operation serializes initial provisioning, verifies the provider
+identity, confirmed founder email and `aal2`, grants only the dedicated OCI role,
+and records an audit event inside one database transaction. It refuses bootstrap
+if any OCI role row already exists, including revoked rows; it never creates or
+changes a customer-platform role. Later OCI grants/revocations require a reviewed,
+audited operator procedure; no self-service grant endpoint exists.
 
 Remove the bootstrap token from the operator environment immediately afterward.
 Sign in as the owner and verify access using the real frontend and direct API.
@@ -172,8 +186,10 @@ Do not report the owner provisioned until these checks pass.
 
 ## 4. Configure backend hosting
 
-Configure the existing backend's approved database and public Supabase authentication
-values. Set `OCI_ALLOWED_ORIGINS` to `https://oci.operionos.com`; do not add wildcard
+Configure the backend's OCI-specific Auth and database values as in
+[`.env.oci.example`](../.env.oci.example). Verify both destinations identify the
+approved dedicated project before starting the API. Set `OCI_ALLOWED_ORIGINS` to
+`https://oci.operionos.com`; do not add wildcard
 origins. See `.env.oci.example` for names only. Ensure HTTPS at the API endpoint.
 
 OCI rate protection is bounded, per-process and IP-based. Configure provider
@@ -185,12 +201,14 @@ for the actual hosting topology.
 Requests fail closed when authorization or mandatory access audit storage is
 unavailable. Such failures are availability failures, not successful authentication.
 
-OCI has an isolated lazy PostgreSQL pool using the same approved database URL.
-It always verifies the TLS certificate/hostname and removes URL options that could
+OCI has an isolated lazy PostgreSQL pool using only `OCI_DATABASE_URL`; it never
+falls back to the product `DATABASE_URL`. It always verifies the TLS certificate/hostname and removes URL options that could
 override that requirement. Supply the approved provider CA through
 `OCI_DATABASE_CA` only when system trust is insufficient; use PEM with actual
 newlines. Test the certificate chain and connection on real infrastructure before
-release. OCI authorization, records and bootstrap all use this verified transport.
+release. OCI authorization, records, migration and bootstrap use this verified
+transport. CLI migration/bootstrap destinations are separately checked against
+their explicit project references; verify project ownership in the provider console.
 
 The legacy/customer database client is intentionally unchanged and currently
 disables certificate verification. Because its database credentials are shared,
