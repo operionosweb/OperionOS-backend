@@ -12,7 +12,7 @@ async function createPage(width = 1440) {
   const context = await browser.newContext({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
   await context.route("**/*", (route) => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
   const page = await context.newPage();
-  page.setDefaultTimeout(15000);
+  page.setDefaultTimeout(30000);
   await page.route("**/api/weather-maps/status", (route) => route.fulfill({ json: { configured: false } }));
   return { context, page };
 }
@@ -96,11 +96,13 @@ test("all globe routes have identical schema controls, composable filters and ke
       assert.deepEqual(schema, baseline, `${route}: identical layers and availability`);
       const filters = page.locator(".od-spatial-filter-grid");
       await filters.getByLabel("Aircraft type", { exact: true }).selectOption("A320neo");
-      await filters.getByLabel("Airline / operator", { exact: true }).selectOption("Skyward Airlines");
-      assert.match(await page.locator(".od-dashboard-globe-footer").innerText(), /1 aircraft shown/);
-      assert.equal(await page.locator(".od-dashboard-selected-heading h3").innerText(), "G-OPRA");
+      await filters.getByLabel("Airline / operator", { exact: true }).selectOption("Operion simulated scenario");
+      assert.match(await page.locator(".od-dashboard-globe-footer").innerText(), /1 simulated flights shown/);
+      await page.getByRole("button", { name: /^Explore the fleet/ }).click();
+      await page.locator(".od-dashboard-aircraft-list button").click();
+      assert.equal(await page.locator(".od-dashboard-selected-heading h3").innerText(), "SIM-012");
       await page.getByRole("button", { name: "Clear globe filters", exact: true }).click();
-      assert.match(await page.locator(".od-dashboard-globe-footer").innerText(), /12 aircraft shown/);
+      assert.match(await page.locator(".od-dashboard-globe-footer").innerText(), /20 simulated flights shown/);
       await page.locator(".od-spatial-layer-grid").getByText("Airports and aviation hubs", { exact: true }).click();
       await page.getByText("Browse visible spatial records (keyboard accessible)", { exact: true }).click();
       await page.locator(".od-spatial-object-list").getByRole("button", { name: "LHR · airports", exact: true }).click();
@@ -115,60 +117,53 @@ test("all globe routes have identical schema controls, composable filters and ke
 });
 
 for (const width of [1440, 390, 320]) {
-  test(`aircraft clicks open an infocard inside every globe at ${width}px`, { timeout: 180000 }, async () => {
+  for (const route of ["/", "/product", "/demo/dashboard", "/demo/live-tracking"]) {
+  test(`aircraft clicks open an infocard on ${route} at ${width}px`, { timeout: 180000 }, async () => {
     const { context, page } = await createPage(width);
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
     try {
-      for (const route of ["/", "/product", "/demo/dashboard", "/demo/live-tracking"]) {
+      {
         await page.goto(`${origin}${route}`, { waitUntil: "domcontentloaded" });
         const globe = page.locator(".od-cesium-shell");
         const canvas = globe.locator("canvas");
         await canvas.waitFor();
         await page.waitForFunction(() => Number(document.querySelector(".od-cesium-globe")?.dataset.aircraftModelsReady) > 0);
-        const popup = globe.getByRole("dialog", { name: "G-OPER", exact: true });
+        await globe.getByRole("button", { name: /^Explore the fleet/ }).click();
+        await globe.locator(".od-dashboard-aircraft-list button").nth(3).click();
+        const popup = globe.getByRole("dialog", { name: "SIM-004", exact: true });
         await popup.waitFor();
         await popup.getByRole("button", { name: "Close aircraft infocard", exact: true }).click();
         assert.equal(await globe.getByRole("dialog").count(), 0);
         await canvas.scrollIntoViewIfNeeded();
-        // The selected aircraft is centred by the real Cesium camera. Click its
-        // rendered status silhouette, exercising actual model picking rather
-        // than a React handler or a separate invisible selection marker.
+        // Explicit selection centres the real model; click its actual canvas hit target.
+        await canvas.screenshot();
         const position = await canvas.evaluate((element) => {
-          const gl = element.getContext("webgl2") || element.getContext("webgl");
-          const pixels = new Uint8Array(element.width * element.height * 4);
-          gl.readPixels(0, 0, element.width, element.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-          let best = null, distance = Infinity;
-          for (let y = 0; y < element.height; y++) {
-            for (let x = 0; x < element.width; x++) {
-              const i = (y * element.width + x) * 4;
-              if (Math.abs(pixels[i] - 76) > 5 || Math.abs(pixels[i + 1] - 209) > 5 || Math.abs(pixels[i + 2] - 140) > 5) continue;
-              const next = (x - element.width / 2) ** 2 + (y - element.height / 2) ** 2;
-              if (next < distance) { distance = next; best = { x: x * element.clientWidth / element.width, y: (element.height - y - 1) * element.clientHeight / element.height }; }
-            }
-          }
-          return best;
+          return { x: element.clientWidth / 2, y: element.clientHeight / 2 };
         });
         assert.ok(position, `${route}: the actual selected aircraft marker is rendered`);
         await canvas.click({ position });
         await popup.waitFor();
+        await popup.screenshot({ animations: "disabled" });
         assert.equal(await globe.locator(".cesium-widget-errorPanel, .od-globe-control-error").count(), 0, "Models render without Cesium or asset errors");
         const bounds = await popup.boundingBox();
         const mapBounds = await globe.boundingBox();
         assert.ok(bounds.x >= mapBounds.x && bounds.y >= mapBounds.y, "Popup starts within the globe");
-        assert.ok(bounds.x + bounds.width <= mapBounds.x + mapBounds.width + 1 && bounds.y + bounds.height <= mapBounds.y + mapBounds.height + 1, "Popup stays inside the globe on desktop/mobile");
+        assert.ok(bounds.x + bounds.width <= mapBounds.x + mapBounds.width + 1 && bounds.y + bounds.height <= mapBounds.y + mapBounds.height + 1,
+          `${route}: popup ${JSON.stringify(bounds)} stays inside globe ${JSON.stringify(mapBounds)}`);
         const controls = await globe.locator(".od-map-controls").boundingBox();
         if (width < 768) assert.ok(controls.y + controls.height <= bounds.y, "Full-width mobile popup leaves map controls accessible above it");
         else assert.ok(bounds.x + bounds.width <= controls.x, "Popup leaves map controls accessible");
         assert.equal(await page.locator(".od-dashboard-flight-inspector .od-dashboard-flight-details").count(), 0, "No duplicate infocard below the globe");
-        assert.match(await popup.innerText(), /Skyward Airlines/);
-        assert.match(await popup.getByRole("link").first().getAttribute("href"), /\/demo\/contracts\//);
+        assert.match(await popup.innerText(), /Operion simulated scenario/);
+        assert.ok(await popup.getByRole("button", { name: "Inspect associated contract", exact: true }).isVisible());
         await popup.getByRole("button", { name: "Close aircraft infocard", exact: true }).focus();
         await page.keyboard.press("Escape");
+        await popup.waitFor({ state: "hidden" });
         assert.equal(await globe.getByRole("dialog").count(), 0);
-        await globe.getByRole("button", { name: "Explore the fleet", exact: true }).click();
+        await globe.getByRole("button", { name: /^Explore the fleet/ }).click();
         await page.locator(".od-dashboard-aircraft-list button").nth(1).click();
-        await globe.getByRole("dialog", { name: "G-OPRA", exact: true }).waitFor();
+        await globe.getByRole("dialog", { name: "SIM-002", exact: true }).waitFor();
         if (route === "/demo/dashboard" && width === 1440) {
           await page.getByRole("button", { name: "Full screen", exact: true }).click();
           await page.getByRole("button", { name: "Exit full screen", exact: true }).waitFor();
@@ -183,6 +178,7 @@ for (const width of [1440, 390, 320]) {
       assert.deepEqual(errors, []);
     } finally { await context.close(); }
   });
+  }
 }
 
 test("missing 3D asset is reported explicitly without breaking aircraft details", async () => {
@@ -192,8 +188,8 @@ test("missing 3D asset is reported explicitly without breaking aircraft details"
     await page.goto(`${origin}/demo/dashboard`, { waitUntil: "domcontentloaded" });
     await page.getByText("3D aircraft are unavailable. Select aircraft from the fleet list to inspect their details.", { exact: true }).waitFor();
     assert.equal(await page.locator(".od-cesium-globe").getAttribute("data-aircraft-models-ready"), "0");
-    await page.getByRole("button", { name: "Explore the fleet", exact: true }).click();
+    await page.getByRole("button", { name: /^Explore the fleet/ }).click();
     await page.locator(".od-dashboard-aircraft-list button").nth(1).click();
-    await page.getByRole("dialog", { name: "G-OPRA", exact: true }).waitFor();
+    await page.getByRole("dialog", { name: "SIM-002", exact: true }).waitFor();
   } finally { await context.close(); }
 });

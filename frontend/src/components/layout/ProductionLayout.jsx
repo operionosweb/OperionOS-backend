@@ -21,6 +21,7 @@ import Logo from "../ui/Logo";
 import { useAuth } from "../../context/AuthContext";
 import { useOrganization } from "../../context/OrganizationContext";
 import { ORGANIZATION_PERMISSIONS, PLATFORM_PERMISSIONS } from "../../lib/permissions";
+import { MattFloating } from "../demo/OperionAssistant";
 
 const PRIMARY_NAV = [
   { to: "/app/dashboard", label: "Dashboard", icon: Gauge, end: true },
@@ -38,7 +39,7 @@ const WORKSPACE_NAV = [
   { hash: "risks", label: "Risks", icon: ShieldAlert },
   { hash: "financial-impact", label: "Financial Impact", icon: CircleDollarSign },
   { hash: "evidence", label: "Evidence", icon: FileCheck2 },
-  { hash: "assistant", label: "Assistant", icon: Bot },
+  { hash: "assistant", label: "Ask Matt", icon: Bot },
 ];
 
 function NavItem({ to, label, icon: Icon, end, onNavigate }) {
@@ -154,6 +155,7 @@ export default function ProductionLayout() {
           <Outlet />
         </main>
       </div>
+      {organization.hasOrganizationPermission(ORGANIZATION_PERMISSIONS.CONTRACT_READ) && <MattFloating/>}
     </div>
   );
 }

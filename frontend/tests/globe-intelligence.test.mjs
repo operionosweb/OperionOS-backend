@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { before, after, test } from "node:test";
 import { chromium } from "@playwright/test";
-import { inflateSync } from "node:zlib";
+import { decodeScreenshot, texturedPixelStats } from "./helpers/pngPixels.mjs";
 import { createDemonstrationAircraft } from "../src/demo/globeIntelligenceData.js";
 
 const origin = process.env.CORPORATE_TEST_URL || "http://127.0.0.1:4192";
@@ -10,11 +10,12 @@ let browser;
 before(async () => { browser = await chromium.launch(); });
 after(async () => { await browser?.close(); });
 
-async function fixture(width = 1440) {
+async function fixture(width = 1440, solarTime = "2026-03-20T12:00:00Z") {
   const context = await browser.newContext({ viewport: { width, height: 1000 }, reducedMotion: "reduce", hasTouch: width < 900 });
   await context.route("**/*", (route) => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
   await context.route("**/api/weather-maps/status", (route) => route.fulfill({ json: { configured: false } }));
   const page = await context.newPage();
+  if (solarTime) await page.clock.setFixedTime(new Date(solarTime));
   page.setDefaultTimeout(30000);
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -39,47 +40,66 @@ async function fits(panel, shell) {
 }
 
 function darkPixelRatio(png) {
-  const width = png.readUInt32BE(16), height = png.readUInt32BE(20);
-  const channels = png[25] === 6 ? 4 : 3;
-  assert.ok([2, 6].includes(png[25]) && png[24] === 8, "Screenshot is an 8-bit RGB/RGBA PNG");
-  const chunks = [];
-  for (let offset = 8; offset < png.length;) {
-    const size = png.readUInt32BE(offset), type = png.toString("ascii", offset + 4, offset + 8);
-    if (type === "IDAT") chunks.push(png.subarray(offset + 8, offset + 8 + size));
-    offset += 12 + size;
-  }
-  const raw = inflateSync(Buffer.concat(chunks)), stride = width * channels;
-  let prior = Buffer.alloc(stride), dark = 0;
-  for (let y = 0; y < height; y++) {
-    const filter = raw[y * (stride + 1)], row = Buffer.alloc(stride);
-    for (let x = 0; x < stride; x++) {
-      const left = x >= channels ? row[x - channels] : 0, up = prior[x], upperLeft = x >= channels ? prior[x - channels] : 0;
-      const p = left + up - upperLeft;
-      const pa = Math.abs(p - left), pb = Math.abs(p - up), pc = Math.abs(p - upperLeft);
-      const prediction = filter === 0 ? 0 : filter === 1 ? left : filter === 2 ? up : filter === 3 ? Math.floor((left + up) / 2) : pa <= pb && pa <= pc ? left : pb <= pc ? up : upperLeft;
-      row[x] = (raw[y * (stride + 1) + 1 + x] + prediction) & 255;
-    }
-    for (let x = 0; x < stride; x += channels) if (Math.max(row[x], row[x + 1], row[x + 2]) < 30) dark++;
-    prior = row;
-  }
+  const { width, height, channels, pixels } = decodeScreenshot(png);
+  let dark = 0;
+  for (let x = 0; x < pixels.length; x += channels) if (Math.max(pixels[x], pixels[x + 1], pixels[x + 2]) < 30) dark++;
   return dark / (width * height);
 }
 
-test("all public and demo Globe entrypoints start unselected with ten explicitly fictional flights", { timeout: 120000 }, async () => {
+test("UTC noon and midnight change actual geographic Earth lighting, not just a clock label", { timeout: 120000 }, async () => {
+  const samples = [];
+  for (const hour of ["12", "00"]) {
+    const { context, page, errors } = await fixture(1440, `2026-03-20T${hour}:00:00Z`);
+    try {
+      await page.waitForFunction(() => Number(document.querySelector(".od-cesium-globe")?.dataset.aircraftModelsReady) === 20);
+      await page.waitForLoadState("networkidle");
+      const image = decodeScreenshot(await page.locator(".od-cesium-globe canvas").screenshot());
+      let sum = 0, count = 0;
+      for (let y = Math.floor(image.height * 0.35); y < image.height * 0.65; y++) {
+        for (let x = Math.floor(image.width * 0.4); x < image.width * 0.6; x++) {
+          const i = (y * image.width + x) * image.channels;
+          sum += (image.pixels[i] + image.pixels[i + 1] + image.pixels[i + 2]) / 3;
+          count++;
+        }
+      }
+      samples.push(sum / count);
+      assert.deepEqual(errors, []);
+    } finally { await context.close(); }
+  }
+  console.log(`Earth central luminance: noon ${samples[0].toFixed(1)}, midnight ${samples[1].toFixed(1)}`);
+  assert.ok(samples[0] - samples[1] > 20, "Geographic surface must visibly darken on its UTC night side");
+  assert.ok(samples[1] > 10, "Night-side geography remains discernible");
+});
+
+test("blocked satellite detail retains real Earth and reports degradation without blocking access", { timeout: 60000 }, async () => {
+  const { context, page, errors } = await fixture();
+  try {
+    await page.getByRole("button", { name: "Satellite", exact: true }).click();
+    await page.locator(".od-globe-imagery-status").getByText("Detailed map imagery is unavailable. The geographic Earth base remains visible.", { exact: true }).waitFor();
+    const pixels = texturedPixelStats(await page.locator(".od-cesium-globe canvas").screenshot());
+    assert.ok(pixels.colors > 100 && pixels.colored > 0.4, `Geographic Earth remains visible: ${JSON.stringify(pixels)}`);
+    assert.equal(await page.locator(".od-globe-unavailable").count(), 0);
+    await page.getByRole("button", { name: "Standard", exact: true }).click();
+    await page.locator(".od-globe-imagery-status").waitFor({ state: "hidden" });
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
+test("all public and demo Globe entrypoints start unselected with twenty explicitly simulated flights", { timeout: 120000 }, async () => {
   const { context, page, errors } = await fixture();
   try {
     for (const path of ["/", "/product", "/demo/dashboard", "/demo/live-tracking"]) {
       await page.goto(`${origin}${path}`, { waitUntil: "domcontentloaded" });
       const shell = page.locator(".od-cesium-shell");
       await shell.locator("canvas").waitFor();
-      await page.waitForFunction(() => Number(document.querySelector(".od-cesium-globe")?.dataset.aircraftModelsReady) === 10);
+      await page.waitForFunction(() => Number(document.querySelector(".od-cesium-globe")?.dataset.aircraftModelsReady) === 20);
       assert.equal(await shell.getByRole("dialog").count(), 0, "No visible dialog opens automatically");
       assert.equal(await shell.locator(".od-aircraft-popup").count(), 0);
       assert.equal(await shell.locator(".od-globe-alerts").count(), 0);
-      await page.getByText("10 aircraft shown", { exact: true }).waitFor();
+      await page.getByText("20 simulated flights shown", { exact: true }).waitFor();
       assert.ok(await page.getByText("ILLUSTRATIVE DEMONSTRATION DATA — NOT LIVE FLIGHT OR CONTRACT DATA.", { exact: true }).count());
       const fleet = await openFleet(shell);
-      assert.equal(await fleet.locator(".od-dashboard-aircraft-list > button").count(), 10);
+      assert.equal(await fleet.locator(".od-dashboard-aircraft-list > button").count(), 20);
       await fleet.getByRole("button", { name: "Close fleet filters" }).click();
       const blackRatio = darkPixelRatio(await shell.screenshot());
       console.log(`Initial Globe ${path}: ${(blackRatio * 100).toFixed(2)}% near-black pixels`);
@@ -96,23 +116,27 @@ test("fleet combinations, removable chips, counts, presets, explicit Global and 
     await fleet.getByText("Combine detailed filters", { exact: true }).click();
     await fleet.getByLabel("Country", { exact: true }).selectOption("Spain");
     await fleet.getByLabel("Detailed flight status", { exact: true }).selectOption("Delayed");
-    assert.equal(await fleet.locator(".od-dashboard-aircraft-list > button").count(), 1);
-    assert.match(await fleet.locator(".od-dashboard-aircraft-list").innerText(), /G-OPRA/);
+    assert.equal(await fleet.locator(".od-dashboard-aircraft-list > button").count(), 2);
+    assert.match(await fleet.locator(".od-dashboard-aircraft-list").innerText(), /SIM-006/);
     assert.match(await fleet.locator(".od-intelligence-active-filters").innerText(), /2 active filters/);
     await fleet.getByRole("button", { name: "Remove Country filter", exact: true }).click();
-    assert.equal(await fleet.locator(".od-dashboard-aircraft-list > button").count(), 4);
-    await fleet.getByLabel("Cancelled", { exact: true }).selectOption("Yes");
+    assert.equal(await fleet.locator(".od-dashboard-aircraft-list > button").count(), 10);
+    assert.equal(await fleet.getByLabel("Cancelled", { exact: true }).locator('option[value="Yes"]').count(), 0, "No cancellation fixture is invented");
+    await fleet.getByLabel("Aircraft model", { exact: true }).selectOption("A350-1000");
     await fleet.getByText("No aircraft match these filters.", { exact: true }).waitFor();
     await fleet.getByRole("button", { name: "Clear fleet filters" }).click();
-    assert.equal(await fleet.locator(".od-dashboard-aircraft-list > button").count(), 10);
-    await fleet.getByLabel("Market context", { exact: true }).selectOption("Global");
+    assert.equal(await fleet.locator(".od-dashboard-aircraft-list > button").count(), 20);
+    await fleet.getByLabel("Market context", { exact: true }).selectOption("Europe");
     assert.match(await fleet.locator(".od-intelligence-active-filters").innerText(), /1 active filters/);
+    assert.equal(await fleet.locator(".od-dashboard-aircraft-list > button").count(), 11);
+    await fleet.getByLabel("Market context", { exact: true }).selectOption("Global");
+    assert.equal(await fleet.locator(".od-dashboard-aircraft-list > button").count(), 20);
     await fleet.getByRole("button", { name: "High exposure review", exact: true }).click();
     assert.equal(await fleet.locator(".od-dashboard-aircraft-list > button").count(), 1);
     await fleet.locator(".od-dashboard-aircraft-list > button").click();
-    const card = shell.getByRole("dialog", { name: "DEMO-009", exact: true });
+    const card = shell.getByRole("dialog", { name: "SIM-010", exact: true });
     await card.waitFor();
-    assert.match(await card.innerText(), /EUR 350/);
+    assert.match(await card.innerText(), /EUR 391/);
     await card.getByRole("button", { name: "Close aircraft infocard" }).click();
     const restored = await openFleet(shell);
     assert.equal(await restored.locator(".od-dashboard-aircraft-list > button").count(), 1);
@@ -152,26 +176,38 @@ test("alerts select the correct aircraft, highlight the alert and inspect only i
     await shell.getByRole("button", { name: /^Alerts / }).click();
     const alerts = shell.getByRole("dialog", { name: "Globe alerts", exact: true });
     await alerts.getByText("Combine detailed filters", { exact: true }).click();
-    await alerts.getByLabel("Aircraft", { exact: true }).selectOption("DEMO-009");
+    await alerts.getByLabel("Aircraft", { exact: true }).selectOption("SIM-010");
     await alerts.getByLabel("Alert category", { exact: true }).selectOption("Financial exposure");
     assert.equal(await alerts.locator(".od-intelligence-alert-list > button").count(), 1);
     await alerts.locator(".od-intelligence-alert-list > button").click();
-    const card = shell.getByRole("dialog", { name: "DEMO-009", exact: true });
+    const card = shell.getByRole("dialog", { name: "SIM-010", exact: true });
     await card.waitFor();
-    assert.match(await card.locator(".od-intelligence-selected-alert").innerText(), /Exposure quantified/);
+    assert.match(await card.locator(".od-intelligence-selected-alert").innerText(), /Hypothetical scenario arithmetic — not confirmed/);
     const canvas = await shell.locator("canvas").elementHandle();
-    await page.waitForFunction(() => Number(document.querySelector(".od-cesium-globe")?.dataset.aircraftModelsReady) === 10);
+    await page.waitForFunction(() => Number(document.querySelector(".od-cesium-globe")?.dataset.aircraftModelsReady) === 20);
+    await page.waitForLoadState("networkidle");
     const globePixels = await canvas.evaluate((element) => element.toDataURL());
+    const cameraPose = await shell.locator(".od-cesium-globe").getAttribute("data-camera-pose");
+    assert.equal(JSON.parse(cameraPose).length, 9, "Rendered camera position, direction and up vectors are available");
     const url = page.url();
     await card.getByRole("button", { name: "Inspect associated contract" }).click();
     const contract = shell.getByRole("dialog", { name: "Contextual contract inspection", exact: true });
     await contract.waitFor();
-    assert.match(await contract.innerText(), /illustrative-flight-contract-9/);
-    assert.match(await contract.innerText(), /EUR 350/);
-    assert.match(await contract.innerText(), /before exclusions/);
+    assert.match(await contract.innerText(), /illustrative-flight-contract-10/);
+    assert.match(await contract.innerText(), /EUR 391/);
+    assert.match(await contract.innerText(), /invented for this demonstration/);
     assert.equal(page.url(), url);
     assert.equal(await shell.locator("canvas").evaluate((element, original) => element === original, canvas), true, "Renderer remains mounted during contract inspection");
-    assert.equal(await canvas.evaluate((element) => element.toDataURL()), globePixels, "Contract inspection preserves the actual camera/framing and simulation frame");
+    const nextPixels = await canvas.evaluate((element) => element.toDataURL());
+    const originalImage = decodeScreenshot(Buffer.from(globePixels.split(",")[1], "base64"));
+    const nextImage = decodeScreenshot(Buffer.from(nextPixels.split(",")[1], "base64"));
+    assert.deepEqual([nextImage.width, nextImage.height, nextImage.channels], [originalImage.width, originalImage.height, originalImage.channels]);
+    // Solar shading and progressive texture repaint can change pixels without moving the camera.
+    const nextPose = JSON.parse(await shell.locator(".od-cesium-globe").getAttribute("data-camera-pose"));
+    JSON.parse(cameraPose).forEach((value, index) => assert.ok(Math.abs(value - nextPose[index]) <= (index < 3 ? 1e-6 : 1e-12),
+      "Contract inspection preserves position within one micrometre and orientation within floating-point precision"));
+    assert.ok(texturedPixelStats(Buffer.from(nextPixels.split(",")[1], "base64")).colors > 100,
+      "Geographic Earth remains textured while the contract is inspected");
     await contract.getByRole("button", { name: "Return to aircraft" }).press("Escape");
     await card.waitFor();
     assert.equal(await card.locator(".od-intelligence-selected-alert").count(), 1);
@@ -187,7 +223,7 @@ for (const width of [320, 360, 375, 390, 430, 768, 1024, 1280, 1440, 1920]) {
       const fleet = await openFleet(shell);
       await fits(fleet, shell);
       await fleet.locator(".od-dashboard-aircraft-list > button").nth(1).click();
-      const card = shell.getByRole("dialog", { name: "G-OPRA", exact: true });
+      const card = shell.getByRole("dialog", { name: "SIM-002", exact: true });
       await card.waitFor();
       await fits(card, shell);
       await card.getByRole("button", { name: "Inspect associated contract" }).click();

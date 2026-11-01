@@ -16,7 +16,7 @@ import "../../styles/globe-intelligence.css";
 const CesiumFlightGlobe = lazy(() => import("../demoRedesign/CesiumFlightGlobe"));
 const aviationProvider = getAviationProvider();
 
-export default function FlightOperations({ onAircraftSelect, selectedAircraftId, contractIds, fleetRequest = 0 }) {
+export default function FlightOperations({ onAircraftSelect, selectedAircraftId, contractIds, fleetRequest = 0, onAskMatt }) {
   const headingId = useId();
   const [aircraft, setAircraft] = useState([]);
   const [weather, setWeather] = useState(null);
@@ -120,6 +120,7 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
   }, [selectedAircraftId]);
   useEffect(() => {
     onAircraftSelect?.(selected || null);
+    window.dispatchEvent(new CustomEvent("operion:aviation-context", { detail: { flight: selected || null } }));
   }, [selected, onAircraftSelect]);
   useEffect(() => { setSelectedObject(null); }, [filters, filter, query, contractIds]);
 
@@ -148,7 +149,7 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
   return <section ref={workspaceRef} className="od-dashboard-aviation od-aviation-workspace" aria-labelledby={headingId}>
     <header className="od-dashboard-aviation-header">
       <div>
-        <span className="od-eyebrow">Europe · illustrative aircraft operations</span>
+        <span className="od-eyebrow">Global · simulated route operations</span>
         <h2 id={headingId}>Global Fleet Operations</h2>
         <p className="od-intelligence-notice">{GLOBE_DEMO_NOTICE}</p>
       </div>
@@ -231,11 +232,11 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
               <button type="button" className="od-button" onClick={resetFilters}>Clear fleet filters</button>
             </section>
             {alertsOpen && <GlobeAlerts records={matchingAlerts} allRecords={allAlerts} filters={alertFilters} onChange={setAlertFilters} onSelect={selectAircraft} onClose={() => { setAlertsOpen(false); alertsButtonRef.current?.focus({ preventScroll: true }); }}/>}
-            {selected && aircraftPopupOpen && !contractOpen && <div ref={inspectButtonRef}><AircraftInfoPopup key={selected.id} aircraft={selected} onClose={closeAircraftPopup} selectedAlertId={selectedAlertId} onInspectContract={() => setContractOpen(true)}/></div>}
+            {selected && aircraftPopupOpen && !contractOpen && <div ref={inspectButtonRef}><AircraftInfoPopup key={selected.id} aircraft={selected} onClose={closeAircraftPopup} selectedAlertId={selectedAlertId} onInspectContract={() => setContractOpen(true)} onAskMatt={onAskMatt}/></div>}
             {selected && contractOpen && <ContractIntelligencePanel aircraft={selected} onClose={() => { setContractOpen(false); requestAnimationFrame(() => inspectButtonRef.current?.querySelector(".od-button")?.focus({ preventScroll: true })); }}/>}
           </CesiumFlightGlobe>
         </Suspense>
-        <footer className="od-dashboard-globe-footer"><span><i/>{intelligenceFilters.scope || "All markets"} · illustrative positions</span><span role="status">{visibleAircraft.length} aircraft shown</span><span>Not live flight or contract data</span></footer>
+        <footer className="od-dashboard-globe-footer"><span><i/>{intelligenceFilters.scope || "All markets"} · simulated positions</span><span role="status">{visibleAircraft.length} simulated flights shown</span><span>Not live flight or contract data</span></footer>
       </section>
       <details className="od-dashboard-flight-stats-wrap"><summary>Prepared fleet summary · not portfolio intelligence</summary><div className="od-dashboard-flight-stats" aria-label="Synthetic aviation summary">
         {[

@@ -57,7 +57,7 @@ const WORKSPACE_SECTIONS = Object.freeze({
   "missing-terms": "Missing / Unclear",
   actions: "Actions",
   evidence: "Evidence",
-  assistant: "Q&A",
+  assistant: "Ask Matt",
   clauses: "Clauses",
   search: "Search",
 });

@@ -4,6 +4,28 @@
 .od-shell .od-aircraft-popup.od-dashboard-flight-details { background: #fff; box-shadow: 0 4px 12px #001c551f; contain: layout paint; }
 .od-shell .od-globe-contract-panel { z-index: 6; border: 1px solid #b7d4ee; border-radius: 14px; }
 .od-shell .od-globe-contract-panel blockquote { margin-inline: 0; padding: 12px; border-left: 3px solid #0066d9; background: #f2f8ff; }
+.od-shell .od-aircraft-popup.od-dashboard-flight-details.od-globe-spatial-infocard { border: 1px solid #9fc5e4; border-radius: 16px 7px 16px 7px; background: linear-gradient(145deg, #fff 20%, #f2f8ff 100%); box-shadow: 0 22px 56px -28px #052d5277, inset 0 1px #fff; animation: od-globe-infocard-in 220ms cubic-bezier(.2,.8,.2,1) both; }
+.od-shell .od-aircraft-popup.od-dashboard-flight-details.od-globe-spatial-infocard.is-closing { animation: od-globe-infocard-out 150ms ease-in both; pointer-events: none; }
+@keyframes od-globe-infocard-in { from { opacity: 0; transform: translateY(8px) scale(.992); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes od-globe-infocard-out { to { opacity: 0; transform: translateY(6px) scale(.995); } }
+.od-shell .od-globe-spatial-infocard .od-aircraft-popup-header { padding-bottom: 12px; border-bottom: 1px solid #d5e6f4; }
+.od-shell .od-globe-spatial-infocard .od-dashboard-plane-icon { color: #0066cf; background: linear-gradient(145deg, #eaf6ff, #d6ebfb); box-shadow: 0 5px 16px -10px #0066cf99; }
+.od-shell .od-globe-flight-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-block: 12px; padding: 10px; border: 1px solid #d2e4f2; border-radius: 11px; background: #f8fcffcc; }
+.od-shell .od-globe-flight-meta > span { min-width: 0; display: grid; gap: 3px; color: #57728a; font-size: 10px; line-height: 1.4; }
+.od-shell .od-globe-flight-meta strong { color: #173c5b; font-size: 11px; font-weight: 650; overflow-wrap: anywhere; }
+.od-shell .od-globe-operational-exposure ul, .od-shell .od-globe-exposure-summary ul { display: grid; gap: 7px; margin: 10px 0; padding: 0; list-style: none; }
+.od-shell .od-globe-operational-exposure li { display: grid; grid-template-columns: minmax(90px, .34fr) minmax(0, 1fr); gap: 8px; padding: 8px 10px; border: 1px solid #d9e8f4; border-radius: 9px; background: #fbfdff; color: #365772; font-size: 11px; line-height: 1.5; }
+.od-shell .od-globe-operational-exposure li strong { color: #173c5b; }
+.od-shell .od-globe-exposure-summary { margin-block: 12px; padding: 12px; border: 1px solid #bfd9ee; border-left: 3px solid #2783c5; border-radius: 10px; background: linear-gradient(120deg, #f8fcff, #edf6fd); }
+.od-shell .od-globe-exposure-summary h4 { margin-top: 0; }
+.od-shell .od-globe-exposure-summary li { color: #49677f; font-size: 11px; line-height: 1.5; }
+.od-shell .od-globe-legal-candidates > article { display: grid; gap: 5px; margin-block: 9px; padding: 10px; border: 1px solid #d1e2f0; border-radius: 10px; background: #fbfdff; }
+.od-shell .od-globe-legal-candidates > article > span { color: #456b89; font-size: 11px; }
+.od-shell .od-globe-legal-candidates > article p { margin: 2px 0; }
+.od-shell .od-globe-legal-candidates a, .od-shell .od-globe-contract-panel a { color: #005aa9; font-size: 11px; overflow-wrap: anywhere; }
+.od-shell .od-globe-ask-matt { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 12px; border-color: #9ac5e6; background: linear-gradient(105deg, #f4faff, #e5f3ff); color: #124e7c; }
+.od-shell .od-globe-ask-matt:hover { background: #dcedfb; box-shadow: 0 6px 18px -10px #0066cf99; }
+.od-shell .od-globe-spatial-infocard :is(p, dd, blockquote, li, a, strong, small) { overflow-wrap: anywhere; }
 .od-shell .od-intelligence-filter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-block: 8px; }
 .od-shell .od-intelligence-filter-grid label { min-width: 0; display: grid; gap: 4px; }
 .od-shell .od-intelligence-filter-grid select { width: 100%; min-width: 0; min-height: 44px; border: 1px solid #b7d4ee; border-radius: 8px; background: #fff; color: #214766; }
@@ -18,4 +40,10 @@
   .od-shell .od-globe-alerts-toggle { top: 60px; left: 6px; max-width: calc(100% - 110px); }
   .od-shell .od-globe-contract-panel.od-aircraft-popup { bottom: 2px; left: 0; width: 100%; top: auto; max-height: min(62%, calc(100% - 116px)); }
   .od-shell .od-globe-alerts.od-globe-fleet-popup { max-height: min(65%, calc(100% - 116px)); }
+  .od-shell .od-globe-flight-meta { grid-template-columns: minmax(0, 1fr); }
 }
+@media (prefers-reduced-motion: reduce) {
+  .od-shell .od-aircraft-popup.od-dashboard-flight-details.od-globe-spatial-infocard,
+  .od-shell .od-aircraft-popup.od-dashboard-flight-details.od-globe-spatial-infocard.is-closing { animation-duration: 1ms; }
+}
+.od-globe-imagery-status { position: absolute; bottom: 6px; left: 8px; max-width: calc(100% - 120px); padding: 6px 8px; background: #fffffff0; color: #19344f; border-radius: 6px; font-size: 11px; pointer-events: none; }

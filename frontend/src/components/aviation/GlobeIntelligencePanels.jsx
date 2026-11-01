@@ -48,7 +48,7 @@ export function GlobeAlerts({ records, allRecords, filters, onChange, onSelect, 
 
 export function ContractIntelligencePanel({ aircraft, onClose }) {
   const closeRef = useRef(null);
-  const contract = aircraft.intelligence.contract, exposure = aircraft.intelligence.exposure;
+  const { contract, exposure, legal } = aircraft.intelligence;
   useEffect(() => { closeRef.current?.focus({ preventScroll: true }); }, []);
   return <section className="od-aircraft-popup od-dashboard-flight-details od-globe-contract-panel" role="dialog" aria-modal="false" aria-label="Contextual contract inspection"
     onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onClose(); } }}
@@ -62,7 +62,9 @@ export function ContractIntelligencePanel({ aircraft, onClose }) {
     {contract.obligation ? <><p>{contract.obligation.title}</p><p>{contract.obligation.id} · {contract.obligation.status} · {contract.obligation.deadline}</p></> : <p>Obligation not established.</p>}
     <h4>Triggering event</h4><p>{aircraft.intelligence.event.title} · {aircraft.intelligence.event.at}</p>
     <dl className="od-dashboard-flight-facts">{Object.entries(contract.provisions).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
-    <h4>{exposure.state}</h4><p>{exposure.basis}</p><p>Confidence: {exposure.confidence}</p><p>{exposure.assumptions}</p>
+    <h4>{exposure.state}</h4>{exposure.amount !== null && <p>{exposure.currency} {exposure.amount.toLocaleString()} · hypothetical scenario calculation only</p>}<p>{exposure.basis}</p><p>Confidence: {exposure.confidence}</p><p>{exposure.assumptions}</p>
+    <h4>Legal-scope candidates · not legal advice</h4><p>{legal.notice}</p><p>Governing law: {legal.governingLaw}</p>
+    {legal.candidates.map((candidate) => <article key={candidate.id}><strong>{candidate.framework} · {candidate.confidence}</strong><p>{candidate.basis}</p><p>Potential scope: {candidate.scope}</p><p>Conditions: {candidate.conditions}</p><a href={candidate.source.url} target="_blank" rel="noopener noreferrer">Source: {candidate.source.title}</a></article>)}
     <h4>Explainable recommendations</h4>
     {aircraft.intelligence.recommendations.map((action) => <article key={action.id}><strong>{action.title}</strong><p>{action.reason}</p></article>)}
     {!aircraft.intelligence.recommendations.length && <p>No action suggested by this scenario.</p>}

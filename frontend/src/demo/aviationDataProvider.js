@@ -1,4 +1,4 @@
-import { createDemonstrationAircraft, EUROPEAN_AIRPORTS, GLOBE_DEMO_NOTICE } from "./globeIntelligenceData.js";
+import { createDemonstrationAircraft, GLOBAL_AIRPORTS, GLOBE_DEMO_NOTICE } from "./globeIntelligenceData.js";
 
 const aircraft = createDemonstrationAircraft();
 const weatherCells = [
@@ -49,17 +49,17 @@ function buildDependencyGraph(id) {
 
 function cloneAircraft(item) {
   if (!item) return null;
-  const routeAirport = (code) => ({ code, longitude: EUROPEAN_AIRPORTS[code][0], latitude: EUROPEAN_AIRPORTS[code][1] });
+  const routeAirport = (code) => ({ code, longitude: GLOBAL_AIRPORTS[code][0], latitude: GLOBAL_AIRPORTS[code][1] });
   return {
     ...structuredClone(item),
-    route: { origin: routeAirport(item.origin), destination: routeAirport(item.destination) },
+    route: { ...structuredClone(item.route || {}), origin: routeAirport(item.origin), destination: routeAirport(item.destination) },
     weather: { cellId: null, condition: item.status === "Weather impact" ? item.intelligence.event.title : "No verified weather observations", severity: item.status === "Weather impact" ? "moderate" : "none", routeImpact: item.status === "Weather impact" ? "Illustrative review" : "Unknown" },
   };
 }
 
 export const SyntheticAviationProvider = {
   mode: "synthetic", sourceLabel: GLOBE_DEMO_NOTICE,
-  async getSummary() { return { state: "synthetic", liveFlights: aircraft.length, trackedAircraft: aircraft.length, activeRoutes: aircraft.length, flightAlerts: aircraft.flatMap((item) => item.alerts).length, deltas: { liveFlights: 0, trackedAircraft: 0, activeRoutes: 0, flightAlerts: 0 } }; },
+  async getSummary() { return { state: "synthetic", liveFlights: 0, trackedAircraft: aircraft.length, activeRoutes: aircraft.length, flightAlerts: aircraft.flatMap((item) => item.alerts).length, deltas: { liveFlights: 0, trackedAircraft: 0, activeRoutes: 0, flightAlerts: 0 } }; },
   async getAircraft() { return aircraft.map(cloneAircraft); },
   async getFlights() { return aircraft.map(cloneAircraft); },
   async getAircraftById(id) { return cloneAircraft(aircraft.find((item) => item.id === id)); },

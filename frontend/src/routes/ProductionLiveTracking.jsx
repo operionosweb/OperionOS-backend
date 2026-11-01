@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { CloudRain, Filter, LocateFixed, Plane, Radio, Route, Search, ShieldAlert, X } from "lucide-react";
+import { CloudRain, Filter, LocateFixed, Plane, Radio, Route, Search, ShieldAlert, Sparkles, X } from "lucide-react";
 import { useOrganization } from "../context/OrganizationContext";
 import useAviationTracking from "../hooks/useAviationTracking";
 import { getAircraftIntelligence, getAviationWeather } from "../lib/aviationApi";
@@ -87,6 +87,12 @@ export default function ProductionLiveTracking() {
           {intelligence.contracts.filter((contract) => contract.contract_id === inspectedContractId).map((contract) => <section key={contract.contract_id} role="region" aria-label="In-place customer contract inspection">
             <h4>{contract.title}</h4><p>{contract.contract_id} · {contract.relationship_type} · confidence: {contract.confidence ?? "Not provided"}</p>
             <p>The authorized aircraft relationship endpoint supplies associations and counts, not clause excerpts or financial terms. Exposure not yet quantified. Obtain applicable clauses, notice periods, exclusions and event attribution before assessing any breach.</p>
+            <button type="button" className="op-button-secondary" onClick={() => {
+              const detail = { contract: { id: contract.contract_id, title: contract.title } };
+              const analysisRunId = contract.analysis_run_id || contract.analysisRunId;
+              if (analysisRunId) detail.analysisRunId = analysisRunId;
+              window.dispatchEvent(new CustomEvent("operion:assistant", { detail }));
+            }}><Sparkles size={15}/>Ask Matt about this contract</button>
             <button type="button" className="op-button-secondary" onClick={() => setInspectedContractId(null)}>Return to aircraft</button>
           </section>)}
           <button className="op-button-primary" onClick={() => setDependenciesOpen(true)}>View Contract Dependency Tree</button>

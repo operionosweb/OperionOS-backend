@@ -20,7 +20,7 @@ export default function AskOperionSection() {
             AI Assistant — In Development
           </span>
           <h2 className="op-heading-lg" style={{ marginBottom: "var(--op-space-4)" }}>
-            Ask Operion in natural language.
+            Ask Matt in natural language.
           </h2>
           <p className="op-body-lg">
             Instead of searching through contracts manually, ask questions in

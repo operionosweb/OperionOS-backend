@@ -19,16 +19,67 @@ export function aircraftOrientation(position, heading) {
 
 export function aircraftRoutePositions(origin, current, destination) {
   const positions = [];
-  for (const [start, end] of [[origin, current], [current, destination]]) {
-    const geodesic = new EllipsoidGeodesic(
-      Cartographic.fromDegrees(start[0], start[1]), Cartographic.fromDegrees(end[0], end[1]),
-    );
-    for (let index = positions.length ? 1 : 0; index <= 32; index++) {
-      const point = geodesic.interpolateUsingFraction(index / 32);
+  const segments = destination ? [[origin, current], [current, destination]] : [[origin, current]];
+  for (const [start, end] of segments) {
+    const geodesic = routeGeodesic(start, end);
+    for (let index = positions.length ? 1 : 0; index <= 64; index++) {
+      const point = geodesic.interpolateUsingFraction(index / 64);
       positions.push(Cartesian3.fromRadians(point.longitude, point.latitude, 16000));
     }
   }
   return positions;
+}
+
+function routeGeodesic(origin, destination) {
+  return new EllipsoidGeodesic(
+    Cartographic.fromDegrees(origin[0], origin[1]),
+    Cartographic.fromDegrees(destination[0], destination[1]),
+  );
+}
+
+function routePoint(origin, destination, fraction) {
+  const point = routeGeodesic(origin, destination).interpolateUsingFraction(Math.max(0, Math.min(1, fraction)));
+  return {
+    longitude: ((point.longitude * 180 / Math.PI + 540) % 360) - 180,
+    latitude: point.latitude * 180 / Math.PI,
+  };
+}
+
+function initialBearing(from, to) {
+  const longitudeDelta = ((to.longitude - from.longitude + 540) % 360 - 180) * Math.PI / 180;
+  const latitude1 = from.latitude * Math.PI / 180;
+  const latitude2 = to.latitude * Math.PI / 180;
+  return (Math.atan2(
+    Math.sin(longitudeDelta) * Math.cos(latitude2),
+    Math.cos(latitude1) * Math.sin(latitude2) - Math.sin(latitude1) * Math.cos(latitude2) * Math.cos(longitudeDelta),
+  ) * 180 / Math.PI + 360) % 360;
+}
+
+export function aircraftRoutePosition(origin, destination, fraction) {
+  return routePoint(origin, destination, fraction);
+}
+
+export function aircraftRouteHeading(origin, destination, fraction) {
+  const step = 0.0001;
+  const fromFraction = fraction >= 1 ? Math.max(0, fraction - step) : fraction;
+  const toFraction = fraction >= 1 ? fraction : Math.min(1, fraction + step);
+  return initialBearing(routePoint(origin, destination, fromFraction), routePoint(origin, destination, toFraction));
+}
+
+export function aircraftRouteDistance(origin, destination) {
+  return routeGeodesic(origin, destination).surfaceDistance;
+}
+
+export function advanceAircraftAlongRoute(origin, destination, fraction, distanceMeters) {
+  const distance = aircraftRouteDistance(origin, destination);
+  const nextFraction = distance > 0 ? Math.min(1, fraction + Math.max(0, distanceMeters) / distance) : 1;
+  const position = routePoint(origin, destination, nextFraction);
+  return {
+    ...position,
+    fraction: nextFraction,
+    heading: aircraftRouteHeading(origin, destination, nextFraction),
+    arrived: nextFraction >= 1,
+  };
 }
 
 export function advanceAircraftPosition(position, heading, distanceMeters) {

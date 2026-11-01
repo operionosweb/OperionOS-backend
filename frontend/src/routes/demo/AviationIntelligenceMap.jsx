@@ -626,7 +626,7 @@ export default function AviationIntelligenceMap() {
               }
             >
               <Sparkles size={14} />
-              Ask Operion
+              Ask Matt
             </button>
           </div>
         }
@@ -672,7 +672,7 @@ export default function AviationIntelligenceMap() {
             }
           >
             <Sparkles size={15} />
-            Ask Operion about this aircraft
+            Ask Matt about this aircraft
           </button>
         </div>
         {graph && (

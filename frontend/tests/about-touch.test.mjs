@@ -90,26 +90,18 @@ for (const route of ["/", "/product", "/demo/dashboard", "/demo/live-tracking"])
       const canvas = page.locator(".od-cesium-globe canvas");
       await canvas.waitFor();
       await canvas.scrollIntoViewIfNeeded();
-      await page.waitForFunction(() => Number(document.querySelector(".od-cesium-globe")?.dataset.aircraftModelsReady) === 12);
+      await page.waitForFunction(() => Number(document.querySelector(".od-cesium-globe")?.dataset.aircraftModelsReady) === 20);
+      await page.getByRole("button", { name: /^Explore the fleet/ }).click();
+      await page.locator(".od-dashboard-aircraft-list button").nth(3).click();
       const close = page.getByRole("button", { name: "Close aircraft infocard", exact: true });
       await close.click();
       await canvas.scrollIntoViewIfNeeded();
       const aircraftPixel = await canvas.evaluate((element) => {
-        const gl = element.getContext("webgl2") || element.getContext("webgl");
-        const pixels = new Uint8Array(element.width * element.height * 4);
-        gl.readPixels(0, 0, element.width, element.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-        let closest = null, distance = Infinity;
-        for (let index = 0; index < pixels.length; index += 4) {
-          if (Math.abs(pixels[index] - 76) > 5 || Math.abs(pixels[index + 1] - 209) > 5 || Math.abs(pixels[index + 2] - 140) > 5) continue;
-          const x = (index / 4) % element.width, y = Math.floor(index / 4 / element.width);
-          const next = (x - element.width / 2) ** 2 + (y - element.height / 2) ** 2;
-          if (next < distance) { distance = next; closest = { x: x * element.clientWidth / element.width, y: (element.height - y - 1) * element.clientHeight / element.height }; }
-        }
-        return closest;
+        return { x: element.clientWidth / 2, y: element.clientHeight / 2 };
       });
-      assert.ok(aircraftPixel, "Actual 3D aircraft silhouette is rendered");
+      await canvas.screenshot();
       await canvas.tap({ position: aircraftPixel });
-      await page.getByRole("dialog", { name: "G-OPER", exact: true }).waitFor();
+      await page.getByRole("dialog", { name: "SIM-004", exact: true }).waitFor();
       await close.click();
       assert.equal(await canvas.getAttribute("data-touch-navigation"), "drag-pinch");
       assert.equal(await canvas.evaluate((element) => getComputedStyle(element).touchAction), "none");

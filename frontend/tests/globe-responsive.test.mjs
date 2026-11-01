@@ -60,7 +60,7 @@ for (const width of [320, 390, 768, 1440]) {
         assert.ok(statuses.length > 0 && statuses.every((status) => status !== "On time"));
         await fleet.getByRole("button", { name: "Clear fleet filters", exact: true }).click();
         await fleet.locator(".od-dashboard-aircraft-list button").nth(1).click();
-        const card = shell.getByRole("dialog", { name: "G-OPRA", exact: true });
+        const card = shell.getByRole("dialog", { name: "SIM-002", exact: true });
         await card.waitFor();
         await assertPanelFits(card, shell);
         const controls = await shell.locator(".od-map-controls").boundingBox(), cardBox = await card.boundingBox();
@@ -209,7 +209,7 @@ for (const width of [390, 1440]) {
         await page.evaluate(() => { window.aircraftPickReadbacks = 0; window.aircraftInputTimings = []; });
         if (width === 390) await page.touchscreen.tap(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
         else await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-        await page.getByRole("dialog", { name: "G-OPER", exact: true }).waitFor();
+        await page.getByRole("dialog", { name: "SIM-001", exact: true }).waitFor();
         await page.waitForTimeout(250);
         samples.push(await page.evaluate(() => ({ readbacks: window.aircraftPickReadbacks, handlers: window.aircraftInputTimings })));
         await page.getByRole("button", { name: "Close aircraft infocard", exact: true }).click();
@@ -225,7 +225,7 @@ for (const width of [390, 1440]) {
       } finally { await context.close(); }
     }
     const baseline = baselineOrigin ? await measure(baselineOrigin, 12) : null;
-    const candidate = await measure(origin, 10);
+    const candidate = await measure(origin, 20);
     if (baseline !== null) assert.ok(candidate <= baseline, `Aircraft selection regressed on the same runtime: candidate ${candidate}ms, baseline ${baseline}ms`);
   });
 }
@@ -273,7 +273,7 @@ for (const [width, height] of [[390, 844], [844, 390]]) {
       await assertPanelFits(fleet, shell);
       assert.ok((await shell.boundingBox()).height >= 180, "Fullscreen leaves a useful canvas in portrait and landscape");
       await fleet.locator(".od-dashboard-aircraft-list button").nth(1).click();
-      await assertPanelFits(shell.getByRole("dialog", { name: "G-OPRA", exact: true }), shell);
+      await assertPanelFits(shell.getByRole("dialog", { name: "SIM-002", exact: true }), shell);
       await page.getByRole("button", { name: "Exit full screen", exact: true }).click();
     } finally { await context.close(); }
   });

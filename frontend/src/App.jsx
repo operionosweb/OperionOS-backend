@@ -10,6 +10,7 @@ import RouteMetadata from "./components/seo/RouteMetadata";
 import Analytics from "./components/analytics/Analytics";
 import { LoadingState } from "./components/ui/States";
 import { ORGANIZATION_PERMISSIONS, PLATFORM_PERMISSIONS } from "./lib/permissions";
+import MattSessionBoundary from "./components/matt/MattSessionBoundary";
 
 const ProductionLayout = lazy(() => import("./components/layout/ProductionLayout"));
 const DemoShell = lazy(() => import("./components/layout/DemoShell"));
@@ -64,6 +65,7 @@ export default function App() {
   return (
     <AuthProvider>
       <OrganizationProvider>
+        <MattSessionBoundary>
         <BrowserRouter>
           <ScrollToTop />
           <Suspense fallback={<div style={{ padding: 32 }}><LoadingState label="Preparing Operion…" /></div>}>
@@ -122,6 +124,7 @@ export default function App() {
               <Route path="intelligence" element={<Navigate to="../aviation" replace />} />
               <Route path="live-tracking" element={<ProductionLiveTracking />} />
               <Route path="matt" element={<Matt />} />
+              <Route path="matt/report" element={<Matt reportOnly />} />
               <Route path="*" element={<Navigate to="dashboard" replace />} />
             </Route>
 
@@ -134,6 +137,7 @@ export default function App() {
               <Route path="upload" element={<DemoUpload />} />
               <Route path="live-tracking" element={<DemoLiveTracking />} />
               <Route path="matt" element={<Matt demo />} />
+              <Route path="matt/report" element={<Matt demo reportOnly />} />
               <Route path="intelligence" element={<DemoIntelligence />} />
               <Route path=":admin" element={<DemoAdmin />} />
             </Route>
@@ -143,6 +147,7 @@ export default function App() {
           <RouteMetadata />
           <Analytics />
         </BrowserRouter>
+        </MattSessionBoundary>
       </OrganizationProvider>
     </AuthProvider>
   );

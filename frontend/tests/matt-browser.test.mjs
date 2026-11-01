@@ -73,15 +73,22 @@ async function fixture({ authenticated = false, denied = false, width = 1440, re
   return { context, page, requests, media, errors, state };
 }
 
+async function enableText(page) {
+  await page.getByRole("checkbox", { name: "Show response text", exact: true }).check();
+  await page.getByRole("button", { name: "Type a question", exact: true }).click();
+}
+
 test("demo reuses grounded lease evidence, supports follow-ups and rejects unestablished fuel exposure", async () => {
   const f = await fixture();
   try {
     await f.page.goto(`${origin}/demo/matt`);
+    await enableText(f.page);
     await f.page.getByRole("button", { name: "What are the key obligations?", exact: true }).click();
     await f.page.locator(".matt-answer").waitFor();
     assert.ok(await f.page.locator(".matt-findings li").count() > 0);
     await f.page.getByText(/Supporting source evidence \(/).click();
-    assert.ok(await f.page.locator(".matt-report blockquote").count() > 0);
+    assert.ok(await f.page.locator(".matt-report .od-evidence").count() > 0);
+    await f.page.waitForFunction(() => document.querySelector(".matt-page")?.dataset.state === "SUCCESS");
     assert.equal(await f.page.locator(".matt-page").getAttribute("data-state"), "SUCCESS");
     const currentHref = f.page.url();
     await f.page.getByRole("button", { name: "Explain the second finding", exact: true }).click();
@@ -95,8 +102,23 @@ test("demo reuses grounded lease evidence, supports follow-ups and rejects unest
     assert.equal(f.requests.length, 0, "Demo never queries customer APIs");
     assert.ok(!f.media.includes("/matt/reference.mp4"), "No initial video download");
     assert.deepEqual(f.errors, []);
+    await f.page.getByText("Voice and privacy settings", { exact: true }).click();
     await f.page.getByRole("button", { name: "Clear conversation", exact: true }).click();
     assert.equal(await f.page.locator(".matt-answer").count(), 0);
+  } finally { await f.context.close(); }
+});
+
+test("normal production-style build publishes the unified cinematic experience without fake media", async () => {
+  const f = await fixture();
+  try {
+    await f.page.goto(`${origin}/demo/matt?studio=1`);
+    await f.page.getByRole("button", { name: "What are the key obligations?", exact: true }).waitFor();
+    assert.equal(await f.page.locator(".matt-page").getAttribute("data-experience"), "unified-matt");
+    assert.equal(await f.page.locator(".matt-studio-notice").count(), 1, "Missing real video is disclosed in production");
+    await enableText(f.page);
+    await f.page.getByRole("button", { name: "What are the key obligations?", exact: true }).click();
+    await f.page.locator(".matt-answer").waitFor();
+    assert.deepEqual(f.errors, []);
   } finally { await f.context.close(); }
 });
 
@@ -105,6 +127,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
     const f = await fixture({ width, reducedMotion: width === 390 });
     try {
       await f.page.goto(`${origin}/demo/matt`);
+      await enableText(f.page);
       await f.page.getByRole("heading", { name: "Let's look at what matters.", exact: true }).waitFor();
       await f.page.getByRole("button", { name: "What are the key obligations?", exact: true }).click();
       await f.page.locator(".matt-answer").waitFor();
@@ -113,7 +136,7 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
       assert.ok(await f.page.locator(".matt-character img").evaluate((image) => image.complete && image.naturalWidth > 0));
       if (width === 390) {
         assert.equal(await f.page.locator(".matt-character img").evaluate((image) => getComputedStyle(image).animationName), "none");
-        assert.equal(await f.page.getByRole("checkbox", { name: /Enable speaking video/ }).isDisabled(), true);
+        assert.equal(await f.page.getByRole("checkbox", { name: /Enable speaking video/ }).count(), 0);
       }
       assert.deepEqual(f.errors, []);
     } finally { await f.context.close(); }
@@ -128,6 +151,7 @@ test("authenticated route scopes existing endpoints, supports follow-ups and ign
       throw new Error(`Matt entry diagnostic: ${f.page.url()}; ${await f.page.locator("main").innerText()}; requests=${JSON.stringify(f.requests)}; errors=${JSON.stringify(f.errors)}`);
     });
     await f.page.getByRole("combobox", { name: "Contract context" }).selectOption("lease-one");
+    await enableText(f.page);
     await f.page.getByRole("textbox", { name: "Ask Matt", exact: true }).fill("Review maintenance risks");
     await f.page.getByRole("button", { name: "Send", exact: true }).click();
     await f.page.getByText("Offline evidence response for first lease.", { exact: true }).waitFor();
@@ -193,10 +217,11 @@ test("organization role lookup failures are explicit and cannot request Matt con
   } finally { await f.context.close(); }
 });
 
-test("voice is explicit and mocked speaking footage stops immediately on interruption", async () => {
+test("voice input is explicit and generic video/TTS cannot masquerade as synchronized Matt", async () => {
   const f = await fixture({ mockVoice: true });
   try {
     await f.page.goto(`${origin}/demo/matt`);
+    await enableText(f.page);
     await f.page.getByRole("button", { name: "What are the key obligations?", exact: true }).click();
     await f.page.locator(".matt-answer").waitFor();
     await f.page.getByRole("button", { name: "Microphone", exact: true }).click();
@@ -207,17 +232,14 @@ test("voice is explicit and mocked speaking footage stops immediately on interru
     await f.page.getByRole("button", { name: "Microphone", exact: true }).click();
     await f.page.getByRole("alert").filter({ hasText: "denied" }).waitFor();
     assert.equal(await f.page.evaluate(() => window.__mattSpeech.microphones), 1);
-    await f.page.getByRole("checkbox", { name: /Enable speaking video/ }).check();
+    assert.equal(await f.page.getByRole("checkbox", { name: /Enable speaking video/ }).count(), 0);
+    assert.equal(await f.page.getByRole("button", { name: "Read answer", exact: true }).count(), 0);
     assert.ok(!f.media.includes("/matt/reference.mp4"));
-    const motionRequest = f.page.waitForRequest("**/matt/reference.mp4");
-    await f.page.getByRole("button", { name: "Read answer", exact: true }).click();
-    await f.page.locator(".matt-page[data-state='SPEAKING']").waitFor();
-    await motionRequest;
-    await f.page.locator(".matt-character video.is-speaking").waitFor();
+    assert.equal(await f.page.evaluate(() => window.__mattSpeech.starts), 0);
     await f.page.getByRole("button", { name: "Interrupt / stop speaking", exact: true }).click();
     await f.page.locator(".matt-page[data-state='INTERRUPTED']").waitFor();
-    assert.equal(await f.page.locator("video").evaluate((video) => video.paused), true);
-    assert.ok(await f.page.evaluate(() => window.__mattSpeech.cancels) > 0);
+    assert.equal(await f.page.locator("video").count(), 0);
+    assert.equal(await f.page.evaluate(() => window.__mattSpeech.starts), 0, "No independent TTS was started");
     assert.equal(await f.page.locator(".matt-answer").count(), 1);
     await f.page.keyboard.press("Tab");
     assert.ok(await f.page.evaluate(() => document.activeElement !== document.body));

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Cartesian2 from "@cesium/engine/Source/Core/Cartesian2.js";
 import Cartesian3 from "@cesium/engine/Source/Core/Cartesian3.js";
 import Color from "@cesium/engine/Source/Core/Color.js";
@@ -7,12 +7,12 @@ import LabelStyle from "@cesium/engine/Source/Scene/LabelStyle.js";
 import ScreenSpaceEventType from "@cesium/engine/Source/Core/ScreenSpaceEventType.js";
 import VerticalOrigin from "@cesium/engine/Source/Scene/VerticalOrigin.js";
 import Viewer from "@cesium/widgets/Source/Viewer/Viewer.js";
-import UrlTemplateImageryProvider from "@cesium/engine/Source/Scene/UrlTemplateImageryProvider.js";
-import { getAviationMapStyle } from "../../demo/aviationMapLayers";
+import { attachGlobeImagery } from "./globeImagery";
 import { LocateFixed } from "lucide-react";
 import { attachGlobeTouchControls } from "./globeTouchControls";
 import { pickGlobeAircraft } from "./pickGlobeAircraft";
 import "cesium/Build/Cesium/Widgets/widgets.css";
+import "../../styles/globe-intelligence.css";
 
 function validPosition(position) {
   return Number.isFinite(position?.longitude) && Number.isFinite(position?.latitude);
@@ -22,6 +22,7 @@ export default function ProductionFlightGlobe({ aircraft, selectedId, onSelect }
   const hostRef = useRef(null);
   const viewerRef = useRef(null);
   const selectRef = useRef(onSelect);
+  const [imageryError, setImageryError] = useState("");
   selectRef.current = onSelect;
 
   useEffect(() => {
@@ -34,12 +35,9 @@ export default function ProductionFlightGlobe({ aircraft, selectedId, onSelect }
       contextOptions: { webgl: { preserveDrawingBuffer: true } },
     });
     viewerRef.current = viewer;
-    viewer.scene.globe.enableLighting = false;
-    viewer.scene.globe.baseColor = Color.fromCssColorString("#dbe8f1");
-    viewer.scene.backgroundColor = Color.fromCssColorString("#eef5fb");
-    viewer.scene.skyBox.show = false;
-    const style = getAviationMapStyle("standard");
-    viewer.imageryLayers.addImageryProvider(new UrlTemplateImageryProvider({ url: style.url, credit: style.credit, maximumLevel: style.maximumLevel }));
+    viewer.scene.globe.enableLighting = true;
+    setImageryError("");
+    const removeImagery = attachGlobeImagery(viewer, { onError: setImageryError });
     aircraft.filter((item) => validPosition(item.position)).forEach((item) => {
       viewer.entities.add({
         id: `aircraft-${item.id}`,
@@ -60,7 +58,7 @@ export default function ProductionFlightGlobe({ aircraft, selectedId, onSelect }
     };
     viewer.screenSpaceEventHandler.setInputAction(({ position }) => selectAtPosition(position), ScreenSpaceEventType.LEFT_CLICK);
     const removeTouchControls = attachGlobeTouchControls(viewer, selectAtPosition);
-    return () => { removeTouchControls(); viewer.destroy(); viewerRef.current = null; };
+    return () => { removeTouchControls(); removeImagery(); viewer.destroy(); viewerRef.current = null; };
   }, [aircraft]);
 
   useEffect(() => {
@@ -81,5 +79,5 @@ export default function ProductionFlightGlobe({ aircraft, selectedId, onSelect }
     });
   }
 
-  return <><div className="op-aviation-globe" ref={hostRef} aria-label="Interactive production aviation globe" /><button type="button" className="op-globe-reset" onClick={resetView} aria-label="Reset view" title="Reset view"><LocateFixed size={18}/></button></>;
+  return <><div className="op-aviation-globe" ref={hostRef} aria-label="Interactive production aviation globe" />{imageryError && <p className="od-globe-imagery-status" role="status">{imageryError}</p>}<button type="button" className="op-globe-reset" onClick={resetView} aria-label="Reset view" title="Reset view"><LocateFixed size={18}/></button></>;
 }

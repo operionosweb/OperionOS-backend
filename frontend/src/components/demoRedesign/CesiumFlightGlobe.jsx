@@ -11,16 +11,15 @@ import Material from "@cesium/engine/Source/Scene/Material.js";
 import PolylineCollection from "@cesium/engine/Source/Scene/PolylineCollection.js";
 import ScreenSpaceEventType from "@cesium/engine/Source/Core/ScreenSpaceEventType.js";
 import SceneMode from "@cesium/engine/Source/Scene/SceneMode.js";
-import UrlTemplateImageryProvider from "@cesium/engine/Source/Scene/UrlTemplateImageryProvider.js";
 import HeightReference from "@cesium/engine/Source/Scene/HeightReference.js";
 import HorizontalOrigin from "@cesium/engine/Source/Scene/HorizontalOrigin.js";
 import LabelStyle from "@cesium/engine/Source/Scene/LabelStyle.js";
 import VerticalOrigin from "@cesium/engine/Source/Scene/VerticalOrigin.js";
 import Viewer from "@cesium/widgets/Source/Viewer/Viewer.js";
 import { LocateFixed, Maximize2, Minimize2, Minus, Plus } from "lucide-react";
-import { getAviationMapStyle } from "../../demo/aviationMapLayers";
+import { attachGlobeImagery } from "../aviation/globeImagery";
 import WeatherMapLayers from "../aviation/WeatherMapLayers";
-import { AIRCRAFT_MODEL_URL, AIRCRAFT_STATUS_COLORS, advanceAircraftPosition, aircraftOrientation, aircraftRoutePositions } from "../aviation/aircraftPose";
+import { AIRCRAFT_MODEL_URL, AIRCRAFT_STATUS_COLORS, advanceAircraftAlongRoute, aircraftOrientation, aircraftRouteHeading, aircraftRoutePosition, aircraftRoutePositions } from "../aviation/aircraftPose";
 import { attachGlobeTouchControls } from "../aviation/globeTouchControls";
 import { pickGlobeAircraft } from "../aviation/pickGlobeAircraft";
 import "cesium/Build/Cesium/Widgets/widgets.css";
@@ -28,7 +27,6 @@ import "cesium/Build/Cesium/Widgets/widgets.css";
 export default function CesiumFlightGlobe({ aircraft, visibleIds, selectedId, onSelect, viewMode = "globe", mapStyle = "standard", weather, weatherEnabled = false, cloudsEnabled = weatherEnabled, windEnabled = false, routesEnabled = true, playing = true, spatialObjects = [], visibleLayers = ["aircraft"], onObjectSelect, children }) {
   const containerRef = useRef(null);
   const viewerRef = useRef(null);
-  const imageryLayerRef = useRef(null);
   const positionsRef = useRef(new Map());
   const routesRef = useRef(new Map());
   const onSelectRef = useRef(onSelect);
@@ -38,6 +36,7 @@ export default function CesiumFlightGlobe({ aircraft, visibleIds, selectedId, on
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
   const [controlError, setControlError] = useState("");
+  const [imageryError, setImageryError] = useState("");
   const [mapViewer, setMapViewer] = useState(null);
   const [providerWeatherActive, setProviderWeatherActive] = useState(false);
   const [modelsReady, setModelsReady] = useState(0);
@@ -63,7 +62,6 @@ export default function CesiumFlightGlobe({ aircraft, visibleIds, selectedId, on
       if (viewer && !viewer.isDestroyed()) viewer.destroy();
       if (modelUrl) URL.revokeObjectURL(modelUrl);
       viewerRef.current = null;
-      imageryLayerRef.current = null;
       positionsRef.current.clear();
       routesRef.current.clear();
       setMapViewer(null);
@@ -87,17 +85,19 @@ export default function CesiumFlightGlobe({ aircraft, visibleIds, selectedId, on
     setControlError("");
     viewerRef.current = viewer;
     setMapViewer(viewer);
+    modelListeners.push(viewer.scene.postRender.addEventListener(() => {
+      if (disposed || !containerRef.current) return;
+      const camera = viewer.camera;
+      containerRef.current.dataset.cameraPose = JSON.stringify(
+        [camera.positionWC, camera.directionWC, camera.upWC].flatMap(({ x, y, z }) => [x, y, z]),
+      );
+    }));
     setup("scene", () => {
-    viewer.scene.globe.enableLighting = false;
+    viewer.scene.globe.enableLighting = true;
     viewer.scene.globe.showGroundAtmosphere = true;
-    viewer.scene.globe.baseColor = Color.fromCssColorString("#dbe8f1");
-    viewer.scene.backgroundColor = Color.fromCssColorString("#eef5fb");
     viewer.scene.skyBox.show = false;
     viewer.scene.fog.enabled = true;
     });
-    const style = getAviationMapStyle(mapStyle);
-    const imagery = new UrlTemplateImageryProvider({ url: style.url, credit: style.credit, maximumLevel: style.maximumLevel });
-    imageryLayerRef.current = setup("imagery", () => viewer.imageryLayers.addImageryProvider(imagery));
     const supportsPolylines = ContextLimits.maximumVertexTextureImageUnits > 0;
     if (!supportsPolylines) setControlError("This graphics device cannot display route lines. Airport endpoints and aircraft details remain available.");
     const routes = supportsPolylines ? setup("route collection", () => viewer.scene.primitives.add(new PolylineCollection())) : null;
@@ -119,13 +119,18 @@ export default function CesiumFlightGlobe({ aircraft, visibleIds, selectedId, on
 
     const routeColors = ["#8b6fe8", "#35a8d4", "#36b77c", "#e19c3a", "#d85b6f", "#6d91df", "#48b4a7", "#ba70cf"];
     aircraft.forEach((item, index) => {
-      positionsRef.current.set(item.id, { longitude: item.longitude, latitude: item.latitude });
+      const origin = item.route?.origin ? [item.route.origin.longitude, item.route.origin.latitude] : null;
+      const destination = item.route?.destination ? [item.route.destination.longitude, item.route.destination.latitude] : null;
+      const fraction = Math.max(0, Math.min(1, item.routeProgress ?? item.route?.progress ?? 0));
+      const current = origin && destination ? aircraftRoutePosition(origin, destination, fraction) : { longitude: item.longitude, latitude: item.latitude };
+      const heading = origin && destination ? aircraftRouteHeading(origin, destination, fraction) : item.heading;
+      positionsRef.current.set(item.id, { ...current, fraction });
       const color = Color.fromCssColorString(AIRCRAFT_STATUS_COLORS[item.status] || "#d9e2f4");
-      const position = Cartesian3.fromDegrees(item.longitude, item.latitude, item.altitude);
+      const position = Cartesian3.fromDegrees(current.longitude, current.latitude, item.altitude);
       setup(`aircraft ${item.id}`, () => viewer.entities.add({
         id: `aircraft-${item.id}`,
         position,
-        orientation: aircraftOrientation(position, item.heading),
+        orientation: aircraftOrientation(position, heading),
         model: {
           scale: 8, minimumPixelSize: item.id === selectedId ? 64 : 44, maximumScale: 250000,
           color, colorBlendMode: ColorBlendMode.MIX, colorBlendAmount: 0.5,
@@ -136,16 +141,14 @@ export default function CesiumFlightGlobe({ aircraft, visibleIds, selectedId, on
         },
         label: { text: item.callsign, font: "600 13px sans-serif", fillColor: Color.WHITE, showBackground: true, backgroundColor: Color.fromCssColorString("#11182cdd"), backgroundPadding: new Cartesian2(8,5), pixelOffset: new Cartesian2(0,-40), style: LabelStyle.FILL, horizontalOrigin: HorizontalOrigin.CENTER, verticalOrigin: VerticalOrigin.BOTTOM, distanceDisplayCondition: new DistanceDisplayCondition(0, 8e6) },
       }));
-      const origin = item.route?.origin ? [item.route.origin.longitude, item.route.origin.latitude] : null;
-      const destination = item.route?.destination ? [item.route.destination.longitude, item.route.destination.latitude] : null;
       if (routes && origin && destination) setup(`route ${item.id}`, () => {
         const route = routes.add({
         id: `route-${item.id}`,
-        positions: aircraftRoutePositions(origin, [item.longitude, item.latitude], destination),
+        positions: aircraftRoutePositions(origin, destination),
         width: item.company ? 2.5 : 1,
         material: Material.fromType(Material.ColorType, { color: Color.fromCssColorString(routeColors[index % routeColors.length]).withAlpha(item.company ? 0.8 : 0.48) }),
         });
-        routesRef.current.set(item.id, { route, origin, destination, color: routeColors[index % routeColors.length] });
+        routesRef.current.set(item.id, { route, color: routeColors[index % routeColors.length] });
         return route;
       });
       if (origin && destination) {
@@ -233,13 +236,14 @@ export default function CesiumFlightGlobe({ aircraft, visibleIds, selectedId, on
           const entity = viewer.entities.getById(`aircraft-${item.id}`);
           if (!entity) return;
           const position = positionsRef.current.get(item.id);
-          if (!position || !Number.isFinite(item.heading)) return;
-          Object.assign(position, advanceAircraftPosition(position, item.heading, item.speed / 3.6 * 1.8));
-          const worldPosition = Cartesian3.fromDegrees(position.longitude, position.latitude, item.altitude);
+          const origin = item.route?.origin ? [item.route.origin.longitude, item.route.origin.latitude] : null;
+          const destination = item.route?.destination ? [item.route.destination.longitude, item.route.destination.latitude] : null;
+          if (!position || !origin || !destination || !Number.isFinite(item.speed)) return;
+          const next = advanceAircraftAlongRoute(origin, destination, position.fraction, item.speed / 3.6 * 1.8 * (item.simulationRate || 1));
+          Object.assign(position, next);
+          const worldPosition = Cartesian3.fromDegrees(next.longitude, next.latitude, item.altitude);
           entity.position = worldPosition;
-          entity.orientation = aircraftOrientation(worldPosition, item.heading);
-          const routeState = routesRef.current.get(item.id);
-          if (routeState) routeState.route.positions = aircraftRoutePositions(routeState.origin, [position.longitude, position.latitude], routeState.destination);
+          entity.orientation = aircraftOrientation(worldPosition, next.heading);
         });
         viewer.scene.requestRender();
       }, 1800);
@@ -248,22 +252,17 @@ export default function CesiumFlightGlobe({ aircraft, visibleIds, selectedId, on
     } catch (error) {
       console.error("Flight globe initialization failed; aircraft details remain available", error);
       cleanup();
+      containerRef.current?.replaceChildren();
       setUnavailable(true);
       return undefined;
     }
   }, [aircraft, weather]);
 
   useEffect(() => {
-    const viewer = viewerRef.current;
-    if (!viewer) return;
-    const style = getAviationMapStyle(mapStyle);
-    const previous = imageryLayerRef.current;
-    const provider = new UrlTemplateImageryProvider({ url: style.url, credit: style.credit, maximumLevel: style.maximumLevel });
-    const next = viewer.imageryLayers.addImageryProvider(provider, 0);
-    imageryLayerRef.current = next;
-    if (previous && !previous.isDestroyed?.()) viewer.imageryLayers.remove(previous, true);
-    viewer.scene.requestRender();
-  }, [mapStyle]);
+    if (!mapViewer || mapViewer.isDestroyed()) return;
+    setImageryError("");
+    return attachGlobeImagery(mapViewer, { mapStyle, viewMode, onError: setImageryError });
+  }, [mapViewer, mapStyle, viewMode]);
 
   useEffect(() => {
     const syncFullscreen = () => {
@@ -372,6 +371,7 @@ export default function CesiumFlightGlobe({ aircraft, visibleIds, selectedId, on
     {unavailable ? <div className="od-globe-unavailable" role="status"><strong>3D globe unavailable</strong><p>WebGL could not initialize. Select aircraft from the fleet list to inspect their infocards and contract links.</p></div> :
       <div className="od-map-controls" aria-label="Map controls"><button type="button" onClick={() => zoom(1)} aria-label="Zoom in" title="Zoom in"><Plus size={15}/></button><button type="button" onClick={() => zoom(-1)} aria-label="Zoom out" title="Zoom out"><Minus size={15}/></button><button type="button" onClick={resetView} aria-label="Reset view" title="Reset view"><LocateFixed size={15}/></button><button type="button" onClick={toggleFullscreen} aria-label={isFullscreen ? "Exit full screen" : "Full screen"} title={isFullscreen ? "Exit full screen" : "Full screen"}>{isFullscreen ? <Minimize2 size={15}/> : <Maximize2 size={15}/>}</button></div>}
     {controlError && <p className="od-globe-control-error" role="alert">{controlError}</p>}
+    {imageryError && <p className="od-globe-imagery-status" role="status">{imageryError}</p>}
     {children}
   </div></div>;
 }

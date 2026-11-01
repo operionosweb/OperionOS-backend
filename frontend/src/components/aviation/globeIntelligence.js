@@ -11,12 +11,12 @@ export const ALERT_FILTERS = [
   ["severity", "Severity"], ["aircraft", "Aircraft"], ["operator", "Operator"], ["country", "Country"], ["route", "Route"],
   ["contract", "Contract"], ["obligation", "Obligation"], ["actionStatus", "Action status"],
 ];
-export const DEFAULT_FLEET_FILTERS = { scope: "Europe" };
+export const DEFAULT_FLEET_FILTERS = { scope: "Global" };
 
 export function fleetValues(item) {
   const contract = item.intelligence.contract, exposure = item.intelligence.exposure;
   return {
-    scope: ["Europe", "Global"], country: item.countries, region: item.regions, airport: [item.origin, item.destination], route: `${item.origin} → ${item.destination}`,
+    scope: ["Global", ...item.route.continents], country: item.countries, region: item.regions, airport: [item.origin, item.destination], route: `${item.origin} → ${item.destination}`,
     type: item.type, model: item.model, operator: item.operator, registration: item.registration, condition: item.condition, phase: item.phase,
     origin: item.origin, destination: item.destination, flightStatus: item.status, departureWindow: item.departureWindow, arrivalWindow: item.arrivalWindow,
     delay: item.delayMinutes === 0 ? "No delay" : item.delayMinutes <= 30 ? "1–30 minutes" : item.delayMinutes <= 60 ? "31–60 minutes" : "Over 60 minutes",
