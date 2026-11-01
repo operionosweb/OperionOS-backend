@@ -45,15 +45,18 @@ test("authenticated SaaS routes use canonical app paths and real components", as
 });
 
 test("authentication restores safe app destinations and defaults to dashboard", async () => {
-  const [guard, login, layout] = await Promise.all([
+  const [guard, login, recovery, layout] = await Promise.all([
     read("frontend/src/components/auth/RequireAuth.jsx"),
     read("frontend/src/routes/Login.jsx"),
+    read("frontend/src/components/auth/PasswordRecovery.jsx"),
     read("frontend/src/components/layout/ProductionLayout.jsx"),
   ]);
   assert.match(guard, /state={{ from: location }}/);
   assert.match(login, /requestedPath\.startsWith\("\/app\/"\)/);
   assert.match(login, /"\/app\/dashboard"/);
-  assert.match(login, /resetPasswordForEmail/);
+  assert.match(login, /import PasswordRecovery, \{ recoveryRequest \}/);
+  assert.match(login, /<PasswordRecovery client=\{supabase\} callbackPath="\/login"/);
+  assert.match(recovery, /client\.auth\.resetPasswordForEmail\(email, \{ redirectTo: redirect\.toString\(\) \}\)/);
   assert.doesNotMatch(login, /auth\.signUp/);
   assert.match(login, /<Navigate to="\/app\/dashboard" replace \/>/);
   assert.match(layout, /auth\.logout/);
