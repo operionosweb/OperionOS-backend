@@ -179,6 +179,11 @@ can move sticky navigation within the image; viewport/layout assertions are
 separate from those stitched captures.
 
 Publication base: `cdadd1f8d3eb55502738db0c5b012a5e93e89213`.
+Validated code release: `f0d9d876d5f467ce76fc4a682fc5c56a1f80c349`.
+The subsequent documentation-only commit records this release identifier; it does
+not change the validated application source. Both commits are authorized for
+publication to `operionosweb/OperionOS-backend` branch `main`. The final branch
+head and remote verification are reported in the completion message.
 The privacy recovery commit remains in ancestry; the unsafe TLS commit is absent.
 Final publication must be a non-force fast-forward from this verified base.
 GitHub source publication is separate from Vercel/Render deployment acceptance;
