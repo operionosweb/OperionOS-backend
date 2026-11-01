@@ -701,6 +701,7 @@
   overflow-wrap: anywhere;
 }
 .od-sidebar-pin { display: none; }
+.od-workspace-folded { display: none; }
 @media (min-width: 901px) {
   .od-shell .od-sidebar { width: 72px; padding: 14px 8px; overflow-x: hidden; transition: width 180ms ease; }
   .od-shell .od-sidebar.is-expanded { width: 258px; padding-inline: 16px; }
@@ -710,6 +711,22 @@
   .od-shell .od-sidebar:not(.is-expanded) :is(.od-brand, .od-brand-subtitle, .od-budget-card, .od-sidebar-foot),
   .od-shell .od-sidebar:not(.is-expanded) > .od-badge { display: none; }
   .od-shell .od-sidebar:not(.is-expanded) .od-nav-label { height: 18px; padding: 0; font-size: 0; }
+  .od-shell .od-sidebar:not(.is-expanded) .od-workspace-label {
+    align-self: center;
+    width: calc(100% + 16px);
+    flex-shrink: 0;
+    text-align: center;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .od-shell .od-sidebar:not(.is-expanded) .od-workspace-expanded { display: none; }
+  .od-shell .od-sidebar:not(.is-expanded) .od-workspace-folded {
+    display: block;
+    font-size: 9px !important;
+    line-height: 18px;
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
   .od-shell .od-sidebar:not(.is-expanded) .od-nav-link { justify-content: center; padding-inline: 0; }
   .od-shell .od-sidebar:not(.is-expanded) .od-nav-link > span { display: none; }
   .od-shell .od-sidebar .od-nav-link svg { flex-shrink: 0; }

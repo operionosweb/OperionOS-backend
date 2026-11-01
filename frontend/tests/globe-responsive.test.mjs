@@ -78,6 +78,67 @@ for (const width of [320, 390, 768, 1440]) {
   });
 }
 
+for (const width of [1024, 1280, 1366, 1440, 1920]) {
+  test(`folded Workspace stays on one line without widening the navigation at ${width}px`, async () => {
+    const { context, page } = await createPage(width);
+    try {
+      await page.goto(`${origin}/demo/contracts`, { waitUntil: "domcontentloaded" });
+      await page.evaluate(() => document.fonts.ready);
+      const measurement = await page.locator(".od-workspace-folded").evaluate((label) => {
+        const range = document.createRange();
+        range.selectNodeContents(label);
+        const text = range.getBoundingClientRect();
+        const bounds = label.getBoundingClientRect();
+        const rail = label.closest(".od-sidebar");
+        const style = getComputedStyle(label);
+        const icons = [...rail.querySelectorAll(".od-nav-link svg")].map((icon) => icon.getBoundingClientRect());
+        return {
+          text: label.textContent, width: rail.getBoundingClientRect().width,
+          fontSize: style.fontSize, whiteSpace: style.whiteSpace, lines: range.getClientRects().length,
+          fits: text.left >= bounds.left && text.right <= bounds.right && text.top >= bounds.top && text.bottom <= bounds.bottom,
+          insideRail: bounds.left >= rail.getBoundingClientRect().left && bounds.right <= rail.getBoundingClientRect().right,
+          overflow: label.scrollWidth > label.clientWidth,
+          collision: icons.some((icon) => text.left < icon.right && text.right > icon.left && text.top < icon.bottom && text.bottom > icon.top),
+          iconWidths: icons.map((icon) => icon.width),
+          pageOverflow: document.documentElement.scrollWidth > innerWidth,
+        };
+      });
+      assert.equal(measurement.text, "Workspace");
+      assert.equal(measurement.width, 72);
+      assert.equal(measurement.fontSize, "9px");
+      assert.equal(measurement.whiteSpace, "nowrap");
+      assert.equal(measurement.lines, 1);
+      assert.equal(measurement.fits, true, "Full text fits vertically and horizontally");
+      assert.equal(measurement.insideRail, true);
+      assert.equal(measurement.overflow, false);
+      assert.equal(measurement.collision, false, "Text never intersects navigation icons");
+      assert.ok(measurement.iconWidths.length > 0 && measurement.iconWidths.every((size) => size === 17));
+      assert.equal(measurement.pageOverflow, false);
+      await page.locator(".od-sidebar").hover();
+      await page.waitForFunction(() => document.querySelector(".od-sidebar").getBoundingClientRect().width === 258);
+      assert.equal(await page.locator(".od-workspace-folded").isVisible(), false);
+      assert.equal(await page.locator(".od-workspace-expanded").textContent(), "Contract workspace");
+      assert.equal(await page.locator(".od-workspace-expanded").isVisible(), true);
+    } finally { await context.close(); }
+  });
+}
+
+test("mobile navigation retains the original workspace label and drawer behaviour", async () => {
+  const { context, page } = await createPage(390, 844, { touch: true });
+  try {
+    await page.goto(`${origin}/demo/contracts`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+    const sidebar = page.locator(".od-sidebar");
+    assert.match(await sidebar.getAttribute("class"), /is-open/);
+    assert.equal(await page.locator(".od-workspace-expanded").textContent(), "Contract workspace");
+    assert.equal(await page.locator(".od-workspace-expanded").isVisible(), true);
+    assert.equal(await page.locator(".od-workspace-folded").isVisible(), false);
+    assert.equal(await sidebar.locator(".od-nav-link svg").first().evaluate((icon) => icon.getBoundingClientRect().width), 17);
+    await sidebar.getByRole("button", { name: "Close navigation", exact: true }).click();
+    assert.doesNotMatch(await sidebar.getAttribute("class"), /is-open/);
+  } finally { await context.close(); }
+});
+
 test("desktop navigation folds, expands on hover and keyboard focus, and pins open", async () => {
   const { context, page } = await createPage(1440);
   try {

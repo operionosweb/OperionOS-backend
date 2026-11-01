@@ -111,6 +111,26 @@ provider sign-in verification, founder provisioning or live OCI acceptance.
 
 ## 1. Prepare and validate the database
 
+### Verified independent hosting preparation (2026-11-01)
+
+An independent Vercel project `operion-oci-production` now exists in the
+`operion-os` team, connected to `operionosweb/OperionOS-backend`, production
+branch `main`. Its root is `oci`, install command is
+`npm --prefix ../frontend ci`, build command is `node ../scripts/build-oci.js`,
+output directory is `dist-oci`, and Node version is 24.x. This selects the
+checked-in `oci/vercel.json`, not the alternate `frontend/vercel.oci.json`.
+The public project configuration and domains were not changed.
+
+OCI has no configured environment variables or production deployment. Preview
+deployments are disabled and its Ignored Build Step is deliberately `exit 0`,
+which skips builds while the dedicated database, backend and founder identity
+are unavailable. This is a provisioning pause, not a production activation.
+Do not clear it or assign `oci.operionos.com` until the gates below pass.
+After approval, configure the dedicated frontend Auth settings and HTTPS OCI
+backend URL described above, clear the Ignored Build Step, deploy a verified
+`main` revision, assign only the OCI hostname, and perform actual founder/MFA
+acceptance. Never copy customer environment settings into this project.
+
 Run the offline backend checks with `npm.cmd run test:oci`. The dedicated runner
 removes database/provider connectivity from its test subprocess. These mocks
 exercise API workflows and authorization, not actual PostgreSQL persistence.

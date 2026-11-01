@@ -86,7 +86,7 @@ function DemoShellContent() {
       <nav className="od-nav" aria-label="Demo navigation">
         <span className="od-nav-label">Main</span>
         {mainNav.map(([to,label,icon]) => <NavigationLink key={to} to={to} label={label} icon={icon} end={to === "/demo/dashboard"} />)}
-        <span className="od-nav-label">Contract workspace</span>
+        <span className="od-nav-label od-workspace-label"><span className="od-workspace-expanded">Contract workspace</span><span className="od-workspace-folded">Workspace</span></span>
         {workspaceNav.map(([section,label,icon]) => <NavigationLink key={section} to={`${workspaceBase}/${section}`} label={label} icon={icon} />)}
         <span className="od-nav-label">Admin</span>
         {adminNav.map(([to,label,icon]) => <NavigationLink key={to} to={to} label={label} icon={icon} />)}
