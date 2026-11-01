@@ -278,3 +278,42 @@ introduces no schema or data changes. Hosting settings and OCI pause stay intact
 - Final Matt rerun after portrait-safe mobile layout: 23/23 pass.
 - Final whole backend rerun: 518/519, solely the unchanged homepage assertion
   documented above; relevant focused release gates pass.
+
+## 16. Publication and live evidence
+
+**GITHUB PRODUCTION PUBLICATION VERIFIED — TESTED MATT DEMO LIVE**
+
+This publication verdict does not replace the outstanding full-v1 acceptance
+limitations in sections 7, 8 and 11.
+
+- Source commit: `1f822944e6bd420b017a6ed963e972d82aec581f`.
+- Normal main push succeeded from starting
+  `4c34bf792f00899b11596a8f003dcf417a1155d6`.
+- Independently verified source SHA through GitHub `commits/main`, `ls-remote`,
+  refreshed `origin/main` and isolated local HEAD.
+- Vercel exact source deployment:
+  `dpl_FyFz3TS8PZGqo6ffuDJ95RTwRt6j`, **Ready / Production**,
+  with `www.operionos.com` and `operionos.com` aliases.
+- Exact Render source deployment:
+  `dep-dbjo2iu417fc73b55igg`, **Live**, trigger **Auto-Deploy**, duration 47.7 s.
+  No manual Render deployment or setting change was performed by this task.
+- Exact OCI source record:
+  `dpl_J27oCgxHMZ8vZNNhyH2xdRquNHDd`, **Canceled / Production**.
+  The intentional OCI pause remains intact.
+- Safe live demo acceptance at
+  [www.operionos.com/demo/matt](https://www.operionos.com/demo/matt),
+  separately at 1440 px and 390 px:
+  HTTPS 200; four grounded prepared findings and four source excerpts;
+  unsupported fuel query returns zero established findings; no horizontal
+  overflow; no page or console errors; no initial video download; no customer
+  API requests. Unauthorized `/app/matt` redirects to `/login` at both widths.
+- This live check uses only the prepared public demo and unauthenticated route
+  restriction. It is not live microphone acceptance or authenticated customer
+  database acceptance; no production records were created, edited or deleted.
+- All eight other worktree fingerprints are unchanged, including modified and
+  untracked files. All four other remote branch SHAs are unchanged.
+- Blocked TLS ancestor check remains negative; approved recovery remains included.
+
+The documentation-only commit following the source commit publishes these observed
+results. It changes no application code; its final remote SHA is verified separately
+in the completion record. This avoids claiming a commit can contain its own SHA.
