@@ -40,7 +40,7 @@ test("contract relationships resolve back to isolated linked aircraft", async ()
   const next = await SyntheticAviationProvider.getContractAircraft("demo-mro-agreement");
   mroAircraft[0].contractIds.length = 0;
 
-  assert.deepEqual(next.map((item) => item.registration), ["G-OPER", "A6-EOA", "D-ABQX", "5Y-KQX"]);
+  assert.deepEqual(next.map((item) => item.registration), ["G-OPER", "DEMO-005", "DEMO-007"]);
   assert.equal(next.every((item) => item.route && item.weather), true);
   assert.notEqual(next[0].contractIds.length, 0);
 });
@@ -64,7 +64,9 @@ test("summary metrics and alert states are internally coherent", async () => {
   assert.equal(summary.state, "synthetic");
   assert.equal(summary.liveFlights >= summary.trackedAircraft, true);
   assert.equal(summary.activeRoutes >= summary.trackedAircraft, true);
-  assert.deepEqual(new Set(flights.map((item) => item.status)), new Set(["On time", "Delayed", "Diverted", "Weather impact", "Maintenance"]));
+  assert.deepEqual(new Set(flights.map((item) => item.status)), new Set(["On time", "Delayed", "Diverted", "Weather impact", "Maintenance", "Cancelled", "Rerouted"]));
+  assert.equal(summary.flightAlerts, flights.flatMap((item) => item.alerts).length);
+  assert.equal(summary.trackedAircraft, flights.length);
 });
 
 test("base map styles are distinct and resolve to a safe default", () => {

@@ -749,6 +749,72 @@ test('public normal login, invalid credentials, session restoration and logout r
   } finally { await expired.context.close() }
 })
 
+test('customer Globe inspects scoped associations in place, rejects stale responses and surfaces relationship errors', { timeout: 120000 }, async () => {
+  const { page, state, context } = await fixture({ publicLogin: true })
+  let releaseFirst, firstRequested = false, firstRequests = 0
+  try {
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await page.route('https://tile.openstreetmap.org/**', route => route.abort())
+    await page.route('**/api/**', async route => {
+      assert.equal(route.request().method(), 'GET', 'Customer acceptance performs no mutations')
+      const pathname = new URL(route.request().url()).pathname
+      const json = (body, status = 200) => route.fulfill({ status, json: body })
+      if (pathname === '/api/platform/context') return json({ roles: [], permissions: [] })
+      if (pathname === '/api/foundation/organizations') return json({ organizations: [{ id: 'offline-org', name: 'Offline organization' }] })
+      if (pathname === '/api/foundation/context') return json({ organization: { id: 'offline-org', role: 'admin' } })
+      if (pathname === '/api/aviation/weather') return json({ weather: { state: 'UNAVAILABLE', layers: [] } })
+      if (pathname === '/api/aviation/aircraft') return json({
+        state: 'LIVE', provider: 'Intercepted offline fixture', aircraft: ['one', 'two'].map(id => ({
+          id, registration: `OFFLINE-${id}`, position: { longitude: 10, latitude: 35, altitudeMeters: 10000, groundSpeedKph: 780 },
+          origin: { iata: 'BCN' }, destination: { iata: 'FRA' }, dataSource: 'Intercepted offline fixture',
+        })),
+      })
+      if (pathname.endsWith('/intelligence')) {
+        const id = pathname.split('/')[4]
+        if (id === 'one') {
+          firstRequests++
+          if (firstRequests > 1) return json({ error: 'Relationship fixture unavailable' }, 503)
+          firstRequested = true
+          await new Promise(resolve => { releaseFirst = resolve })
+        }
+        return json({ intelligence: { contracts: [{ contract_id: `contract-${id}`, title: `Scoped agreement ${id}`, relationship_type: 'lease', confidence: 0.9 }], impact: { contracts: 1, obligations: 0, deadlines: 0, risks: 0 } } })
+      }
+      return json({})
+    })
+    await page.goto(`${origin}/app/live-tracking`, { waitUntil: 'domcontentloaded' })
+    const canvas = page.locator('.op-aviation-globe canvas')
+    await canvas.waitFor()
+    assert.equal(await page.locator('.op-flight-sheet').count(), 0)
+    async function select(id) {
+      await page.getByPlaceholder('Flight, callsign, registration or airport').fill(`OFFLINE-${id}`)
+      await page.waitForTimeout(300)
+      await canvas.scrollIntoViewIfNeeded()
+      const bounds = await canvas.boundingBox()
+      await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+      await page.locator('.op-flight-sheet').getByRole('heading', { name: `OFFLINE-${id}`, exact: true }).waitFor()
+    }
+    await select('one')
+    await page.waitForFunction(() => !!document.querySelector('.op-flight-sheet'))
+    for (let attempt = 0; !firstRequested && attempt < 100; attempt++) await page.waitForTimeout(20)
+    assert.ok(firstRequested, 'Selecting the first aircraft requests its own associations')
+    await select('two')
+    await page.getByRole('button', { name: 'Scoped agreement two', exact: true }).waitFor()
+    releaseFirst()
+    await page.waitForTimeout(200)
+    assert.equal(await page.getByRole('button', { name: 'Scoped agreement one', exact: true }).count(), 0)
+    const frame = await canvas.elementHandle(), url = page.url()
+    await page.getByRole('button', { name: 'Scoped agreement two', exact: true }).click()
+    await page.getByRole('region', { name: 'In-place customer contract inspection' }).waitFor()
+    assert.ok(await page.getByText(/not clause excerpts or financial terms/).count())
+    assert.equal(await page.locator('.op-aviation-globe canvas').evaluate((node, original) => node === original, frame), true)
+    assert.equal(page.url(), url)
+    await page.getByRole('button', { name: 'Return to aircraft', exact: true }).click()
+    await select('one')
+    await page.getByRole('alert').filter({ hasText: 'Relationship fixture unavailable' }).waitFor()
+    assert.deepEqual(state.javascriptErrors, [])
+  } finally { releaseFirst?.(); await context.close() }
+})
+
 test('recovery identity mismatch and failed provider identity checks reject updates', async () => {
   for (const option of [{ identityMismatch: true }, { userError: true }]) {
     const { page, state, context } = await fixture({ restore: false, enrolled: false, recovery: '?token_hash=offline-recovery&type=recovery', ...option })

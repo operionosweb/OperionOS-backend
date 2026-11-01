@@ -8,6 +8,7 @@ export const AIRCRAFT_MODEL_URL = "/models/operion-airliner.glb";
 export const AIRCRAFT_STATUS_COLORS = Object.freeze({
   "On time": "#4cd18c", Delayed: "#efad43", Diverted: "#ee5a64",
   "Weather impact": "#9b7aef", Maintenance: "#58b6dc",
+  Cancelled: "#ee5a64", Rerouted: "#e19c3a",
 });
 
 export function aircraftOrientation(position, heading) {

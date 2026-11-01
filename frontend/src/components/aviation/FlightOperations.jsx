@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
+import React, { lazy, startTransition, Suspense, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   CloudRain, Globe2, Layers, Map, Plane, Radio, Search, ShieldAlert, Wind, X,
@@ -8,6 +8,10 @@ import { getAviationProvider } from "../../demo/aviationDataProvider";
 import { DEMO_CONTRACTS } from "../../demo/DemoDataProvider";
 import { buildSpatialObjects, getFilterOptions, GLOBE_FILTERS, GLOBE_LAYERS, matchesGlobeFilters } from "./globeSchema";
 import AircraftInfoPopup from "./AircraftInfoPopup";
+import { GLOBE_DEMO_NOTICE } from "../../demo/globeIntelligenceData";
+import { activeFilters, DEFAULT_FLEET_FILTERS, matchesAlert, matchesFleetIntelligence } from "./globeIntelligence";
+import { ContractIntelligencePanel, FleetIntelligenceFilters, GlobeAlerts } from "./GlobeIntelligencePanels";
+import "../../styles/globe-intelligence.css";
 
 const CesiumFlightGlobe = lazy(() => import("../demoRedesign/CesiumFlightGlobe"));
 const aviationProvider = getAviationProvider();
@@ -16,12 +20,12 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
   const headingId = useId();
   const [aircraft, setAircraft] = useState([]);
   const [weather, setWeather] = useState(null);
-  const [selectedId, setSelectedId] = useState("ac-goper");
+  const [selectedId, setSelectedId] = useState(null);
   const [filter, setFilter] = useState("all");
   const [viewMode, setViewMode] = useState("globe");
   const [mapStyle, setMapStyle] = useState("standard");
   const [weatherEnabled, setWeatherEnabled] = useState(false);
-  const [cloudsEnabled, setCloudsEnabled] = useState(true);
+  const [cloudsEnabled, setCloudsEnabled] = useState(false);
   const [windEnabled, setWindEnabled] = useState(false);
   const [routesEnabled, setRoutesEnabled] = useState(true);
   const [playing, setPlaying] = useState(true);
@@ -30,7 +34,14 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
   const [filters, setFilters] = useState({});
   const [layers, setLayers] = useState(() => GLOBE_LAYERS.filter((layer) => layer.initial).map((layer) => layer.id));
   const [selectedObject, setSelectedObject] = useState(null);
-  const [aircraftPopupOpen, setAircraftPopupOpen] = useState(true);
+  const [aircraftPopupOpen, setAircraftPopupOpen] = useState(false);
+  const [intelligenceFilters, setIntelligenceFilters] = useState(DEFAULT_FLEET_FILTERS);
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const [alertFilters, setAlertFilters] = useState({});
+  const [selectedAlertId, setSelectedAlertId] = useState(null);
+  const [contractOpen, setContractOpen] = useState(false);
+  const inspectButtonRef = useRef(null);
+  const alertsButtonRef = useRef(null);
   const [fleetOpen, setFleetOpen] = useState(false);
   const workspaceRef = useRef(null);
   const fleetButtonRef = useRef(null);
@@ -44,11 +55,16 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
     workspaceRef.current?.scrollIntoView({ block: "start" });
   }, [fleetRequest, loadState]);
 
-  function selectAircraft(id) {
-    setSelectedObject(null);
-    setSelectedId(id);
-    setFleetOpen(false);
-    setAircraftPopupOpen(true);
+  function selectAircraft(id, alertId = null) {
+    startTransition(() => {
+      setSelectedObject(null);
+      setSelectedId(id);
+      setFleetOpen(false);
+      setAlertsOpen(false);
+      setContractOpen(false);
+      setSelectedAlertId(alertId);
+      setAircraftPopupOpen(true);
+    });
   }
 
   function closeFleet() {
@@ -58,6 +74,7 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
 
   function closeAircraftPopup() {
     setAircraftPopupOpen(false);
+    setContractOpen(false);
     workspaceRef.current?.querySelector(".od-cesium-globe canvas")?.focus({ preventScroll: true });
   }
 
@@ -85,15 +102,21 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
     const matchesSearch = [item.registration, item.callsign, item.flightNumber, item.icao24, item.operator]
       .some((value) => value.toLowerCase().replace(/[^a-z0-9]/g, "").includes(needle));
     return matchesFilter && matchesSearch && matchesGlobeFilters(item, filters, DEMO_CONTRACTS)
+      && matchesFleetIntelligence(item, intelligenceFilters)
       && (!contractIds || item.contractIds.some((id) => contractIds.includes(id)));
-  }), [aircraft, filter, query, filters, contractIds]);
+  }), [aircraft, filter, query, filters, contractIds, intelligenceFilters]);
   const visibleIds = useMemo(() => visibleAircraft.map((item) => item.id), [visibleAircraft]);
-  const selected = visibleAircraft.find((item) => item.id === selectedId) || visibleAircraft[0] || null;
+  const selected = visibleAircraft.find((item) => item.id === selectedId) || null;
   const objects = useMemo(() => buildSpatialObjects(visibleAircraft, DEMO_CONTRACTS), [visibleAircraft]);
-  const selectedContracts = selected ? DEMO_CONTRACTS.filter((item) => selected.contractIds.includes(item.id)) : [];
+  const allAlerts = useMemo(() => aircraft.flatMap((item) => item.alerts.map((alert) => ({ alert, aircraft: item }))), [aircraft]);
+  const matchingAlerts = useMemo(() => allAlerts.filter((record) => visibleIds.includes(record.aircraft.id) && matchesAlert(record, alertFilters)), [allAlerts, visibleIds, alertFilters]);
+  const filterCount = activeFilters(intelligenceFilters, DEFAULT_FLEET_FILTERS).length + activeFilters(filters).length + (filter !== "all" ? 1 : 0) + (query ? 1 : 0);
 
   useEffect(() => {
-    if (selectedAircraftId) setSelectedId(selectedAircraftId);
+    if (selectedAircraftId) {
+      setSelectedId(selectedAircraftId);
+      setAircraftPopupOpen(true);
+    }
   }, [selectedAircraftId]);
   useEffect(() => {
     onAircraftSelect?.(selected || null);
@@ -104,10 +127,15 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
     setFilter("all");
     setQuery("");
     setFilters({});
+    setIntelligenceFilters(DEFAULT_FLEET_FILTERS);
   }
 
   useEffect(() => {
-    if (selected && selected.id !== selectedId) setSelectedId(selected.id);
+    if (selectedId && !selected) {
+      setSelectedId(null);
+      setAircraftPopupOpen(false);
+      setContractOpen(false);
+    }
   }, [selected, selectedId]);
 
   if (loadState === "loading") {
@@ -120,9 +148,9 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
   return <section ref={workspaceRef} className="od-dashboard-aviation od-aviation-workspace" aria-labelledby={headingId}>
     <header className="od-dashboard-aviation-header">
       <div>
-        <span className="od-eyebrow">Spatial operations · synthetic positions</span>
+        <span className="od-eyebrow">Europe · illustrative aircraft operations</span>
         <h2 id={headingId}>Global Fleet Operations</h2>
-        <p>Explore prepared aircraft positions and their contract-linked routes.</p>
+        <p className="od-intelligence-notice">{GLOBE_DEMO_NOTICE}</p>
       </div>
       <div className="od-dashboard-globe-actions">
         <div className="od-globe-toggle-group" role="group" aria-label="Aircraft filter">
@@ -179,9 +207,10 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
         <Suspense fallback={<div className="od-globe-loading"><Plane size={28}/><strong>Loading interactive globe</strong></div>}>
           <CesiumFlightGlobe aircraft={aircraft} visibleIds={visibleIds} selectedId={selected?.id} onSelect={selectAircraft} viewMode={viewMode} mapStyle={mapStyle} weather={weather} weatherEnabled={weatherEnabled} cloudsEnabled={cloudsEnabled} windEnabled={windEnabled} routesEnabled={routesEnabled} playing={playing} spatialObjects={objects} visibleLayers={layers} onObjectSelect={(item) => { setAircraftPopupOpen(false); setSelectedObject(item); }}>
             <button ref={fleetButtonRef} type="button" className="od-globe-fleet-toggle" aria-expanded={fleetOpen} aria-controls={fleetId}
-              onClick={() => { setFleetOpen((open) => !open); setAircraftPopupOpen(false); }}>
-              <Plane size={16}/>Explore the fleet
+              onClick={() => { setFleetOpen((open) => !open); setAircraftPopupOpen(false); setContractOpen(false); setAlertsOpen(false); }}>
+              <Plane size={16}/>Explore the fleet <span>{filterCount ? `(${filterCount} filters)` : ""}</span>
             </button>
+            <button ref={alertsButtonRef} type="button" className="od-globe-alerts-toggle" aria-expanded={alertsOpen} onClick={() => { setAlertsOpen((open) => !open); setFleetOpen(false); setAircraftPopupOpen(false); setContractOpen(false); }}><ShieldAlert size={16}/>Alerts ({matchingAlerts.length})</button>
             <section id={fleetId} hidden={!fleetOpen} className="od-globe-fleet-popup od-dashboard-fleet-card" role="dialog" aria-modal="false" aria-label="Explore the fleet"
               onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); closeFleet(); } }}
               onPointerDown={(event) => event.stopPropagation()} onWheel={(event) => event.stopPropagation()}>
@@ -190,19 +219,23 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
               <label className="od-fleet-search">Flight status<select aria-label="Flight status" value={filter} onChange={(event) => setFilter(event.target.value)}>
                 <option value="all">All flights</option><option value="company">Company fleet</option><option value="watch">Operational watch</option><option value="delayed">Delayed</option><option value="diverted">Diverted</option>
               </select></label>
+              <FleetIntelligenceFilters aircraft={aircraft} filters={intelligenceFilters} onChange={setIntelligenceFilters}/>
+              <p role="status">{visibleAircraft.length} aircraft · {filterCount} active filters · {intelligenceFilters.scope || "All markets"}</p>
               <div className="od-dashboard-aircraft-list" aria-label="Choose an aircraft">
                 {visibleAircraft.map((item) => <button type="button" className={item.id === selected?.id ? "is-active" : ""} aria-pressed={item.id === selected?.id} onClick={() => selectAircraft(item.id)} key={item.id}>
                   <span className={`od-aircraft-status${item.status === "On time" ? " is-good" : " is-alert"}`}/>
-                  <span><strong>{item.callsign}</strong><small>{item.origin} → {item.destination}</small></span><span>{item.status}</span>
+                  <span><strong>{item.registration} · {item.callsign}</strong><small>{item.origin} → {item.destination} · {item.alerts.length} alerts</small></span><span>{item.status}</span>
                 </button>)}
               </div>
               {!visibleAircraft.length && <p role="status">No aircraft match these filters.</p>}
               <button type="button" className="od-button" onClick={resetFilters}>Clear fleet filters</button>
             </section>
-            {selected && aircraftPopupOpen && <AircraftInfoPopup aircraft={selected} contracts={selectedContracts} onClose={closeAircraftPopup}/>}
+            {alertsOpen && <GlobeAlerts records={matchingAlerts} allRecords={allAlerts} filters={alertFilters} onChange={setAlertFilters} onSelect={selectAircraft} onClose={() => { setAlertsOpen(false); alertsButtonRef.current?.focus({ preventScroll: true }); }}/>}
+            {selected && aircraftPopupOpen && !contractOpen && <div ref={inspectButtonRef}><AircraftInfoPopup key={selected.id} aircraft={selected} onClose={closeAircraftPopup} selectedAlertId={selectedAlertId} onInspectContract={() => setContractOpen(true)}/></div>}
+            {selected && contractOpen && <ContractIntelligencePanel aircraft={selected} onClose={() => { setContractOpen(false); requestAnimationFrame(() => inspectButtonRef.current?.querySelector(".od-button")?.focus({ preventScroll: true })); }}/>}
           </CesiumFlightGlobe>
         </Suspense>
-        <footer className="od-dashboard-globe-footer"><span><i/>Prepared synthetic positions</span><span role="status">{visibleAircraft.length} aircraft shown</span><span>Not a live aviation feed or navigation aid</span></footer>
+        <footer className="od-dashboard-globe-footer"><span><i/>{intelligenceFilters.scope || "All markets"} · illustrative positions</span><span role="status">{visibleAircraft.length} aircraft shown</span><span>Not live flight or contract data</span></footer>
       </section>
       <details className="od-dashboard-flight-stats-wrap"><summary>Prepared fleet summary · not portfolio intelligence</summary><div className="od-dashboard-flight-stats" aria-label="Synthetic aviation summary">
         {[

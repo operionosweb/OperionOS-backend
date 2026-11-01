@@ -7,6 +7,8 @@ import LabelStyle from "@cesium/engine/Source/Scene/LabelStyle.js";
 import ScreenSpaceEventType from "@cesium/engine/Source/Core/ScreenSpaceEventType.js";
 import VerticalOrigin from "@cesium/engine/Source/Scene/VerticalOrigin.js";
 import Viewer from "@cesium/widgets/Source/Viewer/Viewer.js";
+import UrlTemplateImageryProvider from "@cesium/engine/Source/Scene/UrlTemplateImageryProvider.js";
+import { getAviationMapStyle } from "../../demo/aviationMapLayers";
 import { LocateFixed } from "lucide-react";
 import { attachGlobeTouchControls } from "./globeTouchControls";
 import { pickGlobeAircraft } from "./pickGlobeAircraft";
@@ -28,10 +30,16 @@ export default function ProductionFlightGlobe({ aircraft, selectedId, onSelect }
       animation: false, timeline: false, baseLayerPicker: false, geocoder: false,
       homeButton: false, sceneModePicker: false, navigationHelpButton: false,
       fullscreenButton: false, infoBox: false, selectionIndicator: false,
+      baseLayer: false, requestRenderMode: true, maximumRenderTimeChange: Infinity,
       contextOptions: { webgl: { preserveDrawingBuffer: true } },
     });
     viewerRef.current = viewer;
-    viewer.scene.globe.enableLighting = true;
+    viewer.scene.globe.enableLighting = false;
+    viewer.scene.globe.baseColor = Color.fromCssColorString("#dbe8f1");
+    viewer.scene.backgroundColor = Color.fromCssColorString("#eef5fb");
+    viewer.scene.skyBox.show = false;
+    const style = getAviationMapStyle("standard");
+    viewer.imageryLayers.addImageryProvider(new UrlTemplateImageryProvider({ url: style.url, credit: style.credit, maximumLevel: style.maximumLevel }));
     aircraft.filter((item) => validPosition(item.position)).forEach((item) => {
       viewer.entities.add({
         id: `aircraft-${item.id}`,

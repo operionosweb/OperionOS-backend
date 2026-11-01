@@ -22,7 +22,7 @@ test("combined filters must match the same linked contract", async () => {
   assert.equal(matchesGlobeFilters(aircraft, { contractType: "Lease", counterparty: "Maintainer" }, contracts), false);
   assert.equal(matchesGlobeFilters(aircraft, { contractType: "Lease", counterparty: "Lessor", risk: "Critical" }, contracts), true);
   assert.equal(matchesGlobeFilters(aircraft, { exposure: "Conditional", status: "Review" }, contracts), false);
-  assert.equal(matchesGlobeFilters(aircraft, { type: "A320neo" }, contracts), false);
+  assert.equal(matchesGlobeFilters(aircraft, { type: "B787-9" }, contracts), false);
   assert.equal(matchesGlobeFilters(aircraft, { operator: aircraft.operator, weather: aircraft.weather.severity }, contracts), true);
 });
 

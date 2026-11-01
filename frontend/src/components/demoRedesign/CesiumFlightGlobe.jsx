@@ -88,11 +88,11 @@ export default function CesiumFlightGlobe({ aircraft, visibleIds, selectedId, on
     viewerRef.current = viewer;
     setMapViewer(viewer);
     setup("scene", () => {
-    viewer.scene.globe.enableLighting = true;
+    viewer.scene.globe.enableLighting = false;
     viewer.scene.globe.showGroundAtmosphere = true;
-    viewer.scene.globe.baseColor = Color.fromCssColorString("#08182f");
-    viewer.scene.backgroundColor = Color.fromCssColorString("#030815");
-    viewer.scene.skyBox.show = true;
+    viewer.scene.globe.baseColor = Color.fromCssColorString("#dbe8f1");
+    viewer.scene.backgroundColor = Color.fromCssColorString("#eef5fb");
+    viewer.scene.skyBox.show = false;
     viewer.scene.fog.enabled = true;
     });
     const style = getAviationMapStyle(mapStyle);
@@ -337,13 +337,13 @@ export default function CesiumFlightGlobe({ aircraft, visibleIds, selectedId, on
         route.material = Material.fromType(Material.ColorType, { color: item.id === selectedId ? Color.fromCssColorString("#f2f5ff").withAlpha(0.96) : Color.fromCssColorString(routesRef.current.get(item.id).color).withAlpha(0.32) });
       }
     });
-    viewer.camera.flyTo({ destination: Cartesian3.fromDegrees(selected.longitude, selected.latitude, 8500000), orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 }, duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 1.1 });
+    viewer.camera.flyTo({ destination: Cartesian3.fromDegrees(selected.longitude, selected.latitude, 10500000), orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 }, duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 1.1 });
   }, [aircraft, selectedId]);
 
   function resetView() {
     const viewer = viewerRef.current;
     if (!viewer) return;
-    viewer.camera.flyTo({ destination: Cartesian3.fromDegrees(22, 30, viewMode === "map" ? 18000000 : 14500000), orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 }, duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 0.8 });
+    viewer.camera.flyTo({ destination: Cartesian3.fromDegrees(18, 42, viewMode === "map" ? 18000000 : 10500000), orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 }, duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 0.8 });
   }
 
   function zoom(multiplier) {

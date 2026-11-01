@@ -1,0 +1,21 @@
+.od-shell .od-intelligence-notice { color: #345976; font-size: 11px !important; line-height: 1.5; }
+.od-shell .od-globe-alerts-toggle { position: absolute; top: 64px; left: 12px; z-index: 3; display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 8px 12px; border: 1px solid #b7d4ee; border-radius: 10px; background: #fff; color: #214766; cursor: pointer; }
+.od-shell .od-globe-fleet-popup { z-index: 5; }
+.od-shell .od-aircraft-popup.od-dashboard-flight-details { background: #fff; box-shadow: 0 4px 12px #001c551f; contain: layout paint; }
+.od-shell .od-globe-contract-panel { z-index: 6; border: 1px solid #b7d4ee; border-radius: 14px; }
+.od-shell .od-globe-contract-panel blockquote { margin-inline: 0; padding: 12px; border-left: 3px solid #0066d9; background: #f2f8ff; }
+.od-shell .od-intelligence-filter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-block: 8px; }
+.od-shell .od-intelligence-filter-grid label { min-width: 0; display: grid; gap: 4px; }
+.od-shell .od-intelligence-filter-grid select { width: 100%; min-width: 0; min-height: 44px; border: 1px solid #b7d4ee; border-radius: 8px; background: #fff; color: #214766; }
+.od-shell :is(.od-intelligence-presets, .od-intelligence-active-filters) { display: flex; flex-wrap: wrap; gap: 6px; margin-block: 10px; }
+.od-shell :is(.od-intelligence-presets, .od-intelligence-active-filters) button { display: flex; align-items: center; gap: 4px; min-height: 36px; max-width: 100%; padding: 6px 8px; border: 1px solid #b7d4ee; border-radius: 8px; background: #f2f8ff; color: #214766; cursor: pointer; }
+.od-shell .od-intelligence-filter-details summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.od-shell .od-intelligence-alert-list { display: grid; gap: 8px; }
+.od-shell .od-intelligence-alert-list button { min-width: 0; display: grid; gap: 5px; padding: 10px; text-align: left; border: 1px solid #b7d4ee; border-radius: 10px; background: #fff; color: #214766; cursor: pointer; }
+.od-shell .od-intelligence-selected-alert { padding: 10px; border: 2px solid #0066d9; border-radius: 10px; background: #f2f8ff; }
+.od-shell :is(.od-globe-alerts, .od-globe-contract-panel) :is(p, small, strong, button) { overflow-wrap: anywhere; }
+@media (max-width: 900px) {
+  .od-shell .od-globe-alerts-toggle { top: 60px; left: 6px; max-width: calc(100% - 110px); }
+  .od-shell .od-globe-contract-panel.od-aircraft-popup { bottom: 2px; left: 0; width: 100%; top: auto; max-height: min(62%, calc(100% - 116px)); }
+  .od-shell .od-globe-alerts.od-globe-fleet-popup { max-height: min(65%, calc(100% - 116px)); }
+}

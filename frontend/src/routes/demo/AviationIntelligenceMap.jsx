@@ -427,14 +427,12 @@ export default function AviationIntelligenceMap() {
   const restoredRef = useRef(restoreTrackingState());
   const [aircraft, setAircraft] = useState([]);
   const [weather, setWeather] = useState({ state: "loading", cells: [] });
-  const [selectedId, setSelectedId] = useState(
-    restoredRef.current.selectedId || "ac-goper",
-  );
+  const [selectedId, setSelectedId] = useState(null);
   const [activeTab, setActiveTab] = useState(
     restoredRef.current.activeTab || "Contracts",
   );
   const [selectedContractId, setSelectedContractId] = useState(
-    restoredRef.current.selectedContractId || null,
+    null,
   );
   const [graph, setGraph] = useState(null);
   const [fleetRequest, setFleetRequest] = useState(0);
@@ -463,8 +461,7 @@ export default function AviationIntelligenceMap() {
       active = false;
     };
   }, []);
-  const selected =
-    aircraft.find((item) => item.id === selectedId) || aircraft[0] || null;
+  const selected = aircraft.find((item) => item.id === selectedId) || null;
   const related = useMemo(
     () =>
       selected

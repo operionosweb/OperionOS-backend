@@ -24,11 +24,14 @@ export default function ProductionLiveTracking() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [weather, setWeather] = useState({ state: "UNAVAILABLE", updatedAt: null, layers: [] });
   const [weatherEnabled, setWeatherEnabled] = useState(false);
-  const [intelligence, setIntelligence] = useState(null);
+  const [intelligenceResult, setIntelligenceResult] = useState(null);
   const [dependenciesOpen, setDependenciesOpen] = useState(false);
+  const [inspectedContractId, setInspectedContractId] = useState(null);
   const tracking = useAviationTracking(organizationId, companyOnly);
   const visible = useMemo(() => tracking.aircraft.filter((item) => `${item.flightNumber || ""} ${item.callsign || ""} ${item.registration || ""} ${item.origin?.iata || ""} ${item.destination?.iata || ""}`.toLowerCase().includes(query.toLowerCase())), [tracking.aircraft, query]);
   const selected = visible.find((item) => item.id === selectedId) || null;
+  const currentIntelligence = intelligenceResult?.aircraftId === selectedId && intelligenceResult?.organizationId === organizationId ? intelligenceResult : null;
+  const intelligence = currentIntelligence?.value;
   const provenance = stateCopy[tracking.state] || [tracking.state, "Aviation connection state"];
   const metrics = {
     flights: tracking.aircraft.filter((item) => item.flightId || item.flightNumber).length,
@@ -42,9 +45,15 @@ export default function ProductionLiveTracking() {
     getAviationWeather(organizationId).then((response) => setWeather(response.weather)).catch(() => setWeather({ state: "UNAVAILABLE", updatedAt: null, layers: [] }));
   }, [organizationId]);
   useEffect(() => {
-    setIntelligence(null);
+    setInspectedContractId(null);
     if (!selectedId || !organizationId) return;
-    getAircraftIntelligence(selectedId, organizationId).then((response) => setIntelligence(response.intelligence)).catch(() => setIntelligence(null));
+    let active = true;
+    getAircraftIntelligence(selectedId, organizationId).then((response) => {
+      if (active) setIntelligenceResult({ aircraftId: selectedId, organizationId, value: response.intelligence });
+    }).catch((error) => {
+      if (active) setIntelligenceResult({ aircraftId: selectedId, organizationId, error: error.message || "Aircraft relationship request failed." });
+    });
+    return () => { active = false; };
   }, [selectedId, organizationId]);
 
   if (tracking.state === "loading") return <LoadingState label="Connecting to aviation services…" />;
@@ -62,7 +71,27 @@ export default function ProductionLiveTracking() {
         {visible.length ? <Suspense fallback={<LoadingState label="Loading 3D globe…"/>}><ProductionFlightGlobe aircraft={visible} selectedId={selectedId} onSelect={setSelectedId}/></Suspense> : <div className="op-aviation-unavailable"><Plane size={32}/><span className="op-badge">{provenance[0]}</span><h2>No aviation positions available</h2><p>{tracking.state === "UNAVAILABLE" ? "Configure a server-side aviation provider to display aircraft. No synthetic positions are shown in production." : "No aircraft match the current organization scope and filters."}</p></div>}
         <div className="op-layer-control"><strong>Layers</strong><label><input type="checkbox" checked={visible.length > 0} readOnly/>Aircraft</label><label><input type="checkbox" checked={false} disabled/>Routes</label><label><input type="checkbox" checked={weatherEnabled} disabled={weather.state === "UNAVAILABLE"} onChange={(event) => setWeatherEnabled(event.target.checked)}/>Weather</label><input aria-label="Weather opacity" type="range" min="0" max="100" defaultValue="60" disabled={!weatherEnabled}/><small>{weather.state === "UNAVAILABLE" ? "Weather data temporarily unavailable" : `Updated ${weather.updatedAt ? new Date(weather.updatedAt).toLocaleTimeString() : "time unavailable"}`}</small></div>
       </section>
-      {selected && <aside className="op-flight-sheet"><button className="op-sheet-close" onClick={() => setSelectedId(null)} aria-label="Close aircraft details"><X size={18}/></button><span className="op-eyebrow">Selected aircraft</span><h2>{selected.registration || "Registration unavailable"}</h2><p>{selected.manufacturer || "—"} {selected.model || selected.aircraftType || ""}</p><dl><div><dt>Flight</dt><dd>{selected.flightNumber || selected.callsign || "—"}</dd></div><div><dt>Route</dt><dd>{selected.origin?.iata || "—"} → {selected.destination?.iata || "—"}</dd></div><div><dt>Altitude</dt><dd>{selected.position?.altitudeMeters ?? "—"}</dd></div><div><dt>Ground speed</dt><dd>{selected.position?.groundSpeedKph ?? "—"}</dd></div><div><dt>Position time</dt><dd>{selected.position?.timestamp ? new Date(selected.position.timestamp).toLocaleString() : "—"}</dd></div><div><dt>Source</dt><dd>{selected.dataSource || tracking.provider || "—"}</dd></div></dl><section><h3>Contract Intelligence</h3>{intelligence?.contracts?.length ? <><strong>{intelligence.impact.contracts} contracts impacted</strong><p>{intelligence.impact.obligations} obligations · {intelligence.impact.deadlines} deadlines · {intelligence.impact.risks} active risks</p><div>{intelligence.contracts.map((contract)=><a key={contract.contract_id} href={`/app/contracts/${contract.contract_id}`}>{contract.title}</a>)}</div><button className="op-button-primary" onClick={() => setDependenciesOpen(true)}>View Contract Dependency Tree</button></> : <p>Impact analysis unavailable — relationship data has not been configured.</p>}</section></aside>}
+      {selected && <aside className="op-flight-sheet">
+        <button className="op-sheet-close" onClick={() => setSelectedId(null)} aria-label="Close aircraft details"><X size={18}/></button>
+        <span className="op-eyebrow">Selected aircraft</span><h2>{selected.registration || "Registration unavailable"}</h2><p>{selected.manufacturer || "—"} {selected.model || selected.aircraftType || ""}</p>
+        <dl>{[
+          ["Flight", selected.flightNumber || selected.callsign || "—"], ["Route", `${selected.origin?.iata || "—"} → ${selected.destination?.iata || "—"}`],
+          ["Altitude", selected.position?.altitudeMeters ?? "—"], ["Ground speed", selected.position?.groundSpeedKph ?? "—"],
+          ["Position time", selected.position?.timestamp ? new Date(selected.position.timestamp).toLocaleString() : "—"],
+          ["Source", selected.dataSource || tracking.provider || "—"], ["Status", selected.status || "Not provided"],
+          ["Ownership / condition", "Not verified by the configured data"], ["Exposure", "Exposure not yet quantified."],
+        ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+        <section><h3>Contract Intelligence</h3>{currentIntelligence?.error ? <ErrorState message={currentIntelligence.error}/> : intelligence?.contracts?.length ? <>
+          <strong>{intelligence.impact.contracts} associated contracts</strong><p>{intelligence.impact.obligations} obligations · {intelligence.impact.deadlines} deadlines · {intelligence.impact.risks} active risks</p>
+          <div>{intelligence.contracts.map((contract) => <button type="button" key={contract.contract_id} className="op-button-secondary" onClick={() => setInspectedContractId(contract.contract_id)}>{contract.title}</button>)}</div>
+          {intelligence.contracts.filter((contract) => contract.contract_id === inspectedContractId).map((contract) => <section key={contract.contract_id} role="region" aria-label="In-place customer contract inspection">
+            <h4>{contract.title}</h4><p>{contract.contract_id} · {contract.relationship_type} · confidence: {contract.confidence ?? "Not provided"}</p>
+            <p>The authorized aircraft relationship endpoint supplies associations and counts, not clause excerpts or financial terms. Exposure not yet quantified. Obtain applicable clauses, notice periods, exclusions and event attribution before assessing any breach.</p>
+            <button type="button" className="op-button-secondary" onClick={() => setInspectedContractId(null)}>Return to aircraft</button>
+          </section>)}
+          <button className="op-button-primary" onClick={() => setDependenciesOpen(true)}>View Contract Dependency Tree</button>
+        </> : <p>Impact analysis unavailable — relationship data has not been configured.</p>}</section>
+      </aside>}
     </div>
 
     {filtersOpen && <div className="op-filter-backdrop" onClick={() => setFiltersOpen(false)}><aside className="op-filter-drawer" role="dialog" aria-modal="true" aria-label="Aviation filters" onClick={(event) => event.stopPropagation()}><button className="op-sheet-close" onClick={() => setFiltersOpen(false)} aria-label="Close filters"><X size={18}/></button><Filter size={22}/><h2>Aircraft filters</h2><p>Status, altitude, speed, airline, region, and aircraft-type filtering become available when the configured provider supplies those fields.</p><button className="op-button-primary" onClick={() => setFiltersOpen(false)}>Done</button></aside></div>}

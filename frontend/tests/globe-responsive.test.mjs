@@ -4,13 +4,15 @@ import { chromium } from "@playwright/test";
 
 const origin = process.env.CORPORATE_TEST_URL || "http://127.0.0.1:4175";
 if (!["localhost", "127.0.0.1", "[::1]"].includes(new URL(origin).hostname)) throw new Error("Responsive checks require loopback");
+const baselineOrigin = process.env.CORPORATE_BASELINE_URL;
+if (baselineOrigin && !["localhost", "127.0.0.1", "[::1]"].includes(new URL(baselineOrigin).hostname)) throw new Error("Performance baseline requires loopback");
 let browser;
 before(async () => { browser = await chromium.launch(); });
 after(async () => { await browser?.close(); });
 
-async function createPage(width, height = 1000, { touch = false } = {}) {
+async function createPage(width, height = 1000, { touch = false, baseOrigin = origin } = {}) {
   const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce", hasTouch: touch });
-  await context.route("**/*", (route) => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
+  await context.route("**/*", (route) => new URL(route.request().url()).origin === baseOrigin ? route.continue() : route.abort());
   const page = await context.newPage();
   page.setDefaultTimeout(30000);
   await page.route("**/api/weather-maps/status", (route) => route.fulfill({ json: { configured: false } }));
@@ -171,8 +173,9 @@ test("desktop navigation folds, expands on hover and keyboard focus, and pins op
 
 for (const width of [390, 1440]) {
   test(`aircraft canvas selection avoids GPU readback and long input handlers at ${width}px`, { timeout: 120000 }, async () => {
-    const { context, page } = await createPage(width, 1000, { touch: width === 390 });
-    try {
+    async function measure(baseOrigin, modelCount) {
+      const { context, page } = await createPage(width, 1000, { touch: width === 390, baseOrigin });
+      try {
       await page.addInitScript(() => {
         window.aircraftPickReadbacks = 0;
         window.aircraftInputTimings = [];
@@ -191,24 +194,39 @@ for (const width of [390, 1440]) {
           }
         }).observe({ type: "event", durationThreshold: 16 });
       });
-      await page.goto(`${origin}/demo/live-tracking`, { waitUntil: "domcontentloaded" });
+      await page.goto(`${baseOrigin}/demo/live-tracking`, { waitUntil: "domcontentloaded" });
       await page.getByRole("button", { name: "Decline", exact: true }).click();
-      await page.waitForFunction(() => Number(document.querySelector(".od-cesium-globe")?.dataset.aircraftModelsReady) === 12);
+      await page.waitForFunction((count) => Number(document.querySelector(".od-cesium-globe")?.dataset.aircraftModelsReady) === count, modelCount);
       const canvas = page.locator(".od-cesium-globe canvas");
+      await page.getByRole("button", { name: "Explore the fleet", exact: true }).click();
+      await page.locator(".od-dashboard-aircraft-list > button").first().click();
       await page.getByRole("button", { name: "Close aircraft infocard", exact: true }).click();
       await canvas.scrollIntoViewIfNeeded();
       const bounds = await canvas.boundingBox();
       await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-      await page.evaluate(() => { window.aircraftPickReadbacks = 0; window.aircraftInputTimings = []; });
-      if (width === 390) await page.touchscreen.tap(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-      else await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-      await page.getByRole("dialog", { name: "G-OPER", exact: true }).waitFor();
-      await page.waitForTimeout(200);
-      const result = await page.evaluate(() => ({ readbacks: window.aircraftPickReadbacks, handlers: window.aircraftInputTimings }));
-      assert.equal(result.readbacks, 0, "Selecting an aircraft must not render/read a GPU picking buffer");
-      assert.ok(result.handlers.every(event => event.handler < 50), `Aircraft input handler exceeded 50ms: ${JSON.stringify(result.handlers)}`);
-      assert.ok(result.handlers.every(event => event.duration < 200), `Aircraft interaction exceeded 200ms: ${JSON.stringify(result.handlers)}`);
-    } finally { await context.close(); }
+      const samples = [];
+      for (let index = 0; index < 7; index++) {
+        await page.evaluate(() => { window.aircraftPickReadbacks = 0; window.aircraftInputTimings = []; });
+        if (width === 390) await page.touchscreen.tap(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+        else await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+        await page.getByRole("dialog", { name: "G-OPER", exact: true }).waitFor();
+        await page.waitForTimeout(250);
+        samples.push(await page.evaluate(() => ({ readbacks: window.aircraftPickReadbacks, handlers: window.aircraftInputTimings })));
+        await page.getByRole("button", { name: "Close aircraft infocard", exact: true }).click();
+        await page.waitForTimeout(100);
+      }
+      // Event Timing is frame-quantized; absent entries are below its 16ms observer floor.
+      const durations = samples.map((sample) => Math.max(16, ...sample.handlers.map((event) => event.duration))).sort((a, b) => a - b);
+      console.log(`Aircraft canvas measurement ${width}px ${baseOrigin}: ${JSON.stringify({ samples, medianUpperBound: durations[3] })}`);
+      assert.ok(samples.every((sample) => sample.readbacks === 0), "Selecting an aircraft must not render/read a GPU picking buffer");
+      assert.ok(samples.every((sample) => sample.handlers.every((event) => event.handler < 50)), `Aircraft input handler exceeded 50ms: ${JSON.stringify(samples)}`);
+      assert.ok(durations.every((duration) => duration < 200), `Aircraft interaction exceeded 200ms: ${JSON.stringify(samples)}`);
+      return durations[3];
+      } finally { await context.close(); }
+    }
+    const baseline = baselineOrigin ? await measure(baselineOrigin, 12) : null;
+    const candidate = await measure(origin, 10);
+    if (baseline !== null) assert.ok(candidate <= baseline, `Aircraft selection regressed on the same runtime: candidate ${candidate}ms, baseline ${baseline}ms`);
   });
 }
 
@@ -217,6 +235,8 @@ for (const width of [320, 390, 1440]) {
     const { context, page } = await createPage(width);
     try {
       await page.goto(`${origin}/demo/live-tracking`, { waitUntil: "domcontentloaded" });
+      await page.getByRole("button", { name: "Explore the fleet", exact: true }).click();
+      await page.locator(".od-dashboard-aircraft-list > button").first().click();
       await page.locator(".od-graph-node").first().waitFor();
       const overflowing = await page.locator(".od-graph-node .od-badge, .od-live-header-actions button, .od-globe-layer-controls button").evaluateAll((elements) =>
         elements.filter((element) => element.scrollWidth > element.clientWidth + 1 || element.scrollHeight > element.clientHeight + 1).map((element) => element.textContent));
