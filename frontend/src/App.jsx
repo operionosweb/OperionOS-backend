@@ -43,6 +43,7 @@ const DemoWorkspace = lazy(() => import("./routes/demo/DemoWorkspace"));
 const DemoLiveTracking = lazy(() => import("./routes/demo/AviationIntelligenceMap"));
 const DemoIntelligence = lazy(() => import("./routes/demo/DemoIntelligence"));
 const DemoAdmin = lazy(() => import("./routes/demo/DemoAdmin"));
+const Matt = lazy(() => import("./routes/Matt"));
 
 function ScrollToTop() {
   const { pathname, hash } = useLocation();
@@ -120,6 +121,7 @@ export default function App() {
               <Route path="internal/commercial-intelligence/people" element={<RequirePlatformPermission permission={PLATFORM_PERMISSIONS.COMMERCIAL_INTELLIGENCE_READ}><CommercialIntelligenceBoundary page="people" /></RequirePlatformPermission>} />
               <Route path="intelligence" element={<Navigate to="../aviation" replace />} />
               <Route path="live-tracking" element={<ProductionLiveTracking />} />
+              <Route path="matt" element={<Matt />} />
               <Route path="*" element={<Navigate to="dashboard" replace />} />
             </Route>
 
@@ -131,6 +133,7 @@ export default function App() {
               <Route path="contracts/:id/:section" element={<DemoWorkspace />} />
               <Route path="upload" element={<DemoUpload />} />
               <Route path="live-tracking" element={<DemoLiveTracking />} />
+              <Route path="matt" element={<Matt demo />} />
               <Route path="intelligence" element={<DemoIntelligence />} />
               <Route path=":admin" element={<DemoAdmin />} />
             </Route>

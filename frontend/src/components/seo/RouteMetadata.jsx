@@ -6,6 +6,11 @@ const DEFAULT_TITLE = "Operion | AI Contract Intelligence for Aviation";
 const DEFAULT_DESCRIPTION = "Operion transforms complex aviation contracts into operational, financial and risk intelligence — helping organisations identify exposure, predict impact and take action.";
 
 const PUBLIC_PAGES = {
+  "/demo/matt": {
+    title: "Matt | Operion Contract Intelligence Demo",
+    description: "Meet Matt in a voice-and-text workspace grounded in prepared contract evidence. Demonstration only, not customer data.",
+    name: "Matt demonstration",
+  },
   "/": {
     title: DEFAULT_TITLE,
     description: DEFAULT_DESCRIPTION,

@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Link, useParams } from "react-router-dom";
 
 import { askContractAssistant } from "../../lib/contractsApi";
 import Button from "../ui/Button";
@@ -11,6 +12,7 @@ const EXAMPLES = [
 ];
 
 export default function ContractAssistantPanel({ analysisRunId, organizationId }) {
+  const { id: contractId } = useParams();
   const [question, setQuestion] = useState("");
   const [state, setState] = useState("idle");
   const [result, setResult] = useState(null);
@@ -40,6 +42,7 @@ export default function ContractAssistantPanel({ analysisRunId, organizationId }
     <section className="op-surface-plane-primary" style={{ padding: "var(--op-space-5)" }}>
       <p className="op-kicker" style={{ marginBottom: "var(--op-space-2)" }}>Contract assistant</p>
       <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-3)" }}>Ask this contract</h2>
+      {contractId && <Link className="op-badge" to={`/app/matt?contract=${encodeURIComponent(contractId)}`}>Open with Matt</Link>}
       <p className="op-body-sm" style={{ marginBottom: "var(--op-space-4)" }}>
         Answers are limited to this analysis run and require supporting contract evidence. They are decision support, not legal advice.
       </p>

@@ -16,12 +16,13 @@ const mainNav = [
   ["/demo/upload", "Upload Contract", Upload],
   ["/demo/live-tracking", "Live Tracking", Radar],
   ["/demo/intelligence", "Intelligence", BrainCircuit],
+  ["/demo/matt", "Matt", Bot],
 ];
 const workspaceNav = [
   ["overview", "Overview", Gauge], ["clauses", "Clauses", Scale],
   ["obligations", "Obligations", ListChecks], ["deadlines", "Deadlines", CalendarClock],
   ["risks", "Risks", ShieldAlert], ["evidence", "Evidence", FileCheck2],
-  ["financial-impact", "Financial Impact", CircleDollarSign], ["assistant", "Assistant", Bot],
+  ["financial-impact", "Financial Impact", CircleDollarSign], ["assistant", "Matt", Bot],
 ];
 const adminNav = [
   ["/demo/organisation", "Organisation", Building2], ["/demo/users", "Users", Users], ["/demo/settings", "Settings", Settings],
@@ -87,7 +88,7 @@ function DemoShellContent() {
         <span className="od-nav-label">Main</span>
         {mainNav.map(([to,label,icon]) => <NavigationLink key={to} to={to} label={label} icon={icon} end={to === "/demo/dashboard"} />)}
         <span className="od-nav-label od-workspace-label"><span className="od-workspace-expanded">Contract workspace</span><span className="od-workspace-folded">Workspace</span></span>
-        {workspaceNav.map(([section,label,icon]) => <NavigationLink key={section} to={`${workspaceBase}/${section}`} label={label} icon={icon} />)}
+        {workspaceNav.map(([section,label,icon]) => <NavigationLink key={section} to={section === "assistant" ? `/demo/matt?contract=${activeContract.id}` : `${workspaceBase}/${section}`} label={label} icon={icon} />)}
         <span className="od-nav-label">Admin</span>
         {adminNav.map(([to,label,icon]) => <NavigationLink key={to} to={to} label={label} icon={icon} />)}
       </nav>
@@ -110,7 +111,7 @@ function DemoShellContent() {
         </div>
         <div className="od-top-actions">
           <button type="button" className="od-icon-button" onClick={() => setNotificationsOpen((open) => !open)} aria-label="Demo notifications"><Bell size={18}/><i>3</i></button>
-          <Link to={`${workspaceBase}/assistant`} className="od-ask-button"><Bot size={16}/>Ask Operion</Link>
+          <Link to={`/demo/matt?contract=${activeContract.id}`} className="od-ask-button"><Bot size={16}/>Ask Matt</Link>
           <button type="button" className="od-profile"><span>JS</span><div><strong>John Smith</strong><small>Aviation Partners Ltd.</small></div><ChevronDown size={14}/></button>
         </div>
         {notificationsOpen && <div className="od-popover"><DemoBadge>DEMO DATA</DemoBadge><strong>3 prepared intelligence notices</strong><p>Review late-return risk, insurance evidence, and the maintenance-record deadline.</p></div>}
@@ -120,7 +121,7 @@ function DemoShellContent() {
     </div>
 
     {paletteOpen && <div className="od-command-backdrop" role="presentation" onClick={() => setPaletteOpen(false)}><section className="od-command" role="dialog" aria-modal="true" aria-label="Demo command palette" onClick={(event)=>event.stopPropagation()}><label><Search size={18}/><input autoFocus value={query} onChange={(event)=>setQuery(event.target.value)} placeholder="Search the demonstration environment"/><kbd>ESC</kbd></label><div>{filtered.map(({to,label,detail,icon:Icon})=><Link key={`${to}-${label}`} to={to}><Icon size={17}/><span><strong>{label}</strong>{detail && <small>{detail}</small>}</span></Link>)}</div><footer><DemoBadge>DEMO DATA</DemoBadge><span>Searches prepared demonstration content only.</span></footer></section></div>}
-    <OperionAssistant />
+    {!location.pathname.startsWith("/demo/matt") && <OperionAssistant />}
   </div>;
 }
 

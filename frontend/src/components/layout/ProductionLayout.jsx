@@ -28,6 +28,7 @@ const PRIMARY_NAV = [
   { to: "/app/upload", label: "Upload", icon: Upload },
   { to: "/app/aviation", label: "Aviation Intelligence", icon: BrainCircuit },
   { to: "/app/live-tracking", label: "Live Tracking", icon: Radar },
+  { to: "/app/matt", label: "Matt", icon: Bot },
 ];
 
 const WORKSPACE_NAV = [

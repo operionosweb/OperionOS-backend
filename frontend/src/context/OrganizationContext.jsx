@@ -21,6 +21,8 @@ export function OrganizationProvider({ children }) {
   const [organizationError, setOrganizationError] = useState("");
   const [organizationRole, setOrganizationRole] = useState(null);
   const [authorizationLoading, setAuthorizationLoading] = useState(false);
+  const [verifiedOrganizationId, setVerifiedOrganizationId] = useState("");
+  const [authorizationError, setAuthorizationError] = useState("");
 
   useEffect(() => {
     if (organizationId) localStorage.setItem(STORAGE_KEY, organizationId);
@@ -65,13 +67,28 @@ export function OrganizationProvider({ children }) {
     if (!organizationId || !auth?.isAuthenticated || organizationState !== "ready") {
       setOrganizationRole(null);
       setAuthorizationLoading(false);
+      setVerifiedOrganizationId("");
+      setAuthorizationError("");
       return () => { active = false; };
     }
     setAuthorizationLoading(true);
+    setAuthorizationError("");
     apiRequest("/api/foundation/context", { organizationId })
-      .then((result) => active && setOrganizationRole(result?.organization?.role || null))
-      .catch(() => active && setOrganizationRole(null))
-      .finally(() => active && setAuthorizationLoading(false));
+      .then((result) => {
+        if (!active) return;
+        if (!result?.organization?.role) throw new Error("Your organization role could not be verified.");
+        setOrganizationRole(result.organization.role);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setOrganizationRole(null);
+        setAuthorizationError(error.message || "Your organization access could not be verified.");
+      })
+      .finally(() => {
+        if (!active) return;
+        setVerifiedOrganizationId(organizationId);
+        setAuthorizationLoading(false);
+      });
     return () => { active = false; };
   }, [auth?.isAuthenticated, organizationId, organizationState]);
 
@@ -83,10 +100,11 @@ export function OrganizationProvider({ children }) {
       organizationState,
       organizationError,
       organizationRole,
-      authorizationLoading,
+      authorizationLoading: authorizationLoading || Boolean(auth?.isAuthenticated && organizationId && organizationState === "ready" && verifiedOrganizationId !== organizationId),
+      authorizationError,
       hasOrganizationPermission: (permission) => hasOrganizationPermission(organizationRole, permission),
     }),
-    [authorizationLoading, organizationError, organizationId, organizationRole, organizations, organizationState]
+    [auth?.isAuthenticated, authorizationError, authorizationLoading, verifiedOrganizationId, organizationError, organizationId, organizationRole, organizations, organizationState]
   );
 
   return (

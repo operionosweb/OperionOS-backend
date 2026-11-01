@@ -6,9 +6,9 @@ import { apiRequest, apiUpload } from "./apiClient";
  * No endpoint, field, or response shape below is invented.
  */
 
-export function listContracts(organizationId) {
+export function listContracts(organizationId, { signal } = {}) {
   // GET /api/contracts -> { success, total, contracts }
-  return apiRequest("/api/contracts", { organizationId });
+  return apiRequest("/api/contracts", { organizationId, signal });
 }
 
 export function getContract(contractId, organizationId) {
@@ -20,14 +20,14 @@ export function getContractProcessingStatus(contractId, organizationId) {
   return apiRequest(`/api/contracts/${contractId}/processing-status`, { organizationId });
 }
 
-export function listContractDocuments(contractId, organizationId) {
+export function listContractDocuments(contractId, organizationId, { signal } = {}) {
   // GET /api/contracts/:id/documents -> { success, documents }
-  return apiRequest(`/api/contracts/${contractId}/documents`, { organizationId });
+  return apiRequest(`/api/contracts/${contractId}/documents`, { organizationId, signal });
 }
 
-export function listDocumentVersions(documentId, organizationId) {
+export function listDocumentVersions(documentId, organizationId, { signal } = {}) {
   // GET /api/documents/:id/versions -> { success, versions }
-  return apiRequest(`/api/documents/${documentId}/versions`, { organizationId });
+  return apiRequest(`/api/documents/${documentId}/versions`, { organizationId, signal });
 }
 
 export function getDocumentStructure(documentId, organizationId) {
@@ -59,9 +59,9 @@ export function getAnalysisRunRoleIntelligence(analysisRunId, organizationId) {
   return apiRequest(`/api/analysis-runs/${analysisRunId}/role-intelligence`, { organizationId });
 }
 
-export function searchContractIntelligence(analysisRunId, organizationId, query, limit = 20) {
+export function searchContractIntelligence(analysisRunId, organizationId, query, limit = 20, { signal } = {}) {
   const params = new URLSearchParams({ q: query, limit: String(limit) });
-  return apiRequest(`/api/analysis-runs/${analysisRunId}/search?${params}`, { organizationId });
+  return apiRequest(`/api/analysis-runs/${analysisRunId}/search?${params}`, { organizationId, signal });
 }
 
 export function listAnalysisRunClauses(analysisRunId, organizationId) {
@@ -112,11 +112,12 @@ export function listAnalysisRunEvidence(analysisRunId, organizationId) {
   return apiRequest(`/api/analysis-runs/${analysisRunId}/evidence`, { organizationId });
 }
 
-export function askContractAssistant(analysisRunId, organizationId, question) {
+export function askContractAssistant(analysisRunId, organizationId, question, { signal } = {}) {
   return apiRequest(`/api/analysis-runs/${analysisRunId}/assistant`, {
     method: "POST",
     organizationId,
     body: { question },
+    signal,
   });
 }
 
