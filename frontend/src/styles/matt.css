@@ -8,10 +8,9 @@
 .matt-layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(340px, 1fr); align-items: start; gap: 24px; }
 .matt-environment { position: sticky; top: 20px; overflow: hidden; border: 1px solid #b7d4ee; border-radius: 20px 6px; background: #e4edf3; min-height: 540px; display: flex; flex-direction: column; justify-content: flex-end; }
 .matt-character { position: absolute; inset: 0; overflow: hidden; }
-.matt-character img, .matt-character video { width: 100%; height: 100%; object-fit: cover; object-position: 48% 40%; }
-.matt-character img { animation: matt-breathe 8s ease-in-out infinite; transform-origin: 48% 60%; }
-.matt-character video { position: absolute; inset: 0; opacity: 0; pointer-events: none; transition: opacity 240ms ease; }
-.matt-character video.is-speaking { opacity: 1; }
+.matt-character video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 48% 40%; pointer-events: none; }
+.matt-video-retry { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+.matt-studio-media-label { position: relative; margin: 0 12px 12px; padding: 7px 10px; border-radius: 8px; background: #fffffff0; color: #315774; font-size: 10px; line-height: 1.5; }
 .matt-nameplate { position: relative; margin: 0 20px 12px; padding: 18px; border-radius: 12px; max-width: 280px; background: #ffffffed; border: 1px solid #d3e2ed; }
 .matt-nameplate span { font-size: 9px; letter-spacing: .08em; }
 .matt-page .matt-nameplate h2 { font-size: 36px; margin: 5px 0; }
@@ -20,10 +19,6 @@
 .matt-character-status i, .matt-activity i { display: inline-block; flex-shrink: 0; width: 7px; height: 7px; background: #0066d9; border-radius: 50%; }
 .matt-page .matt-motion-choice { position: relative; margin: 0 12px 8px; font-size: 11px; color: #163b5b; background: #fffffff2; padding: 8px; border-radius: 8px; display: flex; align-items: center; gap: 4px; }
 .matt-page .matt-motion-note { position: relative; margin: 0 12px 12px; font-size: 9px; line-height: 1.3; color: #163b5b; padding: 7px; background: #fffffff2; border-radius: 6px; }
-.matt-environment[data-state="LISTENING"] img { animation: matt-attend 5s ease-in-out infinite; }
-.matt-environment[data-state="PROCESSING"] img, .matt-environment[data-state="INVESTIGATING"] img { animation: matt-consider 7s ease-in-out infinite; }
-.matt-environment[data-state="PRESENTING"] img, .matt-environment[data-state="SUCCESS"] img { animation: matt-attend 6s ease-in-out infinite; }
-.matt-environment[data-state="ERROR"] img, .matt-environment[data-state="INTERRUPTED"] img { animation: none; }
 .matt-workspace { min-width: 0; background: #fff; border: 1px solid #b7d4ee; border-radius: 16px; padding: 18px; }
 .matt-context { display: grid; gap: 10px; }
 .matt-page label { display: grid; gap: 5px; font-size: 12px; font-weight: 600; min-width: 0; }
@@ -57,10 +52,6 @@
 .matt-page .is-recording { color: #a72e2e; border-color: #a72e2e; background: #fff1ef; }
 .matt-voice-settings label:has(input[type="checkbox"]) { display: block; padding: 8px 0; }
 .matt-page :is(p, h1, h2, h3, cite, small, label) { overflow-wrap: anywhere; }
-@keyframes matt-breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.006); } }
-@keyframes matt-attend { 0%,100% { transform: scale(1.008) translateY(0); } 50% { transform: scale(1.012) translateY(-1px); } }
-@keyframes matt-consider { 0%,100% { transform: scale(1.008) translateX(0); } 50% { transform: scale(1.01) translateX(2px); } }
 @media (min-width: 1500px) { .matt-environment { min-height: 720px; } }
 @media (max-width: 1000px) { .matt-layout { grid-template-columns: minmax(0, 1fr); } .matt-environment { position: relative; top: auto; min-height: 430px; } .matt-character { position: relative; height: 340px; flex-shrink: 0; } .matt-nameplate { margin-top: 12px; } .matt-heading { flex-wrap: wrap; } }
 @media (max-width: 600px) { .matt-page { padding: 12px 0; } .matt-workspace { padding: 12px; } .matt-environment { min-height: 370px; border-radius: 12px; } .matt-character { height: 280px; } .matt-nameplate { max-width: none; padding: 12px; } .matt-page .matt-nameplate h2 { font-size: 26px; } .matt-report { max-height: none; } .matt-controls button { flex: 1 1 140px; } }
-@media (prefers-reduced-motion: reduce) { .matt-character img { animation: none !important; } .matt-character video { transition: none; } }

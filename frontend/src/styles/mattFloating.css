@@ -1,6 +1,6 @@
 .matt-floating { position: fixed; right: 18px; bottom: 18px; z-index: 80; }
 .matt-floating-trigger { display: flex; align-items: center; gap: 8px; padding: 6px 14px 6px 6px; border: 1px solid #b7d4ee; border-radius: 999px; background: #fff; color: #19344f; box-shadow: 0 6px 24px #19344f26; min-height: 48px; cursor: pointer; }
-.matt-floating-trigger img { width: 36px; height: 36px; object-fit: cover; object-position: 50% 30%; border-radius: 50%; }
+.matt-floating-trigger video { width: 36px; height: 36px; object-fit: cover; object-position: 50% 30%; border-radius: 50%; pointer-events: none; }
 .matt-floating-panel { position: absolute; right: 0; bottom: 60px; width: min(880px, calc(100vw - 100px)); max-height: calc(100dvh - 110px); overflow: auto; overscroll-behavior: contain; border: 1px solid #b7d4ee; border-radius: 20px; background: #f5faff; box-shadow: 0 16px 60px #19344f33; }
 .matt-floating-panel > header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px; }
 .matt-floating-panel > header strong { flex: 1; font-size: 11px; }
@@ -15,4 +15,8 @@
   .matt-floating { right: 8px; bottom: calc(78px + env(safe-area-inset-bottom)); }
   .matt-floating-panel { position: fixed; left: 2px; right: 2px; top: 64px; bottom: calc(136px + env(safe-area-inset-bottom)); width: auto; max-height: none; }
   .matt-floating-panel .matt-page { padding-inline: 0; }
+}
+body:has(.op-consent) .matt-floating { top: calc(84px + env(safe-area-inset-top)); bottom: auto; }
+@media (min-width: 769px) {
+  body:has(.op-consent) .matt-floating-panel { top: 60px; bottom: auto; max-height: calc(100dvh - 160px); }
 }

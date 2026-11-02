@@ -15,6 +15,7 @@ export function MattFloating({ demo = false, contracts = [], primaryContract }) 
   const location = useLocation();
   const { organizationId } = useOrganization();
   const [open, setOpen] = useState(false), [flight, setFlight] = useState(null);
+  const [previewError, setPreviewError] = useState(false);
   const [selectedContext, setSelectedContext] = useState(null);
   const trigger = useRef(null), panel = useRef(null);
   const base = demo ? "/demo" : "/app";
@@ -45,7 +46,7 @@ export function MattFloating({ demo = false, contracts = [], primaryContract }) 
   const query = new URLSearchParams(flight ? { flight: flight.id } : contract ? { contract: contract.id, ...(selectedContext?.analysisRunId ? { analysis: selectedContext.analysisRunId } : {}) } : {});
   return <div className="matt-floating">
     <button ref={trigger} type="button" className="matt-floating-trigger" aria-label={open ? "Close Matt assistant" : "Open Matt assistant"} aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-      <img src="/matt/executive-office.jpg" alt=""/><span>Matt</span>
+      <video src="/matt/reference.mp4" autoPlay loop muted playsInline aria-hidden="true" tabIndex={-1} title="Prerecorded Matt identity preview, not live speech" onError={() => setPreviewError(true)}/><span>{previewError ? "Matt video unavailable" : "Matt"}</span>
     </button>
     {open && <section ref={panel} className="matt-floating-panel" role="dialog" aria-label="Matt contextual assistant">
       <header><strong>ASK MATT / {flight ? flight.id : contract?.title || "Authorized contract context"}</strong><Link to={`${base}/matt?${query}`} onClick={() => setOpen(false)}><Maximize2 size={16}/>Expand Matt</Link><button type="button" aria-label="Close Matt panel" onClick={() => { setOpen(false); trigger.current?.focus(); }}><X size={18}/></button></header>

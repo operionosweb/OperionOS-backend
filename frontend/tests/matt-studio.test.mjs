@@ -55,23 +55,39 @@ for (const width of [320, 360, 390, 430, 768, 1024, 1440, 1920]) {
     const f = await fixture(width);
     try {
       assert.equal(await f.page.locator(".matt-page").getAttribute("data-experience"), "unified-matt");
-      assert.equal(await f.page.locator("video").count(), 0);
+      const avatar = f.page.locator(".matt-character video");
+      assert.equal(await avatar.count(), 1);
+      assert.deepEqual(await avatar.evaluate((player) => ({
+        autoplay: player.autoplay, loop: player.loop, muted: player.muted, playsInline: player.playsInline,
+      })), { autoplay: true, loop: true, muted: true, playsInline: true });
+      assert.equal(await f.page.locator(".matt-character img").count(), 0, "Matt has no static-image fallback");
+      assert.equal(await f.page.locator(".matt-character-status").evaluate((status) => {
+        const label = document.querySelector(".matt-studio-media-label").getBoundingClientRect();
+        const name = document.querySelector(".matt-nameplate").getBoundingClientRect();
+        const box = status.getBoundingClientRect();
+        const intersects = (other) => box.left < other.right && box.right > other.left && box.top < other.bottom && box.bottom > other.top;
+        return intersects(label) || intersects(name);
+      }), false, "Conversation status never overlaps Matt's name or the prerecorded-media disclosure");
       assert.equal(await f.page.getByRole("textbox", { name: "Ask Matt", exact: true }).count(), 0);
       await f.page.getByRole("button", { name: "What are the key obligations?", exact: true }).click();
       await f.page.waitForFunction(() => document.querySelector(".matt-page")?.dataset.state === "PRESENTING");
       assert.equal(await f.page.locator(".matt-answer").count(), 0);
       assert.equal(await f.page.locator(".matt-report").isVisible(), true, "Result panel opens without leaving Matt");
       assert.equal(await f.page.locator(".matt-findings li").count(), 4);
+      assert.equal(await f.page.locator(".matt-proposal").isVisible(), false, "Review actions remain collapsed until requested");
       await f.page.getByText(/Supporting source evidence \(/).click();
       assert.equal(await f.page.locator(".matt-report .od-evidence").count(), 4);
+      await f.page.getByText("Review actions and proposal", { exact: true }).click();
       if (width <= 768) {
         const bounds = await f.page.locator(".matt-studio-notice, .matt-environment, .matt-composer, .matt-report, .matt-proposal-card, .matt-proposal-status, .matt-report .od-evidence").evaluateAll((cards) => cards.map((card) => {
           const rect = card.getBoundingClientRect();
-          return { left: rect.left, right: innerWidth - rect.right, name: card.className };
+          const report = card.closest(".matt-report");
+          return { left: rect.left, right: innerWidth - rect.right, name: card.className,
+            scrollbar: report && report !== card ? report.offsetWidth - report.clientWidth : 0 };
         }));
         for (const card of bounds) {
           assert.ok(Math.abs(card.left - 2) < 1, `${card.name}: exact Demo left gutter, got ${card.left}`);
-          assert.ok(Math.abs(card.right - 2) < 1, `${card.name}: exact Demo right gutter, got ${card.right}`);
+          assert.ok(Math.abs(card.right - 2 - card.scrollbar) < 1, `${card.name}: exact Demo gutter plus the report's visible scrollbar, got ${card.right}`);
         }
       }
       const geometry = await f.page.evaluate(() => {
@@ -88,16 +104,26 @@ for (const width of [320, 360, 390, 430, 768, 1024, 1440, 1920]) {
       if (width >= 1024) assert.ok(geometry.dockBottom <= geometry.stageBottom, "Desktop primary controls dock inside scene");
       else assert.ok(geometry.dockGap >= 0 && geometry.dockGap <= 60, "Mobile primary controls follow scene without a report/context wall");
       assert.deepEqual(geometry.undersized, []);
-      assert.equal(await f.page.locator(".matt-character img").evaluate((image) => getComputedStyle(image).animationName), "none");
+      if (width >= 1024) {
+        await f.page.getByRole("button", { name: "Type a question", exact: true }).click();
+        await f.page.waitForFunction(() => {
+          const label = document.querySelector(".matt-studio-media-label").getBoundingClientRect();
+          const dock = document.querySelector(".matt-composer").getBoundingClientRect();
+          return label.bottom <= dock.top;
+        });
+        await f.page.getByRole("button", { name: "Hide text input", exact: true }).click();
+      }
+      assert.equal(await f.page.locator(".matt-character video").count(), 1, "Reduced-motion preference does not replace Matt with a still");
       if (process.env.MATT_SCREENSHOT_DIR && [390, 1440].includes(width)) {
         await f.page.locator(".matt-proposal").scrollIntoViewIfNeeded();
+        await f.page.evaluate(() => { window.scrollTo({ top: 0, behavior: "instant" }); });
         await f.page.screenshot({ path: path.join(process.env.MATT_SCREENSHOT_DIR, `matt-proposal-${width}.png`), fullPage: true, animations: "disabled" });
         await f.page.getByRole("button", { name: "Close findings panel", exact: true }).click();
         await f.page.evaluate(() => { window.scrollTo({ top: 0, behavior: "instant" }); });
         await f.page.screenshot({ path: path.join(process.env.MATT_SCREENSHOT_DIR, `matt-studio-${width}.png`), fullPage: true, animations: "disabled" });
       }
       assert.deepEqual(f.errors, []);
-      assert.deepEqual(f.requests, [], "No customer APIs, external hosts or generic footage");
+      assert.ok(f.requests.length > 0 && f.requests.every((path) => path === "/matt/reference.mp4"), "Only the supplied same-origin Matt footage is requested");
       assert.equal(await f.page.evaluate(() => window.__voice.speech), 0);
     } finally { await f.context.close(); }
   });
@@ -107,6 +133,7 @@ for (const width of [320, 360, 390, 430, 768, 1024, 1440, 1920]) {
     try {
       assert.equal(await f.page.locator(".matt-proposal").count(), 0, "No fabricated proposal before a result");
       await f.page.getByRole("button", { name: "Review the maintenance risks", exact: true }).click();
+      await f.page.getByText("Review actions and proposal", { exact: true }).click();
       await f.page.getByRole("region", { name: "Contract review proposal", exact: true }).waitFor();
       const proposal = f.page.locator(".matt-proposal");
       if (width <= 768) assert.ok(await f.page.locator(".matt-report").evaluate((panel) => panel.clientHeight <= innerHeight * 0.75 + 2), "Mobile proposal sheet bounds vertical page growth");
@@ -119,12 +146,12 @@ for (const width of [320, 360, 390, 430, 768, 1024, 1440, 1920]) {
       await f.page.getByRole("button", { name: "Send", exact: true }).click();
       await f.page.waitForFunction(() => document.querySelector(".matt-page")?.dataset.state === "PRESENTING");
       assert.equal(await f.page.locator(".matt-answer").count(), 0, "Proposal remains available with response text off");
-      await f.page.getByRole("button", { name: "Hide proposal", exact: true }).click();
+      await f.page.getByRole("button", { name: /^Close findings(?: \(\d+\))?$/ }).click();
       assert.equal(await f.page.locator(".matt-report").isVisible(), false);
-      await f.page.getByRole("button", { name: "Open proposal", exact: true }).click();
+      await f.page.getByRole("button", { name: /^Inspect findings/ }).click();
       await proposal.getByRole("link", { name: "Review contract evidence", exact: true }).click();
       await f.page.waitForURL(/\/demo\/contracts\/[^/]+\/evidence/);
-      assert.deepEqual(f.requests, []);
+      assert.ok(f.requests.every((path) => path === "/matt/reference.mp4"), "Only supplied Matt footage is requested; no customer API is called");
       assert.deepEqual(f.errors, []);
     } finally { await f.context.close(); }
   });
@@ -174,11 +201,31 @@ test("microphone requires consent, opens transcript review and interruption stop
       window.__recognition.onresult({ resultIndex: 0, results: [result] });
     });
     assert.equal(await f.page.getByRole("textbox", { name: "Ask Matt", exact: true }).inputValue(), "Review the maintenance risks");
-    await f.page.getByRole("button", { name: "Interrupt / stop speaking", exact: true }).click();
+    await f.page.getByRole("button", { name: "Interrupt / stop", exact: true }).click();
     assert.equal(await f.page.locator(".matt-page").getAttribute("data-state"), "INTERRUPTED");
     assert.equal(await f.page.evaluate(() => window.__voice.speech), 0);
     assert.ok(await f.page.evaluate(() => window.__voice.aborted) > 0);
-    assert.equal(await f.page.locator("video").count(), 0);
+    assert.equal(await f.page.locator(".matt-character video").count(), 1, "Matt's video presence continues while speech input is interrupted");
+    assert.deepEqual(f.errors, []);
+  } finally { await f.context.close(); }
+});
+
+test("Matt plays the supplied video continuously without claiming response synchronization", async () => {
+  const f = await fixture();
+  try {
+    const video = f.page.locator(".matt-character video");
+    await f.page.waitForFunction(() => {
+      const player = document.querySelector(".matt-character video");
+      return player && player.readyState >= 2 && !player.paused && player.currentTime > 0.1;
+    }, null, { timeout: 20000 });
+    const initialTime = await video.evaluate((player) => player.currentTime);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const nextTime = await video.evaluate((player) => player.currentTime);
+    assert.ok(nextTime > initialTime, "Decoded Matt footage advances instead of showing a static reference");
+    assert.equal(await video.evaluate((player) => player.loop && player.muted && player.autoplay && player.playsInline), true);
+    assert.equal(await f.page.locator(".matt-character img").count(), 0);
+    assert.match(await f.page.locator(".matt-studio-notice").textContent(), /Identity footage only.*Live synchronized conversation is not connected/);
+    assert.ok(f.requests.length > 0 && f.requests.every((path) => path === "/matt/reference.mp4"));
     assert.deepEqual(f.errors, []);
   } finally { await f.context.close(); }
 });

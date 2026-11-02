@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
-import { ArrowUp, Mic, Square, RotateCcw, Volume2, FileText, Keyboard, PanelRight, VideoOff } from "lucide-react";
+import { ArrowUp, Mic, Square, RotateCcw, Volume2, FileText, Keyboard, PanelRight, Video, VideoOff } from "lucide-react";
 import { useOrganization } from "../context/OrganizationContext";
 import { useAuth } from "../context/AuthContext";
 import OrganizationGate from "../components/demo/OrganizationGate";
@@ -66,17 +66,28 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
   const [readAnswers, setReadAnswers] = useState(false);
   const [support, setSupport] = useState({ input: false, output: false });
   const [mediaError, setMediaError] = useState("");
+  const [mediaStatus, setMediaStatus] = useState("loading");
   const [scopeError, setScopeError] = useState("");
   const [showResponseText, setShowResponseText] = useState(session.showText);
   const [showTextInput, setShowTextInput] = useState(false);
-  const [dossierOpen, setDossierOpen] = useState(true);
+  const [dossierOpen, setDossierOpen] = useState(Boolean(session.state.result));
   const [feedback, setFeedback] = useState(session.feedback || {});
   const voiceRef = useRef(null), requestRef = useRef(null), composerRef = useRef(null), sequenceRef = useRef(0);
+  const dockRef = useRef(null);
   const result = state.result;
   const busy = ["PROCESSING", "INVESTIGATING"].includes(state.phase);
   const onMediaError = useCallback((message) => setMediaError(message), []);
-  useEffect(() => { setQuestionState(session.question); setShowResponseText(session.showText); setFeedback(session.feedback || {}); }, [scopeKey, session]);
+  const onMediaStatus = useCallback((status) => setMediaStatus(status), []);
+  useEffect(() => { setQuestionState(session.question); setShowResponseText(session.showText); setFeedback(session.feedback || {}); setDossierOpen(Boolean(session.state.result)); }, [scopeKey, session]);
   useEffect(() => { session.showText = showResponseText; }, [session, showResponseText]);
+  useEffect(() => {
+    const dock = dockRef.current;
+    if (!dock) return;
+    const root = dock.closest(".matt-studio");
+    const observer = new ResizeObserver(() => root.style.setProperty("--matt-dock-height", `${dock.getBoundingClientRect().height}px`));
+    observer.observe(dock);
+    return () => { observer.disconnect(); root.style.removeProperty("--matt-dock-height"); };
+  }, [reportOnly]);
 
   useEffect(() => {
     const voice = createMattVoice({ onEvent: dispatch, onTranscript: (transcript) => {
@@ -129,7 +140,7 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
     voiceRef.current?.listen();
   }
   function read(text = result?.answer) {
-    if (studio) { dispatch({ type: "ERROR", error: "Talking video is not configured. Independent browser speech is disabled in this preview; inspect the evidence or enable response text." }); return; }
+    if (studio) { dispatch({ type: "ERROR", error: "Matt's video is prerecorded and is not synchronized to response audio. Speech output is disabled in this preview; inspect the evidence or enable response text." }); return; }
     if (!voiceConsent) { dispatch({ type: "ERROR", error: "Acknowledge the speech-service privacy notice before playback. Text remains available." }); return; }
     if (text) { interrupt(); voiceRef.current?.speak(text, { voiceURI, rate }); }
   }
@@ -212,23 +223,26 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
   return <main className={`matt-page matt-studio matt-cockpit${compact ? " matt-compact" : ""}`} data-mode={demo ? "demo" : "authenticated"} data-state={state.phase} data-experience="unified-matt" data-context={flight ? flight.id : contractId} data-text={showResponseText ? "visible" : "hidden"}>
     {studio ? <PageHeader eyebrow="MATT / YOUR OPERION COLLEAGUE" title="Let's look at what matters." description="Ask. Investigate. Understand the evidence." actions={<DemoBadge tone="neutral">{demo ? "DEMONSTRATION / PREPARED CONTRACT DATA" : "AUTHENTICATED / SELECTED CONTRACT SCOPE"}</DemoBadge>}/> : <header className="matt-heading"><div><span className="matt-eyebrow">MATT / YOUR OPERION COLLEAGUE</span><h1>Let's look at what matters.</h1><p>Ask. Investigate. Understand the evidence.</p></div>
       <span className="matt-provenance">{demo ? "DEMONSTRATION / PREPARED CONTRACT DATA" : "AUTHENTICATED / SELECTED CONTRACT SCOPE"}</span></header>}
-    {studio && <div className="matt-studio-notice od-card" role="status"><VideoOff size={20} aria-hidden="true"/><div><strong>Talking video unavailable / identity reference only</strong><p>Provider, Matt identity, fixed voice and privacy/budget approval are still required. No synchronized video response is claimed.</p></div></div>}
+    {studio && <div className="matt-studio-notice" role="status">{mediaStatus === "error" ? <VideoOff size={18} aria-hidden="true"/> : <Video size={18} aria-hidden="true"/>}<div>
+      <strong>{mediaStatus === "playing" ? "Matt's video presence is active" : mediaStatus === "buffering" ? "Matt's video is buffering" : mediaStatus === "error" ? "Matt's video could not play" : "Loading Matt's video presence"}</strong>
+      <p>Identity footage only. Live synchronized conversation is not connected. Review answers and evidence in Findings.</p>
+    </div></div>}
     <div className={`matt-layout${studio && dossierOpen ? " has-proposal" : ""}`}>
-      <MattEnvironment phase={state.phase} onMediaError={onMediaError} studio={studio}/>
+      <MattEnvironment phase={state.phase} onMediaError={onMediaError} onMediaStatus={onMediaStatus} studio={studio}/>
       <section className={`matt-workspace${studio ? " od-card" : ""}`} aria-label="Matt conversation and findings">
         {studio && <div className="matt-studio-toolbar">
-          <span className="matt-studio-state">Current interaction: <strong>{state.phase.toLowerCase()}</strong></span>
           <button type="button" aria-controls={dossierId} aria-expanded={dossierOpen} onClick={() => setDossierOpen((open) => !open)}><PanelRight size={18}/>{dossierOpen ? "Close findings" : "Inspect findings"}{result ? ` (${result.findings.length})` : ""}</button>
-          <button type="button" aria-controls={dossierId} aria-expanded={dossierOpen} onClick={() => setDossierOpen((open) => !open)}>{dossierOpen ? "Hide proposal" : "Open proposal"}</button>
           <label><input type="checkbox" checked={showResponseText} onChange={(event) => { setShowResponseText(event.target.checked); if (event.target.checked) setDossierOpen(true); }}/>Show response text</label>
         </div>}
         {flight ? <div className="matt-context"><strong>{flight.flightNumber || flight.id} / {flight.origin} to {flight.destination}</strong><p>Illustrative flight only. Answers use this flight's scenario, not the demonstration lease or customer records.</p></div> : <div className="matt-context">
-          <label>Search available contract names<input type="search" value={contractSearch} onChange={(event) => setContractSearch(event.target.value)} placeholder="Contract title"/></label>
           <label>Contract context<select aria-label="Contract context" value={contractId} disabled={catalogState !== "ready"} onChange={(event) => changeContract(event.target.value)}>
             <option value="">Select an authorized contract</option>
             {catalog.filter((item) => item.id === contractId || (item.title || "").toLowerCase().includes(contractSearch.toLowerCase())).map((item) => <option key={item.id} value={item.id}>{item.title || item.id}</option>)}
           </select></label>
-          <p>{demo ? "Illustrative lease only. Other demo agreements share sample evidence and are excluded. No production records or external AI calls." : "Names come from your authorized organization catalog. Each question searches only the selected contract; no portfolio-wide ranking or automatic extraction."}</p>
+          <details className="matt-context-details"><summary>Scope and contract search</summary>
+            <label>Search available contract names<input type="search" value={contractSearch} onChange={(event) => setContractSearch(event.target.value)} placeholder="Contract title"/></label>
+            <p>{demo ? "Illustrative lease only. Other demo agreements share sample evidence and are excluded. No production records or external AI calls." : "Names come from your authorized organization catalog. Each question searches only the selected contract; no portfolio-wide ranking or automatic extraction."}</p>
+          </details>
           {catalogState === "loading" && <p role="status">Loading available contract context...</p>}
           {scopeError && <p role="alert">{scopeError}</p>}
         </div>}
@@ -236,7 +250,7 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
         {state.error && <p className="matt-error" role="alert">{state.error}</p>}
         {mediaError && <p className="matt-error" role="alert">{mediaError}</p>}
         <div id={dossierId} className="matt-report" aria-label="Intelligence report" hidden={studio && !dossierOpen}>
-          {studio && <div className="matt-dossier-heading"><h2>Proposal and evidence</h2><button type="button" aria-label="Close findings panel" onClick={() => setDossierOpen(false)}>Close</button></div>}
+          {studio && <div className="matt-dossier-heading"><div><span className="matt-eyebrow">CONTEXTUAL INTELLIGENCE</span><h2>Findings and evidence</h2></div><button type="button" aria-label="Close findings panel" onClick={() => setDossierOpen(false)}>Close</button></div>}
           {result && (busy || state.error) && <p role="status">The retained report below is from the previous completed question, not the current request.</p>}
           {result?.analysisRunId && analysisScope && result.analysisRunId !== analysisScope && <p role="status">This retained report is from a different analysis version. Ask again to use the selected workspace version.</p>}
           {!result ? <div className="matt-welcome"><FileText size={28}/><h2>Evidence, not guesswork.</h2><p>Start with a contract question. Findings, source excerpts and follow-ups stay here beside Matt.</p>
@@ -253,7 +267,7 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
                 {result.evidence.map((source, index) => studio ? <EvidenceCard key={source.id || index} evidence={{ excerpt: source.excerpt, page: source.page_number, locator: source.source_locator }}/>: <blockquote key={source.id || index}><p>{source.excerpt}</p><cite>{source.source_locator || (source.page_number ? `Page ${source.page_number}` : "Source locator unavailable")}</cite>
                   {source.confidence !== null && source.confidence !== undefined && <small>Source confidence: {source.confidence}. Not a liability estimate.</small>}</blockquote>)}
               </details>
-              {studio ? <MattProposal result={result} demo={demo} onCompose={compose}/> : <section className="matt-review"><h3>Exposure and next action</h3><p>No new financial exposure is calculated by this presentation. Amounts, exclusions and missing evidence require review in the existing contract intelligence.</p><p>Review the supplied source and verify timing/attribution before taking action. Matt does not send notices or change records.</p></section>}
+              {studio ? <details className="matt-proposal-disclosure"><summary>Review actions and proposal</summary><MattProposal result={result} demo={demo} onCompose={compose}/></details> : <section className="matt-review"><h3>Exposure and next action</h3><p>No new financial exposure is calculated by this presentation. Amounts, exclusions and missing evidence require review in the existing contract intelligence.</p><p>Review the supplied source and verify timing/attribution before taking action. Matt does not send notices or change records.</p></section>}
               <div className="matt-report-actions">{!studio && <button type="button" disabled={!support.output} onClick={() => read()}><Volume2 size={16}/>Read answer</button>}<button type="button" onClick={() => compose("Explain the second finding in more detail")}>Explain the second finding</button>
                 <Link to={fullReport}>OPEN FULL REPORT</Link>{result.contractId && <Link to={`${base}/contracts/${encodeURIComponent(result.contractId)}${demo ? "/evidence" : "#evidence"}`}>Open existing contract workspace</Link>}</div>
               <div className="matt-report-actions" aria-label="Session-only response feedback">{["Helpful", "Needs review"].map((rating) => <button type="button" key={rating} aria-pressed={feedback[state.requestId] === rating} onClick={() => {
@@ -263,12 +277,12 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
         </div>
         {(!studio || showResponseText) && <details className="matt-history"><summary>Conversation ({state.messages.length} messages, this visit only)</summary>{state.messages.map((message, index) => <p key={index}><strong>{message.role === "user" ? "You" : "Matt"}</strong> {message.text}</p>)}</details>}
         {studio && <div className="matt-studio-prompts" aria-label="Prepared intelligence questions">{(flight ? ["What happens if this flight is delayed by three hours?", "Which contractual clauses apply?", "What is the potential financial exposure?"] : result?.followUps?.length ? result.followUps : ["What are the key obligations?", "Review the maintenance risks", "Which deadlines require trigger dates?"]).map((prompt) => <button type="button" key={prompt} disabled={busy || (!contractId && !flight)} onClick={() => submit(null, prompt)}>{prompt}</button>)}</div>}
-        <form className="matt-composer" onSubmit={submit}>
+        <form ref={dockRef} className="matt-composer" onSubmit={submit}>
           {(!studio || showTextInput) && <div className="matt-text-input" id={inputId}><label>Ask Matt<textarea ref={composerRef} aria-label="Ask Matt" value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={500} rows={2} placeholder="Ask about the selected contract, or a previous finding..."/></label>
           <small>{question.length}/500 characters. Voice transcripts are reviewed before sending.</small></div>}
           <div className="matt-controls"><button type="button" className={state.phase === "LISTENING" ? "is-recording" : ""} onClick={state.phase === "LISTENING" ? interrupt : startListening} aria-pressed={state.phase === "LISTENING"}><Mic size={18}/>{state.phase === "LISTENING" ? "Stop microphone" : "Microphone"}</button>
             {(!studio || showTextInput) && <button type="submit" className="matt-send" disabled={question.trim().length < 3 || (!contractId && !flight) || catalogState !== "ready"}><ArrowUp size={18}/>Send</button>}
-            <button type="button" onClick={interrupt}><Square size={16}/>Interrupt / stop speaking</button>
+            <button type="button" onClick={interrupt}><Square size={16}/>Interrupt / stop</button>
             {studio && <button type="button" aria-controls={inputId} aria-expanded={showTextInput} onClick={() => setShowTextInput((open) => !open)}><Keyboard size={18}/>{showTextInput ? "Hide text input" : "Type a question"}</button>}
             {!studio && <><button type="button" onClick={() => { interrupt(); dispatch({ type: "READY" }); composerRef.current?.focus(); }}>Return to listening</button>
             <button type="button" onClick={reset}><RotateCcw size={16}/>Clear conversation</button></>}</div>
@@ -280,7 +294,7 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
           {!studio && <><label><input type="checkbox" checked={readAnswers} disabled={!voiceConsent || !support.output} onChange={(event) => setReadAnswers(event.target.checked)}/>Read received answers aloud</label>
           <label>Voice<select value={voiceURI} disabled={!support.output} onChange={(event) => setVoiceURI(event.target.value)}><option value="">Browser default (identity may vary by device)</option>{voices.map((voice) => <option key={voice.voiceURI} value={voice.voiceURI}>{voice.name} / {voice.lang}{voice.localService ? " / local" : " / possibly remote"}</option>)}</select></label>
           <label>Speech pace<select value={rate} onChange={(event) => setRate(Number(event.target.value))}><option value={0.9}>Measured</option><option value={1}>Natural</option><option value={1.1}>Brisk</option></select></label></>}
-          <p>{support.input ? "Browser speech recognition available; permission and network still required." : "Speech recognition unavailable in this browser: use text."} {studio ? "Speech output is blocked until synchronized talking video is configured. No independent browser TTS in this preview." : support.output ? "Speech synthesis available; choose a device voice." : "Speech playback unavailable: answers remain in text."}</p>
+          <p>{support.input ? "Browser speech recognition available; permission and network still required." : "Speech recognition unavailable in this browser: use text."} {studio ? "Matt's video is prerecorded; response speech is not available or synchronized in this preview." : support.output ? "Speech synthesis available; choose a device voice." : "Speech playback unavailable: answers remain in text."}</p>
         </details>
       </section>
     </div>

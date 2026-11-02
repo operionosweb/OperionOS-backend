@@ -78,11 +78,13 @@ test("main, workspace, floating Matt and full response report share one contract
     const pageUrl = f.page.url();
     await f.page.getByText(/Supporting source evidence \(/).click();
     assert.equal(f.page.url(), pageUrl, "Evidence remains in contextual panel");
+    await f.page.getByText("Review actions and proposal", { exact: true }).click();
     await f.page.getByRole("link", { name: "OPEN FULL REPORT", exact: true }).click();
     await f.page.waitForURL("**/matt/report?**");
     assert.match(await f.page.locator(".matt-full-report").innerText(), /Maintain insurance/);
     await f.page.getByRole("link", { name: "Return to Matt and conversation", exact: true }).click();
     assert.equal(await f.page.locator(".matt-answer").textContent(), answer);
+    await f.page.getByText("Review actions and proposal", { exact: true }).click();
     await f.page.getByRole("link", { name: "Open existing contract workspace", exact: true }).click();
     await f.page.waitForURL("**/demo/contracts/demo-aircraft-lease/evidence");
     await f.page.getByRole("button", { name: "Open Matt assistant", exact: true }).click();

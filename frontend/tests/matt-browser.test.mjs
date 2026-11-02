@@ -100,7 +100,7 @@ test("demo reuses grounded lease evidence, supports follow-ups and rejects unest
     await f.page.getByText("Not established. Do not infer that a clause, exposure or obligation exists.", { exact: true }).waitFor();
     assert.equal(await f.page.locator(".matt-findings li").count(), 0);
     assert.equal(f.requests.length, 0, "Demo never queries customer APIs");
-    assert.ok(!f.media.includes("/matt/reference.mp4"), "No initial video download");
+    assert.ok(f.media.includes("/matt/reference.mp4"), "The supplied identity video is loaded, without a generated-response claim");
     assert.deepEqual(f.errors, []);
     await f.page.getByText("Voice and privacy settings", { exact: true }).click();
     await f.page.getByRole("button", { name: "Clear conversation", exact: true }).click();
@@ -114,7 +114,8 @@ test("normal production-style build publishes the unified cinematic experience w
     await f.page.goto(`${origin}/demo/matt?studio=1`);
     await f.page.getByRole("button", { name: "What are the key obligations?", exact: true }).waitFor();
     assert.equal(await f.page.locator(".matt-page").getAttribute("data-experience"), "unified-matt");
-    assert.equal(await f.page.locator(".matt-studio-notice").count(), 1, "Missing real video is disclosed in production");
+    assert.match(await f.page.locator(".matt-studio-notice").textContent(), /Identity footage only.*Live synchronized conversation is not connected/);
+    assert.equal(await f.page.locator(".matt-character img").count(), 0, "The old static Matt section is not published");
     await enableText(f.page);
     await f.page.getByRole("button", { name: "What are the key obligations?", exact: true }).click();
     await f.page.locator(".matt-answer").waitFor();
@@ -133,9 +134,12 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
       await f.page.locator(".matt-answer").waitFor();
       assert.ok(await f.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "Page has no horizontal overflow");
       assert.equal(await f.page.locator(".oa-overlay").count(), 0, "No competing assistant overlay");
-      assert.ok(await f.page.locator(".matt-character img").evaluate((image) => image.complete && image.naturalWidth > 0));
+      await f.page.waitForFunction(() => {
+        const video = document.querySelector(".matt-character video");
+        return video && !video.paused && video.readyState >= 2 && video.videoWidth > 0;
+      });
       if (width === 390) {
-        assert.equal(await f.page.locator(".matt-character img").evaluate((image) => getComputedStyle(image).animationName), "none");
+        assert.equal(await f.page.locator(".matt-character video").evaluate((video) => getComputedStyle(video).animationName), "none");
         assert.equal(await f.page.getByRole("checkbox", { name: /Enable speaking video/ }).count(), 0);
       }
       assert.deepEqual(f.errors, []);
@@ -234,11 +238,11 @@ test("voice input is explicit and generic video/TTS cannot masquerade as synchro
     assert.equal(await f.page.evaluate(() => window.__mattSpeech.microphones), 1);
     assert.equal(await f.page.getByRole("checkbox", { name: /Enable speaking video/ }).count(), 0);
     assert.equal(await f.page.getByRole("button", { name: "Read answer", exact: true }).count(), 0);
-    assert.ok(!f.media.includes("/matt/reference.mp4"));
+    assert.ok(f.media.includes("/matt/reference.mp4"));
     assert.equal(await f.page.evaluate(() => window.__mattSpeech.starts), 0);
-    await f.page.getByRole("button", { name: "Interrupt / stop speaking", exact: true }).click();
+    await f.page.getByRole("button", { name: "Interrupt / stop", exact: true }).click();
     await f.page.locator(".matt-page[data-state='INTERRUPTED']").waitFor();
-    assert.equal(await f.page.locator("video").count(), 0);
+    assert.equal(await f.page.locator(".matt-character video").count(), 1, "Interrupting a question does not remove identity footage");
     assert.equal(await f.page.evaluate(() => window.__mattSpeech.starts), 0, "No independent TTS was started");
     assert.equal(await f.page.locator(".matt-answer").count(), 1);
     await f.page.keyboard.press("Tab");
