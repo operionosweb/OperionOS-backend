@@ -229,13 +229,29 @@ The implementation must not be described as MATT AUDIO AND MICROPHONE VERIFIED o
 
 ## 12. Git, preservation and publication
 
-Status: PARTIALLY IMPLEMENTED at this report's initial preparation.
+Status: VERIFIED for the implementation publication and public checks below.
 
 - All code was changed only in the existing isolated worktree based on `9bc748fd73a48e027a0d74007e4165fa7dfe9812`.
 - Before publication, all 41/41 preserved original file hashes and original Git status matched their preservation records.
 - No original dirty files were reverted, accepted or overwritten. No Keep/Undo/Redo/checkpoint/Apply/Revert file-acceptance mechanism was used.
 - No environment/configuration activation, identity upload or paid provider/model call occurred.
-- User-authorized publication will commit only the reviewed isolated Matt implementation, tests, dependency lockfile and reports, then push without force only if remote main is still the tested parent.
-- Production verification outcomes will be recorded in an addendum after the push. Git publication and website availability will not change this report's genuine-audio acceptance verdict.
+- User-authorized publication committed exactly 34 reviewed isolated Matt implementation/test/dependency/report files and fast-forward pushed without force after confirming the tested remote parent.
+- Git publication and website availability do not change this report's genuine-audio acceptance verdict.
+
+### Observed production publication
+
+Status: VERIFIED, 2 November 2026.
+
+- Implementation commit: [`01c6157b9ce7b7dc82b33de9fcba3322eaa20905`](https://github.com/operionosweb/OperionOS-backend/commit/01c6157b9ce7b7dc82b33de9fcba3322eaa20905), pushed to `main`.
+- GitHub reported **Vercel - operion-os: success / Deployment has completed**. [Main deployment](https://vercel.com/operion-os/operion-os/Hfi9L5cdfsmmgHgP31o6CLBM327p).
+- GitHub reported **Vercel - operion-oci-production: success / Canceled by Ignored Build Step**. [OCI status](https://vercel.com/operion-os/operion-oci-production/J36oHJGezUdZBuaiXCoy8nRY9pb1). This is an ignored build, NOT evidence of a newly deployed OCI revision.
+- The actual public [Matt demo](https://www.operionos.com/demo/matt) returned HTTP 200 and served `index-CLeyKaoy.js` / `Matt-C3MoaKiR.js`. The served Matt bundle contains device capture, permission/device states, audio-unlock and once-only introduction code, without the synthetic provider fixture.
+- The shared production browser decoded the intro with `loop=false`, `muted=true`, advancing time and `paused=false`. Skip removed all stage video/portrait elements and showed the honest live-unavailable boundary.
+- A production 390px viewport had no horizontal overflow, no replay/portrait after skip, and microphone status NOT_REQUESTED. Prepared obligations still returned four findings. No microphone or paid provider session was activated in that public check.
+- Production backend health returned HTTP 200. Its `/api/matt/status` rejected an anonymous request with HTTP 401. The health endpoint does not expose a revision; an exact backend deployment SHA is not independently claimed.
+- Post-push checks confirmed the original 41/41 hashes and original Git status unchanged. The earlier publication worktree remains clean at `9bc748fd73a48e027a0d74007e4165fa7dfe9812`.
+- Live configuration remains disabled by default; no environment activation, subscription, identity upload or paid request was made. Public demo continues to state that live voice/video is not connected.
+
+This documentation-only addendum records the observed implementation deployment without representing it as genuine audio acceptance.
 
 **MATT AUDIO NOT READY.**
