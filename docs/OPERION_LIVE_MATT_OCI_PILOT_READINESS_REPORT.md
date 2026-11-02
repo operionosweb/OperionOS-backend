@@ -212,10 +212,45 @@ Globe checks are not a repeat of the entire Globe suite.
 
 ### Publication acceptance
 
-At this addendum's commit, combined production deployment verification is
-pending. Check the actual public desktop and mobile experience after the
-hosting integration serves the combined bundle. A push alone does not verify
-frontend delivery or the backend deployment revision.
+**VERIFIED:** combined application commit
+`8a7eb630156ddeeae959c21ee3784297fa4d0c6e` was non-force pushed to main.
+The public entry changed to `index-CFsMUpqM.js`, referencing
+`Matt-D1CHOgC8.js`. The served Matt bundle contains both the new platform
+presence boundary and visibility-resume listener.
+
+GitHub's commit-status API reported success for `Vercel - operion-os` and
+`Vercel - operion-oci-production`. The production deployment record for
+`operion-os` identifies that exact commit and successful environment
+<https://operion-rn73673yt-operion-os.vercel.app>. These observations establish
+deployment status, not acceptance of every authenticated OCI workflow.
+
+On the actual public <https://www.operionos.com/demo/matt>:
+
+- At 1440 pixels, initial playback advanced without selecting Retry; decoded
+  video width was 1920 pixels. No static Matt image, old unavailable-video
+  warning or horizontal overflow was present.
+- A prepared obligations question opened four illustrative findings and four
+  supporting evidence cards; proposals remained collapsed.
+- At 390 pixels, findings and evidence remained available without horizontal
+  overflow. The stage measured approximately 410 pixels high, with controls
+  approximately 12 pixels below it.
+- Pausing the public preview and dispatching a visibility event resumed it.
+  This is a browser lifecycle check, not certification of every background-tab
+  policy. Desktop and mobile screenshots were inspected.
+- The displayed media label remained "PRERECORDED IDENTITY PREVIEW / NOT LIVE
+  ANSWER VIDEO". No live generated conversation is implied.
+
+The deployed public API origin, discovered from the served application bundle,
+returned HTTP 200 and `status: healthy`, `service: operion-backend` at
+<https://operionos-backend-1.onrender.com/api/health> on 2 November 2026,
+11:14:10 UTC. This endpoint does not expose a build revision, so the exact
+backend deployed commit remains **UNVERIFIED**. No hosting setting or backend
+configuration was changed to obtain this result.
+
+Production checks used only the public prepared demonstration and read-only
+health/status endpoints, not confidential documents, tenant data or provider
+calls. Original dirty-worktree preservation and source-level test results are
+separate from these production observations.
 
 ### Unchanged blockers
 
