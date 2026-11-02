@@ -15,7 +15,7 @@ export function createMattVoice({ environment = window, onEvent, onTranscript, o
     previous?.abort();
     if (utterance) { utterance = null; synthesis.cancel(); }
   }
-  function listen() {
+  function listen(audioTrack) {
     stop();
     if (!supported.input) { emit({ type: "ERROR", error: "Speech recognition is not supported in this browser. Type your request instead." }); return; }
     const current = new Recognition(), ownGeneration = generation;
@@ -24,7 +24,14 @@ export function createMattVoice({ environment = window, onEvent, onTranscript, o
     current.continuous = false;
     current.interimResults = false;
     const currentSession = () => !disposed && generation === ownGeneration && recognition === current;
-    current.onstart = () => { if (currentSession()) emit({ type: "LISTEN" }); };
+    current.onstart = () => {
+      if (currentSession()) {
+        if (audioTrack && (audioTrack.readyState !== "live" || !audioTrack.enabled)) {
+          stop();
+          emit({ type: "ERROR", error: "The captured microphone is no longer active. Enable it and retry." });
+        } else emit({ type: "LISTEN" });
+      }
+    };
     let transcribed = false;
     current.onresult = (event) => {
       if (!currentSession()) return;
@@ -43,7 +50,7 @@ export function createMattVoice({ environment = window, onEvent, onTranscript, o
       recognition = null;
       if (!failed) emit(transcribed ? { type: "TRANSCRIBED" } : { type: "ERROR", error: "No usable speech transcript was received. You can continue by typing." });
     };
-    try { current.start(); }
+    try { if (audioTrack) current.start(audioTrack); else current.start(); }
     catch (error) { recognition = null; emit({ type: "ERROR", error: error.message || "Microphone activation failed. Type your request instead." }); }
   }
   function speak(text, { voiceURI = "", rate = 1 } = {}) {

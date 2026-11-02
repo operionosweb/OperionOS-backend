@@ -44,6 +44,27 @@ async function ask(page, question) {
   await page.locator(".matt-page[data-state='PRESENTING']").waitFor();
 }
 
+test("skipped introduction stays dismissed across findings, workspace floating and expanded Matt", async () => {
+  const f = await fixture();
+  try {
+    await f.page.goto(`${origin}/demo/matt`);
+    await f.page.getByRole("button", { name: "Skip introduction", exact: true }).click();
+    await prepare(f.page);
+    await ask(f.page, "What are the key obligations?");
+    await f.page.getByRole("button", { name: "Close findings panel", exact: true }).click();
+    await f.page.getByRole("button", { name: /^Inspect findings/ }).click();
+    await f.page.getByRole("link", { name: "Open existing contract workspace", exact: true }).click();
+    await f.page.getByRole("button", { name: "Open Matt assistant", exact: true }).click();
+    await f.page.getByRole("heading", { name: "Live Matt unavailable", exact: true }).waitFor();
+    assert.equal(await f.page.locator(".matt-character video, .matt-character img").count(), 0);
+    await f.page.getByRole("link", { name: "Expand Matt", exact: true }).click();
+    await f.page.getByRole("heading", { name: "Live Matt unavailable", exact: true }).waitFor();
+    assert.equal(await f.page.locator(".matt-character video, .matt-character img").count(), 0);
+    assert.equal(f.requests.length, 0, "Demo never calls a live provider or tenant API");
+    assert.deepEqual(f.errors, []);
+  } finally { await f.context.close(); }
+});
+
 test("Demo has one Ask Matt navigation entry and folded Admin fits one line", async () => {
   const f = await fixture();
   try {

@@ -8,7 +8,7 @@ export default function MattProposal({ result, demo, onCompose }) {
   return <section className="matt-proposal" aria-label="Contract review proposal">
     <header><FileText size={20} aria-hidden="true"/><div><h3>Proposal / contract review</h3><DemoBadge tone="neutral">Decision support / not approved or executed</DemoBadge></div></header>
     <div className="matt-proposal-status"><strong>{result.established ? "Evidence available for review" : "Insufficient evidence"}</strong>
-      <p>{demo ? "Prepared demonstration data, not verified customer findings." : "Selected-contract structured intelligence; human review required."}</p>
+      <p>{demo ? "Prepared demonstration data, not verified customer findings." : result.source === "ai_gateway" ? "Generated interpretation of selected-contract evidence; human review required." : "Selected-contract structured intelligence; human review required."}</p>
     </div>
     <GlassCard className="matt-proposal-card" title="Recommendations">
       {result.reviewRecommendations?.length ? <><DemoBadge tone="neutral">Prepared review suggestions / not generated approval</DemoBadge><ul>{result.reviewRecommendations.map(([label, to]) => <li key={label}>{to ? <Link to={to}>{label}</Link> : label}</li>)}</ul></>

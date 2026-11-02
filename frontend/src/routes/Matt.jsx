@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
-import { ArrowUp, Mic, Square, RotateCcw, Volume2, FileText, Keyboard, PanelRight, Video, VideoOff } from "lucide-react";
+import { ArrowUp, Mic, Square, RotateCcw, FileText, Keyboard, PanelRight, Video, VideoOff } from "lucide-react";
 import { useOrganization } from "../context/OrganizationContext";
 import { useAuth } from "../context/AuthContext";
 import OrganizationGate from "../components/demo/OrganizationGate";
@@ -12,6 +12,8 @@ import { PageHeader, DemoBadge, EvidenceCard } from "../demo/DemoUI";
 import { contextualQuestion } from "../components/matt/mattState";
 import { useMattSession } from "../components/matt/mattSessions";
 import { createMattVoice } from "../components/matt/mattVoice";
+import { createMattMicrophone, supportsMattCapturedSpeech } from "../components/matt/mattMicrophone";
+import { useMattLive } from "../components/matt/useMattLive";
 import { askContractAssistant, listContracts, listContractDocuments, listDocumentVersions, searchContractIntelligence } from "../lib/contractsApi";
 import "../styles/matt.css";
 import "../styles/mattStudio.css";
@@ -45,17 +47,18 @@ export default function Matt({ demo = false, reportOnly = false }) {
 }
 
 export function MattPresenceOnly({ compact = false }) {
+  const { user } = useAuth();
   const [mediaStatus, setMediaStatus] = useState("loading");
   const [mediaError, setMediaError] = useState("");
   return <main className={`matt-page${compact ? " matt-compact" : ""}`} data-matt-mode="platform-presence-only">
     {!compact && <header className="matt-heading"><div><span className="matt-eyebrow">OPERION / PLATFORM SESSION</span><h1>Matt</h1><p>Video presence without an organisation contract context.</p></div></header>}
     <div className="matt-layout">
-      <MattEnvironment phase={mediaStatus} onMediaStatus={setMediaStatus} onMediaError={setMediaError}/>
+      <MattEnvironment introductionKey={`user:${user?.id}`} phase={mediaStatus} onMediaStatus={setMediaStatus} onMediaError={setMediaError}/>
       <section className="matt-workspace" aria-labelledby="matt-platform-presence-title">
         <span className="matt-eyebrow">PLATFORM-ONLY SESSION</span>
-        <h2 id="matt-platform-presence-title">Matt video presence is available.</h2>
+        <h2 id="matt-platform-presence-title">Matt requires an authorized contract context.</h2>
         <p>Contract review and customer data are unavailable without an authorized organization context and contract-read permission.</p>
-        <p className="matt-studio-notice" role="status">This is continuous prerecorded video, not a live or answer-synchronised avatar conversation.</p>
+        <p className="matt-studio-notice" role="status">The introduction plays once. Live contract conversation is unavailable without an authorized organization context.</p>
         {mediaError && <p className="matt-error" role="alert">{mediaError}</p>}
       </section>
     </div>
@@ -75,6 +78,7 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
   const analysisScope = selectedAnalysis || params.get("analysis") || "";
   const scopeKey = `${demo ? "demo" : `${user?.id}:${organizationId}`}:${flight ? `flight:${flight.id}` : `contract:${contractId}`}`;
   const { state, dispatch, session } = useMattSession(scopeKey);
+  const live = useMattLive({ demo, organizationId, scopeKey });
   const [contractSearch, setContractSearch] = useState("");
   const [question, setQuestionState] = useState(session.question);
   const setQuestion = (value) => setQuestionState((current) => {
@@ -82,11 +86,9 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
     session.question = next;
     return next;
   });
-  const [voices, setVoices] = useState([]);
-  const [voiceURI, setVoiceURI] = useState("");
-  const [rate, setRate] = useState(1);
   const [voiceConsent, setVoiceConsent] = useState(false);
-  const [readAnswers, setReadAnswers] = useState(false);
+  const [microphoneState, setMicrophoneState] = useState("NOT_REQUESTED");
+  const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
   const [support, setSupport] = useState({ input: false, output: false });
   const [mediaError, setMediaError] = useState("");
   const [mediaStatus, setMediaStatus] = useState("loading");
@@ -95,11 +97,20 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
   const [showTextInput, setShowTextInput] = useState(false);
   const [dossierOpen, setDossierOpen] = useState(Boolean(session.state.result));
   const [feedback, setFeedback] = useState(session.feedback || {});
-  const voiceRef = useRef(null), requestRef = useRef(null), composerRef = useRef(null), sequenceRef = useRef(0);
+  const voiceRef = useRef(null), microphoneRef = useRef(null), requestRef = useRef(null), composerRef = useRef(null), sequenceRef = useRef(0), submitRef = useRef(null);
+  const liveRef = useRef(live);
+  const previousLiveConsent = useRef(live.consent);
+  liveRef.current = live;
   const dockRef = useRef(null);
   const result = state.result;
   const busy = ["PROCESSING", "INVESTIGATING"].includes(state.phase);
-  const onMediaError = useCallback((message) => setMediaError(message), []);
+  const onMediaError = useCallback((message) => {
+    setMediaError(message);
+    if (message && liveRef.current.connected) {
+      liveRef.current.setState("ERROR");
+      void liveRef.current.dispose();
+    }
+  }, []);
   const onMediaStatus = useCallback((status) => setMediaStatus(status), []);
   useEffect(() => { setQuestionState(session.question); setShowResponseText(session.showText); setFeedback(session.feedback || {}); setDossierOpen(Boolean(session.state.result)); }, [scopeKey, session]);
   useEffect(() => { session.showText = showResponseText; }, [session, showResponseText]);
@@ -113,18 +124,50 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
   }, [reportOnly]);
 
   useEffect(() => {
-    const voice = createMattVoice({ onEvent: dispatch, onTranscript: (transcript) => {
-      setQuestion((current) => `${current}${current ? " " : ""}${transcript}`);
-      if (studio) setShowTextInput(true);
-    }, onVoices: setVoices });
+    const voice = createMattVoice({ onEvent: (event) => {
+      dispatch(event);
+      if (event.type === "LISTEN") liveRef.current.setState("LISTENING");
+      if (event.type === "ERROR" || event.type === "TRANSCRIBED") {
+        microphoneRef.current?.pause();
+        if (event.type === "ERROR") liveRef.current.setState("ERROR");
+      }
+    }, onTranscript: (transcript) => {
+      if (liveRef.current.connected) void submitRef.current(null, transcript);
+      else { setQuestion((current) => `${current}${current ? " " : ""}${transcript}`); setShowTextInput(true); }
+    }, onVoices: () => {} });
     voiceRef.current = voice;
-    setSupport(voice.supported);
+    const microphone = createMattMicrophone({
+      onState: setMicrophoneState,
+      onError: (error) => { setMicrophoneEnabled(false); dispatch({ type: "ERROR", error }); },
+      onRevoked: () => { voice.stop(); liveRef.current.setState("ERROR"); },
+    });
+    microphoneRef.current = microphone;
+    setMicrophoneState("NOT_REQUESTED"); setMicrophoneEnabled(false);
+    setSupport({ ...voice.supported, input: supportsMattCapturedSpeech() });
     return () => {
+      sequenceRef.current++;
       voice.dispose(); voiceRef.current = null;
+      microphone.dispose(); microphoneRef.current = null;
       if (session.activeVoice === voice) session.activeVoice = null;
       if (requestRef.current) { requestRef.current.abort(); dispatch({ type: "INTERRUPT" }); requestRef.current = null; }
     };
   }, [scopeKey]);
+  useEffect(() => {
+    if (live.state === "ERROR" || (previousLiveConsent.current && !live.consent)) {
+      microphoneRef.current?.disable();
+      voiceRef.current?.stop();
+      setMicrophoneEnabled(false);
+    }
+    previousLiveConsent.current = live.consent;
+  }, [live.state, live.consent]);
+  useEffect(() => {
+    const release = () => {
+      microphoneRef.current?.disable(); voiceRef.current?.stop();
+      setMicrophoneEnabled(false); dispatch({ type: "INTERRUPT" });
+    };
+    window.addEventListener("pagehide", release);
+    return () => window.removeEventListener("pagehide", release);
+  }, [dispatch]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -145,29 +188,39 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
     return () => { active = false; controller.abort(); };
   }, [demo, organizationId, selectedContract]);
 
-  function interrupt() {
+  async function interrupt() {
+    sequenceRef.current++;
     requestRef.current?.abort();
     session.controller?.abort();
     requestRef.current = null;
     voiceRef.current?.stop();
+    microphoneRef.current?.pause();
     session.activeVoice?.stop();
     session.activeVoice = null;
     dispatch({ type: "INTERRUPT" });
+    await live.interrupt();
   }
   function reset() { interrupt(); dispatch({ type: "RESET" }); session.feedback = {}; setFeedback({}); setQuestion(""); composerRef.current?.focus(); }
   function changeContract(value) { interrupt(); setContractId(value); setScopeError(""); }
-  function startListening() {
+  async function startListening() {
     if (!voiceConsent) { dispatch({ type: "ERROR", error: "Please acknowledge the browser speech-service privacy notice before activating the microphone." }); return; }
-    interrupt();
+    const voice = voiceRef.current;
+    void live.enableAudio();
+    const interrupted = interrupt();
+    const captured = microphoneRef.current?.acquire();
+    const generation = sequenceRef.current;
+    const [track] = await Promise.all([captured, interrupted]);
+    if (!track || voiceRef.current !== voice || sequenceRef.current !== generation) return;
+    setMicrophoneEnabled(true);
     session.activeVoice = voiceRef.current;
-    voiceRef.current?.listen();
+    voiceRef.current?.listen(track);
   }
-  function read(text = result?.answer) {
-    if (studio) { dispatch({ type: "ERROR", error: "Matt's video is prerecorded and is not synchronized to response audio. Speech output is disabled in this preview; inspect the evidence or enable response text." }); return; }
-    if (!voiceConsent) { dispatch({ type: "ERROR", error: "Acknowledge the speech-service privacy notice before playback. Text remains available." }); return; }
-    if (text) { interrupt(); voiceRef.current?.speak(text, { voiceURI, rate }); }
+  function disableMicrophone() {
+    microphoneRef.current?.disable();
+    setMicrophoneEnabled(false);
+    void interrupt();
   }
-  async function submit(event, suppliedQuestion = question) {
+  async function submit(event, suppliedQuestion = question, confirmation = false) {
     event?.preventDefault();
     const raw = suppliedQuestion.trim();
     if (raw.length < 3 || raw.length > 500 || (!flight && !catalog.some((item) => item.id === contractId))) {
@@ -175,9 +228,11 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
       return;
     }
     let resolved;
-    try { resolved = contextualQuestion(raw, result); }
+    try { resolved = live.connected ? raw : contextualQuestion(raw, result); }
     catch (error) { dispatch({ type: "ERROR", error: error.message }); return; }
-    interrupt();
+    const interrupted = interrupt(), generation = sequenceRef.current;
+    await interrupted;
+    if (sequenceRef.current !== generation) return;
     const controller = new AbortController(), requestId = `${Date.now()}-${++sequenceRef.current}`;
     session.controller = controller;
     requestRef.current = controller;
@@ -200,7 +255,8 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
         if (analysisScope) {
           analysisRunId = analysisScope;
           operation("Retrieving the existing selected workspace analysis; no new extraction is started.");
-          answer = (await askContractAssistant(analysisRunId, organizationId, resolved, { signal: controller.signal })).assistant;
+          answer = live.connected ? await live.ask(analysisRunId, resolved, controller.signal, confirmation)
+            : (await askContractAssistant(analysisRunId, organizationId, resolved, { signal: controller.signal })).assistant;
         } else {
         operation("Retrieving the selected contract's authorized documents.");
         const documents = await listContractDocuments(contractId, organizationId, { signal: controller.signal });
@@ -213,7 +269,8 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
         operation("Searching the selected analysis run for relevant contract evidence.");
         await searchContractIntelligence(analysisRunId, organizationId, resolved, 10, { signal: controller.signal });
         operation("Search completed. Retrieving the existing evidence-grounded contract answer.");
-        answer = (await askContractAssistant(analysisRunId, organizationId, resolved, { signal: controller.signal })).assistant;
+        answer = live.connected ? await live.ask(analysisRunId, resolved, controller.signal, confirmation)
+          : (await askContractAssistant(analysisRunId, organizationId, resolved, { signal: controller.signal })).assistant;
         }
       }
       if (controller.signal.aborted) return;
@@ -221,11 +278,11 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
       const next = { ...answer, contractId: flight ? null : contractId, flightId: flight?.id, contractTitle: flight ? `${flight.flightNumber || flight.id} / ${flight.origin} to ${flight.destination}` : catalog.find((item) => item.id === contractId)?.title || "Selected contract", analysisRunId };
       dispatch({ type: "RESULT", requestId, result: next });
       setDossierOpen(true);
-      if (!studio && readAnswers && voiceConsent) voiceRef.current?.speak(next.answer, { voiceURI, rate });
     } catch (error) {
-      if (!controller.signal.aborted) dispatch({ type: "ERROR", requestId, error: error.message || "Matt could not retrieve an evidence-backed answer." });
+      if (!controller.signal.aborted) { live.setState("ERROR"); dispatch({ type: "ERROR", requestId, error: error.message || "Matt could not retrieve an evidence-backed answer." }); }
     } finally { if (requestRef.current === controller) requestRef.current = null; }
   }
+  submitRef.current = submit;
 
   function compose(text) {
     setQuestion(text);
@@ -247,11 +304,11 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
     {studio ? <PageHeader eyebrow="MATT / YOUR OPERION COLLEAGUE" title="Let's look at what matters." description="Ask. Investigate. Understand the evidence." actions={<DemoBadge tone="neutral">{demo ? "DEMONSTRATION / PREPARED CONTRACT DATA" : "AUTHENTICATED / SELECTED CONTRACT SCOPE"}</DemoBadge>}/> : <header className="matt-heading"><div><span className="matt-eyebrow">MATT / YOUR OPERION COLLEAGUE</span><h1>Let's look at what matters.</h1><p>Ask. Investigate. Understand the evidence.</p></div>
       <span className="matt-provenance">{demo ? "DEMONSTRATION / PREPARED CONTRACT DATA" : "AUTHENTICATED / SELECTED CONTRACT SCOPE"}</span></header>}
     {studio && <div className="matt-studio-notice" role="status">{mediaStatus === "error" ? <VideoOff size={18} aria-hidden="true"/> : <Video size={18} aria-hidden="true"/>}<div>
-      <strong>{mediaStatus === "playing" ? "Matt's video presence is active" : mediaStatus === "buffering" ? "Matt's video is buffering" : mediaStatus === "error" ? "Matt's video could not play" : "Loading Matt's video presence"}</strong>
-      <p>Identity footage only. Live synchronized conversation is not connected. Review answers and evidence in Findings.</p>
+      <strong>{live.connected ? `Live Matt: ${live.state.toLowerCase()}` : "One-time introduction, then live assistant connection"}</strong>
+      <p>{live.connected ? "The approved provider receives the actual generated answer text and supplies both speech and video. Review the supporting evidence." : "Introduction footage is not an answer. Until live activation is approved, findings use the existing prepared or structured intelligence without spoken video responses."}</p>
     </div></div>}
     <div className={`matt-layout${studio && dossierOpen ? " has-proposal" : ""}`}>
-      <MattEnvironment phase={state.phase} onMediaError={onMediaError} onMediaStatus={onMediaStatus} studio={studio}/>
+      <MattEnvironment introductionKey={demo ? "demo" : `user:${user?.id}`} phase={state.phase} onMediaError={onMediaError} onMediaStatus={onMediaStatus} stream={live.stream} live={live}/>
       <section className={`matt-workspace${studio ? " od-card" : ""}`} aria-label="Matt conversation and findings">
         {studio && <div className="matt-studio-toolbar">
           <button type="button" aria-controls={dossierId} aria-expanded={dossierOpen} onClick={() => setDossierOpen((open) => !open)}><PanelRight size={18}/>{dossierOpen ? "Close findings" : "Inspect findings"}{result ? ` (${result.findings.length})` : ""}</button>
@@ -272,15 +329,19 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
         <div className="matt-activity" role="status" aria-live="polite"><i aria-hidden="true"/><span>{state.activity}</span></div>
         {state.error && <p className="matt-error" role="alert">{state.error}</p>}
         {mediaError && <p className="matt-error" role="alert">{mediaError}</p>}
+        {live.audioError && <p className="matt-error" role="alert">{live.audioError}</p>}
+        <p role="status" data-microphone-state={microphoneState}>Microphone permission: {microphoneState.toLowerCase().replaceAll("_", " ")}. {state.phase === "LISTENING" ? live.connected ? "Listening to captured audio for the live conversation." : "Listening for transcript review only; live Matt is not connected." : microphoneEnabled ? "Capture retained but paused; not listening." : "Microphone disabled."}</p>
+        {live.connected && <div className="matt-controls"><span role="status">Audio output: {live.audioState.toLowerCase()}. Device audibility is not independently verified.</span>{live.audioState === "ENABLED" ? <button type="button" onClick={live.muteAudio}>Mute Matt audio</button> : <button type="button" onClick={live.enableAudio}>Enable Matt audio</button>}</div>}
+        {live.pendingApproval && <div className="matt-review" role="status"><p>This answer requires an estimated {live.pendingApproval.estimatedIntelligence} intelligence units. No model response has been generated for this request.</p><button type="button" onClick={() => submit(null, live.pendingApproval.question, true)}>Approve estimated generation</button></div>}
         <div id={dossierId} className="matt-report" aria-label="Intelligence report" hidden={studio && !dossierOpen}>
           {studio && <div className="matt-dossier-heading"><div><span className="matt-eyebrow">CONTEXTUAL INTELLIGENCE</span><h2>Findings and evidence</h2></div><button type="button" aria-label="Close findings panel" onClick={() => setDossierOpen(false)}>Close</button></div>}
           {result && (busy || state.error) && <p role="status">The retained report below is from the previous completed question, not the current request.</p>}
           {result?.analysisRunId && analysisScope && result.analysisRunId !== analysisScope && <p role="status">This retained report is from a different analysis version. Ask again to use the selected workspace version.</p>}
           {!result ? <div className="matt-welcome"><FileText size={28}/><h2>Evidence, not guesswork.</h2><p>Start with a contract question. Findings, source excerpts and follow-ups stay here beside Matt.</p>
             <div className="matt-prompts">{["What are the key obligations?", "Review the maintenance risks", "Which deadlines require trigger dates?"].map((prompt) => <button type="button" key={prompt} disabled={busy || !contractId} onClick={() => submit(null, prompt)}>{prompt}</button>)}</div></div>
-            : <article><span className="matt-eyebrow">{demo ? "ILLUSTRATIVE FINDINGS / NOT VERIFIED CUSTOMER DATA" : "EXISTING STRUCTURED INTELLIGENCE / HUMAN REVIEW REQUIRED"}</span>
+            : <article><span className="matt-eyebrow">{demo ? "ILLUSTRATIVE FINDINGS / NOT VERIFIED CUSTOMER DATA" : result.source === "ai_gateway" ? "GENERATED INTERPRETATION / HUMAN REVIEW REQUIRED" : "EXISTING STRUCTURED INTELLIGENCE / HUMAN REVIEW REQUIRED"}</span>
               <h2>{result.contractTitle}</h2>{(!studio || showResponseText) && <p className="matt-answer">{result.answer}</p>}
-              <p>{result.established ? "Linked source evidence was supplied by the existing assistant; interpretation remains decision support, not legal advice." : "Not established. Do not infer that a clause, exposure or obligation exists."}</p>
+              <p>{result.established ? result.source === "ai_gateway" ? "Source references passed identifier validation. Review the generated interpretation against the original evidence; this is not legal advice." : "Linked source evidence was supplied by the existing assistant; interpretation remains decision support, not legal advice." : "Not established. Do not infer that a clause, exposure or obligation exists."}</p>
               <ol className="matt-findings">{result.findings.map((finding) => <li key={`${finding.type}-${finding.id}`}>
                 <button type="button" onClick={() => compose(`Explain ${finding.type}: ${finding.label}`.slice(0, 500))}><span>{finding.type}</span>{finding.label}</button>
               </li>)}</ol>
@@ -291,7 +352,7 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
                   {source.confidence !== null && source.confidence !== undefined && <small>Source confidence: {source.confidence}. Not a liability estimate.</small>}</blockquote>)}
               </details>
               {studio ? <details className="matt-proposal-disclosure"><summary>Review actions and proposal</summary><MattProposal result={result} demo={demo} onCompose={compose}/></details> : <section className="matt-review"><h3>Exposure and next action</h3><p>No new financial exposure is calculated by this presentation. Amounts, exclusions and missing evidence require review in the existing contract intelligence.</p><p>Review the supplied source and verify timing/attribution before taking action. Matt does not send notices or change records.</p></section>}
-              <div className="matt-report-actions">{!studio && <button type="button" disabled={!support.output} onClick={() => read()}><Volume2 size={16}/>Read answer</button>}<button type="button" onClick={() => compose("Explain the second finding in more detail")}>Explain the second finding</button>
+              <div className="matt-report-actions"><button type="button" onClick={() => compose("Explain the second finding in more detail")}>Explain the second finding</button>
                 <Link to={fullReport}>OPEN FULL REPORT</Link>{result.contractId && <Link to={`${base}/contracts/${encodeURIComponent(result.contractId)}${demo ? "/evidence" : "#evidence"}`}>Open existing contract workspace</Link>}</div>
               <div className="matt-report-actions" aria-label="Session-only response feedback">{["Helpful", "Needs review"].map((rating) => <button type="button" key={rating} aria-pressed={feedback[state.requestId] === rating} onClick={() => {
                 const next = { ...session.feedback, [state.requestId]: rating }; session.feedback = next; setFeedback(next);
@@ -302,8 +363,9 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
         {studio && <div className="matt-studio-prompts" aria-label="Prepared intelligence questions">{(flight ? ["What happens if this flight is delayed by three hours?", "Which contractual clauses apply?", "What is the potential financial exposure?"] : result?.followUps?.length ? result.followUps : ["What are the key obligations?", "Review the maintenance risks", "Which deadlines require trigger dates?"]).map((prompt) => <button type="button" key={prompt} disabled={busy || (!contractId && !flight)} onClick={() => submit(null, prompt)}>{prompt}</button>)}</div>}
         <form ref={dockRef} className="matt-composer" onSubmit={submit}>
           {(!studio || showTextInput) && <div className="matt-text-input" id={inputId}><label>Ask Matt<textarea ref={composerRef} aria-label="Ask Matt" value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={500} rows={2} placeholder="Ask about the selected contract, or a previous finding..."/></label>
-          <small>{question.length}/500 characters. Voice transcripts are reviewed before sending.</small></div>}
-          <div className="matt-controls"><button type="button" className={state.phase === "LISTENING" ? "is-recording" : ""} onClick={state.phase === "LISTENING" ? interrupt : startListening} aria-pressed={state.phase === "LISTENING"}><Mic size={18}/>{state.phase === "LISTENING" ? "Stop microphone" : "Microphone"}</button>
+          <small>{question.length}/500 characters. {live.connected ? "Final voice transcripts are sent to the authorized live conversation." : "Voice transcripts are reviewed before sending."}</small></div>}
+          <div className="matt-controls"><button type="button" disabled={microphoneState === "REQUESTING"} className={state.phase === "LISTENING" ? "is-recording" : ""} onClick={state.phase === "LISTENING" ? disableMicrophone : startListening} aria-pressed={state.phase === "LISTENING"}><Mic size={18}/>{state.phase === "LISTENING" ? "Stop microphone" : "Microphone"}</button>
+            {microphoneEnabled && state.phase !== "LISTENING" && <button type="button" onClick={disableMicrophone}>Disable microphone</button>}
             {(!studio || showTextInput) && <button type="submit" className="matt-send" disabled={question.trim().length < 3 || (!contractId && !flight) || catalogState !== "ready"}><ArrowUp size={18}/>Send</button>}
             <button type="button" onClick={interrupt}><Square size={16}/>Interrupt / stop</button>
             {studio && <button type="button" aria-controls={inputId} aria-expanded={showTextInput} onClick={() => setShowTextInput((open) => !open)}><Keyboard size={18}/>{showTextInput ? "Hide text input" : "Type a question"}</button>}
@@ -311,13 +373,12 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
             <button type="button" onClick={reset}><RotateCcw size={16}/>Clear conversation</button></>}</div>
         </form>
         <details className="matt-voice-settings"><summary>Voice and privacy settings</summary>
+          {live.connected && <button type="button" onClick={async () => { await interrupt(); live.setConsent(false); }}>Disconnect live Matt</button>}
           {studio && <button type="button" onClick={reset}><RotateCcw size={16}/>Clear conversation</button>}
-          <p>Browser recognition may send microphone audio to its vendor's speech service. Voice synthesis may use a remote voice. Operion does not retain recordings or send contract documents for speech recognition. Enable only if your organization permits these services. Text works without them.</p>
-          <label><input type="checkbox" checked={voiceConsent} onChange={(event) => { setVoiceConsent(event.target.checked); if (!event.target.checked) { interrupt(); setReadAnswers(false); } }}/>I permit browser speech services for this visit</label>
-          {!studio && <><label><input type="checkbox" checked={readAnswers} disabled={!voiceConsent || !support.output} onChange={(event) => setReadAnswers(event.target.checked)}/>Read received answers aloud</label>
-          <label>Voice<select value={voiceURI} disabled={!support.output} onChange={(event) => setVoiceURI(event.target.value)}><option value="">Browser default (identity may vary by device)</option>{voices.map((voice) => <option key={voice.voiceURI} value={voice.voiceURI}>{voice.name} / {voice.lang}{voice.localService ? " / local" : " / possibly remote"}</option>)}</select></label>
-          <label>Speech pace<select value={rate} onChange={(event) => setRate(Number(event.target.value))}><option value={0.9}>Measured</option><option value={1}>Natural</option><option value={1.1}>Brisk</option></select></label></>}
-          <p>{support.input ? "Browser speech recognition available; permission and network still required." : "Speech recognition unavailable in this browser: use text."} {studio ? "Matt's video is prerecorded; response speech is not available or synchronized in this preview." : support.output ? "Speech synthesis available; choose a device voice." : "Speech playback unavailable: answers remain in text."}</p>
+          <p>Browser recognition may send microphone audio to its vendor's speech service. Live answers and conversation text go to the approved model and avatar services. No browser voice synthesis is used for Matt's live responses. Enable only if your organization permits these services. Text findings work without them.</p>
+          <label><input type="checkbox" checked={voiceConsent} onChange={(event) => { setVoiceConsent(event.target.checked); if (!event.target.checked) disableMicrophone(); }}/>I permit browser speech services for this visit</label>
+          <p>Captured-track speech currently requires desktop Chrome or Edge 135+ on HTTPS. Other browsers can use typed questions. Device permission is requested only when you click Microphone after acknowledging this notice. Tavus Text Echo receives answer text, not your microphone audio.</p>
+          <p>{support.input ? "Browser speech recognition available; permission and network still required." : "Speech recognition unavailable in this browser: use text."} {live.connected ? "Live response speech and video use the same provider session." : "Live speech and video are not connected. The introduction will not be substituted for an answer."}</p>
         </details>
       </section>
     </div>

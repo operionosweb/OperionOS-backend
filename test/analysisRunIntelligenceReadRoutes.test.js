@@ -289,7 +289,7 @@ test("analysis-run assistant passes the authoritative tenant scope to every read
     analysisRunId: RUN_ID,
     question: "Who is responsible for maintenance?",
     readers: {
-      clauses: reader("clauses", [{ id: "clause-1", title: "Maintenance", source_text: source.excerpt }]),
+      clauses: reader("clauses", [{ id: "clause-1", title: "Maintenance", source_text: source.excerpt, source_evidence_id: source.id }]),
       obligations: reader("obligations"),
       deadlines: reader("deadlines"),
       risks: reader("risks"),

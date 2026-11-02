@@ -8,7 +8,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
  * see middleware/organizationMiddleware.js), and normalizes error handling.
  * No endpoints are invented here â€” callers pass the real path.
  */
-export async function apiRequest(path, { method = "GET", body, organizationId, signal } = {}) {
+export async function apiRequest(path, { method = "GET", body, organizationId, signal, keepalive = false } = {}) {
   const { data } = await supabase.auth.getSession();
   const token = data?.session?.access_token;
 
@@ -23,6 +23,7 @@ export async function apiRequest(path, { method = "GET", body, organizationId, s
     headers,
     body: body ? JSON.stringify(body) : undefined,
     signal,
+    keepalive,
   });
 
   const text = await response.text();

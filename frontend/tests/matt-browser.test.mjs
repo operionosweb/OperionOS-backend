@@ -15,7 +15,7 @@ before(async () => {
   await build({ root, mode: "matt-offline", logLevel: "error" });
   server = await preview({ root, preview: { host: "127.0.0.1", port: 0 }, logLevel: "error" });
   origin = `http://127.0.0.1:${server.httpServer.address().port}`;
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({ headless: true, args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] });
 });
 after(async () => { await browser?.close(); if (server) await new Promise((resolve) => server.httpServer.close(resolve)); });
 
@@ -231,7 +231,7 @@ test("platform Super Admin without organization membership can see Matt without 
       await f.page.locator(".op-consent").waitFor();
       const trigger = f.page.getByRole("button", { name: "Open Matt assistant", exact: true });
       await trigger.waitFor();
-      assert.equal(await trigger.locator("video").count(), 1, "The launcher uses identity video, not a static portrait");
+      assert.equal(await trigger.locator("video, img").count(), 0, "The launcher is a control, not a second looping Matt player");
       assert.equal(await trigger.evaluate((button) => {
         const bounds = button.getBoundingClientRect();
         return document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2)?.closest(".matt-floating-trigger") === button;

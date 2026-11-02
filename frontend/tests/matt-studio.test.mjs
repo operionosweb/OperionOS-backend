@@ -14,7 +14,7 @@ before(async () => {
   await build({ root, mode: "matt-studio-preview", logLevel: "error" });
   server = await preview({ root, preview: { host: "127.0.0.1", port: 0 }, logLevel: "error" });
   origin = `http://127.0.0.1:${server.httpServer.address().port}`;
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({ headless: true, args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] });
 });
 after(async () => { await browser?.close(); if (server) await new Promise((resolve) => server.httpServer.close(resolve)); });
 
@@ -59,7 +59,7 @@ for (const width of [320, 360, 390, 430, 768, 1024, 1440, 1920]) {
       assert.equal(await avatar.count(), 1);
       assert.deepEqual(await avatar.evaluate((player) => ({
         autoplay: player.autoplay, loop: player.loop, muted: player.muted, playsInline: player.playsInline,
-      })), { autoplay: true, loop: true, muted: true, playsInline: true });
+      })), { autoplay: false, loop: false, muted: true, playsInline: true });
       assert.equal(await f.page.locator(".matt-character img").count(), 0, "Matt has no static-image fallback");
       assert.equal(await f.page.locator(".matt-character-status").evaluate((status) => {
         const label = document.querySelector(".matt-studio-media-label").getBoundingClientRect();
@@ -113,7 +113,10 @@ for (const width of [320, 360, 390, 430, 768, 1024, 1440, 1920]) {
         });
         await f.page.getByRole("button", { name: "Hide text input", exact: true }).click();
       }
-      assert.equal(await f.page.locator(".matt-character video").count(), 1, "Reduced-motion preference does not replace Matt with a still");
+      assert.equal(await f.page.locator(".matt-character img").count(), 0, "Reduced motion never replaces Matt with a still");
+      assert.equal(await f.page.locator(".matt-character video").count() > 0
+        || await f.page.getByRole("heading", { name: "Live Matt unavailable", exact: true }).count() === 1, true,
+      "The non-looping introduction may finish during the test, but must advance to the honest live boundary");
       if (process.env.MATT_SCREENSHOT_DIR && [390, 1440].includes(width)) {
         await f.page.locator(".matt-proposal").scrollIntoViewIfNeeded();
         await f.page.evaluate(() => { window.scrollTo({ top: 0, behavior: "instant" }); });
@@ -210,7 +213,7 @@ test("microphone requires consent, opens transcript review and interruption stop
   } finally { await f.context.close(); }
 });
 
-test("Matt plays the supplied video continuously without claiming response synchronization", async () => {
+test("Matt plays the one-time introduction without looping or claiming response synchronization", async () => {
   const f = await fixture();
   try {
     const video = f.page.locator(".matt-character video");
@@ -222,9 +225,9 @@ test("Matt plays the supplied video continuously without claiming response synch
     await new Promise((resolve) => setTimeout(resolve, 400));
     const nextTime = await video.evaluate((player) => player.currentTime);
     assert.ok(nextTime > initialTime, "Decoded Matt footage advances instead of showing a static reference");
-    assert.equal(await video.evaluate((player) => player.loop && player.muted && player.autoplay && player.playsInline), true);
+    assert.equal(await video.evaluate((player) => !player.loop && player.muted && player.playsInline), true);
     assert.equal(await f.page.locator(".matt-character img").count(), 0);
-    assert.match(await f.page.locator(".matt-studio-notice").textContent(), /Identity footage only.*Live synchronized conversation is not connected/);
+    assert.match(await f.page.locator(".matt-studio-notice").textContent(), /One-time introduction.*Introduction footage is not an answer/);
     assert.ok(f.requests.length > 0 && f.requests.every((path) => path === "/matt/reference.mp4"));
     assert.deepEqual(f.errors, []);
   } finally { await f.context.close(); }

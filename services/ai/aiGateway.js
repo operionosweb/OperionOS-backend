@@ -66,7 +66,7 @@ function createMistralProvider({ apiKey = process.env.MISTRAL_API_KEY, model = p
         model, messages: [{ role: "system", content: request.system || "Return valid JSON." }, { role: "user", content: request.input }],
         temperature: request.temperature ?? 0.1,
         response_format: request.structured ? { type: "json_object" } : undefined,
-      }, { headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, timeout: request.timeoutMs || 25000 });
+      }, { headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, timeout: request.timeoutMs || 25000, signal: request.signal });
       return { output: response?.data?.choices?.[0]?.message?.content, usage: response?.data?.usage || {} };
     },
   };
@@ -81,7 +81,7 @@ function createOpenRouterProvider({ apiKey = process.env.OPENROUTER_API_KEY, mod
         model, messages: [{ role: "system", content: request.system || "Return valid JSON." }, { role: "user", content: request.input }],
         temperature: request.temperature ?? 0.1,
         response_format: request.structured ? { type: "json_object" } : undefined,
-      }, { headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, timeout: request.timeoutMs || 25000 });
+      }, { headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, timeout: request.timeoutMs || 25000, signal: request.signal });
       return { output: response?.data?.choices?.[0]?.message?.content, usage: response?.data?.usage || {} };
     },
   };
@@ -137,7 +137,8 @@ export function createAIGateway({
     return Math.max(0, Math.ceil(base * Math.max(1, String(input).length / 12000)));
   }
 
-  async function request({ organizationId, userId = null, operation, input = "", deterministicResult, existingIntelligence, documentHash = hashContent(input), provider = process.env.AI_PROVIDER || "mistral", model, promptVersion = null, confirmation = false, structured = true, system }) {
+  async function request({ organizationId, userId = null, operation, input = "", deterministicResult, existingIntelligence, documentHash = hashContent(input), provider = process.env.AI_PROVIDER || "mistral", model, promptVersion = null, confirmation = false, structured = true, system, signal }) {
+    signal?.throwIfAborted();
     if (!operation) throw Object.assign(new Error("An operation type is required"), { code: "INVALID_AI_REQUEST" });
     scopedKey(organizationId, "request");
     if (deterministicResult !== undefined) return { success: true, source: "deterministic", intelligenceConsumption: 0, result: deterministicResult };
@@ -182,7 +183,8 @@ export function createAIGateway({
     job.status = "processing"; job.provider = selected.name || provider; job.model = resolvedModel;
     await updateJob(job);
     try {
-      const response = await selected.generate({ input, system, structured });
+      signal?.throwIfAborted();
+      const response = await selected.generate({ input, system, structured, signal });
       const actual = estimated;
       const result = structured ? parseStructuredOutput(response?.output) : response?.output;
       if (store.kind !== "postgres") {
