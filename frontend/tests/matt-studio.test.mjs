@@ -71,7 +71,7 @@ for (const width of [320, 360, 390, 430, 768, 1024, 1440, 1920]) {
       assert.equal(await f.page.getByRole("textbox", { name: "Ask Matt", exact: true }).count(), 0);
       await f.page.getByRole("button", { name: "What are the key obligations?", exact: true }).click();
       await f.page.waitForFunction(() => document.querySelector(".matt-page")?.dataset.state === "PRESENTING");
-      assert.equal(await f.page.locator(".matt-answer").count(), 0);
+      assert.equal(await f.page.locator(".matt-answer").count(), 1, "Executive answer is readable by default in the redesigned intelligence panel");
       assert.equal(await f.page.locator(".matt-report").isVisible(), true, "Result panel opens without leaving Matt");
       assert.equal(await f.page.locator(".matt-findings li").count(), 4);
       assert.equal(await f.page.locator(".matt-proposal").isVisible(), false, "Review actions remain collapsed until requested");
@@ -86,8 +86,7 @@ for (const width of [320, 360, 390, 430, 768, 1024, 1440, 1920]) {
             scrollbar: report && report !== card ? report.offsetWidth - report.clientWidth : 0 };
         }));
         for (const card of bounds) {
-          assert.ok(Math.abs(card.left - 2) < 1, `${card.name}: exact Demo left gutter, got ${card.left}`);
-          assert.ok(Math.abs(card.right - 2 - card.scrollbar) < 1, `${card.name}: exact Demo gutter plus the report's visible scrollbar, got ${card.right}`);
+          assert.ok(card.left >= 1 && card.right >= 1, `${card.name}: native padded cards remain inside the mobile viewport`);
         }
       }
       const geometry = await f.page.evaluate(() => {
@@ -99,10 +98,9 @@ for (const width of [320, 360, 390, 430, 768, 1024, 1440, 1920]) {
           undersized: [...document.querySelectorAll(".matt-studio button, .matt-studio summary")].filter((el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height < 44).map((el) => el.textContent) };
       });
       assert.equal(geometry.overflow, false);
-      assert.ok(geometry.ratio >= (width >= 1024 ? 0.65 : 0.95), "Matt remains dominant when the proposal rail is open");
-      assert.ok(geometry.height >= 360);
-      if (width >= 1024) assert.ok(geometry.dockBottom <= geometry.stageBottom, "Desktop primary controls dock inside scene");
-      else assert.ok(geometry.dockGap >= 0 && geometry.dockGap <= 60, "Mobile primary controls follow scene without a report/context wall");
+      assert.ok(width >= 1024 ? geometry.ratio >= 0.45 && geometry.ratio <= 0.51 : geometry.ratio >= 0.95, "Persistent two columns on desktop; full-width stage on mobile");
+      assert.ok(geometry.height >= (width <= 600 ? 220 : 300));
+      assert.ok(geometry.dockGap >= 0 && geometry.dockGap <= 150, "In-flow controls follow optional intro controls, never a report/context wall");
       assert.deepEqual(geometry.undersized, []);
       if (width >= 1024) {
         await f.page.getByRole("button", { name: "Type a question", exact: true }).click();
@@ -139,13 +137,14 @@ for (const width of [320, 360, 390, 430, 768, 1024, 1440, 1920]) {
       await f.page.getByText("Review actions and proposal", { exact: true }).click();
       await f.page.getByRole("region", { name: "Contract review proposal", exact: true }).waitFor();
       const proposal = f.page.locator(".matt-proposal");
-      if (width <= 768) assert.ok(await f.page.locator(".matt-report").evaluate((panel) => panel.clientHeight <= innerHeight * 0.75 + 2), "Mobile proposal sheet bounds vertical page growth");
+      if (width <= 768) assert.equal(await f.page.locator(".matt-report").evaluate((panel) => getComputedStyle(panel).overflow), "visible", "Mobile evidence uses expandable details in document flow, not a nested scrolling sheet");
       assert.match(await proposal.textContent(), /not a generated mitigation proposal/);
       assert.match(await proposal.textContent(), /not AI-generated or approved actions/);
       assert.match(await proposal.textContent(), /No notice has been sent or approved/);
       assert.equal(await proposal.getByRole("button", { name: /Transmit|DocuSign|PDF|Notary/ }).count(), 0);
       assert.match(await proposal.getByRole("link", { name: "Review contract evidence", exact: true }).getAttribute("href"), /^\/demo\/contracts\/[^/]+\/evidence$/);
       await proposal.getByRole("button", { name: "Clarify first finding", exact: true }).click();
+      await f.page.getByRole("checkbox", { name: "Show response text", exact: true }).uncheck();
       await f.page.getByRole("button", { name: "Send", exact: true }).click();
       await f.page.waitForFunction(() => document.querySelector(".matt-page")?.dataset.state === "PRESENTING");
       assert.equal(await f.page.locator(".matt-answer").count(), 0, "Proposal remains available with response text off");

@@ -34,11 +34,14 @@ before(async () => {
 });
 after(async () => { await browser?.close(); if (server) await new Promise((resolve) => server.close(resolve)); });
 
-async function fixture({ failVideo = false, live = false, width = 1440 } = {}) {
-  const context = await browser.newContext({ viewport: { width, height: 900 } });
+async function fixture({ failVideo = false, live = false, width = 1440, storageState, blockStorage = false } = {}) {
+  const context = await browser.newContext({ viewport: { width, height: 900 }, storageState });
   const page = await context.newPage(), requests = [], errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await context.addInitScript((enabled) => { window.__mountSyntheticLive = enabled; }, live);
+  if (blockStorage) await context.addInitScript(() => {
+    Storage.prototype.setItem = () => { throw new DOMException("Test blocked storage", "SecurityError"); };
+  });
   await page.route("**/*", (route) => {
     const url = new URL(route.request().url());
     requests.push(url.pathname);
@@ -95,6 +98,69 @@ test("actual introduction ended event removes intro and mounts the unavailable l
     await f.page.getByRole("heading", { name: "Live Matt unavailable" }).waitFor();
     assert.equal(await f.page.locator("video").count(), 0);
     assert.equal(await f.page.evaluate(() => window.__intro.completed), 1);
+    assert.equal(await f.page.locator(".matt-environment").getAttribute("data-intro-outcome"), "intro_completed");
+    const saved = await f.context.storageState();
+    const next = await fixture({ storageState: saved });
+    try { await next.page.getByRole("heading", { name: "Live Matt unavailable" }).waitFor(); assert.equal(await next.page.locator("video").count(), 0); }
+    finally { await next.context.close(); }
+    assert.deepEqual(f.errors, []);
+  } finally { await f.context.close(); }
+});
+
+for (const [label, outcome] of [["Skip introduction", "intro_skipped"], ["Do not show introduction again", "intro_disabled"]]) {
+  test(`84317 ${outcome} persists across fresh browser contexts without session storage`, async () => {
+    const f = await fixture();
+    let saved;
+    try {
+      await f.page.getByRole("button", { name: label, exact: true }).click();
+      assert.equal(await f.page.locator(".matt-environment").getAttribute("data-intro-state"), "assistant_ready");
+      assert.equal(await f.page.locator(".matt-environment").getAttribute("data-intro-outcome"), outcome);
+      saved = await f.context.storageState();
+    } finally { await f.context.close(); }
+    const next = await fixture({ storageState: saved });
+    try {
+      await next.page.getByRole("heading", { name: "Live Matt unavailable" }).waitFor();
+      assert.equal(await next.page.locator("video").count(), 0);
+      assert.equal(await next.page.evaluate(() => sessionStorage.length), 0);
+      assert.deepEqual(next.errors, []);
+    } finally { await next.context.close(); }
+  });
+}
+test("84317 watch enables sound; explicit disable syncs to another tab without an intro loop", async () => {
+  const f = await fixture();
+  try {
+    await f.page.getByRole("button", { name: "Watch introduction", exact: true }).click();
+    assert.equal(await f.page.locator("video").evaluate((v) => v.muted), false);
+    await f.page.waitForFunction(() => document.querySelector(".matt-environment").dataset.introState === "intro_playing");
+    const other = await f.context.newPage();
+    await other.goto(origin);
+    await other.getByRole("button", { name: "Do not show introduction again", exact: true }).click();
+    await f.page.getByRole("heading", { name: "Live Matt unavailable" }).waitFor();
+    assert.equal(await f.page.locator("video").count(), 0);
+    assert.deepEqual(f.errors, []);
+  } finally { await f.context.close(); }
+});
+test("84317 blocked preference storage warns but skip still reaches assistant for the visit", async () => {
+  const f = await fixture({ blockStorage: true });
+  try {
+    const warnings = [];
+    f.page.on("console", (message) => { if (message.type() === "warning") warnings.push(message.text()); });
+    await f.page.getByRole("button", { name: "Skip introduction", exact: true }).click();
+    await f.page.getByRole("heading", { name: "Live Matt unavailable" }).waitFor();
+    assert.ok(warnings.some((m) => /visit memory only/.test(m)));
+    assert.deepEqual(f.errors, []);
+  } finally { await f.context.close(); }
+});
+test("84317 introduction preference belongs to its authorized user, not another account", async () => {
+  const f = await fixture();
+  try {
+    await f.page.getByRole("button", { name: "Do not show introduction again", exact: true }).click();
+    await f.page.getByRole("button", { name: "Switch authorized user", exact: true }).click();
+    await f.page.getByRole("button", { name: "Skip introduction", exact: true }).waitFor();
+    assert.equal(await f.page.locator("video source").getAttribute("src"), "/matt/reference.mp4");
+    await f.page.getByRole("button", { name: "Switch authorized user", exact: true }).click();
+    await f.page.getByRole("heading", { name: "Live Matt unavailable" }).waitFor();
+    assert.equal(await f.page.locator(".matt-environment").getAttribute("data-intro-outcome"), "intro_disabled");
     assert.deepEqual(f.errors, []);
   } finally { await f.context.close(); }
 });
@@ -113,6 +179,7 @@ test("intro completion can mount a supplied synthetic live stream with no prerec
   try {
     await f.page.getByRole("button", { name: "Skip introduction", exact: true }).click();
     await f.page.waitForFunction(() => document.querySelector("video")?.srcObject?.getAudioTracks().length === 1);
+    assert.equal(await f.page.locator(".matt-environment").getAttribute("data-intro-outcome"), "intro_skipped", "Connecting media does not overwrite the user's persisted introduction choice");
     assert.equal(await f.page.locator("video source").count(), 0);
     assert.equal(await f.page.locator("video").evaluate((video) => video.loop), false);
     await f.page.evaluate(() => window.__cleanupSynthetic());

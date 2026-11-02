@@ -1,11 +1,11 @@
 import { DEMO_CONTRACTS } from "./DemoDataProvider";
 import { answerContractQuestion } from "../../../services/phase3/intelligence/contractAssistantService.js";
 
-export const MATT_DEMO_CATALOG = DEMO_CONTRACTS.slice(0, 1);
+export const MATT_DEMO_CATALOG = DEMO_CONTRACTS;
 
 export function askMattDemo(contractId, question) {
   const contract = MATT_DEMO_CATALOG.find((item) => item.id === contractId);
-  if (!contract) throw new Error("Select the supported illustrative lease. Other demo agreements reuse sample evidence and are not independently analysed.");
+  if (!contract) throw new Error("Select an available illustrative agreement. Other demo agreements reuse sample lease evidence and are not independently analysed.");
   const evidence = contract.evidence.map((source) => ({ id: source.id, excerpt: source.excerpt, source_locator: source.locator, page_number: source.page }));
   if (/\bfuel\b/i.test(question) && !evidence.some((source) => /\bfuel\b/i.test(source.excerpt))) {
     return { ...answerContractQuestion({ question }), demonstration: true };

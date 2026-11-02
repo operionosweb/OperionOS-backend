@@ -3,7 +3,7 @@ import { INITIAL_MATT_STATE, mattReducer } from "./mattState";
 
 const sessions = new Map();
 function sessionFor(key) {
-  if (!sessions.has(key)) sessions.set(key, { state: INITIAL_MATT_STATE, question: "", showText: false, listeners: new Set() });
+  if (!sessions.has(key)) sessions.set(key, { state: INITIAL_MATT_STATE, question: "", showText: true, listeners: new Set() });
   return sessions.get(key);
 }
 export function clearMattSessions() {
@@ -13,7 +13,7 @@ export function clearMattSessions() {
     session.activeVoice = null;
     session.state = INITIAL_MATT_STATE;
     session.question = "";
-    session.showText = false;
+    session.showText = true;
     session.feedback = {};
     session.listeners.forEach((listener) => listener());
     if (session.listeners.size === 0) sessions.delete(key);

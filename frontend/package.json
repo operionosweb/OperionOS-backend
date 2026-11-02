@@ -12,6 +12,7 @@
     "build:aircraft-model": "node scripts/export-aircraft-model.mjs",
     "preview": "vite preview",
     "test:corporate": "node --test tests/corporate-design.test.mjs",
+    "test:matt:browser": "node --test --test-concurrency=1 tests/matt-live-browser.test.mjs tests/matt-unified.test.mjs",
     "test:acceptance": "node tests/acceptance/run.mjs",
     "test:acceptance:install": "playwright install chromium"
   },

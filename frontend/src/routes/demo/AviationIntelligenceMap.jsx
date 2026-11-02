@@ -70,6 +70,7 @@ function openAssistant(
     new CustomEvent("operion:assistant", {
       detail: {
         mode: "panel",
+        flight: aircraft,
         aviation: {
           aircraft,
           relatedContracts: scopedContracts,
@@ -438,7 +439,7 @@ export default function AviationIntelligenceMap() {
   const [fleetRequest, setFleetRequest] = useState(0);
   const [relationships, setRelationships] = useState([]);
   const [state, setState] = useState("loading");
-  const syncSelectedAircraft = useCallback((item) => { if (item) setSelectedId(item.id); }, []);
+  const syncSelectedAircraft = useCallback((item) => { setSelectedId(item?.id || null); }, []);
 
   useEffect(() => {
     let active = true;
@@ -509,10 +510,10 @@ export default function AviationIntelligenceMap() {
     };
   }, [selected]);
   useEffect(() => {
-    if (selected)
-      window.dispatchEvent(
+    window.dispatchEvent(
         new CustomEvent("operion:aviation-context", {
           detail: {
+            flight: selected || null,
             aircraft: selected,
             relatedContracts: previewContract ? [previewContract] : related,
             relationships,

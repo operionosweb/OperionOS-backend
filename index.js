@@ -22,6 +22,7 @@ import foundationRoutes from "./routes/foundationRoutes.js";
 import documentRoutes from "./routes/documentRoutes.js";
 import analysisRunRoutes from "./routes/analysisRunRoutes.js";
 import mattLiveRoutes from "./routes/mattLiveRoutes.js";
+import mattDemoRoutes from "./routes/mattDemoRoutes.js";
 import aviationRoutes from "./routes/aviationRoutes.js";
 import contactRoutes from "./routes/contactRoutes.js";
 import weatherMapRoutes from "./routes/weatherMapRoutes.js";
@@ -74,6 +75,7 @@ app.use("/api/oci", (error, _req, res, _next) => {
   if (status === 500) console.error("OCI request processing failed");
   res.status(status).json({ success: false, code: "OCI_REQUEST_REJECTED", error: status === 413 ? "OCI request is too large." : status === 400 ? "Invalid JSON request." : "OCI request failed." });
 });
+app.use("/api/demo/matt", mattDemoRoutes);
 app.use(cors());
 app.use("/api/weather-maps", weatherMapRoutes);
 

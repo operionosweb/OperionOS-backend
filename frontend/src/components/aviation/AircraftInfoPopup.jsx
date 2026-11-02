@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from "react";
 import { Plane, Sparkles, X } from "lucide-react";
-import { DemoBadge } from "../../demo/DemoUI";
+import { DemoBadge, InfoCard } from "../../demo/DemoUI";
 import { GLOBE_DEMO_NOTICE } from "../../demo/globeIntelligenceData";
 
 export default function AircraftInfoPopup({ aircraft, onClose, onInspectContract, selectedAlertId, onAskMatt }) {
@@ -23,7 +23,7 @@ export default function AircraftInfoPopup({ aircraft, onClose, onInspectContract
     window.dispatchEvent(new CustomEvent("operion:assistant", { detail: { flight: aircraft } }));
     onAskMatt?.(aircraft);
   }
-  return <section className={`od-aircraft-popup od-dashboard-flight-details od-globe-spatial-infocard${closing ? " is-closing" : ""}`} role="dialog" aria-modal="false"
+  return <InfoCard className={`od-aircraft-popup od-dashboard-flight-details od-globe-spatial-infocard${closing ? " is-closing" : ""}`} role="dialog" aria-modal="false"
     data-testid="globe-aircraft-infocard"
     aria-labelledby={titleId} onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); closeCard(); } }}
     onPointerDown={(event) => event.stopPropagation()} onWheel={(event) => event.stopPropagation()}>
@@ -70,5 +70,5 @@ export default function AircraftInfoPopup({ aircraft, onClose, onInspectContract
     {recommendations.map((action) => <article key={action.id}><strong>{action.title}</strong><p>{action.reason}</p></article>)}
     {!recommendations.length && <p>No identified exposure or recommended action in this scenario.</p>}
     <button type="button" className="od-button od-globe-ask-matt" onClick={askMatt}><Sparkles size={16}/>Ask Matt about this flight</button>
-  </section>;
+  </InfoCard>;
 }

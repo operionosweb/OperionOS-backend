@@ -6,7 +6,7 @@ export function supportsMattCapturedSpeech(environment = window) {
     && version && Number(version[1]) >= 135 && !/Android|iPhone|iPad|iPod/.test(agent));
 }
 
-export function createMattMicrophone({ environment = window, onState, onError, onRevoked }) {
+export function createMattMicrophone({ environment = window, supportsInput = supportsMattCapturedSpeech, onState, onError, onRevoked }) {
   let stream = null, pending = null, revision = 0, disposed = false, permission = null;
   const publish = (state) => { if (!disposed) onState(state); };
   function release() {
@@ -38,8 +38,8 @@ export function createMattMicrophone({ environment = window, onState, onError, o
   return {
     acquire() {
       if (disposed) return Promise.resolve(null);
-      if (!environment.isSecureContext || !environment.navigator?.mediaDevices?.getUserMedia || !supportsMattCapturedSpeech(environment)) {
-        fail("UNSUPPORTED", "Captured-track speech requires desktop Chrome or Edge 135+ over HTTPS (or localhost). This browser cannot connect the captured microphone to recognition. Use typed questions.");
+      if (!environment.isSecureContext || !environment.navigator?.mediaDevices?.getUserMedia || !supportsInput(environment)) {
+        fail("UNSUPPORTED", "This browser cannot connect the captured microphone to the selected speech processor over HTTPS (or localhost). Check the speech-provider requirements or use typed questions.");
         return Promise.resolve(null);
       }
       const existing = stream?.getAudioTracks().find((track) => track.readyState === "live");
@@ -73,8 +73,17 @@ export function createMattMicrophone({ environment = window, onState, onError, o
       }).finally(() => { pending = null; });
       return pending;
     },
-    pause() { stream?.getAudioTracks().forEach((track) => { track.enabled = false; }); },
-    disable() { release(); },
+    pause() {
+      if (pending) {
+        revision++;
+        fail("ERROR", "The pending microphone request was cancelled. Close the browser permission prompt, then click Microphone to retry.");
+      }
+      stream?.getAudioTracks().forEach((track) => { track.enabled = false; });
+    },
+    disable() {
+      release();
+      if (pending) fail("ERROR", "The pending microphone request was cancelled. Close the browser permission prompt, then click Microphone to retry.");
+    },
     dispose() {
       release();
       disposed = true;

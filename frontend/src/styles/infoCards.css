@@ -1,0 +1,22 @@
+:root {
+  --op-card-surface: #fff;
+  --op-card-line: #cfe0ed;
+  --op-card-radius: 14px;
+  --op-card-shadow: 0 8px 24px -16px #19344f38;
+  --op-card-ink: #19344f;
+  --op-card-muted: #48667e;
+}
+:is(.od-shell, .matt-page) :is(.od-card, .od-finding-card, .od-evidence, .od-portfolio, .op-infocard),
+.od-shell .od-aircraft-popup.od-globe-spatial-infocard {
+  color: var(--op-card-ink);
+  background: var(--op-card-surface);
+  border: 1px solid var(--op-card-line);
+  border-radius: var(--op-card-radius);
+  box-shadow: var(--op-card-shadow);
+}
+.op-infocard { padding: 18px; min-width: 0; overflow-wrap: anywhere; }
+.op-infocard[data-tone="warning"] { border-left: 3px solid #ad6a21; }
+.od-shell .od-globe-spatial-infocard .od-dashboard-plane-icon { background: #edf5fc; box-shadow: none; }
+:is(.od-shell, .matt-page) .od-card-header { border-color: var(--op-card-line); }
+:is(.od-shell, .matt-page) .od-evidence { background: #f5f9fd; }
+:is(.od-shell, .matt-page) .od-evidence :is(p, h3) { line-height: 1.6; }

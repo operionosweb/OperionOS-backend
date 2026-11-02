@@ -4,7 +4,7 @@
 .od-shell .od-aircraft-popup.od-dashboard-flight-details { background: #fff; box-shadow: 0 4px 12px #001c551f; contain: layout paint; }
 .od-shell .od-globe-contract-panel { z-index: 6; border: 1px solid #b7d4ee; border-radius: 14px; }
 .od-shell .od-globe-contract-panel blockquote { margin-inline: 0; padding: 12px; border-left: 3px solid #0066d9; background: #f2f8ff; }
-.od-shell .od-aircraft-popup.od-dashboard-flight-details.od-globe-spatial-infocard { border: 1px solid #9fc5e4; border-radius: 16px 7px 16px 7px; background: linear-gradient(145deg, #fff 20%, #f2f8ff 100%); box-shadow: 0 22px 56px -28px #052d5277, inset 0 1px #fff; animation: od-globe-infocard-in 220ms cubic-bezier(.2,.8,.2,1) both; }
+.od-shell .od-aircraft-popup.od-dashboard-flight-details.od-globe-spatial-infocard { border: 1px solid var(--op-card-line); border-radius: var(--op-card-radius); background: var(--op-card-surface); box-shadow: var(--op-card-shadow); animation: od-globe-infocard-in 220ms cubic-bezier(.2,.8,.2,1) both; }
 .od-shell .od-aircraft-popup.od-dashboard-flight-details.od-globe-spatial-infocard.is-closing { animation: od-globe-infocard-out 150ms ease-in both; pointer-events: none; }
 @keyframes od-globe-infocard-in { from { opacity: 0; transform: translateY(8px) scale(.992); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes od-globe-infocard-out { to { opacity: 0; transform: translateY(6px) scale(.995); } }

@@ -73,6 +73,7 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
   }
 
   function closeAircraftPopup() {
+    setSelectedId(null);
     setAircraftPopupOpen(false);
     setContractOpen(false);
     workspaceRef.current?.querySelector(".od-cesium-globe canvas")?.focus({ preventScroll: true });
@@ -122,6 +123,9 @@ export default function FlightOperations({ onAircraftSelect, selectedAircraftId,
     onAircraftSelect?.(selected || null);
     window.dispatchEvent(new CustomEvent("operion:aviation-context", { detail: { flight: selected || null } }));
   }, [selected, onAircraftSelect]);
+  useEffect(() => () => {
+    window.dispatchEvent(new CustomEvent("operion:aviation-context", { detail: { flight: null } }));
+  }, []);
   useEffect(() => { setSelectedObject(null); }, [filters, filter, query, contractIds]);
 
   function resetFilters() {

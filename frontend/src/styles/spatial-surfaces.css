@@ -25,15 +25,22 @@
 .op-corporate-shell :is(.op-story-eyebrow, .op-about-label, .op-sales-eyebrow, .op-solutions-label) { color: #0055a9; letter-spacing: .12em; }
 .op-corporate-shell :is(.op-about-intelligence-path li, .op-sales-flow article) { border-top: 3px solid #068fe8; }
 .op-corporate-shell :is(.op-story-product-frame, .op-solutions-segment-image, .op-founder-grid img) { box-shadow: var(--op-spatial-shadow); }
-.od-shell :is(.od-card, .od-metric, .od-portfolio, .od-finding-card, .od-evidence, .od-command-overview, .od-dashboard-aviation, .od-intelligence-categories > a, .od-evidence-drawer, .od-popover) {
+.od-shell :is(.od-metric, .od-command-overview, .od-dashboard-aviation, .od-intelligence-categories > a, .od-evidence-drawer, .od-popover) {
   border-color: var(--op-spatial-line);
   background: var(--op-spatial-panel);
   box-shadow: var(--op-spatial-shadow);
 }
-.od-shell .od-card-header { background: linear-gradient(100deg, #f8fcff, #eaf5ff); border-bottom-color: #bed6ec; }
+.od-shell :is(.od-card, .od-portfolio, .od-finding-card, .od-evidence),
+.op-product-shell :is(.op-metric-card, .op-intelligence-panel, .op-contract-card, .op-surface) {
+  border-color: var(--op-card-line);
+  border-radius: var(--op-card-radius);
+  background: var(--op-card-surface);
+  box-shadow: var(--op-card-shadow);
+}
+.od-shell .od-card-header { background: #f5f9fd; border-bottom-color: var(--op-card-line); }
 .od-shell .od-dashboard-globe-toolbar { background: linear-gradient(100deg, #0b2947, #103d61); border-bottom-color: #34516e; }
 .od-shell :is(.od-dashboard-globe-panel, .od-aircraft-popup, .od-globe-fleet-popup) { box-shadow: 0 20px 55px -22px #001c5577; }
-.op-product-shell :is(.op-metric-card, .op-intelligence-panel, .op-contract-card, .op-upload-stage, .op-honest-boundary, .op-surface) { border-color: var(--op-spatial-line); background: var(--op-spatial-panel); box-shadow: var(--op-spatial-shadow); }
+.op-product-shell :is(.op-upload-stage, .op-honest-boundary) { border-color: var(--op-spatial-line); background: var(--op-spatial-panel); box-shadow: var(--op-spatial-shadow); }
 .op-consent { border-color: #b7d4ee; border-radius: 16px 6px; background: linear-gradient(135deg, #fff, #edf6ff); box-shadow: 0 24px 54px -22px #06467c55, inset 0 1px #fff; max-height: calc(100svh - 8px); overflow: auto; box-sizing: border-box; }
 .op-consent .op-btn-primary { background: #0066f5; border-color: #0066f5; }
 .op-consent .op-btn-secondary { background: #f3f8ff; border-color: #b7d4ee; color: #174e82; }

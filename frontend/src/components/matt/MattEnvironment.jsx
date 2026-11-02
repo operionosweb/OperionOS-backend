@@ -18,7 +18,7 @@ export default function MattEnvironment({ phase, onMediaError, onMediaStatus, st
   useEffect(() => {
     if (introduction.completed) onIntroductionComplete?.();
   }, [introduction.completed, onIntroductionComplete]);
-  useEffect(() => { if (stream) introductionRef.current.complete(); }, [stream]);
+  useEffect(() => { if (stream && !introductionRef.current.completed) introductionRef.current.complete(); }, [stream]);
   const playbackFailed = useCallback(() => {
     player.current?.pause();
     onMediaStatus("error");
@@ -35,10 +35,10 @@ export default function MattEnvironment({ phase, onMediaError, onMediaStatus, st
     const currentIntroduction = introductionRef.current;
     if (!stream && !currentIntroduction.claim(owner.current)) return;
     if (live?.mediaRef) live.mediaRef.current = video;
-    const restoreTime = () => { if (!stream) video.currentTime = Math.min(currentIntroduction.resumeTime(), video.duration); };
+    const restoreTime = () => { if (!stream && Number.isFinite(video.duration)) video.currentTime = Math.min(currentIntroduction.resumeTime(), video.duration); };
     video.addEventListener("loadedmetadata", restoreTime);
     const play = () => {
-      if (stream && live?.enableAudio) { void live.enableAudio(); return; }
+      if (stream && live?.attachAudio) { void live.attachAudio(); return; }
       return video.play().catch((error) => {
       if (!active) return;
       if (!stream && document.visibilityState === "hidden" && ["AbortError", "NotAllowedError"].includes(error.name)) {
@@ -80,7 +80,7 @@ export default function MattEnvironment({ phase, onMediaError, onMediaStatus, st
       video.removeEventListener("loadedmetadata", restoreTime);
       if (!stream) currentIntroduction.release(owner.current, time);
     };
-  }, [stream, isIntroduction, introductionKey, isIntroduction ? introduction.revision : 0, playbackFailed, onMediaError, onMediaStatus]);
+  }, [stream, isIntroduction, introductionKey, isIntroduction && introduction.available(owner.current), playbackFailed, onMediaError, onMediaStatus]);
   function retry() {
     onMediaError("");
     onMediaStatus("loading");
@@ -89,10 +89,11 @@ export default function MattEnvironment({ phase, onMediaError, onMediaStatus, st
     if (!stream) player.current.load();
     player.current.play().catch(playbackFailed);
   }
-  return <section className="matt-environment od-card" aria-label="Matt video presence" data-state={isIntroduction ? "INTRODUCTION" : live?.state || phase}>
+  return <div className="matt-media-unit"><section className="matt-environment od-card" aria-label="Matt video presence" data-intro-state={introduction.state} data-intro-outcome={introduction.outcome} data-state={isIntroduction ? "INTRODUCTION" : live?.state || phase}>
     <div className="matt-character">{(isIntroduction || stream) ? <video key={stream ? "stream" : "introduction"} ref={player} autoPlay={false} loop={false} muted={!stream && !introAudio} playsInline preload="metadata" aria-label={stream ? "Matt live audio and video" : "Matt introduction"} tabIndex={-1}
       onPlaying={() => {
         if (stream && !hasLiveAudioVideo(stream)) { playbackFailed(); return; }
+        if (!stream) introduction.playing();
         setNeedsPlayback(false); onMediaError(""); onMediaStatus("playing");
       }}
       onWaiting={() => onMediaStatus("buffering")}
@@ -101,12 +102,13 @@ export default function MattEnvironment({ phase, onMediaError, onMediaStatus, st
       onError={playbackFailed}>
       {!stream && <source src="/matt/reference.mp4" type="video/mp4"/>}
     </video> : <div className="matt-live-unavailable" role="status"><h2>{live?.state === "RECONNECTING" ? "Connecting live Matt" : "Live Matt unavailable"}</h2><p>{live?.error || "No live video provider is connected. The introduction will not be replayed as an answer."}</p>
-      {live?.connect && <><label><input type="checkbox" checked={live.consent} onChange={(event) => live.setConsent(event.target.checked)}/>I am authorized to send questions and contract evidence to the approved model service, and answer text to the approved avatar service.</label><button type="button" disabled={!live.consent || live.state === "RECONNECTING"} onClick={live.connect}>Connect live Matt</button></>}
+      {live?.connect && <><label><input type="checkbox" checked={live.consent} onChange={(event) => live.setConsent(event.target.checked)}/>{live.demo ? "I approve sending my non-confidential questions and prepared Demo evidence to the approved model service, and answer text to the approved avatar service. I will not share customer information." : "I am authorized to send questions and contract evidence to the approved model service, and answer text to the approved avatar service."}</label><button type="button" disabled={!live.consent || live.state === "RECONNECTING"} onClick={live.connect}>Connect live Matt</button></>}
     </div>}</div>
     <div className="matt-nameplate"><span>OPERION / AVIATION INTELLIGENCE</span><h2>Matt</h2><p>Your intelligence colleague.</p></div>
     <div className="matt-character-status"><i aria-hidden="true"/>Conversation: {isIntroduction ? "introduction" : (live?.state || phase).toLowerCase()}</div>
     <p className="matt-studio-media-label">{stream ? "LIVE PROVIDER AUDIO / VIDEO" : isIntroduction ? "ONE-TIME INTRODUCTION / NOT AN ANSWER" : "LIVE SESSION NOT CONNECTED / NO VIDEO SUBSTITUTE"}</p>
-    {isIntroduction && <div className="matt-intro-controls"><button type="button" onClick={() => { setIntroAudio(true); player.current.muted = false; player.current.play().catch(playbackFailed); }}>Enable introduction sound</button><button type="button" onClick={() => introduction.complete()}>Skip introduction</button></div>}
     {needsPlayback && <button className="matt-video-retry" type="button" onClick={retry}>Retry Matt video</button>}
-  </section>;
+  </section>
+    {isIntroduction && <div className="matt-intro-controls"><button type="button" onClick={() => { setIntroAudio(true); player.current.muted = false; player.current.play().catch(playbackFailed); }}>Watch introduction</button><button type="button" onClick={() => introduction.complete("intro_skipped")}>Skip introduction</button><button type="button" aria-label="Do not show introduction again" onClick={() => introduction.complete("intro_disabled")}>Do not show again</button></div>}
+  </div>;
 }

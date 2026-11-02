@@ -88,7 +88,7 @@ test("cancelled session creation terminates the late provider room", async () =>
 test("gateway answer generation uses authorized sources and rejects invented evidence IDs", async () => {
   const requests = [];
   const gateway = { request: async (request) => { requests.push(request); return { success: true, result: { answer: "Airworthy return is required.", established: true, evidence_ids: ["source-one"] } }; } };
-  const readContext = async (scope) => { assert.deepEqual(scope, { organizationId, analysisRunId }); return { evidence: [source], clauses: [], obligations: [], deadlines: [], risks: [] }; };
+  const readContext = async (scope) => { assert.equal(scope.organizationId, organizationId); assert.equal(scope.analysisRunId, analysisRunId); assert.equal(scope.contextMode, "analysis"); assert.equal(scope.pageId, "matt"); return { evidence: [source], clauses: [], obligations: [], deadlines: [], risks: [] }; };
   const answer = createMattAnswerService({ readContext, gateway });
   const result = await answer({ organizationId, userId: "user", analysisRunId, question: "Which condition applies?", history: [] });
   assert.equal(result.source, "ai_gateway");

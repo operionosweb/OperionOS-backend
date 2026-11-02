@@ -1,4 +1,9 @@
 import React from "react";
+import "../styles/infoCards.css";
+
+export function InfoCard({ as: Element = "section", className = "", tone = "neutral", children, ...props }) {
+  return <Element {...props} className={`op-infocard ${className}`.trim()} data-tone={tone}>{children}</Element>;
+}
 
 export function DemoBadge({ children = "DEMO DATA", tone = "demo" }) {
   return <span className={`od-badge od-badge-${tone}`}>{children}</span>;
@@ -9,7 +14,7 @@ export function PageHeader({ eyebrow, title, description, actions, children, hea
 }
 
 export function GlassCard({ title, eyebrow, action, className = "", children }) {
-  return <section className={`od-card ${className}`.trim()}>{(title || eyebrow || action) && <header className="od-card-header"><div>{eyebrow && <span className="od-eyebrow">{eyebrow}</span>}{title && <h2>{title}</h2>}</div>{action}</header>}<div className="od-card-body">{children}</div></section>;
+  return <InfoCard className={`od-card ${className}`} style={{ padding: 0 }}>{(title || eyebrow || action) && <header className="od-card-header"><div>{eyebrow && <span className="od-eyebrow">{eyebrow}</span>}{title && <h2>{title}</h2>}</div>{action}</header>}<div className="od-card-body">{children}</div></InfoCard>;
 }
 
 export function MetricCard({ icon: Icon, label, value, note, tone = "purple" }) {

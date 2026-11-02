@@ -85,6 +85,18 @@ test("pending capture is shared and a late permission grant after disposal relea
   assert.equal(await pending, null);
   assert.equal(f.tracks[0].readyState, "ended");
 });
+test("interrupting a pending permission request releases a late grant instead of leaving an active unowned microphone", async () => {
+  const f = fixture();
+  let finish, stream;
+  f.delay((resolve, next) => { finish = resolve; stream = next; });
+  const pending = f.microphone.acquire();
+  f.microphone.pause();
+  finish(stream);
+  assert.equal(await pending, null);
+  assert.equal(f.tracks[0].readyState, "ended");
+  assert.equal(f.states.includes("GRANTED"), false);
+  f.microphone.dispose();
+});
 test("permission revocation and device disconnection release capture and notify the consumer", async () => {
   const f = fixture();
   await f.microphone.acquire();

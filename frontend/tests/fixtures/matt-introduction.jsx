@@ -10,6 +10,7 @@ function Fixture() {
   const [context, setContext] = useState("contract-one");
   const [mounted, setMounted] = useState(true);
   const [stream, setStream] = useState(null);
+  const [identity, setIdentity] = useState("fixture");
   const complete = useCallback(() => {
     window.__intro.completed++;
     if (window.__mountSyntheticLive) {
@@ -26,8 +27,9 @@ function Fixture() {
   return <main className="matt-page">
     <button onClick={() => setContext((value) => value === "contract-one" ? "flight-two" : "contract-one")}>Change context</button>
     <button onClick={() => setMounted((value) => !value)}>Toggle Matt</button>
+    <button onClick={() => setIdentity((value) => value === "fixture" ? "other-user" : "fixture")}>Switch authorized user</button>
     <p>{context}</p>
-    {mounted && <MattEnvironment phase="READY" introductionKey="fixture" onIntroductionComplete={complete} onMediaError={onMediaError} onMediaStatus={onMediaStatus} stream={stream}/>}
+    {mounted && <MattEnvironment phase="READY" introductionKey={identity} onIntroductionComplete={complete} onMediaError={onMediaError} onMediaStatus={onMediaStatus} stream={stream}/>}
   </main>;
 }
 createRoot(document.getElementById("root")).render(<Fixture/>);

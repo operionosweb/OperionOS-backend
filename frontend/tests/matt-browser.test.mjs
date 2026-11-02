@@ -129,12 +129,14 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
     try {
       await f.page.goto(`${origin}/demo/matt`);
       await enableText(f.page);
-      await f.page.getByRole("heading", { name: "Let's look at what matters.", exact: true }).waitFor();
+      await f.page.getByRole("heading", { name: "Ask Matt", exact: true }).waitFor();
       await f.page.getByRole("button", { name: "What are the key obligations?", exact: true }).click();
       await f.page.locator(".matt-answer").waitFor();
       assert.ok(await f.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "Page has no horizontal overflow");
       assert.equal(await f.page.locator(".oa-overlay").count(), 0, "No competing assistant overlay");
-      assert.equal(await f.page.locator(".matt-character video").count(), 1);
+      assert.ok(await f.page.locator(".matt-character video").count() === 1
+        || await f.page.locator(".matt-environment").getAttribute("data-intro-state") === "assistant_ready",
+      "The non-looping introduction may complete; no recorded response is replayed");
       assert.equal(await f.page.locator(".matt-character img").count(), 0);
       if (width === 390) {
         assert.ok(f.media.includes("/matt/reference.mp4"), "Reduced-motion layout still uses Matt's moving video");
@@ -149,7 +151,7 @@ test("authenticated route scopes existing endpoints, supports follow-ups and ign
   const f = await fixture({ authenticated: true });
   try {
     await f.page.goto(`${origin}/app/matt?contract=lease-one`);
-    await f.page.getByRole("heading", { name: "Let's look at what matters.", exact: true }).waitFor().catch(async () => {
+    await f.page.getByRole("heading", { name: "Ask Matt", exact: true }).waitFor().catch(async () => {
       throw new Error(`Matt entry diagnostic: ${f.page.url()}; ${await f.page.locator("main").innerText()}; requests=${JSON.stringify(f.requests)}; errors=${JSON.stringify(f.errors)}`);
     });
     const nav = f.page.getByRole("navigation", { name: "Production navigation" });
@@ -229,9 +231,12 @@ test("platform Super Admin without organization membership can see Matt without 
       await f.page.setViewportSize({ width, height: 1000 });
       await f.page.goto(`${origin}/app/dashboard`);
       await f.page.locator(".op-consent").waitFor();
-      const trigger = f.page.getByRole("button", { name: "Open Matt assistant", exact: true });
+      const trigger = f.page.locator(".matt-floating-trigger");
       await trigger.waitFor();
-      assert.equal(await trigger.locator("video, img").count(), 0, "The launcher is a control, not a second looping Matt player");
+      if (await trigger.getAttribute("aria-expanded") === "true") await trigger.click();
+      assert.equal(await trigger.getAttribute("aria-label"), "Ask Matt");
+      assert.equal(await trigger.locator("video").count(), 0, "The launcher is a portrait control, not a second looping Matt player");
+      assert.equal(await trigger.locator("img").getAttribute("src"), "/matt/executive-office.jpg");
       assert.equal(await trigger.evaluate((button) => {
         const bounds = button.getBoundingClientRect();
         return document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2)?.closest(".matt-floating-trigger") === button;
@@ -242,7 +247,9 @@ test("platform Super Admin without organization membership can see Matt without 
         const bounds = panel.getBoundingClientRect();
         return bounds.top >= 0 && bounds.bottom <= innerHeight && bounds.left >= 0 && bounds.right <= innerWidth;
       }), true, `The open Matt panel is wholly on screen at ${width}px while the consent banner is present`);
-      assert.equal(await f.page.locator(".matt-character video").count(), 1);
+      assert.ok(await f.page.locator(".matt-character video").count() === 1
+        || await f.page.locator(".matt-environment").getAttribute("data-intro-state") === "assistant_ready",
+      "An introduction may finish while using the controls; it never replays to impersonate an answer");
       assert.ok(f.media.includes("/matt/reference.mp4"));
       assert.ok(await f.page.getByText(/Contract review and customer data are unavailable/).isVisible());
       await f.page.goto(`${origin}/app/matt`);
@@ -275,7 +282,9 @@ test("voice input is explicit and prerecorded Matt video is not presented as syn
     assert.equal(await f.page.evaluate(() => window.__mattSpeech.starts), 0);
     await f.page.getByRole("button", { name: "Interrupt / stop", exact: true }).click();
     await f.page.locator(".matt-page[data-state='INTERRUPTED']").waitFor();
-    assert.equal(await f.page.locator(".matt-character video").count(), 1);
+    assert.ok(await f.page.locator(".matt-character video").count() === 1
+      || await f.page.locator(".matt-environment").getAttribute("data-intro-state") === "assistant_ready",
+    "Completed introduction is never replayed by an interruption");
     assert.equal(await f.page.evaluate(() => window.__mattSpeech.starts), 0, "No independent TTS was started");
     assert.equal(await f.page.locator(".matt-answer").count(), 1);
     await f.page.keyboard.press("Tab");

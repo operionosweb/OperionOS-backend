@@ -2,16 +2,17 @@
 export default {
   createCallObject() {
     const listeners = new Map();
-    let audio, oscillator, stream, inference, seq = 0;
+    let audio, oscillator, stream, inference, conversationId, seq = 0;
     window.__daily = { sent: [], destroyed: false };
     const emit = (event_type, properties) => listeners.get("app-message")?.({
       fromId: "synthetic-avatar",
-      data: { message_type: "conversation", conversation_id: "synthetic-room", event_type, seq: ++seq, inference_id: inference, properties: { role: "pal", ...properties } },
+      data: { message_type: "conversation", conversation_id: conversationId, event_type, seq: ++seq, inference_id: inference, properties: { role: "pal", ...properties } },
     });
     const call = {
       on(event, handler) { listeners.set(event, handler); },
       off(event) { listeners.delete(event); },
-      async join() {
+      async join({ url }) {
+        conversationId = new URL(url).pathname.slice(1);
         const canvas = document.createElement("canvas");
         canvas.width = 640; canvas.height = 480;
         canvas.getContext("2d").fillRect(0, 0, 640, 480);
@@ -24,7 +25,7 @@ export default {
       },
       participants() {
         return { avatar: { session_id: "synthetic-avatar", local: false,
-          tracks: { audio: { persistentTrack: stream.getAudioTracks()[0] }, video: { persistentTrack: stream.getVideoTracks()[0] } } } };
+          tracks: { audio: { subscribed: true, state: "playable", persistentTrack: stream.getAudioTracks()[0] }, video: { subscribed: true, state: "playable", persistentTrack: stream.getVideoTracks()[0] } } } };
       },
       sendAppMessage(message) {
         window.__daily.sent.push(message);
@@ -39,6 +40,13 @@ export default {
       async destroy() { oscillator?.stop(); await audio?.close(); window.__daily.destroyed = true; },
     };
     window.__dailyFail = () => listeners.get("error")?.({ errorMsg: "Synthetic provider failure" });
+    window.__dailyReplaceTracks = () => {
+      const previous = stream.getTracks();
+      stream = new MediaStream(previous.map((track) => track.clone()));
+      listeners.get("participant-updated")?.({ participant: call.participants().avatar });
+      previous.forEach((track) => track.stop());
+    };
+    window.__dailyNetwork = (event) => listeners.get("network-connection")?.({ event });
     return call;
   },
 };

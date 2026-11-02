@@ -1,16 +1,23 @@
 import { useCallback, useSyncExternalStore } from "react";
 
 const introductions = new Map();
+const outcomes = ["intro_completed", "intro_skipped", "intro_disabled"];
+const storageKey = (key) => `operion:matt:intro:${key}`;
 function entry(key) {
   if (!introductions.has(key)) {
-    let completed = false, time = 0;
+    let status = "intro_not_seen", time = 0;
     try {
-      completed = sessionStorage.getItem(`operion:matt:intro:${key}`) === "complete";
+      const stored = localStorage.getItem(storageKey(key));
+      if (outcomes.includes(stored)) status = stored;
+      else if (sessionStorage.getItem(storageKey(key)) === "complete") {
+        status = "intro_completed";
+        localStorage.setItem(storageKey(key), status);
+      }
       const saved = Number(sessionStorage.getItem(`operion:matt:intro-progress:${key}`));
       if (Number.isFinite(saved) && saved > 0) time = saved;
     }
     catch (error) { console.warn("Matt introduction session storage unavailable; using visit memory", error.name); }
-    introductions.set(key, { completed, time, owner: null, listeners: new Set(), revision: 0, warned: false });
+    introductions.set(key, { status, time, owner: null, listeners: new Set(), revision: 0, warned: false });
   }
   return introductions.get(key);
 }
@@ -22,20 +29,35 @@ export function useMattIntroduction(key) {
   const subscribe = useCallback((listener) => {
     const value = entry(key);
     value.listeners.add(listener);
-    return () => value.listeners.delete(listener);
+    const changed = (event) => {
+      if (event.key !== storageKey(key) || !outcomes.includes(event.newValue)) return;
+      value.status = event.newValue;
+      value.owner = null;
+      notify(value);
+    };
+    window.addEventListener("storage", changed);
+    return () => { value.listeners.delete(listener); window.removeEventListener("storage", changed); };
   }, [key]);
   const snapshot = useCallback(() => entry(key).revision, [key]);
   useSyncExternalStore(subscribe, snapshot);
   const value = entry(key);
   return {
-    completed: value.completed,
+    completed: outcomes.includes(value.status),
+    state: outcomes.includes(value.status) ? "assistant_ready" : value.status,
+    outcome: value.status,
     revision: value.revision,
+    available: (owner) => !value.owner || value.owner === owner,
     claim(owner) {
-      if (value.completed || (value.owner && value.owner !== owner)) return false;
+      if (outcomes.includes(value.status) || (value.owner && value.owner !== owner)) return false;
       value.owner = owner;
       return true;
     },
     resumeTime: () => value.time,
+    playing() {
+      if (value.status !== "intro_not_seen") return;
+      value.status = "intro_playing";
+      notify(value);
+    },
     checkpoint(time) {
       if (!Number.isFinite(time) || time < value.time + 1) return;
       value.time = time;
@@ -51,10 +73,11 @@ export function useMattIntroduction(key) {
       value.owner = null;
       notify(value);
     },
-    complete() {
-      value.completed = true;
+    complete(outcome = "intro_completed") {
+      if (!outcomes.includes(outcome)) throw new Error("Invalid Matt introduction outcome.");
+      value.status = outcome;
       value.owner = null;
-      try { sessionStorage.setItem(`operion:matt:intro:${key}`, "complete"); }
+      try { localStorage.setItem(storageKey(key), outcome); }
       catch (error) { console.warn("Matt introduction completion retained in visit memory only", error.name); }
       notify(value);
     },

@@ -6,8 +6,8 @@ import { ORGANIZATION_PERMISSIONS } from "../../lib/permissions";
 
 export default function MattSessionBoundary({ children }) {
   const { user } = useAuth();
-  const { organizationId, hasOrganizationPermission } = useOrganization();
+  const { organizationId, organizationRole, authorizationLoading, hasOrganizationPermission } = useOrganization();
   const permitted = hasOrganizationPermission(ORGANIZATION_PERMISSIONS.CONTRACT_READ);
-  useEffect(() => () => clearMattSessions(), [user?.id, organizationId, permitted]);
+  useEffect(() => () => clearMattSessions(), [user?.id, organizationId, organizationRole, authorizationLoading, permitted]);
   return children;
 }
