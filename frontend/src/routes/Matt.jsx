@@ -5,7 +5,7 @@ import { useOrganization } from "../context/OrganizationContext";
 import { useAuth } from "../context/AuthContext";
 import OrganizationGate from "../components/demo/OrganizationGate";
 import RequireOrganizationPermission from "../components/auth/RequireOrganizationPermission";
-import { ORGANIZATION_PERMISSIONS } from "../lib/permissions";
+import { ORGANIZATION_PERMISSIONS, PLATFORM_PERMISSIONS } from "../lib/permissions";
 import MattEnvironment from "../components/matt/MattEnvironment";
 import MattProposal from "../components/matt/MattProposal";
 import { PageHeader, DemoBadge, EvidenceCard } from "../demo/DemoUI";
@@ -17,7 +17,9 @@ import "../styles/matt.css";
 import "../styles/mattStudio.css";
 
 export default function Matt({ demo = false, reportOnly = false }) {
-  const { organizationId } = useOrganization();
+  const organization = useOrganization();
+  const { organizationId } = organization;
+  const auth = useAuth();
   const [params] = useSearchParams();
   const [flight, setFlight] = useState(null);
   const [flightError, setFlightError] = useState("");
@@ -36,7 +38,28 @@ export default function Matt({ demo = false, reportOnly = false }) {
   }, [demo, flightId]);
   if (flightError) return <p role="alert">{flightError}</p>;
   if (demo && flightId && !flight) return <p role="status">Loading selected demonstration flight...</p>;
+  if (!demo && auth.hasPlatformPermission(PLATFORM_PERMISSIONS.PLATFORM_ADMIN) && (!organizationId || (!organization.authorizationLoading && !organization.hasOrganizationPermission(ORGANIZATION_PERMISSIONS.CONTRACT_READ)))) {
+    return <MattPresenceOnly/>;
+  }
   return demo ? <MattExperience demo flight={flight} reportOnly={reportOnly}/> : <OrganizationGate><RequireOrganizationPermission permission={ORGANIZATION_PERMISSIONS.CONTRACT_READ}><MattExperience key={organizationId} organizationId={organizationId} reportOnly={reportOnly}/></RequireOrganizationPermission></OrganizationGate>;
+}
+
+export function MattPresenceOnly({ compact = false }) {
+  const [mediaStatus, setMediaStatus] = useState("loading");
+  const [mediaError, setMediaError] = useState("");
+  return <main className={`matt-page${compact ? " matt-compact" : ""}`} data-matt-mode="platform-presence-only">
+    {!compact && <header className="matt-heading"><div><span className="matt-eyebrow">OPERION / PLATFORM SESSION</span><h1>Matt</h1><p>Video presence without an organisation contract context.</p></div></header>}
+    <div className="matt-layout">
+      <MattEnvironment phase={mediaStatus} onMediaStatus={setMediaStatus} onMediaError={setMediaError}/>
+      <section className="matt-workspace" aria-labelledby="matt-platform-presence-title">
+        <span className="matt-eyebrow">PLATFORM-ONLY SESSION</span>
+        <h2 id="matt-platform-presence-title">Matt video presence is available.</h2>
+        <p>Contract review and customer data are unavailable without an authorized organization context and contract-read permission.</p>
+        <p className="matt-studio-notice" role="status">This is continuous prerecorded video, not a live or answer-synchronised avatar conversation.</p>
+        {mediaError && <p className="matt-error" role="alert">{mediaError}</p>}
+      </section>
+    </div>
+  </main>;
 }
 
 export function MattExperience({ demo = false, organizationId, contract: selectedContract, analysisRunId: selectedAnalysis, flight = null, compact = false, reportOnly = false }) {
@@ -167,7 +190,7 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
         operation("Retrieving only the selected illustrative flight's scenario and source limitations.");
         const adapter = await import("../components/matt/mattFlightIntelligence");
         if (controller.signal.aborted) return;
-        answer = adapter.askMattFlight(raw, flight);
+        answer = adapter.askMattFlight(resolved, flight);
       } else if (demo) {
         operation("Demonstration: retrieving prepared lease findings and source excerpts.");
         const adapter = await import("../components/matt/mattIntelligence");

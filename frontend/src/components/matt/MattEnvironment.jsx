@@ -19,6 +19,17 @@ export default function MattEnvironment({ phase, onMediaError, onMediaStatus, st
   useEffect(() => {
     let active = true;
     const video = player.current;
+    const play = () => video.play().catch((error) => {
+      if (!active) return;
+      if (!stream && document.visibilityState === "hidden" && ["AbortError", "NotAllowedError"].includes(error.name)) {
+        onMediaStatus("buffering");
+        return;
+      }
+      playbackFailed();
+    });
+    const resumePreview = () => {
+      if (!stream && document.visibilityState === "visible" && video.paused && !video.error) play();
+    };
     onMediaError("");
     onMediaStatus("loading");
     if (stream) {
@@ -33,12 +44,14 @@ export default function MattEnvironment({ phase, onMediaError, onMediaStatus, st
     for (const track of tracks) track.addEventListener("ended", ended);
     stream?.addEventListener("removetrack", ended);
     stream?.addEventListener("inactive", ended);
-    video.play().catch(() => { if (active) playbackFailed(); });
+    document.addEventListener("visibilitychange", resumePreview);
+    play();
     return () => {
       active = false;
       for (const track of tracks) track.removeEventListener("ended", ended);
       stream?.removeEventListener("removetrack", ended);
       stream?.removeEventListener("inactive", ended);
+      document.removeEventListener("visibilitychange", resumePreview);
       video.pause();
       video.srcObject = null;
     };

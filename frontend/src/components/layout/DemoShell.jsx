@@ -16,13 +16,13 @@ const mainNav = [
   ["/demo/upload", "Upload Contract", Upload],
   ["/demo/live-tracking", "Live Tracking", Radar],
   ["/demo/intelligence", "Intelligence", BrainCircuit],
-  ["/demo/matt", "Matt", Bot],
+  ["/demo/matt", "Ask Matt", Bot],
 ];
 const workspaceNav = [
   ["overview", "Overview", Gauge], ["clauses", "Clauses", Scale],
   ["obligations", "Obligations", ListChecks], ["deadlines", "Deadlines", CalendarClock],
   ["risks", "Risks", ShieldAlert], ["evidence", "Evidence", FileCheck2],
-  ["financial-impact", "Financial Impact", CircleDollarSign], ["assistant", "Matt", Bot],
+  ["financial-impact", "Financial Impact", CircleDollarSign],
 ];
 const adminNav = [
   ["/demo/organisation", "Organisation", Building2], ["/demo/users", "Users", Users], ["/demo/settings", "Settings", Settings],
@@ -88,8 +88,8 @@ function DemoShellContent() {
         <span className="od-nav-label">Main</span>
         {mainNav.map(([to,label,icon]) => <NavigationLink key={to} to={to} label={label} icon={icon} end={to === "/demo/dashboard"} />)}
         <span className="od-nav-label od-workspace-label"><span className="od-workspace-expanded">Contract workspace</span><span className="od-workspace-folded">Workspace</span></span>
-        {workspaceNav.map(([section,label,icon]) => <NavigationLink key={section} to={section === "assistant" ? `/demo/matt?contract=${activeContract.id}` : `${workspaceBase}/${section}`} label={label} icon={icon} />)}
-        <span className="od-nav-label">Admin</span>
+        {workspaceNav.map(([section,label,icon]) => <NavigationLink key={section} to={`${workspaceBase}/${section}`} label={label} icon={icon} />)}
+        <span className="od-nav-label od-admin-label">Admin</span>
         {adminNav.map(([to,label,icon]) => <NavigationLink key={to} to={to} label={label} icon={icon} />)}
       </nav>
       <div className="od-budget-card">

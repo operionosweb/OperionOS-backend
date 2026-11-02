@@ -7,6 +7,7 @@ import EvidencePanel from "../components/intelligence/EvidencePanel";
 import ContractAssistantPanel from "../components/intelligence/ContractAssistantPanel";
 import IntelligenceStatus from "../components/intelligence/IntelligenceStatus";
 import FinancialImpactSection from "../components/intelligence/FinancialImpactSection";
+import AviationContractCoreSection from "../components/intelligence/AviationContractCoreSection";
 import OrganizationGate from "../components/demo/OrganizationGate";
 import { useOrganization } from "../context/OrganizationContext";
 import { ORGANIZATION_PERMISSIONS } from "../lib/permissions";
@@ -684,6 +685,12 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
           </div>
         )}
       </Reveal>
+
+      {!!profile && (
+        <Reveal style={{ marginBottom: "var(--op-space-5)" }}>
+          <AviationContractCoreSection key={activeAnalysisRunId} core={profile.metadata?.aviationCore} />
+        </Reveal>
+      )}
 
       {analysisRun?.status === "completed" && (
         <Reveal id="search" style={{ marginBottom: "var(--op-space-6)", scrollMarginTop: 90 }}>

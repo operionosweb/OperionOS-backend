@@ -29,7 +29,7 @@ const PRIMARY_NAV = [
   { to: "/app/upload", label: "Upload", icon: Upload },
   { to: "/app/aviation", label: "Aviation Intelligence", icon: BrainCircuit },
   { to: "/app/live-tracking", label: "Live Tracking", icon: Radar },
-  { to: "/app/matt", label: "Matt", icon: Bot },
+  { to: "/app/matt", label: "Ask Matt", icon: Bot },
 ];
 
 const WORKSPACE_NAV = [
@@ -39,7 +39,6 @@ const WORKSPACE_NAV = [
   { hash: "risks", label: "Risks", icon: ShieldAlert },
   { hash: "financial-impact", label: "Financial Impact", icon: CircleDollarSign },
   { hash: "evidence", label: "Evidence", icon: FileCheck2 },
-  { hash: "assistant", label: "Ask Matt", icon: Bot },
 ];
 
 function NavItem({ to, label, icon: Icon, end, onNavigate }) {
@@ -155,7 +154,9 @@ export default function ProductionLayout() {
           <Outlet />
         </main>
       </div>
-      {organization.hasOrganizationPermission(ORGANIZATION_PERMISSIONS.CONTRACT_READ) && <MattFloating/>}
+      {(organization.hasOrganizationPermission(ORGANIZATION_PERMISSIONS.CONTRACT_READ) || auth.hasPlatformPermission(PLATFORM_PERMISSIONS.PLATFORM_ADMIN)) && (
+        <MattFloating presenceOnly={!organization.hasOrganizationPermission(ORGANIZATION_PERMISSIONS.CONTRACT_READ)} />
+      )}
     </div>
   );
 }

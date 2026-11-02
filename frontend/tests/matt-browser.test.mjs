@@ -19,7 +19,7 @@ before(async () => {
 });
 after(async () => { await browser?.close(); if (server) await new Promise((resolve) => server.httpServer.close(resolve)); });
 
-async function fixture({ authenticated = false, denied = false, width = 1440, reducedMotion = false, mockVoice = false, role = "admin", contextError = false } = {}) {
+async function fixture({ authenticated = false, denied = false, width = 1440, reducedMotion = false, mockVoice = false, role = "admin", contextError = false, platformAdmin = false, hasOrganization = true } = {}) {
   const context = await browser.newContext({ viewport: { width, height: 1000 }, reducedMotion: reducedMotion ? "reduce" : "no-preference" });
   const requests = [], errors = [], media = [];
   const state = { denied, missingAnalysis: false, invalidAnswer: false, delay: 0 };
@@ -27,10 +27,10 @@ async function fixture({ authenticated = false, denied = false, width = 1440, re
     const now = Math.floor(Date.now() / 1000);
     const user = { id: "00000000-0000-4000-8000-000000000001", email: "reviewer@example.test", aud: "authenticated", role: "authenticated", app_metadata: {}, user_metadata: {}, created_at: new Date().toISOString() };
     const token = [Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url"), Buffer.from(JSON.stringify({ sub: user.id, exp: now + 3600, role: "authenticated", aal: "aal2" })).toString("base64url"), Buffer.from("offline-signature").toString("base64url")].join(".");
-    await context.addInitScript(({ stored }) => {
+    await context.addInitScript(({ stored, organizationId }) => {
       localStorage.setItem("sb-127-auth-token", JSON.stringify(stored));
-      localStorage.setItem("operion.organizationId", "org-one");
-    }, { stored: { access_token: token, refresh_token: "offline-refresh", token_type: "bearer", expires_at: now + 3600, expires_in: 3600, user } });
+      if (organizationId) localStorage.setItem("operion.organizationId", organizationId);
+    }, { stored: { access_token: token, refresh_token: "offline-refresh", token_type: "bearer", expires_at: now + 3600, expires_in: 3600, user }, organizationId: hasOrganization ? "org-one" : "" });
     state.user = user;
   }
   if (mockVoice) await context.addInitScript(() => {
@@ -56,8 +56,8 @@ async function fixture({ authenticated = false, denied = false, width = 1440, re
     if (!url.pathname.startsWith("/api/")) return route.continue();
     const request = route.request();
     requests.push({ path: url.pathname, query: url.searchParams.get("q"), method: request.method(), org: request.headers()["x-org-id"], hasAuth: Boolean(request.headers().authorization), body: request.postData() ? request.postDataJSON() : null });
-    if (url.pathname === "/api/platform/context") return json({ roles: ["user"], permissions: [] });
-    if (url.pathname === "/api/foundation/organizations") return json({ organizations: [{ id: "org-one", name: "Offline tenant" }] });
+    if (url.pathname === "/api/platform/context") return json({ roles: platformAdmin ? ["SUPERADMIN"] : ["user"], permissions: platformAdmin ? ["platform:admin"] : [] });
+    if (url.pathname === "/api/foundation/organizations") return json({ organizations: hasOrganization ? [{ id: "org-one", name: "Offline tenant" }] : [] });
     if (url.pathname === "/api/foundation/context") return contextError ? json({ error: "Role verification unavailable" }, 503) : json({ organization: { id: "org-one", role } });
     if (state.denied) return json({ error: "Contract access denied" }, 403);
     if (url.pathname === "/api/contracts") return json({ contracts: [{ id: "lease-one", title: "Offline authorized lease" }, { id: "lease-two", title: "Second authorized lease" }] });
@@ -100,7 +100,7 @@ test("demo reuses grounded lease evidence, supports follow-ups and rejects unest
     await f.page.getByText("Not established. Do not infer that a clause, exposure or obligation exists.", { exact: true }).waitFor();
     assert.equal(await f.page.locator(".matt-findings li").count(), 0);
     assert.equal(f.requests.length, 0, "Demo never queries customer APIs");
-    assert.ok(f.media.includes("/matt/reference.mp4"), "The supplied identity video is loaded, without a generated-response claim");
+    assert.ok(f.media.includes("/matt/reference.mp4"), "Matt's supplied video plays locally");
     assert.deepEqual(f.errors, []);
     await f.page.getByText("Voice and privacy settings", { exact: true }).click();
     await f.page.getByRole("button", { name: "Clear conversation", exact: true }).click();
@@ -114,8 +114,8 @@ test("normal production-style build publishes the unified cinematic experience w
     await f.page.goto(`${origin}/demo/matt?studio=1`);
     await f.page.getByRole("button", { name: "What are the key obligations?", exact: true }).waitFor();
     assert.equal(await f.page.locator(".matt-page").getAttribute("data-experience"), "unified-matt");
-    assert.match(await f.page.locator(".matt-studio-notice").textContent(), /Identity footage only.*Live synchronized conversation is not connected/);
-    assert.equal(await f.page.locator(".matt-character img").count(), 0, "The old static Matt section is not published");
+    assert.equal(await f.page.locator(".matt-studio-notice").count(), 1, "Prerecorded video and lack of live synchronization are disclosed");
+    assert.equal(await f.page.locator(".matt-character video").count(), 1);
     await enableText(f.page);
     await f.page.getByRole("button", { name: "What are the key obligations?", exact: true }).click();
     await f.page.locator(".matt-answer").waitFor();
@@ -134,12 +134,10 @@ for (const width of [320, 390, 768, 1024, 1440, 1920]) {
       await f.page.locator(".matt-answer").waitFor();
       assert.ok(await f.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "Page has no horizontal overflow");
       assert.equal(await f.page.locator(".oa-overlay").count(), 0, "No competing assistant overlay");
-      await f.page.waitForFunction(() => {
-        const video = document.querySelector(".matt-character video");
-        return video && !video.paused && video.readyState >= 2 && video.videoWidth > 0;
-      });
+      assert.equal(await f.page.locator(".matt-character video").count(), 1);
+      assert.equal(await f.page.locator(".matt-character img").count(), 0);
       if (width === 390) {
-        assert.equal(await f.page.locator(".matt-character video").evaluate((video) => getComputedStyle(video).animationName), "none");
+        assert.ok(f.media.includes("/matt/reference.mp4"), "Reduced-motion layout still uses Matt's moving video");
         assert.equal(await f.page.getByRole("checkbox", { name: /Enable speaking video/ }).count(), 0);
       }
       assert.deepEqual(f.errors, []);
@@ -154,6 +152,9 @@ test("authenticated route scopes existing endpoints, supports follow-ups and ign
     await f.page.getByRole("heading", { name: "Let's look at what matters.", exact: true }).waitFor().catch(async () => {
       throw new Error(`Matt entry diagnostic: ${f.page.url()}; ${await f.page.locator("main").innerText()}; requests=${JSON.stringify(f.requests)}; errors=${JSON.stringify(f.errors)}`);
     });
+    const nav = f.page.getByRole("navigation", { name: "Production navigation" });
+    assert.equal(await nav.getByRole("link", { name: "Ask Matt", exact: true }).count(), 1);
+    assert.equal(await nav.locator('a[href*="/matt"]').count(), 1, "No workspace navigation duplicate");
     await f.page.getByRole("combobox", { name: "Contract context" }).selectOption("lease-one");
     await enableText(f.page);
     await f.page.getByRole("textbox", { name: "Ask Matt", exact: true }).fill("Review maintenance risks");
@@ -221,7 +222,39 @@ test("organization role lookup failures are explicit and cannot request Matt con
   } finally { await f.context.close(); }
 });
 
-test("voice input is explicit and generic video/TTS cannot masquerade as synchronized Matt", async () => {
+test("platform Super Admin without organization membership can see Matt without requesting tenant data", async () => {
+  const f = await fixture({ authenticated: true, platformAdmin: true, hasOrganization: false });
+  try {
+    for (const width of [390, 1440]) {
+      await f.page.setViewportSize({ width, height: 1000 });
+      await f.page.goto(`${origin}/app/dashboard`);
+      await f.page.locator(".op-consent").waitFor();
+      const trigger = f.page.getByRole("button", { name: "Open Matt assistant", exact: true });
+      await trigger.waitFor();
+      assert.equal(await trigger.locator("video").count(), 1, "The launcher uses identity video, not a static portrait");
+      assert.equal(await trigger.evaluate((button) => {
+        const bounds = button.getBoundingClientRect();
+        return document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2)?.closest(".matt-floating-trigger") === button;
+      }), true, `Matt's launcher is not obscured at ${width}px`);
+      await trigger.click();
+      await f.page.locator('[data-matt-mode="platform-presence-only"]').waitFor();
+      assert.equal(await f.page.locator(".matt-floating-panel").evaluate((panel) => {
+        const bounds = panel.getBoundingClientRect();
+        return bounds.top >= 0 && bounds.bottom <= innerHeight && bounds.left >= 0 && bounds.right <= innerWidth;
+      }), true, `The open Matt panel is wholly on screen at ${width}px while the consent banner is present`);
+      assert.equal(await f.page.locator(".matt-character video").count(), 1);
+      assert.ok(f.media.includes("/matt/reference.mp4"));
+      assert.ok(await f.page.getByText(/Contract review and customer data are unavailable/).isVisible());
+      await f.page.goto(`${origin}/app/matt`);
+      await f.page.locator('[data-matt-mode="platform-presence-only"]').waitFor();
+      assert.equal(await f.page.locator(".matt-character video").count(), 1);
+    }
+    assert.ok(!f.requests.some((item) => /^\/api\/(contracts|documents|analysis-runs)/.test(item.path)));
+    assert.deepEqual(f.errors, []);
+  } finally { await f.context.close(); }
+});
+
+test("voice input is explicit and prerecorded Matt video is not presented as synchronized speech", async () => {
   const f = await fixture({ mockVoice: true });
   try {
     await f.page.goto(`${origin}/demo/matt`);
@@ -242,7 +275,7 @@ test("voice input is explicit and generic video/TTS cannot masquerade as synchro
     assert.equal(await f.page.evaluate(() => window.__mattSpeech.starts), 0);
     await f.page.getByRole("button", { name: "Interrupt / stop", exact: true }).click();
     await f.page.locator(".matt-page[data-state='INTERRUPTED']").waitFor();
-    assert.equal(await f.page.locator(".matt-character video").count(), 1, "Interrupting a question does not remove identity footage");
+    assert.equal(await f.page.locator(".matt-character video").count(), 1);
     assert.equal(await f.page.evaluate(() => window.__mattSpeech.starts), 0, "No independent TTS was started");
     assert.equal(await f.page.locator(".matt-answer").count(), 1);
     await f.page.keyboard.press("Tab");

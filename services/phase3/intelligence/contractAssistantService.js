@@ -69,7 +69,7 @@ function publicEvidence(source) {
 }
 
 function evidenceForFinding(finding, allEvidence) {
-  const linked = (finding.item.evidence || []).map(sourceFromLink).find((source) => source?.excerpt);
+  const linked = (finding.item.evidence || []).map((link) => sourceFromLink(link) || allEvidence.find((source) => source.id === link.evidence_id)).find((source) => source?.excerpt);
   if (linked) return publicEvidence(linked);
 
   const directId = finding.item.source_evidence_id;
@@ -78,12 +78,7 @@ function evidenceForFinding(finding, allEvidence) {
     if (direct) return publicEvidence(direct);
   }
 
-  const findingText = textFor(finding.type, finding.item);
-  const ranked = allEvidence
-    .map((source) => ({ source, score: score(tokens(findingText), source.excerpt) }))
-    .filter((candidate) => candidate.score > 0)
-    .sort((left, right) => right.score - left.score);
-  return publicEvidence(ranked[0]?.source);
+  return null;
 }
 
 export function answerContractQuestion({ question, clauses = [], obligations = [], deadlines = [], risks = [], evidence = [], rbiProfile = null }) {
@@ -108,15 +103,19 @@ export function answerContractQuestion({ question, clauses = [], obligations = [
     return { ...finding, queryScore, score: queryScore * 100 + roleScore };
   })
     .filter((finding) => finding.queryScore > 0 || (genericPriorityQuestion && finding.type !== "clause"))
-    .sort((left, right) => right.score - left.score)
-    .slice(0, 4);
+    .sort((left, right) => right.score - left.score);
 
   const grounded = findings.map((finding) => ({
     ...finding,
     evidence: evidenceForFinding(finding, evidence),
   })).filter((finding) => finding.evidence);
+  const unsupportedCount = findings.length - grounded.length;
+  const limitations = unsupportedCount
+    ? [`${unsupportedCount} relevant finding(s) lack an explicit evidence relationship and were excluded. Similar wording is not proof of source support.`]
+    : [];
+  const selected = grounded.slice(0, 4);
 
-  if (!grounded.length) {
+  if (!selected.length) {
     return {
       established: false,
       answer: "The available contract intelligence does not establish an evidence-backed answer to this question.",
@@ -124,12 +123,13 @@ export function answerContractQuestion({ question, clauses = [], obligations = [
       evidence: [],
       source: "structured_intelligence",
       intelligenceConsumption: 0,
+      limitations,
     };
   }
 
   const uniqueEvidence = [];
   const evidenceKeys = new Set();
-  for (const finding of grounded) {
+  for (const finding of selected) {
     const key = finding.evidence.id || `${finding.evidence.source_locator}:${finding.evidence.excerpt}`;
     if (!evidenceKeys.has(key)) {
       evidenceKeys.add(key);
@@ -139,15 +139,18 @@ export function answerContractQuestion({ question, clauses = [], obligations = [
 
   return {
     established: true,
-    answer: grounded.map((finding) => summarize(finding.type, finding.item)).filter(Boolean).join(" "),
-    findings: grounded.map(({ type, item }) => ({
+    answer: selected.map((finding) => summarize(finding.type, finding.item)).filter(Boolean).join(" "),
+    findings: selected.map(({ type, item, evidence: source }) => ({
       type,
       id: item.id,
       label: item.title || item.description || item.timing_expression || item.clause_number || type,
+      evidence_ids: source.id ? [source.id] : [],
+      review_status: "requires_review",
     })),
     evidence: uniqueEvidence,
     source: "structured_intelligence",
     intelligenceConsumption: 0,
+    limitations,
     roleContext: rbiProfile ? {
       profileId: rbiProfile.roleId,
       profileName: rbiProfile.roleName,

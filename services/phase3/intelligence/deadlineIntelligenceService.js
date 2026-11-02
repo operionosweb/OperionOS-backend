@@ -4,8 +4,9 @@ import { z } from "zod";
 import { createDeadlineRepository } from "../../../repositories/phase3/deadlineRepository.js";
 import { assertOrganizationScope, assertResourceId } from "../../../repositories/phase3/scope.js";
 import { aiGateway } from "../../ai/aiGateway.js";
+import { isCalendarDate } from "../../../domain/contractIntelligence/calendarDate.js";
 
-const PARSER_VERSION = "phase3d-deadline-parser-v1";
+const PARSER_VERSION = "phase3d-deadline-parser-v2";
 const TAXONOMY_VERSION = "aviation-temporal-v1";
 const PROMPT_VERSION = "deadline-semantic-fallback-v1";
 const SCHEMA_VERSION = "phase3d.deadline.v1";
@@ -80,6 +81,8 @@ function isoDate(year, month, day) {
 
 export function parseAbsoluteDate(expression, { numericDateOrder = null } = {}) {
   const text = normalizeWhitespace(expression);
+  const iso = text.match(/\b\d{4}-\d{2}-\d{2}\b/);
+  if (iso) return { date: isCalendarDate(iso[0]) ? iso[0] : null, expression: iso[0], ambiguous: !isCalendarDate(iso[0]), reason: isCalendarDate(iso[0]) ? null : "Invalid calendar date" };
   let match = text.match(/\b(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})\b/i);
   if (match) {
     const date = isoDate(Number(match[3]), MONTHS[match[2].toLowerCase()], Number(match[1]));
@@ -102,7 +105,8 @@ export function parseAbsoluteDate(expression, { numericDateOrder = null } = {}) 
   const order = numericDateOrder || (first > 12 ? "DMY" : "MDY");
   const day = order === "DMY" ? first : second;
   const month = order === "DMY" ? second - 1 : first - 1;
-  return { date: isoDate(Number(match[3]), month, day), expression: match[0], ambiguous: false };
+  const date = isoDate(Number(match[3]), month, day);
+  return { date, expression: match[0], ambiguous: !date, reason: date ? null : "Invalid calendar date" };
 }
 
 function extractCondition(text) {
@@ -215,6 +219,10 @@ export class BusinessCalendar {
 
 export function calculateDeadline({ anchorDate, amount, unit, direction = "after", businessCalendar = null }) {
   if (!anchorDate) return { date: null, reason: "Requires anchor date" };
+  if (!isCalendarDate(anchorDate)) return { date: null, reason: "Requires a valid ISO calendar anchor date" };
+  if (!Number.isSafeInteger(amount) || amount < 0) return { date: null, reason: "Requires a non-negative safe integer offset" };
+  if (!["before", "after"].includes(direction)) return { date: null, reason: "Requires an explicit before or after direction" };
+  if (unit === "hours") return { date: null, reason: "Hourly deadlines require an anchor time and timezone; a calendar date is insufficient" };
   const signedAmount = direction === "before" ? -amount : amount;
   if (unit === "business_days") {
     if (!businessCalendar) return { date: null, reason: "Business-day calendar unavailable" };
@@ -223,13 +231,18 @@ export function calculateDeadline({ anchorDate, amount, unit, direction = "after
   if (["flight_hours", "flight_cycles"].includes(unit)) return { date: null, reason: `Requires ${unit.replace("_", " ")} event data` };
 
   const date = new Date(`${anchorDate}T00:00:00.000Z`);
-  if (unit === "hours") date.setUTCHours(date.getUTCHours() + signedAmount);
-  else if (unit === "days") date.setUTCDate(date.getUTCDate() + signedAmount);
+  if (unit === "days") date.setUTCDate(date.getUTCDate() + signedAmount);
   else if (unit === "weeks") date.setUTCDate(date.getUTCDate() + signedAmount * 7);
   else if (unit === "months") date.setUTCMonth(date.getUTCMonth() + signedAmount);
   else if (unit === "years") date.setUTCFullYear(date.getUTCFullYear() + signedAmount);
   else return { date: null, reason: "Unsupported calculation unit" };
-  return { date: date.toISOString().slice(0, 10), method: "utc_calendar_arithmetic" };
+  if (!Number.isFinite(date.getTime())) return { date: null, reason: "Deadline exceeds the supported calendar range" };
+  if (["months", "years"].includes(unit) && date.getUTCDate() !== Number(anchorDate.slice(8))) {
+    return { date: null, reason: "Month-end or leap-day arithmetic requires a contractual date convention" };
+  }
+  const result = date.toISOString().slice(0, 10);
+  if (!isCalendarDate(result)) return { date: null, reason: "Deadline exceeds the supported four-digit calendar range" };
+  return { date: result, method: "utc_calendar_arithmetic" };
 }
 
 export function parseTemporalExpression(expression, options = {}) {
@@ -255,7 +268,15 @@ export function parseTemporalExpression(expression, options = {}) {
   }
 
   const absolute = parseAbsoluteDate(temporalText, options);
-  if (absolute) {
+  const relative = findRelative(temporalText);
+  if (absolute && relative && !relative.anchor) {
+    return {
+      deadline_type: "ambiguous", timing_expression: selectedExpression, condition,
+      computability: "ambiguous", ambiguity: "A calendar date and an unanchored interval appear together; review which expression governs.",
+      absolute_date: null, status: "ambiguous", confidence: 0.6,
+    };
+  }
+  if (absolute && !relative) {
     return {
       deadline_type: absolute.ambiguous ? "ambiguous" : "absolute",
       timing_expression: absolute.expression,
@@ -268,7 +289,6 @@ export function parseTemporalExpression(expression, options = {}) {
     };
   }
 
-  const relative = findRelative(temporalText);
   if (relative) {
     const calculation = options.anchorDate
       ? calculateDeadline({ anchorDate: options.anchorDate, amount: relative.amount, unit: relative.unit, direction: relative.direction, businessCalendar: options.businessCalendar })
@@ -358,15 +378,23 @@ function extractDateDefinitions(clauses) {
   const definitions = new Map();
   for (const clause of clauses) {
     const text = normalizeWhitespace(clause.source_text);
-    const match = text.match(/\b(Effective Date|Execution Date|Delivery Date|Termination Date)\b\s+(?:means|is|shall be)\s+([^.;]+)/i);
-    if (!match) continue;
-    const parsed = parseAbsoluteDate(match[2]);
-    if (parsed?.date && !parsed.ambiguous) {
-      definitions.set(match[1].toLowerCase(), {
-        date: parsed.date,
+    for (const match of text.matchAll(/\b(Effective Date|Execution Date|Delivery Date|Termination Date|Expiration Date)\b\s+(?:means|is|shall be)\s+([^.;]+)/gi)) {
+      const parsed = parseAbsoluteDate(match[2]);
+      const key = match[1].toLowerCase();
+      const candidate = {
+        date: parsed?.date && !parsed.ambiguous ? parsed.date : null,
         source_clause_id: clause.id,
         source_evidence_id: clause.source_evidence_id || null,
         expression: match[0],
+      };
+      const candidates = [...(definitions.get(key)?.candidates || []), candidate];
+      const dates = new Set(candidates.map((entry) => entry.date));
+      const ambiguous = dates.size !== 1 || dates.has(null);
+      definitions.set(key, {
+        ...candidates[0],
+        date: ambiguous ? null : candidate.date,
+        ambiguity: ambiguous ? `Conflicting or unresolved definitions of ${key} require reviewer reconciliation` : null,
+        candidates,
       });
     }
   }
@@ -435,7 +463,11 @@ export function createDeadlineIntelligenceService({ repository = createDeadlineR
         let interpretation = parseTemporalExpression(sourceExpression, { condition: obligation.condition, clauseText: clause?.source_text });
         if (!interpretation) continue;
         const definition = interpretation?.anchor_reference ? definitions.get(interpretation.anchor_reference.toLowerCase()) : null;
-        if (definition) interpretation = parseTemporalExpression(sourceExpression, { condition: obligation.condition, clauseText: clause?.source_text, anchorDate: definition.date });
+        if (definition?.ambiguity) {
+          interpretation = { ...interpretation, deadline_type: "ambiguous", computability: "ambiguous", absolute_date: null, status: "ambiguous", ambiguity: definition.ambiguity, confidence: 0.4 };
+        } else if (definition) {
+          interpretation = parseTemporalExpression(sourceExpression, { condition: obligation.condition, clauseText: clause?.source_text, anchorDate: definition.date });
+        }
         const primaryEvidence = obligation.evidence.find((link) => link.is_primary) || obligation.evidence[0];
         if (interpretation.deadline_type === "non_computable" && useAIFallback) {
           if (!provider?.analyzeStructured) throw Object.assign(new Error("Deadline AI fallback is not configured"), { code: "PROVIDER_NOT_CONFIGURED", status: 422 });

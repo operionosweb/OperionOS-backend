@@ -2,11 +2,18 @@
 
 ## Scope and authorization - 2 November 2026
 
-This report covers the founder-approved **Matt visual publication only**.
+The initial publication covered the founder-approved **Matt visual fix only**.
 The user confirmed that the outdated page was
 <https://www.operionos.com/demo/matt> and explicitly approved overriding the
 no-commit/no-push/no-deploy restrictions for this scoped fix. Provider spending,
-identity uploads and unrelated dirty OCI work remain excluded.
+identity uploads and unrelated dirty OCI work were excluded.
+
+**Publication addendum:** the subsequent instruction, "After finishing deploy
+everything to GitHub's Production", authorizes publishing the completed,
+tested Matt/OCI/Globe development cycle. The scoped sections below retain their
+historical meaning; the combined release and current limitations are recorded
+in the addendum near the end. This does not authorize provider spending,
+identity uploads, confidential documents or configuration changes.
 
 ## Initial architecture and defect
 
@@ -130,6 +137,95 @@ dirty files as a shortcut.
 
 The desktop individual-file acceptance safety gate remains unresolved; no Kilo
 Apply/Revert/Keep/Undo mechanism is used.
+
+## Combined publication addendum - 2 November 2026
+
+### Observed scoped production delivery
+
+**VERIFIED:** scoped commit `f4ab2f6b7658ec474f3be919c76ac0852231c03d`
+was non-force pushed to main. The public page subsequently served
+`Matt-CzrBjKJf.js` instead of the old bundle. Browser inspection found the
+redesigned section and video rather than the static portrait. The existing
+identity MP4 returned valid ranged video content. Foregrounding the browser and
+selecting Retry produced advancing playback. This verifies preview video,
+not generated talking answers.
+
+During deployment, one reload briefly referenced an obsolete missing JS asset;
+a later reload served the new working entry bundle. No hosting configuration
+change was made or inferred necessary from that transition.
+
+### Combined candidate scope
+
+The known development-cycle changes were transferred into the separate release
+worktree using a temporary Git index and an audited patch. All 41 original dirty
+files were hash-verified unchanged, and the original Git status was preserved.
+No environment files, dependencies, hosting settings or credentials were added.
+
+- Shared aviation Contract Intelligence core and workspace presentation:
+  source-grounded aviation topics, review recommendations and narrowly bounded
+  scenario inputs; not predictive risk, a market feed or confirmed liability.
+- Deadline reliability: strict calendar validation, relative-expression
+  precedence, invalid/contradictory anchors and named-date conflicts requiring
+  review rather than silently choosing a date.
+- Assistant evidence: explicit source relationships, unsupported findings
+  excluded with limitations, and ranking after evidence grounding.
+- Matt access: server-authorized platform presence without tenant contract
+  requests for a platform administrator lacking organization membership.
+  Existing contract authorization remains required for contract intelligence.
+- Globe: selected-flight follow-ups preserve the selected finding and aircraft
+  context; routes remain fictional and external legal links are research leads.
+- Navigation and OCI login presentation improvements from the same cycle.
+- Offline LiveAvatar LITE protocol boundary, with injected transport and
+  synthetic events only. No broker, provider session, voice or real identity
+  connection is deployed by this work.
+- Preview-video lifecycle: hidden-tab playback rejection is not treated as a
+  permanent failure; returning to a visible tab resumes paused identity footage.
+  Audible live streams are not automatically restarted by that listener.
+
+See the [development report](matt-oci-globe-development-2026-11-02.md)
+and [pilot readiness assessment](aviation-paid-pilot-readiness-2026-11-01.md)
+for implementation details and the unresolved operational gates.
+
+### Executed combined-candidate verification
+
+**VERIFIED locally:** 328 passing checks on the combined candidate:
+
+| Test group | Passing |
+| --- | ---: |
+| Domain/backend/frontend pure and SSR checks | 240 |
+| Matt browser | 14 |
+| Matt Studio, including the new visibility-resume regression | 21 |
+| Unified Matt | 7 |
+| Matt media | 2 |
+| Aviation workspace browser | 4 |
+| OCI browser | 37 |
+| Focused Globe: actual noon/night rendering, imagery outage and selected-flight follow-up | 3 |
+| Total | 328 |
+
+These are not 328 production acceptance checks. Browser suites use loopback
+builds, mocked authorized APIs and synthetic media where specified. The
+visibility test dispatches a visibility event on a paused actual local video;
+it is not a real provider or operating-system background policy certification.
+The focused Globe run measured rendered central luminance 162.9 at noon versus
+55.9 at midnight; it does not establish astronomical accuracy. The three
+Globe checks are not a repeat of the entire Globe suite.
+
+### Publication acceptance
+
+At this addendum's commit, combined production deployment verification is
+pending. Check the actual public desktop and mobile experience after the
+hosting integration serves the combined bundle. A push alone does not verify
+frontend delivery or the backend deployment revision.
+
+### Unchanged blockers
+
+Real answer-specific talking video, approved identity and fixed voice, genuine
+live interruption, emotional responsiveness and durable Matt memory are not
+established. No confidential corpus accuracy, production-grade tenant-isolation
+audit, TLS assessment, certification, complete OCR, translation or amendment
+reconciliation is claimed. The confidential paid pilot and desktop
+individual-file acceptance gate remain **NOT READY**. No acceptance,
+Keep/Undo/Redo or worktree Apply/Revert mechanism was used.
 
 ## Overall verdict
 

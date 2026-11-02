@@ -18,6 +18,45 @@ test("absolute dates preserve source and ambiguous numeric dates are not guessed
   assert.equal(ambiguous.absolute_date, null);
 });
 
+test("ISO dates and invalid numeric dates retain their actual computability", () => {
+  assert.equal(parseTemporalExpression("Pay by 2028-02-29.").absolute_date, "2028-02-29");
+  for (const expression of ["Pay by 2027-02-29.", "Pay by 31/02/2027.", "Pay by 2026-13-01."]) {
+    const result = parseTemporalExpression(expression);
+    assert.equal(result.absolute_date, null);
+    assert.equal(result.computability, "ambiguous");
+    assert.match(result.ambiguity, /Invalid calendar date/);
+  }
+});
+
+test("dates inside relative notice anchors are not fabricated as notice due dates", () => {
+  const result = parseTemporalExpression("Give 90 days' written notice before 15 March 2027.");
+  assert.equal(result.deadline_type, "relative");
+  assert.equal(result.amount, 90);
+  assert.equal(result.direction, "before");
+  assert.equal(result.anchor_reference, "15 march 2027");
+  assert.equal(result.absolute_date, null);
+  assert.equal(result.status, "awaiting_trigger");
+  assert.match(result.timing_expression, /90 days' written notice before 15 March 2027/);
+  const ambiguous = parseTemporalExpression("The period is 12 months; payment is due 15 March 2027.");
+  assert.equal(ambiguous.computability, "ambiguous");
+  assert.equal(ambiguous.absolute_date, null);
+});
+
+test("calculation refuses invalid anchors, lossy time arithmetic and unstated month-end conventions", () => {
+  for (const anchorDate of ["not-a-date", "2027-02-29", "2027-13-01"]) {
+    assert.match(calculateDeadline({ anchorDate, amount: 5, unit: "days" }).reason, /valid ISO/);
+  }
+  for (const amount of [-1, 0.5, NaN, Infinity]) {
+    assert.equal(calculateDeadline({ anchorDate: "2027-01-01", amount, unit: "days" }).date, null);
+  }
+  assert.equal(calculateDeadline({ anchorDate: "2027-01-01", amount: 3, unit: "hours" }).date, null);
+  assert.match(calculateDeadline({ anchorDate: "2027-01-31", amount: 1, unit: "months" }).reason, /contractual date convention/);
+  assert.match(calculateDeadline({ anchorDate: "2028-02-29", amount: 1, unit: "years" }).reason, /contractual date convention/);
+  assert.equal(calculateDeadline({ anchorDate: "2027-01-15", amount: 1, unit: "months" }).date, "2027-02-15");
+  assert.match(calculateDeadline({ anchorDate: "9999-12-31", amount: 1, unit: "days" }).reason, /four-digit calendar range/);
+  assert.match(calculateDeadline({ anchorDate: "2027-01-15", amount: Number.MAX_SAFE_INTEGER, unit: "years" }).reason, /supported calendar range/);
+});
+
 test("relative business-day expressions preserve amount, calendar and anchor", () => {
   const result = parseTemporalExpression("within five Business Days after becoming aware of material damage");
   assert.equal(result.deadline_type, "relative");

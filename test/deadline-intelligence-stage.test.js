@@ -156,6 +156,36 @@ test("unresolved and complex timing remains non-computable without invoking AI",
   const repository = inMemoryRepository({
     obligations: [obligation("The Lessee shall respond within a commercially appropriate operational window determined by prevailing circumstances.")],
   });
+
+  test("conflicting date definitions never silently select the last clause or amendment", async () => {
+    for (const reversed of [false, true]) {
+      const clauses = [
+        { id: "original", source_evidence_id: "original-evidence", source_text: "Effective Date means 1 September 2026." },
+        { id: "amendment", source_evidence_id: "amended-evidence", source_text: "Effective Date means 1 October 2026." },
+      ];
+      const repository = inMemoryRepository({ obligations: [obligation("The Lessee shall pay within 30 days after the Effective Date.")], clauses: reversed ? clauses.reverse() : clauses });
+      const result = await createDeadlineIntelligenceService({ repository }).runStage(SCOPE);
+      const row = result.deadlines[0];
+      assert.equal(row.absolute_date, null);
+      assert.equal(row.computability, "ambiguous");
+      assert.equal(row.review_status, "pending");
+      assert.match(row.ambiguity, /reviewer reconciliation/);
+      assert.deepEqual(new Set(row.metadata.anchor_source.candidates.map((item) => item.source_evidence_id)), new Set(["original-evidence", "amended-evidence"]));
+      assert.equal(result.aiFallbackAnalyses, 0);
+    }
+  });
+
+  test("a defined Expiration Date can anchor a notice while invalid definitions remain unresolved", async () => {
+    for (const [definition, expected] of [["15 March 2027", "2026-12-15"], ["2027-02-29", null]]) {
+      const repository = inMemoryRepository({
+        obligations: [obligation("The Lessee shall give notice 90 days before the Expiration Date.")],
+        clauses: [{ id: "expiry", source_evidence_id: "expiry-evidence", source_text: `Expiration Date means ${definition}.` }],
+      });
+      const result = await createDeadlineIntelligenceService({ repository }).runStage(SCOPE);
+      assert.equal(result.deadlines[0].absolute_date, expected);
+      if (!expected) assert.equal(result.deadlines[0].computability, "ambiguous");
+    }
+  });
   const result = await createDeadlineIntelligenceService({ repository }).runStage(SCOPE);
   assert.equal(result.deadlines[0].deadline_type, "non_computable");
   assert.equal(result.deadlines[0].absolute_date, null);

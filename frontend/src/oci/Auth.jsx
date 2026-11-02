@@ -157,7 +157,7 @@ export default function Auth({ children }) {
       <Notice>{error}</Notice>
       {state === 'restoring' && <p role="status">Restoring your session and checking server authorization…</p>}
       {state === 'login' && <form onSubmit={login} className="oci-stack">
-        <p>Use your existing Operion administrator account.</p>
+        <p>Use your dedicated OCI administrator account. Customer application credentials do not grant OCI access.</p>
         <label>Email<input name="email" type="email" autoComplete="username" required disabled={busy} /></label>
         <label>Password<input name="password" type="password" autoComplete="current-password" required disabled={busy} /></label>
         <button className="oci-primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>

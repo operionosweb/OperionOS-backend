@@ -27,6 +27,12 @@ function profileFor(text) {
   return buildContractProfile({ clauses: segmentDeterministicClauses(source(text)) });
 }
 
+test("invalid ISO metadata dates are not accepted as contractual calendar facts", () => {
+  const profile = profileFor("AIRCRAFT LEASE AGREEMENT\n1. Dates\nEffective Date: 2027-02-29\nExpiration Date: 2030-13-01");
+  assert.equal(profile.metadata.effectiveDate, null);
+  assert.equal(profile.metadata.expirationDate, null);
+});
+
 test("synthetic aviation lease produces evidence-grounded metadata and classification", async () => {
   const text = await fs.readFile(path.join(root, "test", "fixtures", "synthetic-aircraft-lease.txt"), "utf8");
   const clauses = segmentDeterministicClauses(source(text));
@@ -235,7 +241,8 @@ for (const text of [
     assert.equal(profile.classification.status, "requires_review");
     assert.equal(profile.metadata.leaseIntelligence, null);
     assert.ok(profile.recommendations.every((item) => item.suggestedOwner !== "LEASE_RETURN_TECHNICAL"));
-    assert.doesNotMatch(JSON.stringify(profile.recommendations), /aircraft|lease return|redelivery compliance plan/i);
+    // Raw citations can mention aircraft without establishing an aircraft-specific recommendation.
+    assert.doesNotMatch(JSON.stringify(profile.recommendations.map(({ evidence, ...interpretation }) => interpretation)), /aircraft|lease return|redelivery compliance plan/i);
     assert.ok(profile.summary.unusualOrMissingTerms.every(({ what }) => !/aircraft|lease|redelivery/i.test(what)));
   });
 }

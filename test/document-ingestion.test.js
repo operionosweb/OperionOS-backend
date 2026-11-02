@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   calculateSha256,
+  extractDocumentMetadata,
   extractPdfMetadata,
   renderPdfPage,
   validateDocumentFile,
@@ -47,6 +48,44 @@ test("DOCX extension, MIME, ZIP signature, and storage key are server-controlled
     true
   );
 });
+
+  test("existing synthetic DOCX fixture extracts ordered clause text with unknown page count", async () => {
+    const buffer = await fs.readFile(path.join(repositoryRoot, "test", "fixtures", "step9-aircraft-lease.docx"));
+    const metadata = await extractDocumentMetadata(buffer, ".docx");
+    const expected = [
+      "AIRCRAFT LEASE AGREEMENT",
+      "1. MAINTENANCE AND AIRWORTHINESS",
+      "The Lessee shall maintain the Aircraft in an airworthy condition throughout the Lease Term and shall notify the Lessor of material damage within five Business Days after discovery.",
+      "2. RETURN CONDITIONS",
+      "The Lessee shall return the Aircraft to the Lessor at the Return Location on the Expiry Date in airworthy condition with all maintenance records complete.",
+      "3. LATE RETURN",
+      "If the Lessee returns the Aircraft after the Expiry Date, the Lessee shall pay late return compensation of EUR 25,000 for each calendar day until the Aircraft is returned. This obligation does not limit the Lessor's other contractual rights.",
+      "4. TERMINATION NOTICE",
+      "The Lessor may terminate this Agreement for an uncured material breach by giving the Lessee 30 calendar days written notice. The Lessee may cure the breach during that notice period.",
+      "5. INSURANCE",
+      "The Lessee shall maintain hull and aviation liability insurance throughout the Lease Term and provide evidence of renewal no later than 15 calendar days before policy expiry.",
+      "6. RETURN INSPECTION",
+      "The Lessee shall make the Aircraft and its records available for return inspection at least 10 Business Days before the Expiry Date.",
+      "7. PAYMENT DEFAULT",
+      "Any rent unpaid for more than five calendar days after its due date incurs a late payment charge of EUR 10,000.",
+    ];
+    assert.deepEqual(metadata.text.split("\n").filter((line) => line.length), expected);
+    assert.equal(metadata.pageCount, null);
+    assert.equal(metadata.requiresOcr, false);
+    assert.deepEqual(await extractDocumentMetadata(buffer, ".docx"), metadata);
+  });
+
+  test("malformed DOCX ZIP-signature bytes fail actual local parser validation", async () => {
+    const file = validateDocumentFile({
+      originalname: "malformed.docx",
+      mimetype: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      buffer: Buffer.from("PK\x03\x04not a complete DOCX archive"),
+    });
+    await assert.rejects(
+      () => extractDocumentMetadata(file.buffer, ".docx"),
+      (error) => error.code === "INVALID_DOCX" && error.status === 400
+    );
+  });
 
 test("parseable image-like PDF is marked as requiring OCR", async () => {
   const buffer = await fs.readFile(path.join(repositoryRoot, "test.pdf"));

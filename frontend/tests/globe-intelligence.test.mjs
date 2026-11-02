@@ -216,6 +216,36 @@ test("alerts select the correct aircraft, highlight the alert and inspect only i
   } finally { await context.close(); }
 });
 
+test("selected-flight Matt resolves a finding follow-up without borrowing another contract or changing flight facts", async () => {
+  const { context, page, shell, errors } = await fixture();
+  const aircraft = createDemonstrationAircraft()[1];
+  try {
+    const fleet = await openFleet(shell);
+    await fleet.locator(".od-dashboard-aircraft-list > button").nth(1).click();
+    const card = shell.getByRole("dialog", { name: aircraft.registration, exact: true });
+    await card.getByRole("button", { name: "Ask Matt about this flight", exact: true }).click();
+    const matt = page.getByRole("dialog", { name: "Matt contextual assistant", exact: true });
+    await matt.locator(`[data-context="${aircraft.id}"]`).waitFor();
+    await matt.getByRole("checkbox", { name: "Show response text", exact: true }).check();
+    await matt.getByRole("button", { name: "Type a question", exact: true }).click();
+    const input = matt.getByRole("textbox", { name: "Ask Matt", exact: true });
+    await input.fill("Explain the associated contract");
+    await matt.getByRole("button", { name: "Send", exact: true }).click();
+    await matt.locator(".matt-answer").waitFor();
+    assert.ok((await matt.locator(".matt-answer").innerText()).includes(aircraft.intelligence.contract.title));
+    await input.fill("Explain the second finding and its potential financial exposure");
+    await matt.getByRole("button", { name: "Send", exact: true }).click();
+    await page.waitForFunction(() => document.querySelector(".matt-floating-panel .matt-findings")?.children.length === 1);
+    assert.ok((await matt.locator(".matt-findings").innerText()).includes(aircraft.intelligence.contract.obligation.title));
+    assert.match(await matt.locator(".matt-answer").innerText(), /fictional scenario/);
+    await matt.getByText(/Supporting source evidence \(/).click();
+    assert.ok((await matt.locator(".od-evidence").innerText()).includes(aircraft.intelligence.contract.clause.source));
+    await matt.getByRole("button", { name: "Close Matt panel", exact: true }).click();
+    assert.match(await card.innerText(), /SIM-002/);
+    assert.deepEqual(errors, []);
+  } finally { await context.close(); }
+});
+
 for (const width of [320, 360, 375, 390, 430, 768, 1024, 1280, 1440, 1920]) {
   test(`aircraft, contextual contract and alerts retain visible Globe and usable controls at ${width}px`, async () => {
     const { context, page, shell, errors } = await fixture(width);

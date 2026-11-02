@@ -17,7 +17,7 @@ capturing audio. None of that behavior will be copied into Operion.
 
 | Stitch element | Operion adaptation |
 |---|---|
-| Dominant cinematic viewport | Large identity-preserving scene, expressly labeled reference portrait until provider acceptance |
+| Dominant cinematic viewport | Large identity-preserving scene using supplied prerecorded Matt video, clearly distinguished from live synchronized avatar output |
 | Identity/status HUD | Matt identity and real reducer phase; no fake optics, compliance, latency, quality or synchronization |
 | Floating control island | Real consent-gated recognition, interrupt, optional text input and response text |
 | Desktop intelligence drawer | Existing evidence-backed report, secondary to scene, controlled disclosure |
@@ -406,12 +406,12 @@ No new dependency audit fixes; inherited advisories from the previous scan remai
 ### 9–10. Remaining limitations and real-video verdict
 
 **REAL SYNCHRONIZED TALKING VIDEO STILL BLOCKED.**
-The studio is an explicitly marked cinematic layout/reference portrait, not a
-talking human. No generated video, matching audio, lip sync, natural facial/body
-motion, fixed voice or text-hidden audio/video continuation was demonstrated.
-Provider access, approved custom identity/rights, fixed audio configuration,
-privacy approval and trial budget remain necessary. No upload, purchase or
-billable provider call occurred.
+The studio continuously plays supplied prerecorded Matt footage; it is not
+generated per answer and is not synchronized to response audio. No generated
+response video, matching audio, lip sync, fixed voice or text-hidden audio/video
+continuation was demonstrated. Provider access, approved custom identity/rights,
+fixed audio configuration, privacy approval and trial budget remain necessary.
+No provider upload, purchase or billable provider call occurred.
 
 The two authorised visual sections are integrated locally; the full video-first
 product is not complete or ready for production.

@@ -238,3 +238,24 @@ test("studio query cannot bypass authenticated route protection", async () => {
     assert.equal(await f.page.locator(".matt-studio").count(), 0);
   } finally { await f.context.close(); }
 });
+
+test("returning to a visible tab resumes paused identity footage without a static fallback", async () => {
+  const f = await fixture();
+  try {
+    await f.page.waitForFunction(() => {
+      const video = document.querySelector(".matt-character video");
+      return video && !video.paused && video.readyState >= 2;
+    });
+    await f.page.locator(".matt-character video").evaluate((video) => {
+      video.pause();
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await f.page.waitForFunction(() => {
+      const video = document.querySelector(".matt-character video");
+      return !video.paused && video.currentTime > 0;
+    });
+    assert.equal(await f.page.locator(".matt-character img").count(), 0);
+    assert.equal(await f.page.locator(".matt-video-retry").count(), 0);
+    assert.deepEqual(f.errors, []);
+  } finally { await f.context.close(); }
+});

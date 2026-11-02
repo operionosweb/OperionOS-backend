@@ -1,3 +1,6 @@
+import { buildAviationContractCore } from "../../../domain/contractIntelligence/aviationContractCore.js";
+import { isCalendarDate } from "../../../domain/contractIntelligence/calendarDate.js";
+
 const AVIATION_CONTRACT_TYPES = Object.freeze([
   "AIRCRAFT_LEASE", "AIRCRAFT_PURCHASE", "MRO", "ENGINE_MAINTENANCE",
   "POWER_BY_HOUR", "COMPONENT_SUPPORT", "INSURANCE", "GROUND_HANDLING",
@@ -27,15 +30,17 @@ const CLASSIFICATION_RULES = [
   { type: "SUPPLIER", decisive: ["supplier agreement", "supply agreement"], supporting: ["supplier", "purchase order"] },
 ];
 
-function normalizeSource(clause, index) {
+function normalizeSource(clause) {
   const evidence = Array.isArray(clause.evidence) ? clause.evidence[0] : clause.evidence;
   return {
     clauseId: clause.id || null,
     clauseNumber: clause.clause_number || clause.clauseNumber || null,
     title: clause.title || null,
     text: String(clause.source_text || clause.text || ""),
-    pageNumber: evidence?.page_number || clause.page_number || clause.pageStart || null,
-    sourceLocation: evidence?.source_locator || clause.source_location || `clause:${clause.clause_number || clause.clauseNumber || index + 1}`,
+    pageNumber: evidence?.page_number ?? clause.page_number ?? clause.pageStart ?? null,
+    sourceLocation: evidence?.source_locator ?? clause.source_location ?? null,
+    charStart: evidence?.char_start ?? null,
+    charEnd: evidence?.char_end ?? null,
     evidenceId: evidence?.id || evidence?.evidence_id || clause.source_evidence_id || null,
   };
 }
@@ -83,7 +88,7 @@ function supportedFinding(result, extra = {}) {
 function toIsoDate(value) {
   if (!value) return null;
   const normalized = value.trim().replace(/,$/, "");
-  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return isCalendarDate(normalized) ? normalized : null;
   const months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
   const dayFirst = normalized.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/);
   const monthFirst = normalized.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
@@ -402,6 +407,8 @@ export function buildContractProfile({ clauses = [], obligations = [], deadlines
   metadata.leaseIntelligence = isConfirmedLease
     ? { asset, commercialTerms, redelivery, insurance, defaultTermination, renewalExtension }
     : null;
+  const { recommendations: aviationRecommendations, ...aviationCore } = buildAviationContractCore(sources);
+  metadata.aviationCore = aviationCore;
   const namedParties = parties.parties.map((party) => `${party.name} (${party.role})`).join(" and ");
   const rentLabel = commercialTerms.baseRent ? `${commercialTerms.baseRent.currency} ${commercialTerms.baseRent.amount.toLocaleString("en-GB")} ${commercialTerms.baseRent.frequency}` : "financial commitment not established from the contract";
   const executiveSummary = [
@@ -437,6 +444,7 @@ export function buildContractProfile({ clauses = [], obligations = [], deadlines
   if (commercialTerms.rentEscalation && !recommendations.some((item) => item.title.includes("escalation"))) {
     recommendations.push({ riskId: null, title: "Monitor contractual rent escalation", action: "Assign finance to maintain the contractual escalation inputs and calculate each adjustment from the cited formula.", reason: isConfirmedLease ? "The lease contains an express rent adjustment mechanism." : "The cited text contains an express rent adjustment mechanism.", suggestedOwner: "FINANCE", priority: "high", triggerDeadline: "Each contractual escalation date", disclaimer: "Operational review recommendation; not legal advice.", evidence: [commercialTerms.rentEscalation.evidence] });
   }
+  recommendations.push(...aviationRecommendations);
   metadata.executiveSynthesis = {
     contractAtAGlance: {
       contractType: classification.type,

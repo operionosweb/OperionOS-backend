@@ -21,6 +21,7 @@ export function answerFlightQuestion(question, flight) {
   }
 
   const prompt = String(question || "").toLowerCase();
+  const referencedType = prompt.match(/\bregarding (clause|obligation|scenario_event|exposure|legal_scope_candidate):/)?.[1];
   const findings = [], evidence = [];
   const addEvidence = (id, excerpt, sourceLocator) => {
     if (!excerpt || !sourceLocator || evidence.some((item) => item.id === id)) return;
@@ -28,7 +29,7 @@ export function answerFlightQuestion(question, flight) {
   };
   let answer;
 
-  if (/legal|law|regulat|jurisdiction|convention|261/.test(prompt)) {
+  if (referencedType === "legal_scope_candidate" || (!referencedType && /legal|law|regulat|jurisdiction|convention|261/.test(prompt))) {
     const candidates = intelligence.legal?.candidates || [];
     candidates.forEach((candidate) => {
       findings.push({ type: "legal_scope_candidate", id: candidate.id, label: candidate.framework });
@@ -37,7 +38,7 @@ export function answerFlightQuestion(question, flight) {
     answer = candidates.length
       ? `For the simulated ${flight.origin}–${flight.destination} route, these are conditional legal-scope candidates only: ${candidates.map((candidate) => candidate.framework).join("; ")}. The route alone does not establish applicability, carrier scope, a passenger entitlement, or governing law.`
       : "No legal-scope candidate is supplied for this simulated flight.";
-  } else if (/deadline|notice|obligation|time limit/.test(prompt)) {
+  } else if (referencedType === "obligation" || (!referencedType && /deadline|notice|obligation|time limit/.test(prompt))) {
     const obligation = contract.obligation;
     if (obligation) {
       findings.push({ type: "obligation", id: obligation.id, label: obligation.title });
@@ -46,16 +47,16 @@ export function answerFlightQuestion(question, flight) {
     } else {
       answer = "No obligation or deadline is supplied for this flight.";
     }
-  } else if (/fuel/.test(prompt)) {
+  } else if (!referencedType && /fuel/.test(prompt)) {
     answer = `Fuel exposure for the simulated ${flight.origin}–${flight.destination} route is not quantified. No verified uplift, burn rate, fuel price, actual track or dispatch calculation is supplied. ${flight.rerouting} A general scenario amount cannot be presented as a fuel cost.`;
     addEvidence(`${flight.id}-fuel`, intelligence.event.title, intelligence.event.source);
-  } else if (/delay|rerout|diver|liabil|three.hour|3.hour/.test(prompt)) {
+  } else if (referencedType === "scenario_event" || (!referencedType && /delay|rerout|diver|liabil|three.hour|3.hour/.test(prompt))) {
     const hypothetical = /three[ -]?hour|3[ -]?hour|180\s*min/.test(prompt);
     answer = `${flight.flightNumber} has ${flight.delayMinutes} fictional delay minutes recorded, not a verified live delay. ${hypothetical ? "A three-hour delay is your hypothetical, not a change to the selected scenario. " : ""}${flight.rerouting} A delay or route change alone establishes neither a contractual breach nor liability. Review the executed agreement, attribution, mitigation, exclusions and notice terms before assessing consequences. ${intelligence.exposure.basis}`;
     findings.push({ type: "scenario_event", id: flight.id, label: intelligence.event.title });
     addEvidence(`${flight.id}-event`, `${intelligence.event.title}; ${flight.delayMinutes} fictional minutes. ${flight.rerouting}`, intelligence.event.source);
     addEvidence(contract.clause.id, contract.clause.text, contract.clause.source);
-  } else if (/exposure|cost|financial|credit|penalt|amount/.test(prompt)) {
+  } else if (referencedType === "exposure" || (!referencedType && /exposure|cost|financial|credit|penalt|amount/.test(prompt))) {
     const exposure = intelligence.exposure;
     if (exposure) {
       findings.push({ type: "exposure", id: exposure.id || contract.id, label: exposure.state });
@@ -66,7 +67,7 @@ export function answerFlightQuestion(question, flight) {
     } else {
       answer = "No financial exposure record is available for this flight.";
     }
-  } else if (/route|distance|origin|destination|where/.test(prompt)) {
+  } else if (!referencedType && /route|distance|origin|destination|where/.test(prompt)) {
     const source = intelligence.event?.source || GLOBE_DEMO_NOTICE;
     const route = `${flight.origin} (${flight.originCountry || "origin country unverified"}) → ${flight.destination} (${flight.destinationCountry || "destination country unverified"})`;
     findings.push({ type: "simulated_flight", id: flight.id, label: `${flight.flightNumber} · ${route}` });

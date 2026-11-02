@@ -57,3 +57,32 @@ test("rejects empty and oversized questions", () => {
   assert.throws(() => answerContractQuestion({ question: " " }), (error) => error.code === "INVALID_ASSISTANT_QUESTION");
   assert.throws(() => answerContractQuestion({ question: "x".repeat(501) }), (error) => error.code === "INVALID_ASSISTANT_QUESTION");
 });
+
+test("overlapping words cannot attach an unrelated source to an unlinked finding", () => {
+  const result = answerContractQuestion({
+    question: "What is the maintenance obligation?",
+    obligations: [{ id: "unsupported", description: "Lessee shall fund all engine maintenance.", actor: "Lessee", action: "fund", object: "engine maintenance" }],
+    evidence: [{ id: "other-clause", excerpt: "Lessor shall provide maintenance records.", source_locator: "clause:8" }],
+  });
+  assert.equal(result.established, false);
+  assert.deepEqual(result.findings, []);
+  assert.deepEqual(result.evidence, []);
+  assert.match(result.limitations[0], /explicit evidence relationship/);
+});
+
+test("linked findings retain source identities and unsupported rankings cannot hide supported results", () => {
+  const linkedSource = { id: "linked", excerpt: "Lessee shall inspect records.", source_locator: "section:7.2", page_number: 4 };
+  const result = answerContractQuestion({
+    question: "What are the key maintenance obligations?",
+    obligations: [
+      ...Array.from({ length: 5 }, (_, i) => ({ id: `unlinked-${i}`, description: "Key maintenance obligation", obligation_type: "maintenance" })),
+      { id: "supported", description: "Inspect records", source_evidence_id: linkedSource.id },
+    ],
+    evidence: [linkedSource],
+  });
+  assert.equal(result.established, true);
+  assert.deepEqual(result.findings.map(({ id }) => id), ["supported"]);
+  assert.deepEqual(result.findings[0].evidence_ids, ["linked"]);
+  assert.equal(result.findings[0].review_status, "requires_review");
+  assert.equal(result.evidence[0].source_locator, "section:7.2");
+});

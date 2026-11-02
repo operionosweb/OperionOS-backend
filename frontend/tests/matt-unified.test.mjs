@@ -44,6 +44,54 @@ async function ask(page, question) {
   await page.locator(".matt-page[data-state='PRESENTING']").waitFor();
 }
 
+test("Demo has one Ask Matt navigation entry and folded Admin fits one line", async () => {
+  const f = await fixture();
+  try {
+    await f.page.goto(`${origin}/demo/contracts/demo-aircraft-lease/overview`);
+    const nav = f.page.getByRole("navigation", { name: "Demo navigation" });
+    await nav.getByRole("link", { name: "Ask Matt", exact: true }).waitFor();
+    assert.equal(await nav.getByRole("link", { name: "Ask Matt", exact: true }).count(), 1);
+    assert.equal(await nav.locator('a[href*="/matt"]').count(), 1, "No assistant duplicate under Workspaces");
+    assert.equal(await nav.getByRole("link", { name: "Ask Matt", exact: true }).evaluate((link) => {
+      let heading = link.previousElementSibling;
+      while (heading && !heading.matches(".od-nav-label")) heading = heading.previousElementSibling;
+      return heading?.textContent;
+    }), "Main");
+    for (const width of [320, 390, 768]) {
+      await f.page.setViewportSize({ width, height: 1000 });
+      await f.page.getByRole("button", { name: "Open navigation", exact: true }).click();
+      assert.equal(await nav.getByRole("link", { name: "Ask Matt", exact: true }).count(), 1);
+      assert.equal(await nav.locator('a[href*="/matt"]').count(), 1);
+      await f.page.locator(".od-brand").getByRole("button", { name: "Close navigation", exact: true }).click();
+      assert.ok(await f.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    }
+    await f.page.getByRole("button", { name: "Open Matt assistant", exact: true }).focus();
+    for (const width of [1024, 1280, 1440, 1920]) {
+      await f.page.setViewportSize({ width, height: 1000 });
+      await f.page.mouse.move(width - 1, 0);
+      await f.page.waitForFunction(() => {
+        const sidebar = document.querySelector(".od-sidebar");
+        return sidebar && !sidebar.classList.contains("is-expanded") && sidebar.getBoundingClientRect().width === 72;
+      });
+      const measurement = await f.page.locator(".od-admin-label").evaluate((label) => {
+        const range = document.createRange();
+        range.selectNodeContents(label);
+        const bounds = label.getBoundingClientRect(), text = range.getBoundingClientRect();
+        return { lines: range.getClientRects().length, rail: label.closest(".od-sidebar").getBoundingClientRect().width,
+          fits: text.left >= bounds.left && text.right <= bounds.right,
+          whiteSpace: getComputedStyle(label).whiteSpace, visible: text.height > 0 };
+      });
+      assert.equal(measurement.rail, 72);
+      assert.equal(measurement.lines, 1);
+      assert.equal(measurement.whiteSpace, "nowrap");
+      assert.ok(measurement.fits && measurement.visible);
+    }
+    await nav.getByRole("link", { name: "Ask Matt", exact: true }).click();
+    await f.page.locator(".matt-environment").waitFor();
+    assert.deepEqual(f.errors, []);
+  } finally { await f.context.close(); }
+});
+
 test("Matt retains the original workspace's supported intelligence categories with evidence and limitations", async () => {
   const f = await fixture();
   try {
@@ -78,13 +126,11 @@ test("main, workspace, floating Matt and full response report share one contract
     const pageUrl = f.page.url();
     await f.page.getByText(/Supporting source evidence \(/).click();
     assert.equal(f.page.url(), pageUrl, "Evidence remains in contextual panel");
-    await f.page.getByText("Review actions and proposal", { exact: true }).click();
     await f.page.getByRole("link", { name: "OPEN FULL REPORT", exact: true }).click();
     await f.page.waitForURL("**/matt/report?**");
     assert.match(await f.page.locator(".matt-full-report").innerText(), /Maintain insurance/);
     await f.page.getByRole("link", { name: "Return to Matt and conversation", exact: true }).click();
     assert.equal(await f.page.locator(".matt-answer").textContent(), answer);
-    await f.page.getByText("Review actions and proposal", { exact: true }).click();
     await f.page.getByRole("link", { name: "Open existing contract workspace", exact: true }).click();
     await f.page.waitForURL("**/demo/contracts/demo-aircraft-lease/evidence");
     await f.page.getByRole("button", { name: "Open Matt assistant", exact: true }).click();

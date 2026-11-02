@@ -1029,6 +1029,28 @@ test('320–1920 responsive layouts, 2px mobile card gutters and keyboard modal 
   } finally { await context.close() }
 })
 
+test('every OCI module has usable empty states and creation dialogs on desktop and narrow mobile', { timeout: 60000 }, async () => {
+  const { page, context } = await fixture();
+  try {
+    await ready(page);
+    for (const width of [320, 768, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const module of OCI_MODULES) {
+        await go(page, module.id);
+        await page.locator(".oci-empty").waitFor();
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${module.id} overflow at ${width}`);
+        await page.getByRole("button", { name: "Create record", exact: true }).click();
+        const dialog = page.getByRole("dialog");
+        await dialog.waitFor();
+        const bounds = await dialog.boundingBox();
+        assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width + 1, `${module.id} dialog at ${width}`);
+        await dialog.getByRole("button", { name: "Close dialog", exact: true }).click();
+        await dialog.waitFor({ state: "hidden" });
+      }
+    }
+  } finally { await context.close(); }
+});
+
 test('fine desktop cards tilt gently without inline styles and reset for reduced motion/mobile', { timeout: 30000 }, async () => {
   const { page, context } = await fixture()
   try {

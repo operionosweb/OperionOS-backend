@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createDemonstrationAircraft } from "../src/demo/globeIntelligenceData.js";
 import { askMattFlight } from "../src/components/matt/mattFlightIntelligence.js";
+import { contextualQuestion } from "../src/components/matt/mattState.js";
 
 test("Ask Matt wrapper returns only flight-grounded demo evidence in the shared normalized schema", () => {
   const flight = createDemonstrationAircraft()[0];
@@ -45,4 +46,14 @@ test("delay hypotheticals do not overwrite flight facts and fuel cost is not inf
   const fuel = askMattFlight("What is the extra fuel cost?", flight);
   assert.match(fuel.answer, /not quantified/);
   assert.match(fuel.answer, /cannot be presented as a fuel cost/);
+});
+
+test("a referenced flight obligation takes precedence over incidental exposure or legal words", () => {
+  const flight = createDemonstrationAircraft()[0];
+  const previous = askMattFlight("Explain the associated contract", flight);
+  const followUp = contextualQuestion("Explain the second finding and its potential financial exposure", previous);
+  const answer = askMattFlight(followUp, flight);
+  assert.deepEqual(answer.findings.map(({ id }) => id), [flight.intelligence.contract.obligation.id]);
+  assert.match(answer.answer, /fictional scenario/);
+  assert.ok(answer.evidence.every(({ source_locator }) => source_locator === flight.intelligence.contract.clause.source));
 });

@@ -1,9 +1,22 @@
 # Matt real-video readiness and Globe repair
 
+**Latest local development update, 2 November 2026:** see the
+[Matt/OCI/Globe development report](matt-oci-globe-development-2026-11-02.md)
+for the light redesign, deadline/evidence safety fixes, selected-flight
+follow-ups, offline LITE protocol and synthetic MediaStream tests. None of
+these activates genuine live Matt or changes the confidential-pilot block.
+
 Historical local-repair record. The later authorized unified Matt/global Globe
 release supersedes its local-only/no-publication status and static globe lighting.
 See [the release report](unified-matt-global-globe-release-2026-11-01.md) for current
 scope, tests and publication. The real-video provider block remains unchanged.
+
+**2 November 2026 update:** Matt's stage now continuously plays the supplied
+`frontend/public/matt/reference.mp4` instead of displaying a still portrait.
+The file matches the user-provided `Operion - Matt (1).mp4`. This is prerecorded,
+muted visual presence only; it is not generated per answer or synchronized to
+response speech. The interactive talking-video and fixed-voice gates below
+remain blocked.
 
 ## Scope and verdict
 
@@ -30,9 +43,10 @@ Current code was inspected, not assumed from previous reports:
 - `mattVoice.js`: native browser recognition, explicit privacy consent,
   reviewed transcript, cancellation and explicit recognition failures.
   Published-candidate native synthesis is still not an audio-producing TTS API.
-  Studio output does not use that synthesis or the generic reference video.
-- `MattEnvironment.jsx`: approved reference portrait; studio has no fake
-  response-specific video. Normal candidate behavior is preserved.
+  Studio does not synthesize responses. The reference video provides only a
+  disclosed identity preview, never rendered response speech.
+- `MattEnvironment.jsx`: supplied prerecorded Matt video loops in the stage;
+  it does not provide response-specific video or speech synchronization.
 - `MattProposal.jsx`: evidence, typed risk findings, clearly labeled human-review
   suggestions and existing evidence navigation. No generated mitigation/notice
   backend or action execution is claimed.
