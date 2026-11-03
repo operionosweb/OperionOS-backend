@@ -11,6 +11,7 @@ import Analytics from "./components/analytics/Analytics";
 import { LoadingState } from "./components/ui/States";
 import { ORGANIZATION_PERMISSIONS, PLATFORM_PERMISSIONS } from "./lib/permissions";
 import MattSessionBoundary from "./components/matt/MattSessionBoundary";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 
 const ProductionLayout = lazy(() => import("./components/layout/ProductionLayout"));
 const DemoShell = lazy(() => import("./components/layout/DemoShell"));
@@ -146,6 +147,7 @@ export default function App() {
           </Suspense>
           <RouteMetadata />
           <Analytics />
+          <SpeedInsights />
         </BrowserRouter>
         </MattSessionBoundary>
       </OrganizationProvider>

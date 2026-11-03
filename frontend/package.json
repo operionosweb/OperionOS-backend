@@ -17,10 +17,11 @@
     "test:acceptance:install": "playwright install chromium"
   },
   "dependencies": {
-    "@daily-co/daily-js": "0.87.0",
     "@cesium/engine": "19.0.0",
     "@cesium/widgets": "13.0.0",
+    "@daily-co/daily-js": "0.87.0",
     "@supabase/supabase-js": "^2.57.0",
+    "@vercel/speed-insights": "^2.0.0",
     "@xyflow/react": "^12.8.4",
     "@zip.js/zip.js": "2.7.70",
     "cesium": "1.132.0",
