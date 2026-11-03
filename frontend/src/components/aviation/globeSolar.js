@@ -40,13 +40,10 @@ export function solarSubpointAtUtc(instant) {
 export function synchronizeGlobeSolarTime(viewer, instant = new Date()) {
   if (!viewer || viewer.isDestroyed?.()) return false;
   if (viewer.scene?.globe) {
-    viewer.scene.globe.enableLighting = true;
-    viewer.scene.globe.showGroundAtmosphere = true;
-    // Cesium otherwise fades solar shading away at the default cockpit zoom.
-    viewer.scene.globe.lightingFadeOutDistance = 0;
-    viewer.scene.globe.lightingFadeInDistance = 1;
-    viewer.scene.globe.dynamicAtmosphereLighting = true;
-    viewer.scene.globe.dynamicAtmosphereLightingFromSun = true;
+    viewer.scene.globe.enableLighting = false;
+    viewer.scene.globe.showGroundAtmosphere = false;
+    viewer.scene.globe.dynamicAtmosphereLighting = false;
+    viewer.scene.globe.dynamicAtmosphereLightingFromSun = false;
   }
   if (viewer.clock) {
     viewer.clock.currentTime = JulianDate.fromDate(instant instanceof Date ? instant : new Date(instant));

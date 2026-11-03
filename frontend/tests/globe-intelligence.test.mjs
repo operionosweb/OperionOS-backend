@@ -46,12 +46,12 @@ function darkPixelRatio(png) {
   return dark / (width * height);
 }
 
-test("UTC noon and midnight change actual geographic Earth lighting, not just a clock label", { timeout: 120000 }, async () => {
+test("the geographic Earth remains textured and recognizable at UTC noon and midnight", { timeout: 120000 }, async () => {
   const samples = [];
+  const textures = [];
   for (const hour of ["12", "00"]) {
     const { context, page, errors } = await fixture(1440, `2026-03-20T${hour}:00:00Z`);
     try {
-      await page.waitForFunction(() => Number(document.querySelector(".od-cesium-globe")?.dataset.aircraftModelsReady) === 20);
       await page.waitForLoadState("networkidle");
       const image = decodeScreenshot(await page.locator(".od-cesium-globe canvas").screenshot());
       let sum = 0, count = 0;
@@ -63,12 +63,15 @@ test("UTC noon and midnight change actual geographic Earth lighting, not just a 
         }
       }
       samples.push(sum / count);
+      textures.push(texturedPixelStats(await page.locator(".od-cesium-globe canvas").screenshot()));
       assert.deepEqual(errors, []);
     } finally { await context.close(); }
   }
   console.log(`Earth central luminance: noon ${samples[0].toFixed(1)}, midnight ${samples[1].toFixed(1)}`);
-  assert.ok(samples[0] - samples[1] > 20, "Geographic surface must visibly darken on its UTC night side");
-  assert.ok(samples[1] > 10, "Night-side geography remains discernible");
+  assert.ok(samples[1] > 70, "UTC night-side geography remains clearly illuminated");
+  assert.ok(Math.abs(samples[0] - samples[1]) < 10, "Earth visibility must not depend on the viewer's UTC time");
+  assert.ok(textures.every((pixels) => pixels.colors > 100 && pixels.colored > 0.4),
+    `Earth texture remains recognizable at both times: ${JSON.stringify(textures)}`);
 });
 
 test("blocked satellite detail retains real Earth and reports degradation without blocking access", { timeout: 60000 }, async () => {

@@ -8,9 +8,6 @@ import { synchronizeGlobeSolarTime } from "./globeSolar.js";
 export function attachGlobeImagery(viewer, { mapStyle = "standard", viewMode = "globe", onError }) {
   const layers = [], listeners = [];
   synchronizeGlobeSolarTime(viewer);
-  const solarTimer = globalThis.setInterval(() => {
-    if (!viewer.isDestroyed() && !globalThis.document?.hidden) synchronizeGlobeSolarTime(viewer);
-  }, 60000);
   viewer.scene.globe.baseColor = Color.fromCssColorString("#164469");
   viewer.scene.backgroundColor = Color.fromCssColorString("#071a2d");
   viewer.scene.skyBox.show = false;
@@ -34,7 +31,6 @@ export function attachGlobeImagery(viewer, { mapStyle = "standard", viewMode = "
   }
   viewer.scene.requestRender();
   return () => {
-    globalThis.clearInterval(solarTimer);
     listeners.forEach((remove) => remove());
     if (!viewer.isDestroyed()) layers.forEach((layer) => viewer.imageryLayers.remove(layer, true));
   };

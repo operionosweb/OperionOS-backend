@@ -17,7 +17,7 @@ test("solar subpoint follows UTC through equinox, solstice and day/night rotatio
   assert.ok(Math.abs(longitudeShift - 180) < 5, `12-hour solar shift ${longitudeShift}`);
 });
 
-test("Cesium globe lighting is enabled and its clock is initialized to current UTC", () => {
+test("Cesium globe stays illuminated and its clock is initialized to current UTC", () => {
   let renderRequests = 0;
   const viewer = {
     scene: { globe: {}, requestRender: () => { renderRequests++; } },
@@ -31,11 +31,10 @@ test("Cesium globe lighting is enabled and its clock is initialized to current U
   assert.equal(viewer.clock.clockStep, ClockStep.SYSTEM_CLOCK_MULTIPLIER);
   assert.equal(viewer.clock.multiplier, 1);
   assert.equal(viewer.clock.shouldAnimate, false);
-  assert.equal(viewer.scene.globe.enableLighting, true);
-  assert.equal(viewer.scene.globe.showGroundAtmosphere, true);
-  assert.equal(viewer.scene.globe.lightingFadeInDistance, 1);
-  assert.equal(viewer.scene.globe.lightingFadeOutDistance, 0);
-  assert.equal(viewer.scene.globe.dynamicAtmosphereLightingFromSun, true);
+  assert.equal(viewer.scene.globe.enableLighting, false);
+  assert.equal(viewer.scene.globe.showGroundAtmosphere, false);
+  assert.equal(viewer.scene.globe.dynamicAtmosphereLighting, false);
+  assert.equal(viewer.scene.globe.dynamicAtmosphereLightingFromSun, false);
   assert.equal(renderRequests, 1);
   assert.equal(synchronizeGlobeSolarTime({ isDestroyed: () => true }), false);
 });
