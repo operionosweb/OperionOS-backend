@@ -27,6 +27,24 @@ test("document structure parser derives pages, sections, subsections, and chunks
   }
 });
 
+test("document structure retains blank pages, complex numbering, and schedules", () => {
+  const text = "1. Maintenance\n1.1 Records\n1.1(a) Records\nKeep records current."
+    + "\f\fSchedule A - Maintenance Reserves\nAirframe reserve rate."
+    + "\nAppendix B - Aircraft Configuration";
+  const structure = parseDocumentStructure({ text });
+
+  assert.deepEqual(structure.pages.map((page) => page.pageNumber), [1, 2, 3]);
+  assert.equal(structure.pages[1].text, "");
+  const nestedClause = structure.sections.find((section) => section.clauseNumber === "1.1(a)");
+  assert.ok(nestedClause);
+  assert.equal(structure.sections[nestedClause.parentIndex].clauseNumber, "1.1");
+  assert.deepEqual(
+    structure.sections.filter((section) => ["schedule", "appendix"].includes(section.structure))
+      .map((section) => [section.structure, section.clauseNumber]),
+    [["schedule", "Schedule A"], ["appendix", "Appendix B"]]
+  );
+});
+
 test("document structure parser handles unstructured text deterministically", () => {
   const text = "A short source document with no recognizable headings.";
   const first = parseDocumentStructure({ text, chunkSize: 12 });

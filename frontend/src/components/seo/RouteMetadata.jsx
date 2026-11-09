@@ -71,6 +71,11 @@ const PUBLIC_PAGES = {
     description: "Discover why Operion starts with aviation, meet founder Meelis Paloson, and explore the evidence-linked path from Contract Intelligence to predictive risk.",
     name: "About Operion",
   },
+  "/blog": {
+    title: "Operion Insights | Aviation Contract Intelligence",
+    description: "Evidence-led insights on aircraft leasing, aviation contract intelligence, maintenance reserves, redelivery, MRO agreements and aviation risk.",
+    name: "Insights",
+  },
   "/privacy": {
     title: "Privacy Policy | Operion",
     description: "Read how Operion handles website, account, organisation and customer contract information, including consent-based analytics and AI-assisted processing.",
@@ -144,6 +149,32 @@ function setCanonical(href) {
   canonical.href = href;
 }
 
+export function applyRouteMetadata({ title, description, canonical, robots = "index, follow, max-image-preview:large", image, type = "website", socialTitle, socialDescription, structuredData }) {
+  document.title = title;
+  setCanonical(canonical);
+  setMeta("name", "description", description);
+  setMeta("name", "robots", robots);
+  setMeta("property", "og:site_name", "Operion");
+  setMeta("property", "og:type", type);
+  setMeta("property", "og:title", socialTitle || title);
+  setMeta("property", "og:description", socialDescription || description);
+  setMeta("property", "og:url", canonical);
+  setMeta("property", "og:image", image || "");
+  setMeta("name", "twitter:card", image ? "summary_large_image" : "summary");
+  setMeta("name", "twitter:title", socialTitle || title);
+  setMeta("name", "twitter:description", socialDescription || description);
+  setMeta("name", "twitter:image", image || "");
+
+  document.head.querySelectorAll('script[type="application/ld+json"]').forEach((script) => script.remove());
+  if (structuredData) {
+    const script = document.createElement("script");
+    script.type = "application/ld+json";
+    script.dataset.operionSeo = "route";
+    script.textContent = JSON.stringify(structuredData);
+    document.head.appendChild(script);
+  }
+}
+
 function publicStructuredData(page, canonicalUrl, pathname) {
   const graph = [];
   if (pathname === "/") {
@@ -196,6 +227,15 @@ function publicStructuredData(page, canonicalUrl, pathname) {
 function resolvePage(pathname) {
   if (pathname === "/demo") return { ...PUBLIC_PAGES["/demo/dashboard"], pathname: "/demo/dashboard", indexable: true, robots: "index, follow, max-image-preview:large" };
   if (PUBLIC_PAGES[pathname]) return { ...PUBLIC_PAGES[pathname], pathname, indexable: true, robots: "index, follow, max-image-preview:large" };
+  if (pathname.startsWith("/blog/")) {
+    return {
+      title: "Article | Operion Insights",
+      description: "Aviation Contract Intelligence insights from Operion.",
+      pathname,
+      indexable: false,
+      robots: "noindex, follow, noarchive",
+    };
+  }
   if (pathname === "/app" || pathname.startsWith("/app/")) {
     return {
       title: "Operion Application | Private Contract Intelligence",
@@ -225,27 +265,14 @@ export default function RouteMetadata() {
   useEffect(() => {
     const page = resolvePage(pathname);
     const canonicalUrl = `${SITE_URL}${page.pathname === "/" ? "/" : page.pathname}`;
-    document.title = page.title;
-    setCanonical(canonicalUrl);
-    setMeta("name", "description", page.description);
-    setMeta("name", "robots", page.robots);
-    setMeta("property", "og:site_name", "Operion");
-    setMeta("property", "og:type", "website");
-    setMeta("property", "og:title", page.title);
-    setMeta("property", "og:description", page.description);
-    setMeta("property", "og:url", canonicalUrl);
-    setMeta("name", "twitter:card", "summary");
-    setMeta("name", "twitter:title", page.title);
-    setMeta("name", "twitter:description", page.description);
-
-    document.head.querySelectorAll('script[type="application/ld+json"]').forEach((script) => script.remove());
-    if (page.indexable) {
-      const script = document.createElement("script");
-      script.type = "application/ld+json";
-      script.dataset.operionSeo = "route";
-      script.textContent = JSON.stringify(publicStructuredData(page, canonicalUrl, page.pathname));
-      document.head.appendChild(script);
-    }
+    applyRouteMetadata({
+      title: page.title,
+      description: page.description,
+      canonical: canonicalUrl,
+      robots: page.robots,
+      type: "website",
+      structuredData: page.indexable ? publicStructuredData(page, canonicalUrl, page.pathname) : null,
+    });
   }, [pathname]);
 
   return null;

@@ -8,7 +8,7 @@ import {
 import BrandMark from "../ui/BrandMark";
 import OperionAssistant from "../demo/OperionAssistant";
 import { DemoDataProvider, useDemoData } from "../../demo/DemoDataProvider";
-import { DemoBadge } from "../../demo/DemoUI";
+import { DemoBadge, DemoDisclosure } from "../../demo/DemoUI";
 
 const mainNav = [
   ["/demo/dashboard", "Dashboard", Gauge],
@@ -103,10 +103,10 @@ function DemoShellContent() {
     <div className="od-frame">
       <header className="od-topbar">
         <button type="button" className="od-icon-button od-mobile-only" onClick={() => setDrawerOpen(true)} aria-label="Open navigation"><Menu size={20}/></button>
-        <button type="button" className="od-search-trigger" onClick={() => setPaletteOpen(true)}><Search size={16}/><span>Search contracts, clauses, obligations, risks...</span><kbd>Ctrl K</kbd></button>
+        <button type="button" className="od-search-trigger" onClick={() => setPaletteOpen(true)}><Search size={16}/><span>Search synthetic contracts and Demo pages...</span><kbd>Ctrl K</kbd></button>
         <div className="od-system-status" aria-label="Synthetic demonstration telemetry">
           <span><i className="od-system-dot" />SYNTHETIC FEED</span>
-          <span><Clock3 size={14} />{utcTime} UTC</span>
+          <span><Clock3 size={14} />{utcTime} UTC · device clock</span>
           <span><Radio size={14} />DEMO ENVIRONMENT</span>
         </div>
         <div className="od-top-actions">
@@ -114,9 +114,9 @@ function DemoShellContent() {
           <Link to={`/demo/matt?contract=${activeContract.id}`} className="od-ask-button"><Bot size={16}/>Ask Matt</Link>
           <button type="button" className="od-profile"><span>JS</span><div><strong>John Smith</strong><small>Aviation Partners Ltd.</small></div><ChevronDown size={14}/></button>
         </div>
-        {notificationsOpen && <div className="od-popover"><DemoBadge>DEMO DATA</DemoBadge><strong>3 prepared intelligence notices</strong><p>Review late-return risk, insurance evidence, and the maintenance-record deadline.</p></div>}
+        {notificationsOpen && <div className="od-popover"><DemoBadge>SYNTHETIC NOTICES</DemoBadge><strong>3 illustrative intelligence notices</strong><p>Prepared lease examples only, not detected customer events: late-return risk, insurance evidence, and the maintenance-record deadline.</p></div>}
       </header>
-      <main className="od-main"><Outlet /></main>
+      <main className="od-main"><DemoDisclosure /><Outlet /></main>
       <nav className="od-bottom-nav" aria-label="Mobile demo navigation">{mainNav.slice(0,5).map(([to,label,Icon]) => <NavLink key={to} to={to} className={({isActive})=>isActive?"is-active":""}><Icon size={19}/><span>{label === "Upload Contract" ? "Upload" : label}</span></NavLink>)}</nav>
     </div>
 

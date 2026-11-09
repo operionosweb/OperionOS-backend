@@ -1,0 +1,404 @@
+{
+  "organizationId": "11111111-1111-4111-8111-111111111111",
+  "asOf": "2026-11-09",
+  "runs": [
+    {
+      "organization_id": "11111111-1111-4111-8111-111111111111",
+      "contract_id": "22222222-2222-4222-8222-222222222201",
+      "analysis_run_id": "55555555-5555-4555-8555-555555552201",
+      "document_version_id": "44444444-4444-4444-8444-444444442201",
+      "contract_title": "Synthetic Lease Alpha",
+      "classification": { "type": "AIRCRAFT_LEASE", "status": "confirmed" }
+    },
+    {
+      "organization_id": "11111111-1111-4111-8111-111111111111",
+      "contract_id": "22222222-2222-4222-8222-222222222202",
+      "analysis_run_id": "55555555-5555-4555-8555-555555552202",
+      "document_version_id": "44444444-4444-4444-8444-444444442202",
+      "contract_title": "Synthetic Lease Beta",
+      "classification": { "type": "AIRCRAFT_LEASE", "status": "confirmed" }
+    },
+    {
+      "organization_id": "11111111-1111-4111-8111-111111111111",
+      "contract_id": "22222222-2222-4222-8222-222222222203",
+      "analysis_run_id": "55555555-5555-4555-8555-555555552203",
+      "document_version_id": "44444444-4444-4444-8444-444444442203",
+      "contract_title": "Synthetic Maintenance Agreement",
+      "classification": { "type": "MRO", "status": "confirmed" }
+    },
+    {
+      "organization_id": "11111111-1111-4111-8111-111111111111",
+      "contract_id": "22222222-2222-4222-8222-222222222205",
+      "analysis_run_id": "55555555-5555-4555-8555-555555552205",
+      "document_version_id": "44444444-4444-4444-8444-444444442205",
+      "contract_title": "Synthetic Lease Gamma",
+      "classification": { "type": "AIRCRAFT_LEASE", "status": "confirmed" }
+    },
+    {
+      "organization_id": "11111111-1111-4111-8111-111111111111",
+      "contract_id": "22222222-2222-4222-8222-222222222204",
+      "analysis_run_id": "55555555-5555-4555-8555-555555552204",
+      "document_version_id": "44444444-4444-4444-8444-444444442204",
+      "contract_title": "Unreviewed Lease",
+      "classification": { "type": "AIRCRAFT_LEASE", "status": "requires_review" }
+    }
+  ],
+  "relationships": [
+    {
+      "id": "rel-lease-alpha",
+      "organization_id": "11111111-1111-4111-8111-111111111111",
+      "contract_id": "22222222-2222-4222-8222-222222222201",
+      "aircraft_id": "aircraft-101",
+      "relationship_type": "aircraft_lease",
+      "source_identifier": "AIRCRAFT_REGISTRATION:N-101",
+      "source_evidence_id": "ev-rel-lease-alpha",
+      "evidence_review_status": "verified",
+      "evidence_document_version_id": "44444444-4444-4444-8444-444444442201",
+      "registration": "N-101",
+      "serial_number": "MSN-101",
+      "aircraft_type": "A320",
+      "contract_title": "Synthetic Lease Alpha",
+      "page_number": 2,
+      "source_locator": "Aircraft particulars",
+      "excerpt": "Aircraft registration N-101, serial number MSN-101."
+    },
+    {
+      "id": "rel-lease-beta",
+      "organization_id": "11111111-1111-4111-8111-111111111111",
+      "contract_id": "22222222-2222-4222-8222-222222222202",
+      "aircraft_id": "aircraft-101",
+      "relationship_type": "aircraft_lease",
+      "source_identifier": "AIRCRAFT_REGISTRATION:N-101",
+      "source_evidence_id": "ev-rel-lease-beta",
+      "evidence_review_status": "verified",
+      "evidence_document_version_id": "44444444-4444-4444-8444-444444442202",
+      "registration": "N-101",
+      "serial_number": "MSN-101",
+      "aircraft_type": "A320",
+      "contract_title": "Synthetic Lease Beta",
+      "page_number": 3,
+      "source_locator": "Aircraft particulars",
+      "excerpt": "Aircraft registration N-101, serial number MSN-101."
+    },
+    {
+      "id": "rel-mro-alpha",
+      "organization_id": "11111111-1111-4111-8111-111111111111",
+      "contract_id": "22222222-2222-4222-8222-222222222203",
+      "aircraft_id": "aircraft-101",
+      "relationship_type": "maintenance_support",
+      "source_identifier": "AIRCRAFT_REGISTRATION:N-101",
+      "source_evidence_id": "ev-rel-mro-alpha",
+      "evidence_review_status": "verified",
+      "evidence_document_version_id": "44444444-4444-4444-8444-444444442203",
+      "registration": "N-101",
+      "serial_number": "MSN-101",
+      "aircraft_type": "A320",
+      "contract_title": "Synthetic Maintenance Agreement",
+      "page_number": 5,
+      "source_locator": "Covered aircraft",
+      "excerpt": "This maintenance agreement covers aircraft registration N-101."
+    },
+    {
+      "id": "rel-mro-beta",
+      "organization_id": "11111111-1111-4111-8111-111111111111",
+      "contract_id": "22222222-2222-4222-8222-222222222203",
+      "aircraft_id": "aircraft-202",
+      "relationship_type": "maintenance_support",
+      "source_identifier": "AIRCRAFT_REGISTRATION:N-202",
+      "source_evidence_id": "ev-rel-mro-beta",
+      "evidence_review_status": "verified",
+      "evidence_document_version_id": "44444444-4444-4444-8444-444444442203",
+      "registration": "N-202",
+      "serial_number": "MSN-202",
+      "aircraft_type": "B737",
+      "contract_title": "Synthetic Maintenance Agreement",
+      "page_number": 5,
+      "source_locator": "Covered aircraft",
+      "excerpt": "This maintenance agreement covers aircraft registration N-202."
+    },
+    {
+      "id": "rel-lease-gamma",
+      "organization_id": "11111111-1111-4111-8111-111111111111",
+      "contract_id": "22222222-2222-4222-8222-222222222205",
+      "aircraft_id": "aircraft-202",
+      "relationship_type": "aircraft_lease",
+      "source_identifier": "AIRCRAFT_REGISTRATION:N-202",
+      "source_evidence_id": "ev-rel-lease-gamma",
+      "evidence_review_status": "verified",
+      "evidence_document_version_id": "44444444-4444-4444-8444-444444442205",
+      "registration": "N-202",
+      "serial_number": "MSN-202",
+      "aircraft_type": "B737",
+      "contract_title": "Synthetic Lease Gamma",
+      "page_number": 2,
+      "source_locator": "Aircraft particulars",
+      "excerpt": "Aircraft registration N-202, serial number MSN-202."
+    },
+    {
+      "id": "rel-potential",
+      "organization_id": "11111111-1111-4111-8111-111111111111",
+      "contract_id": "22222222-2222-4222-8222-222222222201",
+      "aircraft_id": "aircraft-potential",
+      "relationship_type": "aircraft_lease",
+      "source_identifier": "AIRCRAFT_REGISTRATION:N-303",
+      "source_evidence_id": "ev-rel-potential",
+      "evidence_review_status": "pending",
+      "evidence_document_version_id": "44444444-4444-4444-8444-444444442201",
+      "registration": "N-303",
+      "contract_title": "Synthetic Lease Alpha",
+      "excerpt": "Aircraft registration N-303."
+    },
+    {
+      "id": "rel-unresolved",
+      "organization_id": "11111111-1111-4111-8111-111111111111",
+      "contract_id": "22222222-2222-4222-8222-222222222202",
+      "aircraft_id": "aircraft-unresolved",
+      "relationship_type": "aircraft_lease",
+      "source_evidence_id": null,
+      "evidence_review_status": null,
+      "evidence_document_version_id": null,
+      "registration": null,
+      "serial_number": null,
+      "contract_title": "Synthetic Lease Beta"
+    },
+    {
+      "id": "rel-missing-id",
+      "organization_id": "11111111-1111-4111-8111-111111111111",
+      "contract_id": "22222222-2222-4222-8222-222222222202",
+      "aircraft_id": null,
+      "relationship_type": "aircraft_lease",
+      "source_evidence_id": "ev-missing-aircraft",
+      "evidence_review_status": "verified",
+      "evidence_document_version_id": "44444444-4444-4444-8444-444444442202",
+      "registration": "N-404"
+    },
+    {
+      "id": "rel-cross-organization",
+      "organization_id": "99999999-9999-4999-8999-999999999999",
+      "contract_id": "22222222-2222-4222-8222-222222222202",
+      "aircraft_id": "aircraft-other-tenant",
+      "relationship_type": "aircraft_lease",
+      "source_evidence_id": "ev-other-tenant",
+      "evidence_review_status": "verified",
+      "evidence_document_version_id": "44444444-4444-4444-8444-444444442202",
+      "registration": "N-999"
+    }
+  ],
+  "assessments": {
+    "55555555-5555-4555-8555-555555552201": {
+      "risks": [
+        {
+          "id": "risk-alpha",
+          "obligation_id": "obl-alpha",
+          "clause_id": "clause-alpha",
+          "contract_evidence": [
+            {
+              "evidenceId": "ev-contract-alpha",
+              "sourceLocator": "Utilisation clause 12",
+              "pageNumber": 12,
+              "excerpt": "For aircraft N-101, the allowance is 300 flight hours per lease year; excess hours are USD 500 per hour.",
+              "reviewStatus": "verified"
+            }
+          ],
+          "deadline_information": {
+            "id": "deadline-alpha",
+            "absoluteDate": "2026-12-01",
+            "status": "approaching",
+            "reviewRequired": false,
+            "daysRemaining": 22
+          },
+          "utilisation_exposure": {
+            "metrics": [
+              {
+                "unit": "flight_hours",
+                "financialExposure": {
+                  "currency": "USD",
+                  "contractualProvision": {
+                    "contractVersionId": "44444444-4444-4444-8444-444444442201",
+                    "clauseId": "clause-alpha",
+                    "clauseNumber": "12",
+                    "unit": "flight_hours",
+                    "measurementPeriod": "per lease year",
+                    "evidence": [
+                      {
+                        "evidenceId": "ev-contract-alpha",
+                        "sourceLocator": "Utilisation clause 12",
+                        "pageNumber": 12,
+                        "excerpt": "For aircraft N-101, the allowance is 300 flight hours per lease year; excess hours are USD 500 per hour.",
+                        "reviewStatus": "verified"
+                      }
+                    ]
+                  },
+                  "current": {
+                    "status": "currently_demonstrated_exposure",
+                    "amount": 10000,
+                    "currency": "USD",
+                    "reportingPeriod": { "start": "2026-01-01", "end": "2026-11-09" },
+                    "sources": [
+                      {
+                        "evidenceId": "ev-usage-alpha",
+                        "sourceLocator": "Utilization report",
+                        "pageNumber": 4,
+                        "excerpt": "Verified cumulative flight hours for aircraft N-101.",
+                        "reviewStatus": "verified"
+                      }
+                    ]
+                  },
+                  "projected": {
+                    "status": "potential_future_exposure",
+                    "amount": 15000,
+                    "currency": "USD",
+                    "measurementDate": "2026-12-31",
+                    "sources": [
+                      {
+                        "evidenceId": "ev-forecast-alpha",
+                        "sourceLocator": "Utilization forecast",
+                        "pageNumber": 4,
+                        "excerpt": "Verified cumulative utilization history for aircraft N-101.",
+                        "reviewStatus": "verified"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "55555555-5555-4555-8555-555555552202": {
+      "risks": [
+        {
+          "id": "risk-beta",
+          "obligation_id": "obl-beta",
+          "clause_id": "clause-beta",
+          "contract_evidence": [
+            {
+              "evidenceId": "ev-contract-beta",
+              "sourceLocator": "Utilisation clause 9",
+              "pageNumber": 9,
+              "excerpt": "For aircraft N-101, the allowance is 200 flight hours per lease year; excess hours are EUR 250 per hour.",
+              "reviewStatus": "verified"
+            }
+          ],
+          "deadline_information": {
+            "id": "deadline-beta",
+            "absoluteDate": "2026-12-01",
+            "status": "approaching",
+            "reviewRequired": false,
+            "daysRemaining": 22
+          },
+          "utilisation_exposure": {
+            "metrics": [
+              {
+                "unit": "flight_hours",
+                "financialExposure": {
+                  "currency": "EUR",
+                  "contractualProvision": {
+                    "contractVersionId": "44444444-4444-4444-8444-444444442202",
+                    "clauseId": "clause-beta",
+                    "clauseNumber": "9",
+                    "unit": "flight_hours",
+                    "measurementPeriod": "per lease year",
+                    "evidence": [
+                      {
+                        "evidenceId": "ev-contract-beta",
+                        "sourceLocator": "Utilisation clause 9",
+                        "pageNumber": 9,
+                        "excerpt": "For aircraft N-101, the allowance is 200 flight hours per lease year; excess hours are EUR 250 per hour.",
+                        "reviewStatus": "verified"
+                      }
+                    ]
+                  },
+                  "current": { "status": "no_demonstrated_exposure", "amount": 0, "currency": "EUR", "sources": [] },
+                  "projected": {
+                    "status": "potential_future_exposure",
+                    "amount": 5000,
+                    "currency": "EUR",
+                    "measurementDate": "2026-12-31",
+                    "sources": [
+                      {
+                        "evidenceId": "ev-forecast-beta",
+                        "sourceLocator": "Utilization forecast",
+                        "pageNumber": 6,
+                        "excerpt": "Verified cumulative utilization history for aircraft N-101.",
+                        "reviewStatus": "verified"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "55555555-5555-4555-8555-555555552205": {
+      "risks": [
+        {
+          "id": "risk-gamma",
+          "obligation_id": "obl-gamma",
+          "clause_id": "clause-gamma",
+          "contract_evidence": [
+            {
+              "evidenceId": "ev-contract-gamma",
+              "sourceLocator": "Utilisation clause 7",
+              "pageNumber": 7,
+              "excerpt": "For aircraft N-202, the allowance is 250 flight cycles per lease year; excess cycles are GBP 100 per cycle.",
+              "reviewStatus": "verified"
+            }
+          ],
+          "deadline_information": {
+            "id": "deadline-gamma",
+            "absoluteDate": "2026-12-10",
+            "status": "approaching",
+            "reviewRequired": false,
+            "daysRemaining": 31
+          },
+          "utilisation_exposure": {
+            "metrics": [
+              {
+                "unit": "flight_cycles",
+                "financialExposure": {
+                  "currency": "GBP",
+                  "contractualProvision": {
+                    "contractVersionId": "44444444-4444-4444-8444-444444442205",
+                    "clauseId": "clause-gamma",
+                    "clauseNumber": "7",
+                    "unit": "flight_cycles",
+                    "measurementPeriod": "per lease year",
+                    "evidence": [
+                      {
+                        "evidenceId": "ev-contract-gamma",
+                        "sourceLocator": "Utilisation clause 7",
+                        "pageNumber": 7,
+                        "excerpt": "For aircraft N-202, the allowance is 250 flight cycles per lease year; excess cycles are GBP 100 per cycle.",
+                        "reviewStatus": "verified"
+                      }
+                    ]
+                  },
+                  "current": { "status": "no_demonstrated_exposure", "amount": 0, "currency": "GBP", "sources": [] },
+                  "projected": {
+                    "status": "potential_future_exposure",
+                    "amount": 3000,
+                    "currency": "GBP",
+                    "measurementDate": "2026-12-31",
+                    "sources": [
+                      {
+                        "evidenceId": "ev-forecast-gamma",
+                        "sourceLocator": "Cycle forecast",
+                        "pageNumber": 8,
+                        "excerpt": "Verified cumulative flight-cycle history for aircraft N-202.",
+                        "reviewStatus": "verified"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

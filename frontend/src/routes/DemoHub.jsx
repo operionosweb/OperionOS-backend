@@ -5,7 +5,12 @@ import Button from "../components/ui/Button";
 import { EmptyState } from "../components/ui/States";
 import SpatialModeToggle from "../components/intelligence/spatial/SpatialModeToggle";
 import SpatialTransition from "../components/intelligence/spatial/SpatialTransition";
+import { SYNTHETIC_INDEXATION, calculateSyntheticIndexation } from "../demo/indexationJourney";
 import { PUBLIC_DEMO_CONTRACTS, PUBLIC_DEMO_NOTICE } from "../lib/publicDemoData";
+import {
+  SYNTHETIC_AIRCRAFT_LEASE,
+  calculateSyntheticFuelPriceAdjustment,
+} from "../demo/aviationIntelligenceJourney";
 
 function SampleBadge({ children, live = false }) {
   return <span className={live ? "op-badge op-badge-live" : "op-badge op-badge-future"}>{children}</span>;
@@ -70,6 +75,7 @@ export default function DemoHub() {
   const [query, setQuery] = useState("");
 
   const contract = PUBLIC_DEMO_CONTRACTS.find((item) => item.id === selectedContractId) || PUBLIC_DEMO_CONTRACTS[0];
+  const fuelAdjustment = calculateSyntheticFuelPriceAdjustment(SYNTHETIC_AIRCRAFT_LEASE);
   const selectedClause = contract.clauses.find((item) => item.id === selectedClauseId) || contract.clauses[0];
   const visibleClauses = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -137,8 +143,29 @@ export default function DemoHub() {
         </div>
       </Reveal>
 
+      {contract.id === "demo-aircraft-lease" && <Reveal className="op-surface" style={{ marginTop: "var(--op-space-6)", padding: "var(--op-space-5)" }}>
+        <SampleBadge>Synthetic-only external-risk illustration</SampleBadge>
+        <h2 className="op-heading-md" style={{ margin: "var(--op-space-3) 0 var(--op-space-2)" }}>Weekly fuel-price clause adjustment</h2>
+        <p className="op-body-sm">Sample lease clause {SYNTHETIC_AIRCRAFT_LEASE.fuelPriceAdjustment.clauseNumber}: {SYNTHETIC_AIRCRAFT_LEASE.fuelPriceAdjustment.excerpt}</p>
+        <p className="op-body-sm">Synthetic reference: {SYNTHETIC_AIRCRAFT_LEASE.fuelPriceAdjustment.observation.value} {SYNTHETIC_AIRCRAFT_LEASE.fuelPriceAdjustment.observation.unit} on {SYNTHETIC_AIRCRAFT_LEASE.fuelPriceAdjustment.observation.observationDate} for {SYNTHETIC_AIRCRAFT_LEASE.fuelPriceAdjustment.observation.market}. {SYNTHETIC_AIRCRAFT_LEASE.fuelPriceAdjustment.observation.source}; no EIA or live data is used.</p>
+        {fuelAdjustment.status === "synthetic_calculated" ? <>
+          <p className="op-body-sm">One-week deterministic result: <strong>{new Intl.NumberFormat("en-GB", { style: "currency", currency: fuelAdjustment.adjustment.currency, minimumFractionDigits: 2 }).format(fuelAdjustment.adjustment.amount)}</strong> · {fuelAdjustment.formula}. Paying party in the sample clause: {fuelAdjustment.payingParty}.</p>
+          <p className="op-body-sm">{fuelAdjustment.disclosure} This is not a customer cost, invoice, forecast, or net exposure. Different currencies and risk categories are not aggregated.</p>
+          <p className="op-body-sm"><strong>Suggested review:</strong> reconcile the explicit clause, matching benchmark period, covered gallons, and supplier invoice before settlement.</p>
+          {fuelAdjustment.limitations.map((limitation) => <p className="op-body-sm" key={limitation}>{limitation}</p>)}
+        </> : <p className="op-body-sm">{fuelAdjustment.reason} Missing: {fuelAdjustment.missingInputs.join("; ")}</p>}
+      </Reveal>}
+
+      <Reveal className="op-surface" style={{ marginTop: "var(--op-space-6)", padding: "var(--op-space-5)" }}>
+        <SampleBadge>Synthetic contractual indexation</SampleBadge>
+        <h2 className="op-heading-md">MRO price indexation, not headline inflation</h2>
+        <p className="op-body-sm">The synthetic MRO agreement indexes 80% of a USD 100,000 annual price. A synthetic index change from 300 to 315 is 5%; the weighted 4% formula change is limited by the contractual 3% cap. Revised synthetic annual price: USD {calculateSyntheticIndexation().calculation.revisedPrice.toLocaleString("en-US")}.</p>
+        <p className="op-body-sm">{SYNTHETIC_INDEXATION.disclosure}</p>
+        <Button to="/demo/intelligence">Explore the synthetic indexation calculation</Button>
+      </Reveal>
+
       <Reveal className="op-demo-preview-grid" style={{ marginTop: "var(--op-space-6)" }}>
-        <div className="op-surface" style={{ padding: "var(--op-space-5)" }}><SampleBadge>Financial Intelligence — In Development</SampleBadge><h2 className="op-heading-md" style={{ margin: "var(--op-space-3) 0 var(--op-space-2)" }}>Potential financial exposure</h2><p className="op-body-sm">A future intelligence layer could connect contractual mechanisms to financial exposure. No financial value is calculated in this public demo.</p></div>
+        <div className="op-surface" style={{ padding: "var(--op-space-5)" }}><SampleBadge>Prepared clause illustration</SampleBadge><h2 className="op-heading-md" style={{ margin: "var(--op-space-3) 0 var(--op-space-2)" }}>Potential financial exposure</h2><p className="op-body-sm">The aircraft lease sample shows one synthetic fuel-price clause calculation. No customer-specific, live-source, or portfolio-level financial exposure is calculated.</p></div>
         <div className="op-surface" style={{ padding: "var(--op-space-5)" }}><SampleBadge>Contract Comparison — In Development</SampleBadge><h2 className="op-heading-md" style={{ margin: "var(--op-space-3) 0 var(--op-space-2)" }}>Compare what matters</h2><p className="op-body-sm">A future comparison experience could highlight differences in service levels, obligations, penalties and termination structures.</p></div>
         <div className="op-surface" style={{ padding: "var(--op-space-5)" }}><SampleBadge>AI Assistant — In Development</SampleBadge><h2 className="op-heading-md" style={{ margin: "var(--op-space-3) 0 var(--op-space-2)" }}>Ask questions naturally</h2><p className="op-body-sm">Examples: “Which obligations are due soon?” or “Which clauses create financial exposure?” No generated answers are shown in this controlled demo.</p></div>
       </Reveal>

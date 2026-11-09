@@ -20,6 +20,7 @@ const publicRoutes = [
   "/scenarios",
   "/enterprise",
   "/about",
+  "/blog",
   "/demo/dashboard",
   "/demo/contracts",
   "/demo/contracts/demo-aircraft-lease/financial-impact",
@@ -64,16 +65,19 @@ test("authentication restores safe app destinations and defaults to dashboard", 
 });
 
 test("every intentionally indexable public route has route metadata and sitemap coverage", async () => {
-  const [metadata, sitemap] = await Promise.all([
+  const [metadata, sitemap, vercel] = await Promise.all([
     read("frontend/src/components/seo/RouteMetadata.jsx"),
-    read("frontend/public/sitemap.xml"),
+    read("controllers/blogController.js"),
+    read("frontend/vercel.json"),
   ]);
   for (const route of publicRoutes) {
     assert.match(metadata, new RegExp(`"${route.replaceAll("/", "\\/")}"`), `metadata missing for ${route}`);
-    assert.ok(sitemap.includes(`<loc>https://operionos.com${route}</loc>`), `sitemap missing ${route}`);
+    assert.ok(sitemap.includes(`"${route}"`), `dynamic sitemap missing ${route}`);
   }
-  assert.doesNotMatch(sitemap, /<loc>https:\/\/operionos\.com\/app(?:\/|<)/);
-  assert.doesNotMatch(sitemap, /<loc>https:\/\/operionos\.com\/login<\/loc>/);
+  assert.match(sitemap, /status = 'published' AND archived_at IS NULL AND is_indexable = TRUE/);
+  assert.doesNotMatch(sitemap, /\/app\//);
+  assert.doesNotMatch(sitemap, /\/login/);
+  assert.match(vercel, /"source": "\/sitemap\.xml"[\s\S]*?"destination": "\/api\/blog-sitemap"/);
 });
 
 test("private routes are noindex in HTML policy, robots, and Vercel headers", async () => {
@@ -88,7 +92,7 @@ test("private routes are noindex in HTML policy, robots, and Vercel headers", as
   assert.match(robots, /Disallow: \/app\r?\n/);
   assert.match(robots, /Disallow: \/app\//);
   assert.match(robots, /Sitemap: https:\/\/operionos\.com\/sitemap\.xml/);
-  assert.deepEqual(vercel.rewrites, [{ source: "/(.*)", destination: "/index.html" }]);
+  assert.equal(vercel.rewrites.at(-1).destination, "/index.html");
   const appHeaders = vercel.headers.filter((entry) => entry.source.startsWith("/app"));
   assert.equal(appHeaders.length, 2);
   assert.ok(appHeaders.every((entry) => entry.headers.some(({ key, value }) => key === "X-Robots-Tag" && value.includes("noindex"))));
@@ -117,6 +121,10 @@ test("public route components retain semantic primary headings", async () => {
     const source = file === "CorporateHome.jsx"
       ? await read("frontend/src/components/corporate/HomeSections.jsx")
       : await read(`frontend/src/routes/${file}`);
-    assert.match(source, /<h1(?:\s|>)/, `${file} must expose a semantic H1`);
+    assert.match(source, /<h1(?:\s|>)|<AeroHero\b/, `${file} must expose or render a semantic H1`);
+    if (!/<h1(?:\s|>)/.test(source)) {
+      const hero = await read("frontend/src/components/corporate/AeroHero.jsx");
+      assert.match(hero, /<h1(?:\s|>)/, `${file} relies on AeroHero to render a semantic H1`);
+    }
   }
 });

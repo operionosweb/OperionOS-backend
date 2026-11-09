@@ -1,7 +1,7 @@
 import React, { createContext, useContext } from "react";
-import { DEMO_CONTRACTS } from "../../../shared/mattDemoContracts.js";
+import { DEMO_CONTRACTS, getDemoEvidence } from "../../../shared/mattDemoContracts.js";
 
-export { DEMO_CONTRACTS };
+export { DEMO_CONTRACTS, getDemoEvidence };
 const primaryContract = DEMO_CONTRACTS[0];
 const DemoDataContext = createContext(null);
 
@@ -13,7 +13,7 @@ export function DemoDataProvider({ children }) {
     primaryContract,
     budget: { allocated: 5000, used: 1245, remaining: 3755, synthetic: true },
     getContract: (id) => DEMO_CONTRACTS.find((contract) => contract.id === id) || primaryContract,
-    getEvidence: (id) => primaryContract.evidence.find((item) => item.id === id),
+    getEvidence: getDemoEvidence,
   };
   return <DemoDataContext.Provider value={value}>{children}</DemoDataContext.Provider>;
 }

@@ -62,17 +62,19 @@ test("contract relationship reads require active tenant aircraft and contract sc
   const calls = [];
   const repository = createAviationRelationshipRepository(async (sql, params) => {
     calls.push({ sql, params });
-    return { rows: [{ id: "relationship-1", registration: "G-SYN1" }] };
+    return { rows: [{ id: "relationship-1", aircraft_id: "aircraft-1", registration: "G-SYN1", evidence_id: "evidence-1" }] };
   });
 
   const result = await repository.listByContract({ organizationId, contractId });
 
-  assert.deepEqual(result, [{ id: "relationship-1", registration: "G-SYN1" }]);
+  assert.deepEqual(result, [{ id: "relationship-1", aircraft_id: "aircraft-1", registration: "G-SYN1", evidence_id: "evidence-1" }]);
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0].params, [organizationId, contractId]);
   assert.match(calls[0].sql, /organization_relationship\.organization_id = relationship\.organization_id/);
   assert.match(calls[0].sql, /organization_relationship\.active = true/);
   assert.match(calls[0].sql, /relationship\.organization_id = \$1[\s\S]*relationship\.contract_id = \$2[\s\S]*relationship\.active = true/);
+  assert.match(calls[0].sql, /relationship\.aircraft_id/);
+  assert.match(calls[0].sql, /relationship\.source_evidence_id/);
 });
 
 test("contract relationship materialization requires evidence and active tenant aircraft", async () => {

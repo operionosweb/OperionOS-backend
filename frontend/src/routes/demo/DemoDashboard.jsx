@@ -80,7 +80,7 @@ export default function DemoDashboard({ headingLevel }) {
     <PageHeader eyebrow="Aviation Contract Intelligence Command Centre" title="Executive Cockpit" headingLevel={headingLevel}
       description="Understand the agreement. Locate the asset. Review the evidence. Decide the next action."
       actions={<><DemoBadge>ILLUSTRATIVE DEMO</DemoBadge><Link className="od-button od-button-primary" to="/demo/intelligence"><Bot size={16}/>Contract intelligence</Link></>}/>
-    <p className="od-command-disclosure">Prepared demonstration records, not customer findings. Non-lease demo records reuse sample lease evidence; their type-specific legal analysis is not validated. Forecasts, scenario simulation and digital twins are not operational. Review edits last only for this visit.</p>
+    <p className="od-command-disclosure">Synthetic demonstration records, not customer findings. Non-lease records are synthetic templates, not validated contract-type analysis; no lease findings or evidence are attributed to them. Amounts, risk and confidence labels are illustrative, not measured customer data. Forecasts, scenario simulation and digital twins are not operational. Review edits last only for this visit.</p>
     <section className="od-command-overview" aria-label="Aviation Contract Intelligence Overview">
       <div className="od-command-filters">
         <label>Search portfolio<input aria-label="Search portfolio" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Contract, asset or counterparty"/></label>

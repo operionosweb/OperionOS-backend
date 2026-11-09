@@ -38,16 +38,19 @@ function withEvidence(item) {
 function inMemoryRepository(intelligence) {
   const rows = [];
   const links = [];
+  const persistenceCalls = [];
   return {
     rows,
     links,
+    persistenceCalls,
     async listIntelligence() { return intelligence; },
     async listByRunScope(scope) {
       return rows.filter((row) => row.organization_id === scope.organizationId
         && row.document_version_id === scope.documentVersionId
         && row.analysis_run_id === scope.analysisRunId);
     },
-    async persistRisks({ risks }) {
+    async persistRisks({ risks, reconciliationGroups }) {
+      persistenceCalls.push({ risks, reconciliationGroups });
       let insertedRisks = 0;
       let insertedEvidenceLinks = 0;
       const persisted = [];
@@ -94,6 +97,9 @@ test("100-clause economics case screens to 10 deterministic candidates with zero
   assert.equal(result.estimatedIntelligence, 0);
   assert.equal(result.actualIntelligence, 0);
   assert.equal(result.risks.length, 10);
+  assert.deepEqual(repository.persistenceCalls[0].reconciliationGroups.map(({ riskVersion }) => riskVersion), [
+    "phase3e-contract-risk-v1:deterministic",
+  ]);
 });
 
 test("300-page synthetic contract sends only reduced candidates to AI and reuses gateway cache", async () => {
@@ -155,6 +161,13 @@ test("300-page synthetic contract sends only reduced candidates to AI and reuses
   assert.equal(first.actualIntelligence, 35);
   assert.equal(second.cacheHits, 1);
   assert.equal(repository.rows.length, 1);
+  assert.equal(first.risks[0].risk_version, "phase3e-contract-risk-v1:semantic");
+  assert.equal(first.risks[0].metadata.deterministic, false);
+  assert.deepEqual(repository.persistenceCalls[0].reconciliationGroups.map(({ riskVersion }) => riskVersion), [
+    "phase3e-contract-risk-v1:deterministic",
+    "phase3e-contract-risk-v1:semantic",
+    "phase3e-contract-risk-v1",
+  ]);
 });
 
 test("invalid semantic sources fail only their batch and preserve deterministic risks", async () => {
@@ -180,6 +193,9 @@ test("invalid semantic sources fail only their batch and preserve deterministic 
   assert.equal(result.failedCandidates.length, 1);
   assert.equal(result.risks.length, 1);
   assert.equal(result.risks[0].risk_type, "penalty_exposure");
+  assert.deepEqual(repository.persistenceCalls[0].reconciliationGroups.map(({ riskVersion }) => riskVersion), [
+    "phase3e-contract-risk-v1:deterministic",
+  ]);
 });
 
 test("severity calibration covers recurring, timing, financial, and explicit uncapped exposure", async () => {
@@ -208,6 +224,12 @@ test("Step 7 migration enforces identity, probability absence, and version scope
   assert.doesNotMatch(migration, /update public\.risks/i);
 });
 
+test("risk lifecycle migration permits resolved and superseded findings without rewriting rows", async () => {
+  const migration = await fs.readFile("supabase/migrations/023_contract_risk_finding_lifecycle.sql", "utf8");
+  assert.match(migration, /'resolved', 'superseded'/);
+  assert.doesNotMatch(migration, /update public\.risks/i);
+});
+
 test("risk persistence is idempotent and retains evidence provenance", async () => {
   const source = withEvidence(clause("Late payment incurs a fee of EUR 100,000."));
   const repository = inMemoryRepository({ clauses: [source], obligations: [], deadlines: [] });
@@ -221,6 +243,17 @@ test("risk persistence is idempotent and retains evidence provenance", async () 
   assert.equal(repository.rows.length, 1);
   assert.equal(repository.links.length, 1);
   assert.equal(repository.links[0].evidence_id, source.source_evidence_id);
+});
+
+test("persisted deterministic risks include a traceable action without adding an AI request", async () => {
+  const source = withEvidence(clause("Late payment incurs a fee of EUR 100,000."));
+  const metrics = {};
+  const repository = inMemoryRepository({ clauses: [source], obligations: [], deadlines: [] });
+  const result = await createContractRiskIntelligenceService({ repository, metrics }).runStage(SCOPE);
+
+  assert.equal(result.aiRequests, 0);
+  assert.match(result.risks[0].metadata.recommended_action, /trigger, amount, and applicable payment controls/i);
+  assert.match(repository.rows[0].metadata.recommended_action, /trigger, amount, and applicable payment controls/i);
 });
 
 test("contract version scopes do not inherit prior risk records", async () => {
@@ -238,6 +271,66 @@ test("contract version scopes do not inherit prior risk records", async () => {
   assert.equal(repository.rows.length, 2);
   assert.notEqual(repository.rows[0].document_version_id, repository.rows[1].document_version_id);
   assert.notEqual(repository.rows[0].analysis_run_id, repository.rows[1].analysis_run_id);
+});
+
+test("risk reads derive deadline findings only within the authenticated version scope", async () => {
+  const deadline = {
+    id: "deadline-1",
+    organization_id: SCOPE.organizationId,
+    contract_id: SCOPE.contractId,
+    document_id: SCOPE.documentId,
+    document_version_id: SCOPE.documentVersionId,
+    analysis_run_id: SCOPE.analysisRunId,
+    source_clause_id: "clause-1",
+    source_evidence_id: "evidence-1",
+    obligation_id: "obligation-1",
+    absolute_date: "2027-01-31",
+    status: "calculated",
+    computability: "calculable",
+    review_status: "verified",
+    confidence: 0.95,
+  };
+  const result = await readAnalysisRunRisks({
+    organizationId: SCOPE.organizationId,
+    analysisRunId: SCOPE.analysisRunId,
+    asOf: "2027-01-01",
+    analysisRunRepository: {
+      async getById(analysisRunId, organizationId) {
+        assert.equal(analysisRunId, SCOPE.analysisRunId);
+        assert.equal(organizationId, SCOPE.organizationId);
+        return {
+          id: SCOPE.analysisRunId,
+          organization_id: SCOPE.organizationId,
+          contract_id: SCOPE.contractId,
+          document_version_id: SCOPE.documentVersionId,
+        };
+      },
+    },
+    riskRepository: {
+      async listByRunScope(scope) {
+        assert.deepEqual(scope, SCOPE);
+        return [];
+      },
+      async listIntelligence(scope) {
+        assert.deepEqual(scope, SCOPE);
+        return {
+          clauses: [],
+          obligations: [{ id: "obligation-1", consequence: null }],
+          deadlines: [deadline],
+        };
+      },
+    },
+    documentVersionResolver: async (documentVersionId, organizationId) => ({
+      id: documentVersionId,
+      document_id: SCOPE.documentId,
+      organization_id: organizationId,
+    }),
+  });
+
+  assert.equal(result.length, 1);
+  assert.equal(result[0].risk_type, "upcoming_deadline_exposure");
+  assert.equal(result[0].document_version_id, undefined);
+  assert.equal(result[0].source_evidence_id, "evidence-1");
 });
 
 test("risk reads reject cross-tenant analysis runs before repository access", async () => {

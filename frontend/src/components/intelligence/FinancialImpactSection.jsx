@@ -19,6 +19,39 @@ function sourceTarget(node) {
   return null;
 }
 
+function obligationMatchesImpact(impact, obligation) {
+  if ((impact.sourceObligationIds || []).includes(obligation.id)) return true;
+  if (!impact.sourceClauseId || obligation.clause_id !== impact.sourceClauseId) return false;
+  const text = `${obligation.description || ""} ${obligation.action || ""} ${obligation.object || ""}`.toLowerCase();
+  switch (impact.category) {
+    case "base_rent":
+      return /\brent\b/.test(text) && !/maintenance reserve/.test(text);
+    case "maintenance_reserve": {
+      const component = impact.description.match(/^(airframe|engine|landing gear|apu)\b/i)?.[1]?.toLowerCase();
+      return /maintenance reserve/.test(text) && (!component || text.includes(component));
+    }
+    case "escalation_indexation":
+      return /\b(rent|escalat|increase|adjust)\b/.test(text) && !/maintenance reserve/.test(text);
+    case "security":
+      return /\b(security deposit|deposit|letter of credit)\b/.test(text);
+    default:
+      return false;
+  }
+}
+
+function linkedLeaseReviews(impact, obligations, assessment) {
+  const linkedObligations = obligations.filter((item) => obligationMatchesImpact(impact, item));
+  const obligationIds = new Set([
+    ...(impact.sourceObligationIds || []),
+    ...linkedObligations.map((item) => item.id),
+  ]);
+  const risks = (assessment?.risks || []).filter((item) => obligationIds.has(item.obligation_id));
+  const recommendations = (assessment?.recommendations || []).filter((item) => (
+    item.is_current && obligationIds.has(item.obligation_id)
+  ));
+  return { linkedObligations, risks, recommendations };
+}
+
 function FinancialImpactDrawer({ impact, onClose }) {
   const [selectedNode, setSelectedNode] = useState(impact.path[0]);
 
@@ -79,27 +112,42 @@ function FinancialImpactDrawer({ impact, onClose }) {
             <h3>Calculation</h3>
             <dl className="op-financial-details">
               <div><dt>Base amount</dt><dd>{formatMoney(impact.baseAmount, impact.currency)}</dd></div>
+              {impact.calculatedAmount !== null && <div><dt>One-period scenario</dt><dd>{formatMoney(impact.calculatedAmount, impact.currency)}</dd></div>}
               <div><dt>Method</dt><dd>{impact.calculationMethod.replaceAll("_", " ")}</dd></div>
+              {impact.calculationTimestamp && <div><dt>Calculated at</dt><dd>{impact.calculationTimestamp}</dd></div>}
+              {impact.adjustmentFrequency && <div><dt>Adjustment interval</dt><dd>{impact.adjustmentFrequency}</dd></div>}
+              {impact.paymentSchedule && <div><dt>Payment schedule</dt><dd>{impact.paymentSchedule.status === "requires_review"
+                ? `Conflicting due rules require human review: ${(impact.paymentSchedule.dueRuleCandidates || []).join(" / ")}`
+                : [impact.paymentSchedule.frequency, impact.paymentSchedule.dueRule].filter(Boolean).join(" — ") || "Contractual recurrence not established"}; no payment occurrence date is generated.</dd></div>}
               <div><dt>Trigger event</dt><dd>{impact.triggerEvent || "No future trigger identified; current contract terms apply."}</dd></div>
               <div><dt>Time horizon</dt><dd>{impact.timeHorizon || "Not established"}</dd></div>
               <div><dt>Confidence</dt><dd>{impact.confidence === null ? "Not established" : `${Math.round(impact.confidence * 100)}%`}</dd></div>
               <div><dt>Probability</dt><dd>{impact.probability === null ? "Not estimated" : `${Math.round(impact.probability * 100)}%`}</dd></div>
             </dl>
             {impact.calculation && <p className="op-financial-formula"><Calculator size={16} />{impact.calculation}</p>}
+            {impact.calculationInputs?.map((input) => (
+              <p className="op-body-sm" key={input.name}>
+                <strong>{input.name}:</strong>{" "}
+                {input.amount !== undefined ? formatMoney(input.amount, input.currency) : `${input.ratePercent}%`}
+                {input.inputDate ? ` · input date ${input.inputDate}` : " · input date not established"}
+              </p>
+            ))}
+            {impact.calculationLimitations?.map((limitation) => <p className="op-body-sm" key={limitation}><strong>Limitation:</strong> {limitation}</p>)}
             {impact.assumptions.map((assumption) => <p className="op-body-sm" key={assumption}>Assumption: {assumption}</p>)}
           </section>
 
           <section>
             <h3>Contract provenance</h3>
-            {impact.provenance.clause ? (
-              <button type="button" className="op-financial-source" onClick={() => inspectNode({ type: "clause", referenceId: impact.provenance.clause.id, id: "source-clause", label: impact.provenance.clause.title || "Source clause" })}>
-                <span>Clause {impact.provenance.clause.number || "number unavailable"}</span>
-                <strong>{impact.provenance.clause.title || "Untitled clause"}</strong>
-                <p>{impact.provenance.clause.text || "Clause text unavailable."}</p>
+            {(impact.provenance.clauses?.length ? impact.provenance.clauses : impact.provenance.clause ? [impact.provenance.clause] : []).map((clause) => (
+              <button type="button" className="op-financial-source" key={clause.id} onClick={() => inspectNode({ type: "clause", referenceId: clause.id, id: `source-clause:${clause.id}`, label: clause.title || "Source clause" })}>
+                <span>Clause {clause.number || "number unavailable"}</span>
+                <strong>{clause.title || "Contract source"}</strong>
+                <p>{clause.text || "Clause text unavailable."}</p>
               </button>
-            ) : <p className="op-body-sm">A source clause link is not available for this impact.</p>}
+            ))}
+            {!impact.provenance.clause && !impact.provenance.clauses?.length && <p className="op-body-sm">A source clause link is not available for this impact.</p>}
             {impact.provenance.obligations.map((item) => <p className="op-body-sm" key={item.id}><strong>Obligation:</strong> {item.description}</p>)}
-            {impact.provenance.deadlines.map((item) => <p className="op-body-sm" key={item.id}><strong>Deadline:</strong> {item.absoluteDate || item.timingExpression || "Timing unavailable"}</p>)}
+            {impact.provenance.deadlines.map((item) => <p className="op-body-sm" key={item.id}><strong>{item.relationship === "same_source_clause" ? "Deadline in the same source clause:" : "Deadline:"}</strong> {item.absoluteDate || item.timingExpression || "Timing unavailable"}</p>)}
             {impact.provenance.evidence.map((item, index) => (
               <blockquote key={item.evidenceId || index}>
                 <p>{item.excerpt || "Evidence excerpt unavailable."}</p>
@@ -124,7 +172,13 @@ function FinancialImpactDrawer({ impact, onClose }) {
   );
 }
 
-export default function FinancialImpactSection({ financialImpact, state = "ready" }) {
+export default function FinancialImpactSection({
+  financialImpact,
+  obligations = [],
+  deadlines = [],
+  leaseRiskAssessment = null,
+  state = "ready",
+}) {
   const [selectedImpact, setSelectedImpact] = useState(null);
 
   if (state === "loading") return <LoadingState label="Loading financial impact…" />;
@@ -155,20 +209,78 @@ export default function FinancialImpactSection({ financialImpact, state = "ready
       {financialImpact.missingInputs.length > 0 && <div className="op-honest-boundary"><strong>What is still needed for a reliable estimate</strong>{financialImpact.missingInputs.map((item) => <p key={item}>{item}</p>)}</div>}
       <div className="op-financial-impact-list">
         {financialImpact.impacts.map((impact) => (
-          <article className="op-financial-impact-card" key={impact.id}>
+          <FinancialImpactCard
+            impact={impact}
+            obligations={obligations}
+            deadlines={deadlines}
+            leaseRiskAssessment={leaseRiskAssessment}
+            key={impact.id}
+            onInspect={setSelectedImpact}
+          />
+        ))}
+      </div>
+      {selectedImpact && <FinancialImpactDrawer impact={selectedImpact} onClose={() => setSelectedImpact(null)} />}
+    </>
+  );
+}
+
+function FinancialImpactCard({ impact, obligations, deadlines, leaseRiskAssessment, onInspect }) {
+  const { linkedObligations, risks, recommendations } = linkedLeaseReviews(impact, obligations, leaseRiskAssessment);
+  const linkedDates = (impact.provenance.deadlines || [])
+    .map((item) => deadlines.find((deadline) => deadline.id === item.id))
+    .filter(Boolean);
+  return (
+    <article className="op-financial-impact-card">
             <header><div><span>{impact.category.replaceAll("_", " ")}</span><h3>{impact.description}</h3></div><span className={`op-status-badge${impact.exposureType === "event_driven" ? " is-neutral" : ""}`}>{impact.exposureType.replaceAll("_", " ")}</span></header>
             <div className="op-financial-impact-amount"><CircleDollarSign size={19} /><strong>{impact.resultLabel}</strong></div>
+            {impact.paymentSchedule && <p className="op-body-sm"><strong>Payment schedule:</strong> {impact.paymentSchedule.status === "requires_review"
+              ? `Conflicting due rules require human review: ${(impact.paymentSchedule.dueRuleCandidates || []).join(" / ")}`
+              : [impact.paymentSchedule.frequency, impact.paymentSchedule.dueRule].filter(Boolean).join(" — ") || "Contractual rule incomplete"}; next occurrence date not calculated.</p>}
+            {linkedDates.map((deadline) => (
+              <p className="op-body-sm" key={deadline.id}>
+                <strong>{deadline.monitoring ? "Phase 29 date monitoring" : "Related lifecycle date"}:</strong>{" "}
+                {deadline.monitoring?.status
+                  ? `${String(deadline.monitoring.status).replaceAll("_", " ")}${deadline.absolute_date ? ` — ${deadline.absolute_date}` : ""}`
+                  : deadline.absolute_date || deadline.timing_expression || "Timing not established"}
+                {deadline.monitoring && " · Date status does not establish payment or performance."}
+              </p>
+            ))}
             <dl>
               <div><dt>Event / condition</dt><dd>{impact.triggerEvent || "Current contract terms"}</dd></div>
               <div><dt>Clause</dt><dd>{impact.sourceClauseNumber || "Not linked"}</dd></div>
               <div><dt>Recommended action</dt><dd>{impact.mitigationAction || "No linked action"}</dd></div>
               <div><dt>Potential protected value</dt><dd>{formatMoney(impact.estimatedProtectedValue, impact.currency)}</dd></div>
             </dl>
-            <button type="button" className="op-button-secondary" onClick={() => setSelectedImpact(impact)}><Calculator size={16} />Why this amount?</button>
-          </article>
-        ))}
-      </div>
-      {selectedImpact && <FinancialImpactDrawer impact={selectedImpact} onClose={() => setSelectedImpact(null)} />}
-    </>
+            {(linkedObligations.length > 0 || risks.length > 0 || recommendations.length > 0) && (
+              <section
+                className="op-financial-lease-links op-surface-plane-secondary"
+                aria-label="Related lease intelligence"
+                style={{ padding: "var(--op-space-3)", marginTop: "var(--op-space-3)" }}
+              >
+                <strong>Related lease intelligence</strong>
+                {linkedObligations.map((obligation) => {
+                  const risk = risks.find((item) => item.obligation_id === obligation.id);
+                  const actions = recommendations.filter((item) => item.obligation_id === obligation.id);
+                  return (
+                    <div className="op-body-sm" key={obligation.id}>
+                      <p><strong>Obligation:</strong> {obligation.description}</p>
+                      {risk ? (
+                        <p><strong>Fulfilment review:</strong> {String(risk.assessment_status || "review status unavailable").replaceAll("_", " ")}. <strong>Phase 35 risk:</strong> {risk.title} ({risk.priority} review priority).</p>
+                      ) : leaseRiskAssessment === null
+                        ? <p>Lease risk review is loading or unavailable; no fulfilment status is inferred.</p>
+                        : <p>No active Phase 35 risk finding is linked to this obligation; this does not establish payment or performance.</p>}
+                      {actions.map((action) => (
+                        <p key={action.recommendation_key}>
+                          <strong>Phase 36 action:</strong> {action.action} ({String(action.status || "suggested").replaceAll("_", " ")}; suggested owner {String(action.owner_role || "not specified").replaceAll("_", " ")}).
+                        </p>
+                      ))}
+                      {leaseRiskAssessment === null && <p>Phase 36 action status is unavailable; no action state is inferred.</p>}
+                    </div>
+                  );
+                })}
+              </section>
+            )}
+            <button type="button" className="op-button-secondary" onClick={() => onInspect(impact)}><Calculator size={16} />Why this amount?</button>
+    </article>
   );
 }

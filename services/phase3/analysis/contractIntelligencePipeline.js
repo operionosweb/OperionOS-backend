@@ -156,7 +156,9 @@ export function createContractIntelligencePipeline({
           organizationId,
           contractId: scope.contractId,
           relationshipType: relationshipTypeFor(profile.classification),
-          identifiers: profile.aircraftIdentifiers,
+          identifiers: profile.metadata.assetIdentificationReview?.status === "requires_review"
+            ? []
+            : profile.aircraftIdentifiers,
         });
         pipelineStage = "analysis_run_state";
         persistenceOperation = "analysisRunRepository.updateStatus";
@@ -173,7 +175,14 @@ export function createContractIntelligencePipeline({
       } catch (error) {
         try {
           await analysisRunRepository.updateStatus({ analysisRunId, organizationId, status: "failed", startedAt, completedAt: new Date().toISOString(), errorCode: error.code || "PROCESSING_FAILED", errorMessage: "Contract intelligence processing failed" });
-        } catch {}
+        } catch (statusError) {
+          console.error("contract_intelligence_failure_status_update_failed", {
+            organizationId,
+            analysisRunId,
+            processingErrorCode: safePostgresIdentifier(error.code) || "PROCESSING_FAILED",
+            statusUpdateErrorCode: safePostgresIdentifier(statusError.code) || "STATUS_UPDATE_FAILED",
+          });
+        }
         const postgresCode = typeof error.code === "string" && /^[0-9A-Z]{5}$/i.test(error.code) ? error.code : null;
         console.warn("contract_intelligence_processing_failed", {
           organizationId,

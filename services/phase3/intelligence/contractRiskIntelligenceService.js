@@ -5,8 +5,11 @@ import { createRiskRepository } from "../../../repositories/phase3/riskRepositor
 import { assertOrganizationScope, assertResourceId } from "../../../repositories/phase3/scope.js";
 import { aiGateway } from "../../ai/aiGateway.js";
 import { isRiskType, RISK_CATEGORIES, RISK_TAXONOMY_VERSION } from "./riskTaxonomy.js";
+import { recommendRiskAction } from "./riskDecisionSupport.js";
 
 const PIPELINE_VERSION = "phase3e-contract-risk-v1";
+const DETERMINISTIC_RISK_VERSION = `${PIPELINE_VERSION}:deterministic`;
+const SEMANTIC_RISK_VERSION = `${PIPELINE_VERSION}:semantic`;
 const PROMPT_VERSION = "contract-risk-semantic-v1";
 const SCHEMA_VERSION = "phase3e.risk.v1";
 const AI_BATCH_SIZE = 10;
@@ -82,7 +85,7 @@ function makeCandidate({ clause, clauses = [clause], obligations = [], deadlines
     affected_obligation_ids: obligations.map((item) => item.id),
     affected_deadline_ids: deadlines.map((item) => item.id),
     evidence,
-    metadata: { ...metadata, deterministic: true },
+    metadata: { ...metadata, deterministic: metadata.deterministic !== false },
   };
 }
 
@@ -216,11 +219,13 @@ function clauseCandidates(clause, obligations, deadlines, allClauses) {
     }));
   }
 
-  const references = [...text.matchAll(/\b(Schedule|Appendix|Annex)\s+(\d+[A-Za-z]?)\b/gi)];
+  const references = [...text.matchAll(/\b(Schedule|Appendix|Annex|Section|Clause)\s+(\d+(?:\.\d+)*[A-Za-z]?)\b/gi)];
   for (const reference of references) {
     const label = `${reference[1]} ${reference[2]}`;
-    const located = allClauses.some((item) => item.id !== clause.id
-      && new RegExp(`^(?:${reference[1]}\\s+${reference[2]})\\b`, "i").test(sourceText(item)));
+    const isNumberedReference = ["Section", "Clause"].includes(reference[1]);
+    const located = allClauses.some((item) => item.id !== clause.id && (isNumberedReference
+      ? String(item.clause_number || "").replace(/\s+/g, "") === reference[2]
+      : new RegExp(`^(?:${reference[1]}\\s+${reference[2]})\\b`, "i").test(sourceText(item))));
     if (!located) {
       candidates.push(makeCandidate({
         clause, obligations: linkedObligations, category: "data_information", riskType: "information_dependency",
@@ -251,6 +256,11 @@ function deadlineCandidates(deadline, obligations, clausesById) {
     })];
   }
   if (Number(deadline.amount) > 0 && Number(deadline.amount) <= 5 && ["hours", "days", "business_days"].includes(deadline.unit)) {
+    const clauseText = sourceText(clause);
+    const isDefaultCurePeriod = /\bfailure to\b/i.test(clauseText)
+      && /\bconstitutes?\s+(?:an?\s+)?(?:event of\s+)?default\b/i.test(clauseText)
+      && linkedObligations.some((item) => /\b(?:uncured\s+(?:event of )?default|event of default)\b/i.test(item.description || ""));
+    if (isDefaultCurePeriod) return [];
     return [makeCandidate({
       clause, obligations: linkedObligations, deadlines: [deadline], category: "timing", riskType: "short_notice_period",
       title: "Short contractual response period",
@@ -431,13 +441,14 @@ function stageRow(candidate, scope) {
     affected_deadline_ids: candidate.affected_deadline_ids,
     condition: candidate.condition,
     status: candidate.status,
-    risk_version: PIPELINE_VERSION,
+    risk_version: candidate.metadata.deterministic === false ? SEMANTIC_RISK_VERSION : DETERMINISTIC_RISK_VERSION,
     metadata: {
       ...candidate.metadata,
       taxonomy_version: RISK_TAXONOMY_VERSION,
       prompt_version: PROMPT_VERSION,
       schema_version: SCHEMA_VERSION,
       source_intelligence_version: PIPELINE_VERSION,
+      recommended_action: recommendRiskAction(candidate.risk_type),
     },
     risk_identity: candidate.risk_identity,
     review_status: candidate.status === "requires_review" ? "requires_review" : "pending",
@@ -491,9 +502,26 @@ export function createContractRiskIntelligenceService({ repository = createRiskR
       }
       const aiAnalysisMs = now() - aiStartedAt;
       const risks = [...deterministic, ...semantic].filter((risk) => risk.evidence.length).map((risk) => stageRow(risk, scope));
-      const persisted = await repository.persistRisks({ ...scope, risks });
+      const reconciliationGroups = [{
+        riskVersion: DETERMINISTIC_RISK_VERSION,
+        riskIdentities: risks.filter((risk) => risk.risk_version === DETERMINISTIC_RISK_VERSION).map((risk) => risk.risk_identity),
+      }];
+      if (useAIFallback && !failedCandidates.length) {
+        reconciliationGroups.push({
+          riskVersion: SEMANTIC_RISK_VERSION,
+          riskIdentities: risks.filter((risk) => risk.risk_version === SEMANTIC_RISK_VERSION).map((risk) => risk.risk_identity),
+        });
+        reconciliationGroups.push({
+          riskVersion: PIPELINE_VERSION,
+          riskIdentities: risks.map((risk) => risk.risk_identity),
+        });
+      }
+      const persisted = await repository.persistRisks({ ...scope, risks, reconciliationGroups });
       return {
-        status: failedCandidates.length ? "partial_failure" : persisted.insertedRisks ? "risks_persisted" : risks.length ? "already_processed" : "no_material_risks",
+        status: failedCandidates.length ? "partial_failure"
+          : persisted.insertedRisks ? "risks_persisted"
+            : persisted.updatedRisks || persisted.supersededRisks ? "risks_reconciled"
+              : risks.length ? "already_processed" : "no_material_risks",
         ...persisted,
         totalClauses: intelligence.clauses.length,
         totalObligations: intelligence.obligations.length,

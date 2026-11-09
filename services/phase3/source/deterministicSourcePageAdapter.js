@@ -57,15 +57,28 @@ export function buildCanonicalPageSource({
   const candidatePages = [...pageRows]
     .filter((page) => page && typeof page === "object")
     .sort((left, right) => Number(left.page_number || 1) - Number(right.page_number || 1));
-  const hasTrustedPageOffsets = candidatePages.length > 0 && candidatePages.every((page) => {
+  const hasTrustedPageOffsets = candidatePages.length > 0 && candidatePages.every((page, index) => {
     const start = page.char_start;
     const end = page.char_end;
-    return Number.isInteger(start)
+    const pageText = Number.isInteger(start) && Number.isInteger(end)
+      ? text.slice(start, end)
+      : null;
+    const previousPage = candidatePages[index - 1];
+    const gap = previousPage && Number.isInteger(previousPage.char_end) && Number.isInteger(start)
+      ? text.slice(previousPage.char_end, start)
+      : null;
+    return page.page_number === index + 1
+      && Number.isInteger(start)
       && Number.isInteger(end)
       && start >= 0
-      && end > start
+      && end >= start
       && end <= text.length
-      && (typeof page.text_content !== "string" || page.text_content === text.slice(start, end));
+      && (index === 0 ? start === 0 : start >= previousPage.char_end && /^\s*$/u.test(gap))
+      && (index === candidatePages.length - 1 ? end === text.length : true)
+      && (typeof page.text_content !== "string" || page.text_content === pageText)
+      && (page.text_length === undefined || page.text_length === pageText.length)
+      && (page.text_hash === undefined || page.text_hash === null || page.text_hash === computeTextHash(pageText))
+      && (page.extraction_status === undefined || page.extraction_status === "completed");
   });
   const orderedPages = hasTrustedPageOffsets
     ? candidatePages.map((page, index) => {
@@ -153,7 +166,7 @@ export function buildCanonicalPageSource({
     pages: normalizedPages,
     sourceStatus,
     sourceLocator: (charStart, charEnd) => {
-      const page = orderedPages.find((candidate) => charStart >= candidate.char_start && charStart <= candidate.char_end);
+      const page = orderedPages.find((candidate) => charStart >= candidate.char_start && charStart < candidate.char_end);
       return page
         ? `document_version:${documentVersion.id}:page:${page.page_number}:char:${charStart}-${charEnd}`
         : `document_version:${documentVersion.id}:char:${charStart}-${charEnd}`;

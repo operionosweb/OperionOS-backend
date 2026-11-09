@@ -82,6 +82,219 @@ test("financial impact exposes lease commitments without inventing total recurri
   assert.match(result.missingInputs.join(" "), /Recurring rates are shown but not aggregated/);
 });
 
+test("annual fixed rent escalation is reproducible and links its contract inputs", () => {
+  const calculationTimestamp = "2026-11-09T08:00:00.000Z";
+  const result = buildFinancialImpact(fixture({
+    risks: [],
+    obligations: [{ id: "rent-obligation", clause_id: "rent-clause", description: "Pay monthly base rent." }],
+    deadlines: [
+      { id: "rent-deadline", source_clause_id: "rent-clause", timing_expression: "fifth business day of each month", recurrence: { frequency: "monthly" } },
+      { id: "unrelated-deadline", source_clause_id: "unrelated-clause", timing_expression: "before delivery" },
+    ],
+    profile: { metadata: { leaseIntelligence: { commercialTerms: {
+      baseRent: {
+        amount: 250000, currency: "USD", frequency: "monthly",
+        evidence: { evidenceId: "rent-evidence", evidenceText: "Monthly base rent of USD 250,000", sourceLocation: "clause:3", clauseId: "rent-clause", clauseNumber: "3" },
+      },
+      rentEscalation: {
+        ratePercent: 2.5, frequency: "annual", recurrenceRule: "On each anniversary of the Delivery Date",
+        formula: "Base Rent shall increase by 2.5 percent",
+        evidence: { evidenceId: "escalation-evidence", evidenceText: "On each anniversary of the Delivery Date, Base Rent shall increase by 2.5 percent.", sourceLocation: "clause:4", clauseId: "escalation-clause", clauseNumber: "4" },
+      },
+      paymentDates: [{
+        value: "fifth business day of each month",
+        evidence: { evidenceId: "payment-date-evidence", clauseId: "rent-clause" },
+      }],
+      maintenanceReserves: [{
+        coveredComponent: "airframe",
+        rate: { amount: 275, currency: "USD", unit: "flight_hour" },
+        paymentFrequency: "monthly",
+        evidence: { evidenceId: "reserve-evidence", evidenceText: "USD 275 per flight hour monthly", sourceLocation: "clause:5", clauseId: "reserve-clause" },
+      }],
+    } } } },
+    calculationTimestamp,
+  }));
+  const escalation = result.impacts.find((item) => item.category === "escalation_indexation");
+  const rent = result.impacts.find((item) => item.category === "base_rent");
+  const reserve = result.impacts.find((item) => item.category === "maintenance_reserve");
+
+  assert.equal(escalation.calculatedAmount, 256250);
+  assert.equal(escalation.currency, "USD");
+  assert.equal(escalation.calculationMethod, "fixed_annual_rate_one_period");
+  assert.equal(escalation.calculationTimestamp, calculationTimestamp);
+  assert.match(escalation.calculation, /250,000\.00.*2\.5.*256,250\.00/);
+  assert.equal(escalation.calculationInputs[0].inputDate, null);
+  assert.equal(escalation.calculationInputs[1].inputDate, null);
+  assert.match(escalation.calculationLimitations[0], /effective date and input observation dates are not established/i);
+  assert.deepEqual(escalation.provenance.clauses.map((item) => item.id), ["escalation-clause", "rent-clause"]);
+  assert.deepEqual(escalation.sourceEvidenceIds, ["escalation-evidence", "rent-evidence"]);
+  assert.deepEqual(result.summary.currentContractual, {});
+  assert.equal(rent.paymentSchedule.dueRule, "fifth business day of each month");
+  assert.equal(rent.paymentSchedule.nextPaymentDate, null);
+  assert.equal(rent.paymentSchedule.occurrenceDatesGenerated, false);
+  assert.deepEqual(rent.provenance.deadlines.map((item) => item.id), ["rent-deadline"]);
+  assert.deepEqual(rent.sourceObligationIds, []);
+  assert.equal(reserve.baseAmount, 275);
+  assert.equal(reserve.calculatedAmount, null);
+  assert.equal(reserve.unit, "flight_hour");
+  assert.equal(result.summary.currentContractual.USD, undefined);
+});
+
+test("conflicting base-rent terms remain unquantified with all candidate evidence", () => {
+  const result = buildFinancialImpact(fixture({
+    risks: [],
+    profile: { metadata: { leaseIntelligence: { commercialTerms: {
+      baseRent: null,
+      financialTermConflicts: [{
+        field: "base_rent",
+        description: "Multiple incompatible base-rent amounts or frequencies were found.",
+        candidates: [
+          { evidence: { evidenceId: "rent-evidence-1", evidenceText: "Monthly rent of USD 100,000", clauseId: "rent-clause-1" } },
+          { evidence: { evidenceId: "rent-evidence-2", evidenceText: "Monthly base rent of USD 125,000", clauseId: "rent-clause-2" } },
+        ],
+      }],
+    } } } },
+  }));
+  const conflict = result.impacts.find((item) => item.category === "financial_term_conflict");
+
+  assert.equal(conflict.baseAmount, null);
+  assert.deepEqual(conflict.sourceEvidenceIds, ["rent-evidence-1", "rent-evidence-2"]);
+  assert.deepEqual(conflict.provenance.clauses.map((item) => item.id), ["rent-clause-1", "rent-clause-2"]);
+  assert.ok(result.missingInputs.some((item) => /Conflicting base-rent terms/.test(item)));
+});
+
+test("conflicting escalation mechanisms are not calculated and retain candidate provenance", () => {
+  const result = buildFinancialImpact(fixture({
+    risks: [],
+    profile: { metadata: { leaseIntelligence: { commercialTerms: {
+      baseRent: { amount: 250000, currency: "USD", evidence: { evidenceId: "rent-evidence", evidenceText: "Monthly rent of USD 250,000", clauseId: "rent-clause" } },
+      rentEscalation: {
+        ratePercent: null,
+        formulaType: "conflicting",
+        formula: "Conflicting rent adjustment mechanisms were found; human review is required.",
+        evidence: null,
+        evidenceCandidates: [
+          { evidenceId: "fixed-evidence", evidenceText: "Base Rent shall increase by 2 percent annually.", clauseId: "fixed-clause" },
+          { evidenceId: "indexed-evidence", evidenceText: "Base Rent shall be adjusted annually by CPI.", clauseId: "indexed-clause" },
+        ],
+      },
+    } } } },
+    calculationTimestamp: "2026-11-09T08:00:00.000Z",
+  }));
+  const escalation = result.impacts.find((item) => item.category === "escalation_indexation");
+
+  assert.equal(escalation.calculatedAmount, null);
+  assert.equal(escalation.calculationMethod, "contractual_formula_requires_inputs");
+  assert.ok(escalation.calculationLimitations.some((item) => /Conflicting rent-adjustment mechanisms/.test(item)));
+  assert.deepEqual(escalation.sourceEvidenceIds, ["fixed-evidence", "indexed-evidence", "rent-evidence"]);
+});
+
+test("conflicting payment due rules remain visible and do not produce a payment date", () => {
+  const result = buildFinancialImpact(fixture({
+    risks: [],
+    profile: { metadata: { leaseIntelligence: { commercialTerms: {
+      baseRent: { amount: 250000, currency: "USD", evidence: { evidenceId: "rent-evidence", evidenceText: "Monthly rent of USD 250,000", clauseId: "rent-clause" } },
+      paymentDates: [
+        { value: "fifth business day of each month", evidence: { evidenceId: "payment-rule-1", evidenceText: "Payment due on the fifth business day", clauseId: "rent-clause" } },
+        { value: "tenth calendar day of each month", evidence: { evidenceId: "payment-rule-2", evidenceText: "Payment due on the tenth calendar day", clauseId: "rent-clause" } },
+      ],
+    } } } },
+  }));
+  const rent = result.impacts.find((item) => item.category === "base_rent");
+
+  assert.equal(rent.paymentSchedule.status, "requires_review");
+  assert.equal(rent.paymentSchedule.dueRule, null);
+  assert.deepEqual(rent.paymentSchedule.dueRuleCandidates, ["fifth business day of each month", "tenth calendar day of each month"]);
+  assert.equal(rent.paymentSchedule.nextPaymentDate, null);
+  assert.ok(rent.sourceEvidenceIds.includes("payment-rule-1"));
+  assert.ok(rent.sourceEvidenceIds.includes("payment-rule-2"));
+  assert.ok(result.missingInputs.some((item) => /Conflicting payment due rules/.test(item)));
+});
+
+test("indexed escalation mechanisms remain unquantified without sourced index observations", () => {
+  const mechanisms = [
+    ["cpi_index", /CPI\/index observations/],
+    ["interest_rate_index", /benchmark observations/],
+    ["foreign_exchange_index", /exchange-rate observations/],
+  ];
+  for (const [formulaType, limitation] of mechanisms) {
+    const result = buildFinancialImpact(fixture({
+      risks: [],
+      profile: { metadata: { leaseIntelligence: { commercialTerms: {
+        baseRent: { amount: 250000, currency: "USD", evidence: { evidenceId: "rent-evidence" } },
+        rentEscalation: {
+          ratePercent: null,
+          formulaType,
+          formula: "Base Rent shall be adjusted annually by the contractual index.",
+          frequency: "annual",
+          evidence: { evidenceId: `adjustment-${formulaType}`, evidenceText: "Base Rent shall be adjusted annually by the contractual index." },
+        },
+      } } } },
+      calculationTimestamp: "2026-11-09T08:00:00.000Z",
+    }));
+    const escalation = result.impacts.find((item) => item.category === "escalation_indexation");
+
+    assert.equal(escalation.calculatedAmount, null);
+    assert.equal(escalation.calculationMethod, "contractual_formula_requires_inputs");
+    assert.match(escalation.calculationLimitations.join(" "), limitation);
+  }
+});
+
+test("rent escalation fails closed when annual cadence or base rent is missing", () => {
+  const result = buildFinancialImpact(fixture({
+    risks: [],
+    profile: { metadata: { leaseIntelligence: { commercialTerms: {
+      rentEscalation: {
+        ratePercent: 2.5, formula: "Rent shall increase by 2.5 percent",
+        evidence: { evidenceId: "escalation-evidence", evidenceText: "Rent shall increase by 2.5 percent" },
+      },
+    } } } },
+  }));
+  const escalation = result.impacts.find((item) => item.category === "escalation_indexation");
+
+  assert.equal(escalation.calculatedAmount, null);
+  assert.equal(escalation.calculationMethod, "contractual_formula_requires_inputs");
+  assert.ok(result.missingInputs.some((item) => /annual escalation interval/.test(item)));
+  assert.ok(result.missingInputs.some((item) => /base rent amount and currency/.test(item)));
+});
+
+test("fixed rent escalation requires a valid calculation timestamp", () => {
+  const result = buildFinancialImpact(fixture({
+    risks: [],
+    profile: { metadata: { leaseIntelligence: { commercialTerms: {
+      baseRent: { amount: 100000, currency: "USD", evidence: { evidenceId: "rent-evidence" } },
+      rentEscalation: {
+        ratePercent: 2, formula: "Base Rent shall increase by 2 percent annually",
+        formulaType: "fixed_percentage", frequency: "annual",
+        evidence: { evidenceId: "escalation-evidence", evidenceText: "Base Rent shall increase by 2 percent annually" },
+      },
+    } } } },
+  }));
+  const escalation = result.impacts.find((item) => item.category === "escalation_indexation");
+
+  assert.equal(escalation.calculatedAmount, null);
+  assert.ok(escalation.calculationLimitations.some((item) => /calculation timestamp was not supplied/i.test(item)));
+});
+
+test("rent escalation does not treat null or blank numeric inputs as zero", () => {
+  const result = buildFinancialImpact(fixture({
+    risks: [],
+    profile: { metadata: { leaseIntelligence: { commercialTerms: {
+      baseRent: { amount: null, currency: "USD", evidence: { evidenceId: "rent-evidence" } },
+      rentEscalation: {
+        ratePercent: null, frequency: "annual", formula: "Rent shall increase by a stated annual percentage",
+        evidence: { evidenceId: "escalation-evidence", evidenceText: "Annual fixed rent adjustment" },
+      },
+    } } } },
+  }));
+  const escalation = result.impacts.find((item) => item.category === "escalation_indexation");
+
+  assert.equal(escalation.calculatedAmount, null);
+  assert.equal(escalation.calculationMethod, "contractual_formula_requires_inputs");
+  assert.ok(result.missingInputs.some((item) => /valid non-negative fixed escalation rate/.test(item)));
+  assert.ok(result.missingInputs.some((item) => /base rent amount and currency/.test(item)));
+});
+
 test("financial impact maps aviation late-return exposure without changing the amount", () => {
   const input = fixture();
   input.risks[0].title = "Late aircraft return";

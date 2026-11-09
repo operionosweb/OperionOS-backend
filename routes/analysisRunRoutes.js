@@ -12,6 +12,7 @@ import { createRiskRepository } from "../repositories/phase3/riskRepository.js";
 import { createEvidenceRepository } from "../repositories/phase3/evidenceRepository.js";
 import { createContractProfileRepository } from "../repositories/phase3/contractProfileRepository.js";
 import { createSearchChunkRepository } from "../repositories/phase3/searchChunkRepository.js";
+import { answerPortfolioContractQuestion } from "../services/phase3/intelligence/portfolioContractAssistantService.js";
 import { createAviationRelationshipRepository } from "../repositories/aviation/aviationRelationshipRepository.js";
 import { runDeterministicClauseStage } from "../services/phase3/intelligence/deterministicClauseService.js";
 import { createDeterministicObligationService, createGatewayObligationProvider } from "../services/phase3/intelligence/deterministicObligationService.js";
@@ -20,13 +21,30 @@ import { createContractRiskIntelligenceService, createGatewayRiskProvider } from
 import { answerContractQuestion } from "../services/phase3/intelligence/contractAssistantService.js";
 import { createContractIntelligencePipeline } from "../services/phase3/analysis/contractIntelligencePipeline.js";
 import { buildFinancialImpact } from "../services/phase3/intelligence/financialImpactService.js";
+import { buildAviationEventImpact, validateAviationEventInput } from "../services/phase3/intelligence/aviationEventImpactService.js";
 import { buildRoleBasedIntelligence, resolveUserIntelligenceContext } from "../services/phase3/intelligence/roleIntelligenceService.js";
+import { monitorDeadlines } from "../services/phase3/intelligence/deadlineMonitoringService.js";
+import { deriveDeadlineRiskFindings } from "../services/phase3/intelligence/riskDecisionSupport.js";
+import { createContractChangeIntelligenceService } from "../services/phase3/intelligence/contractChangeIntelligenceService.js";
+import { createObligationFulfilmentService } from "../services/phase3/intelligence/obligationFulfilmentService.js";
+import { createObligationFulfilmentRepository } from "../repositories/phase3/obligationFulfilmentRepository.js";
+import {
+  deriveAviationLeaseRiskAssessment,
+  hasExplicitAircraftLeaseUtilisationLimit,
+} from "../services/phase3/intelligence/aviationLeaseRiskAssessmentService.js";
+import { createAviationLeaseRecommendationRepository } from "../repositories/phase3/aviationLeaseRecommendationRepository.js";
+import { createAviationLeaseRecommendationService } from "../services/phase3/intelligence/aviationLeaseRecommendationService.js";
 import { aiGateway } from "../services/ai/aiGateway.js";
 import { assertOrganizationScope, assertResourceId } from "../repositories/phase3/scope.js";
 import supabase from "../config/supabase.js";
 import { toSafeHttpError } from "../utils/safeHttpError.js";
 
 const router = express.Router();
+const contractChangeIntelligence = createContractChangeIntelligenceService();
+const obligationFulfilment = createObligationFulfilmentService();
+const aviationLeaseRecommendations = createAviationLeaseRecommendationService({
+  repository: createAviationLeaseRecommendationRepository(),
+});
 
 function normalizeAnalysisRunError(error) {
   return toSafeHttpError(error, {
@@ -111,12 +129,15 @@ function sanitizeProfile(row) {
   return safeProfile;
 }
 
-async function resolveAnalysisRunScope({ organizationId, analysisRunId, analysisRunRepository, documentVersionResolver }) {
+async function resolveAnalysisRunScope({ organizationId, analysisRunId, analysisRunRepository, documentVersionResolver, requireCompleted = false }) {
   assertOrganizationScope(organizationId);
   assertResourceId(analysisRunId, "analysisRunId");
   const analysisRun = await analysisRunRepository.getById(analysisRunId, organizationId);
   if (!analysisRun || analysisRun.organization_id !== organizationId) {
     throw Object.assign(new Error("Analysis run not found"), { code: "ANALYSIS_RUN_NOT_FOUND", status: 404 });
+  }
+  if (requireCompleted && analysisRun.status !== "completed") {
+    throw Object.assign(new Error("This intelligence review requires a completed analysis"), { code: "ANALYSIS_NOT_COMPLETED", status: 422 });
   }
   const documentVersion = await documentVersionResolver(analysisRun.document_version_id, organizationId);
   if (!documentVersion || documentVersion.organization_id && documentVersion.organization_id !== organizationId) {
@@ -217,6 +238,7 @@ export async function readAnalysisRunObligations({
 export async function readAnalysisRunDeadlines({
   organizationId,
   analysisRunId,
+  asOf,
   analysisRunRepository = createAnalysisRunRepository(),
   deadlineRepository = createDeadlineRepository(),
   documentVersionResolver = async (documentVersionId, orgId) => {
@@ -228,12 +250,13 @@ export async function readAnalysisRunDeadlines({
   },
 }) {
   const scope = await resolveAnalysisRunScope({ organizationId, analysisRunId, analysisRunRepository, documentVersionResolver });
-  return (await deadlineRepository.listByRunScope(scope)).map(sanitizeDeadline);
+  return monitorDeadlines((await deadlineRepository.listByRunScope(scope)).map(sanitizeDeadline), { asOf });
 }
 
 export async function readAnalysisRunRisks({
   organizationId,
   analysisRunId,
+  asOf,
   analysisRunRepository = createAnalysisRunRepository(),
   riskRepository = createRiskRepository(),
   documentVersionResolver = async (documentVersionId, orgId) => {
@@ -245,7 +268,100 @@ export async function readAnalysisRunRisks({
   },
 }) {
   const scope = await resolveAnalysisRunScope({ organizationId, analysisRunId, analysisRunRepository, documentVersionResolver });
-  return (await riskRepository.listByRunScope(scope)).map(sanitizeRisk);
+  const [storedRisks, intelligence] = await Promise.all([
+    riskRepository.listByRunScope(scope),
+    riskRepository.listIntelligence(scope),
+  ]);
+  return deriveDeadlineRiskFindings({
+    deadlines: intelligence.deadlines,
+    obligations: intelligence.obligations,
+    existingRisks: storedRisks
+      .filter((risk) => !["superseded", "resolved"].includes(risk.status))
+      .map(sanitizeRisk),
+    asOf,
+  });
+}
+
+export async function readAnalysisRunAviationLeaseRiskAssessment({
+  organizationId,
+  analysisRunId,
+  asOf,
+  analysisRunRepository = createAnalysisRunRepository(),
+  riskRepository = createRiskRepository(),
+  profileRepository = createContractProfileRepository(),
+  fulfilmentRepository = createObligationFulfilmentRepository(),
+  recommendationRepository = createAviationLeaseRecommendationRepository(),
+  documentVersionResolver = async (documentVersionId, orgId) => {
+    const { data, error } = await supabase.from("document_versions")
+      .select("id, document_id, organization_id")
+      .eq("id", documentVersionId).eq("organization_id", orgId).maybeSingle();
+    if (error) throw Object.assign(new Error("Document version lookup failed"), { code: "STORAGE_ERROR", status: 503 });
+    return data || null;
+  },
+}) {
+  const scope = await resolveAnalysisRunScope({
+    organizationId,
+    analysisRunId,
+    analysisRunRepository,
+    documentVersionResolver,
+    requireCompleted: true,
+  });
+  const [profile, intelligence] = await Promise.all([
+    profileRepository.getByRun({ organizationId, analysisRunId }),
+    riskRepository.listIntelligence(scope),
+  ]);
+  const applicability = deriveAviationLeaseRiskAssessment({ profile, scope });
+  if (!applicability.applicable) {
+    return {
+      ...applicability,
+      organizationId: scope.organizationId,
+      contractId: scope.contractId,
+      documentVersionId: scope.documentVersionId,
+      analysisRunId: scope.analysisRunId,
+      recommendations: [],
+    };
+  }
+  const latestAssessments = await fulfilmentRepository.listLatestForRun({
+    scope,
+    obligationIds: intelligence.obligations.map((obligation) => obligation.id),
+  });
+  const clausesById = new Map(intelligence.clauses.map((clause) => [clause.id, clause]));
+  const utilisationObligations = intelligence.obligations.filter((obligation) => (
+    hasExplicitAircraftLeaseUtilisationLimit(clausesById.get(obligation.clause_id)?.source_text)
+  ));
+  const utilisationHistory = await Promise.all(utilisationObligations.map(async (obligation) => [
+    obligation.id,
+    await fulfilmentRepository.listByObligation({
+      organizationId: scope.organizationId,
+      contractId: scope.contractId,
+      obligationId: obligation.id,
+    }),
+  ]));
+  const utilizationHistoryByObligation = Object.fromEntries(utilisationHistory);
+  const assessment = deriveAviationLeaseRiskAssessment({
+    profile,
+    scope,
+    clauses: intelligence.clauses,
+    obligations: intelligence.obligations,
+    deadlines: intelligence.deadlines,
+    latestAssessments,
+    utilizationHistoryByObligation,
+    asOf,
+  });
+  const recommendations = await createAviationLeaseRecommendationService({
+    repository: recommendationRepository,
+  }).list({
+    scope,
+    risks: assessment.risks,
+  });
+  return {
+    ...assessment,
+    organizationId: scope.organizationId,
+    contractId: scope.contractId,
+    documentVersionId: scope.documentVersionId,
+    analysisRunId: scope.analysisRunId,
+    recommendations,
+  };
 }
 
 export async function readAnalysisRunEvidence({
@@ -351,6 +467,38 @@ export async function answerAnalysisRunQuestion({
   });
 }
 
+export async function answerPortfolioQuestion({
+  organizationId,
+  question,
+  searchRepository = createSearchChunkRepository(),
+  intelligenceReader = readPortfolioQuestionIntelligence,
+}) {
+  return answerPortfolioContractQuestion({ organizationId, question, searchRepository, intelligenceReader });
+}
+
+async function readPortfolioQuestionIntelligence({
+  organizationId,
+  analysisRunId,
+  question,
+  includeFinancial,
+  includeRecommendations,
+  includeAircraftRelationships,
+}) {
+  const [assistant, financialImpact, leaseAssessment, aircraftRelationships] = await Promise.all([
+    answerAnalysisRunQuestion({ organizationId, analysisRunId, question }),
+    includeFinancial
+      ? readAnalysisRunFinancialImpact({ organizationId, analysisRunId })
+      : null,
+    includeRecommendations
+      ? readAnalysisRunAviationLeaseRiskAssessment({ organizationId, analysisRunId })
+      : null,
+    includeAircraftRelationships
+      ? readAnalysisRunRelationships({ organizationId, analysisRunId })
+      : null,
+  ]);
+  return { assistant, financialImpact, leaseAssessment, aircraftRelationships };
+}
+
 export async function readAnalysisRunFinancialImpact({
   organizationId,
   analysisRunId,
@@ -377,7 +525,93 @@ export async function readAnalysisRunFinancialImpact({
     readers.risks(scope),
     readers.profile(scope).catch((error) => error.code === "CONTRACT_PROFILE_NOT_FOUND" ? null : Promise.reject(error)),
   ]);
-  return buildFinancialImpact({ contractId: analysisRun.contract_id, analysisRunId, clauses, obligations, deadlines, risks, profile });
+  return buildFinancialImpact({
+    contractId: analysisRun.contract_id,
+    analysisRunId,
+    clauses,
+    obligations,
+    deadlines,
+    risks,
+    profile,
+    calculationTimestamp: new Date().toISOString(),
+  });
+}
+
+export async function readAnalysisRunAviationEventImpact({
+  organizationId,
+  analysisRunId,
+  event,
+  analysisRunRepository = createAnalysisRunRepository(),
+  documentVersionResolver = async (documentVersionId, orgId) => {
+    const { data, error } = await supabase.from("document_versions")
+      .select("id, document_id, organization_id")
+      .eq("id", documentVersionId).eq("organization_id", orgId).maybeSingle();
+    if (error) throw Object.assign(new Error("Document version lookup failed"), { code: "STORAGE_ERROR", status: 503 });
+    return data || null;
+  },
+  readers = {
+    aircraftRelationships: ({ organizationId: orgId, contractId }) => createAviationRelationshipRepository()
+      .listByContract({ organizationId: orgId, contractId }),
+    clauses: readAnalysisRunClauses,
+    evidence: readAnalysisRunEvidence,
+    obligations: readAnalysisRunObligations,
+    deadlines: readAnalysisRunDeadlines,
+    risks: readAnalysisRunRisks,
+    riskAssessment: readAnalysisRunAviationLeaseRiskAssessment,
+    financialImpact: readAnalysisRunFinancialImpact,
+  },
+}) {
+  const validatedEvent = validateAviationEventInput(event);
+  const scope = await resolveAnalysisRunScope({
+    organizationId,
+    analysisRunId,
+    analysisRunRepository,
+    documentVersionResolver,
+    requireCompleted: true,
+  });
+  const assetRelationships = await readers.aircraftRelationships({
+    organizationId,
+    contractId: scope.contractId,
+  });
+  const matchingAssetRelationships = assetRelationships.filter((item) => item.aircraft_id === validatedEvent.assetId);
+  const assetRelationship = matchingAssetRelationships.find((item) => item.evidence_id) || matchingAssetRelationships[0];
+  if (!assetRelationship) {
+    throw Object.assign(new Error("No active evidence-backed aircraft relationship exists for this contract."), {
+      code: "AVIATION_ASSET_CONTRACT_RELATIONSHIP_NOT_FOUND",
+      status: 422,
+    });
+  }
+  if (!assetRelationship.evidence_id) {
+    throw Object.assign(new Error("The aircraft relationship has no available source evidence and cannot support an event review."), {
+      code: "AVIATION_ASSET_LINK_EVIDENCE_UNAVAILABLE",
+      status: 422,
+    });
+  }
+
+  const [clauses, evidence, obligations, deadlines, riskAssessment, financialImpact] = await Promise.all([
+    readers.clauses({ organizationId, analysisRunId }),
+    readers.evidence({ organizationId, analysisRunId }),
+    readers.obligations({ organizationId, analysisRunId }),
+    readers.deadlines({ organizationId, analysisRunId }),
+    readers.riskAssessment({ organizationId, analysisRunId }),
+    readers.financialImpact({ organizationId, analysisRunId }),
+  ]);
+  const risks = riskAssessment?.applicable
+    ? riskAssessment.risks
+    : await readers.risks({ organizationId, analysisRunId });
+  return buildAviationEventImpact({
+    contractId: scope.contractId,
+    analysisRunId,
+    event,
+    assetRelationship,
+    clauses,
+    evidence,
+    obligations,
+    deadlines,
+    risks,
+    financialImpact,
+    recommendations: riskAssessment?.recommendations || [],
+  });
 }
 
 export async function readAnalysisRunRoleIntelligence({
@@ -481,6 +715,19 @@ router.get("/:id/financial-impact", async (req, res) => {
   }
 });
 
+router.post("/:id/aviation-event-impact", async (req, res) => {
+  try {
+    const eventImpact = await readAnalysisRunAviationEventImpact({
+      organizationId: req.organization.id,
+      analysisRunId: req.params.id,
+      event: req.body?.event,
+    });
+    return res.json({ success: true, eventImpact });
+  } catch (error) {
+    return res.status(error.status || (error.code === "STORAGE_ERROR" ? 503 : 400)).json(normalizeAnalysisRunError(error));
+  }
+});
+
 router.get("/:id/role-intelligence", async (req, res) => {
   try {
     const intelligence = await readAnalysisRunRoleIntelligence({
@@ -508,6 +755,18 @@ router.get("/:id/search", async (req, res) => {
   }
 });
 
+router.post("/portfolio-assistant", async (req, res) => {
+  try {
+    const assistant = await answerPortfolioQuestion({
+      organizationId: req.organization.id,
+      question: req.body?.question,
+    });
+    return res.json({ success: true, assistant });
+  } catch (error) {
+    return res.status(error.status || (error.code === "STORAGE_ERROR" ? 503 : 400)).json(normalizeAnalysisRunError(error));
+  }
+});
+
 router.get("/:id/clauses", async (req, res) => {
   try {
     const clauses = await readAnalysisRunClauses({
@@ -515,6 +774,19 @@ router.get("/:id/clauses", async (req, res) => {
       analysisRunId: req.params.id,
     });
     return res.json({ success: true, clauses });
+  } catch (error) {
+    return res.status(error.status || 404).json(normalizeAnalysisRunError(error));
+  }
+});
+
+router.get("/:sourceAId/compare/:sourceBId", async (req, res) => {
+  try {
+    const comparison = await contractChangeIntelligence.compare({
+      organizationId: req.organization.id,
+      sourceAAnalysisRunId: req.params.sourceAId,
+      sourceBAnalysisRunId: req.params.sourceBId,
+    });
+    return res.json({ success: true, comparison });
   } catch (error) {
     return res.status(error.status || 404).json(normalizeAnalysisRunError(error));
   }
@@ -636,6 +908,38 @@ router.get("/:id/obligations", async (req, res) => {
     return res.status(error.status || 404).json(normalizeAnalysisRunError(error));
   }
 });
+
+router.get("/:id/obligations/:obligationId/fulfilment", async (req, res) => {
+  try {
+    const result = await obligationFulfilment.get({
+      organizationId: req.organization.id,
+      analysisRunId: req.params.id,
+      obligationId: req.params.obligationId,
+    });
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    return res.status(error.status || (error.code === "STORAGE_ERROR" ? 503 : 500)).json(normalizeAnalysisRunError(error));
+  }
+});
+
+router.post(
+  "/:id/obligations/:obligationId/fulfilment",
+  requireOrganizationPermission("contract:write"),
+  async (req, res) => {
+    try {
+      const result = await obligationFulfilment.assess({
+        organizationId: req.organization.id,
+        analysisRunId: req.params.id,
+        obligationId: req.params.obligationId,
+        reviewerUserId: req.user.id,
+        input: req.body,
+      });
+      return res.status(201).json({ success: true, ...result });
+    } catch (error) {
+      return res.status(error.status || (error.code === "STORAGE_ERROR" ? 503 : 500)).json(normalizeAnalysisRunError(error));
+    }
+  }
+);
 
 router.post("/:id/deadlines/analyze", requireOrganizationPermission("contract:analyze"), async (req, res) => {
   const metrics = {};
@@ -772,6 +1076,51 @@ router.get("/:id/risks", async (req, res) => {
     return res.status(error.status || 404).json(normalizeAnalysisRunError(error));
   }
 });
+
+router.get("/:id/aviation-lease-risk-assessment", async (req, res) => {
+  try {
+    const assessment = await readAnalysisRunAviationLeaseRiskAssessment({
+      organizationId: req.organization.id,
+      analysisRunId: req.params.id,
+    });
+    return res.json({ success: true, ...assessment });
+  } catch (error) {
+    return res.status(error.status || (error.code === "STORAGE_ERROR" ? 503 : 500)).json(normalizeAnalysisRunError(error));
+  }
+});
+
+router.post(
+  "/:id/aviation-lease-recommendations/:recommendationKey/decision",
+  requireOrganizationPermission("contract:write"),
+  async (req, res) => {
+    try {
+      const current = await readAnalysisRunAviationLeaseRiskAssessment({
+        organizationId: req.organization.id,
+        analysisRunId: req.params.id,
+      });
+      const recommendation = current.recommendations.find((item) => item.recommendation_key === req.params.recommendationKey);
+      if (!recommendation) {
+        throw Object.assign(new Error("Recommendation not found"), { code: "RECOMMENDATION_NOT_FOUND", status: 404 });
+      }
+      const decision = await aviationLeaseRecommendations.decide({
+        recommendation,
+        reviewerUserId: req.user.id,
+        input: req.body,
+      });
+      const refreshed = await readAnalysisRunAviationLeaseRiskAssessment({
+        organizationId: req.organization.id,
+        analysisRunId: req.params.id,
+      });
+      return res.json({
+        success: true,
+        decision,
+        recommendation: refreshed.recommendations.find((item) => item.recommendation_key === req.params.recommendationKey) || null,
+      });
+    } catch (error) {
+      return res.status(error.status || (error.code === "STORAGE_ERROR" ? 503 : 500)).json(normalizeAnalysisRunError(error));
+    }
+  }
+);
 
 router.get("/:id/evidence", async (req, res) => {
   try {

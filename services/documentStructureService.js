@@ -1,11 +1,13 @@
 import crypto from "node:crypto";
 
 const DEFAULT_CHUNK_SIZE = 4000;
-const HEADING_PATTERN = /^(?:(?:ARTICLE|SECTION)\s+)?(\d+(?:\.\d+)*)\s*(?:[-:.)]\s*|\s+)(.+)$/i;
+const HEADING_PATTERN = /^(?:(?:ARTICLE|SECTION)\s+)?(\d+(?:\.\d+)*(?:\([A-Za-z0-9]+\))*)\s*(?:[-:.)]\s*|\s+)(.+)$/i;
+const ANNEX_PATTERN = /^(SCHEDULE|ANNEX(?:E)?|APPENDIX|EXHIBIT|ATTACHMENT)\s+([A-Z0-9]+(?:[.-][A-Z0-9]+)*)\s*(?:[-:.)]\s*|\s+)?(.*)$/i;
 
 function isHeading(line) {
   const text = line.trim();
   if (!text || text.length > 120 || /[.;!?]$/.test(text)) return false;
+  if (ANNEX_PATTERN.test(text)) return true;
   const numbered = HEADING_PATTERN.exec(text);
   if (numbered && !/\b(shall|may|must|will|is|are|provide|required)\b/i.test(numbered[2])) return true;
   const letters = text.replace(/[^A-Za-z]/g, "");
@@ -14,6 +16,17 @@ function isHeading(line) {
 
 function headingDetails(line) {
   const text = line.trim();
+  const annex = ANNEX_PATTERN.exec(text);
+  if (annex) {
+    const structure = annex[1].toLowerCase() === "annexe"
+      ? "annex"
+      : annex[1].toLowerCase();
+    return {
+      heading: annex[3].trim() || `${annex[1]} ${annex[2]}`,
+      clauseNumber: `${annex[1]} ${annex[2]}`,
+      structure,
+    };
+  }
   const match = HEADING_PATTERN.exec(text);
   if (match) {
     const clauseNumber = match[1];
@@ -31,13 +44,13 @@ function buildPages(text) {
     pages.push({ pageNumber: index + 1, text: pageText, charStart: start, charEnd: end });
     start = end + 1;
   });
-  return pages.filter((page) => page.text.length > 0 || pages.length === 1);
+  return pages;
 }
 
 function buildSections(text) {
-  const lines = [...text.matchAll(/.*(?:\r\n|\n|\r|$)/g)]
+  const lines = [...text.matchAll(/[^\r\n\f]*(?:\r\n|\n|\r|\f|$)/g)]
     .filter((match) => match[0].length > 0)
-    .map((match) => ({ text: match[0].replace(/(?:\r\n|\n|\r)$/, ""), start: match.index }));
+    .map((match) => ({ text: match[0].replace(/(?:\r\n|\n|\r|\f)$/, ""), start: match.index }));
   const headings = lines.filter((line) => isHeading(line.text));
   if (!headings.length) {
     return [{ heading: "Document content", clauseNumber: null, structure: "unstructured", text, charStart: 0, charEnd: text.length, parentIndex: null }];
@@ -50,9 +63,7 @@ function buildSections(text) {
   headings.forEach((line, index) => {
     const details = headingDetails(line.text);
     const charEnd = headings[index + 1]?.start ?? text.length;
-    const parentNumber = details.clauseNumber?.includes(".")
-      ? details.clauseNumber.split(".").slice(0, -1).join(".")
-      : null;
+    const parentNumber = details.clauseNumber?.match(/^(.*)(?:\([^)]+\)|\.\d+)$/)?.[1] || null;
     const parentIndex = parentNumber
       ? sections.findIndex((section) => section.clauseNumber === parentNumber)
       : null;

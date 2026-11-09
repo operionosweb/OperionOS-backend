@@ -29,6 +29,9 @@ const Enterprise = lazy(() => import("./routes/Enterprise"));
 const Solutions = lazy(() => import("./routes/Solutions"));
 const About = lazy(() => import("./routes/About"));
 const Resources = lazy(() => import("./routes/Resources"));
+const BlogIndex = lazy(() => import("./routes/Blog").then((module) => ({ default: module.BlogIndex })));
+const BlogArticle = lazy(() => import("./routes/Blog").then((module) => ({ default: module.BlogArticle })));
+const BlogCMS = lazy(() => import("./routes/BlogCMS"));
 const Intelligence = lazy(() => import("./routes/Intelligence"));
 const ProductionDashboard = lazy(() => import("./routes/ProductionDashboard"));
 const ProductionContracts = lazy(() => import("./routes/ProductionContracts"));
@@ -94,6 +97,8 @@ export default function App() {
               <Route path="/contact" element={<Navigate to="/request-demo" replace />} />
               <Route path="/about" element={<About />} />
               <Route path="/resources" element={<Resources />} />
+              <Route path="/blog" element={<BlogIndex />} />
+              <Route path="/blog/:slug" element={<BlogArticle />} />
               <Route path="/intelligence" element={<Intelligence />} />
               <Route path="/privacy" element={<PrivacyPage />} />
               <Route path="/legal" element={<LegalPage />} />
@@ -115,6 +120,7 @@ export default function App() {
               <Route path="contracts/:id/analysis" element={<Navigate to=".." relative="path" replace />} />
               <Route path="upload" element={<RequireOrganizationPermission permission={ORGANIZATION_PERMISSIONS.CONTRACT_WRITE}><ProductionUpload /></RequireOrganizationPermission>} />
               <Route path="aviation" element={<ProductionIntelligence />} />
+              <Route path="admin/blog" element={<RequirePlatformPermission permission={PLATFORM_PERMISSIONS.PLATFORM_ADMIN}><BlogCMS /></RequirePlatformPermission>} />
               <Route path="internal/commercial-intelligence" element={<RequirePlatformPermission permission={PLATFORM_PERMISSIONS.COMMERCIAL_INTELLIGENCE_READ}><CommercialIntelligenceBoundary /></RequirePlatformPermission>} />
               <Route path="internal/commercial-intelligence/companies" element={<RequirePlatformPermission permission={PLATFORM_PERMISSIONS.COMMERCIAL_INTELLIGENCE_READ}><CommercialIntelligenceBoundary page="companies" /></RequirePlatformPermission>} />
               <Route path="internal/commercial-intelligence/companies/:companyId" element={<RequirePlatformPermission permission={PLATFORM_PERMISSIONS.COMMERCIAL_INTELLIGENCE_READ}><CommercialIntelligenceBoundary page="company" /></RequirePlatformPermission>} />

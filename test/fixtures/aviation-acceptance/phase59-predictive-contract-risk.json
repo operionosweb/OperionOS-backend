@@ -1,0 +1,434 @@
+{
+  "organizationId": "11111111-1111-4111-8111-111111111111",
+  "asOf": "2026-11-09",
+  "portfolio": {
+    "asOf": "2026-11-09",
+    "coverage": {
+      "portfolioInventoryComplete": false,
+      "runsTruncated": false,
+      "relationshipsTruncated": false
+    },
+    "contracts": [
+      {
+        "id": "22222222-2222-4222-8222-222222222201",
+        "title": "Synthetic N-101 Aircraft Lease",
+        "analysisRunId": "55555555-5555-4555-8555-555555552201",
+        "documentVersionId": "44444444-4444-4444-8444-444444442201"
+      },
+      {
+        "id": "22222222-2222-4222-8222-222222222202",
+        "title": "Synthetic N-101 Maintenance Agreement",
+        "analysisRunId": "55555555-5555-4555-8555-555555552202",
+        "documentVersionId": "44444444-4444-4444-8444-444444442202"
+      },
+      {
+        "id": "22222222-2222-4222-8222-222222222203",
+        "title": "Synthetic Aircraft Financing Agreement",
+        "analysisRunId": "55555555-5555-4555-8555-555555552203",
+        "documentVersionId": "44444444-4444-4444-8444-444444442203"
+      }
+    ],
+    "utilisationExposures": [
+      {
+        "contractId": "22222222-2222-4222-8222-222222222201",
+        "contractTitle": "Synthetic N-101 Aircraft Lease",
+        "analysisRunId": "55555555-5555-4555-8555-555555552201",
+        "documentVersionId": "44444444-4444-4444-8444-444444442201",
+        "clauseId": "lease-utilization-12",
+        "clauseNumber": "12",
+        "unit": "flight_hours",
+        "contractualLimit": 500,
+        "status": "approaching",
+        "recordedUtilisation": 420,
+        "headroom": 80,
+        "consumedPercent": 84,
+        "reportingPeriod": {
+          "start": "2026-01-01",
+          "end": "2026-11-09"
+        },
+        "sources": [
+          {
+            "evidenceId": "ev-usage-n101",
+            "sourceLocator": "Utilization report",
+            "pageNumber": 4,
+            "excerpt": "Verified recorded flight hours: 420; reporting period 2026-01-01 to 2026-11-09.",
+            "reviewStatus": "verified"
+          }
+        ],
+        "forecast": {
+          "status": "forecast_available",
+          "estimatedThresholdDate": "2026-12-01",
+          "daysToThreshold": 22,
+          "forecastAssumption": "Observed average daily utilisation remains constant.",
+          "sources": [
+            {
+              "evidenceId": "ev-forecast-n101",
+              "sourceLocator": "Utilization forecast",
+              "pageNumber": 4,
+              "excerpt": "Verified cumulative flight-hour history.",
+              "reviewStatus": "verified"
+            }
+          ]
+        },
+        "contractEvidence": [
+          {
+            "evidenceId": "ev-clause-util-n101",
+            "sourceLocator": "Lease clause 12",
+            "pageNumber": 12,
+            "excerpt": "The aircraft may not exceed 500 flight hours per lease year.",
+            "reviewStatus": "verified"
+          }
+        ],
+        "financialExposure": {
+          "currency": "USD",
+          "contractualProvision": {
+            "contractVersionId": "44444444-4444-4444-8444-444444442201",
+            "clauseId": "lease-utilization-12",
+            "clauseNumber": "12",
+            "unit": "flight_hours",
+            "measurementPeriod": "per lease year",
+            "evidence": [
+              {
+                "evidenceId": "ev-clause-util-n101",
+                "sourceLocator": "Lease clause 12",
+                "pageNumber": 12,
+                "excerpt": "The aircraft may not exceed 500 flight hours per lease year; excess hours are USD 500 per hour.",
+                "reviewStatus": "verified"
+              }
+            ]
+          },
+          "current": {
+            "status": "no_demonstrated_exposure",
+            "amount": 0,
+            "currency": "USD",
+            "sources": []
+          },
+          "projected": {
+            "status": "potential_future_exposure",
+            "amount": 2500,
+            "currency": "USD",
+            "measurementDate": "2026-12-31",
+            "calculation": "5 projected excess hours × USD 500 per hour = USD 2,500.",
+            "assumptions": ["Historical average daily utilization continues."],
+            "sources": [
+              {
+                "evidenceId": "ev-forecast-n101",
+                "sourceLocator": "Utilization forecast",
+                "pageNumber": 4,
+                "excerpt": "Verified cumulative flight-hour history.",
+                "reviewStatus": "verified"
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "financialExposure": {
+      "currentByCurrency": [],
+      "projectedByCurrency": [
+        {
+          "currency": "USD",
+          "amount": 2500
+        }
+      ],
+      "findings": [
+        {
+          "id": "financial-projected-util-12",
+          "kind": "projected",
+          "status": "potential_future_exposure",
+          "contractId": "22222222-2222-4222-8222-222222222201",
+          "contractTitle": "Synthetic N-101 Aircraft Lease",
+          "analysisRunId": "55555555-5555-4555-8555-555555552201",
+          "documentVersionId": "44444444-4444-4444-8444-444444442201",
+          "clauseId": "lease-utilization-12",
+          "clauseNumber": "12",
+          "unit": "flight_hours",
+          "amount": 2500,
+          "currency": "USD",
+          "evidence": [
+            {
+              "evidenceId": "ev-clause-util-n101",
+              "evidenceType": "contractual_provision",
+              "sourceLocator": "Lease clause 12",
+              "pageNumber": 12,
+              "excerpt": "The aircraft may not exceed 500 flight hours per lease year; excess hours are USD 500 per hour.",
+              "reviewStatus": "verified"
+            },
+            {
+              "evidenceId": "ev-forecast-n101",
+              "evidenceType": "forecast_utilisation",
+              "sourceLocator": "Utilization forecast",
+              "pageNumber": 4,
+              "excerpt": "Verified cumulative flight-hour history.",
+              "reviewStatus": "verified"
+            }
+          ]
+        }
+      ]
+    },
+    "aircraft": [
+      {
+        "aircraftId": "aircraft-n101",
+        "registration": "N-101",
+        "serialNumber": "MSN-101",
+        "status": "confirmed",
+        "confirmedContractIds": [
+          "22222222-2222-4222-8222-222222222201",
+          "22222222-2222-4222-8222-222222222202"
+        ],
+        "contracts": [
+          {
+            "contractId": "22222222-2222-4222-8222-222222222201",
+            "relationshipStatus": "confirmed",
+            "evidence": {
+              "evidenceId": "ev-aircraft-link-lease",
+              "sourceLocator": "Lease aircraft particulars",
+              "pageNumber": 2,
+              "reviewStatus": "verified"
+            }
+          },
+          {
+            "contractId": "22222222-2222-4222-8222-222222222202",
+            "relationshipStatus": "confirmed",
+            "evidence": {
+              "evidenceId": "ev-aircraft-link-mro",
+              "sourceLocator": "Maintenance covered aircraft",
+              "pageNumber": 3,
+              "reviewStatus": "verified"
+            }
+          }
+        ]
+      },
+      {
+        "aircraftId": "aircraft-unverified",
+        "registration": "N-999",
+        "status": "potential",
+        "confirmedContractIds": [],
+        "contracts": []
+      }
+    ]
+  },
+  "externalRisk": {
+    "asOf": "2026-11-09",
+    "coverage": {
+      "provisionsTruncated": false
+    },
+    "contractualAssessments": [
+      {
+        "id": "ext-fuel-lease",
+        "category": "fuel",
+        "status": "verified_contractual_relationship",
+        "mechanism": "explicit_fuel_price_adjustment",
+        "contractId": "22222222-2222-4222-8222-222222222201",
+        "contractTitle": "Synthetic N-101 Aircraft Lease",
+        "analysisRunId": "55555555-5555-4555-8555-555555552201",
+        "documentVersionId": "44444444-4444-4444-8444-444444442201",
+        "clauseId": "lease-fuel-14",
+        "clauseNumber": "14",
+        "evidence": {
+          "evidenceId": "ev-fuel-clause-lease",
+          "sourceLocator": "Lease clause 14",
+          "pageNumber": 14,
+          "excerpt": "A fuel adjustment is linked to the U.S. Gulf Coast jet fuel index.",
+          "reviewStatus": "verified"
+        },
+        "observation": {
+          "indicatorId": "fuel.jet.us.gulf_coast",
+          "value": 2.45,
+          "unit": "USD per gallon",
+          "currency": "USD",
+          "observationDate": "2026-11-06",
+          "retrievalTimestamp": "2026-11-09T08:00:00.000Z",
+          "sourceId": "eia",
+          "sourceName": "U.S. Energy Information Administration",
+          "sourceReference": "https://www.eia.gov/dnav/pet/hist/LeafHandler.ashx",
+          "freshnessStatus": "current",
+          "historical": false,
+          "updateStatus": "recorded"
+        },
+        "calculation": {
+          "status": "not_calculated",
+          "missingInputs": ["contractual adjustment formula", "contract quantity and payment amount"]
+        },
+        "recommendation": {
+          "action": "Verify the contractual formula, units, and applicability before quantifying any payment."
+        }
+      },
+      {
+        "id": "ext-fx-lease",
+        "category": "fx",
+        "status": "verified_contractual_relationship",
+        "mechanism": "explicit_foreign_currency_payment",
+        "contractId": "22222222-2222-4222-8222-222222222201",
+        "contractTitle": "Synthetic N-101 Aircraft Lease",
+        "analysisRunId": "55555555-5555-4555-8555-555555552201",
+        "documentVersionId": "44444444-4444-4444-8444-444444442201",
+        "clauseId": "lease-payment-8",
+        "clauseNumber": "8",
+        "contractualPayment": {
+          "amount": 1250000,
+          "currency": "USD",
+          "dueDate": "2026-12-01"
+        },
+        "evidence": {
+          "evidenceId": "ev-fx-clause-lease",
+          "sourceLocator": "Lease clause 8",
+          "pageNumber": 8,
+          "excerpt": "Monthly rent of USD 1,250,000 is payable on 2026-12-01.",
+          "reviewStatus": "verified"
+        },
+        "observation": {
+          "indicatorId": "fx.eur.usd",
+          "value": 1.1165,
+          "unit": "USD per EUR",
+          "currency": "USD",
+          "observationDate": "2026-11-06",
+          "retrievalTimestamp": "2026-11-09T08:00:00.000Z",
+          "sourceId": "ecb",
+          "sourceName": "European Central Bank",
+          "sourceReference": "https://data-api.ecb.europa.eu/service/data/EXR/D.USD.EUR.SP00.A",
+          "freshnessStatus": "current",
+          "historical": false,
+          "updateStatus": "recorded"
+        },
+        "calculation": {
+          "status": "not_calculated",
+          "missingInputs": ["organisation reporting currency", "hedge status and treasury position"]
+        },
+        "recommendation": {
+          "action": "Confirm reporting currency, payment timing, and hedge status with treasury."
+        }
+      },
+      {
+        "id": "ext-fx-financing",
+        "category": "fx",
+        "status": "verified_contractual_relationship",
+        "mechanism": "explicit_foreign_currency_payment",
+        "contractId": "22222222-2222-4222-8222-222222222203",
+        "contractTitle": "Synthetic Aircraft Financing Agreement",
+        "analysisRunId": "55555555-5555-4555-8555-555555552203",
+        "documentVersionId": "44444444-4444-4444-8444-444444442203",
+        "clauseId": "finance-payment-3",
+        "clauseNumber": "3",
+        "contractualPayment": {
+          "amount": 400000,
+          "currency": "USD",
+          "dueDate": "2026-12-15"
+        },
+        "evidence": {
+          "evidenceId": "ev-fx-financing",
+          "sourceLocator": "Financing clause 3",
+          "pageNumber": 3,
+          "excerpt": "A USD 400,000 payment is due on 2026-12-15.",
+          "reviewStatus": "verified"
+        },
+        "observation": {
+          "indicatorId": "fx.eur.usd",
+          "value": 1.1165,
+          "unit": "USD per EUR",
+          "currency": "USD",
+          "observationDate": "2026-11-06",
+          "retrievalTimestamp": "2026-11-09T08:00:00.000Z",
+          "sourceId": "ecb",
+          "sourceName": "European Central Bank",
+          "sourceReference": "https://data-api.ecb.europa.eu/service/data/EXR/D.USD.EUR.SP00.A",
+          "freshnessStatus": "current",
+          "historical": false,
+          "updateStatus": "recorded"
+        },
+        "calculation": {
+          "status": "not_calculated",
+          "missingInputs": ["organisation reporting currency", "hedge status and treasury position"]
+        },
+        "recommendation": {
+          "action": "Confirm reporting currency, payment timing, and hedge status with treasury."
+        }
+      },
+      {
+        "id": "ext-interest-financing",
+        "category": "interest",
+        "status": "verified_contractual_relationship",
+        "mechanism": "explicit_floating_reference_rate",
+        "contractId": "22222222-2222-4222-8222-222222222203",
+        "contractTitle": "Synthetic Aircraft Financing Agreement",
+        "analysisRunId": "55555555-5555-4555-8555-555555552203",
+        "documentVersionId": "44444444-4444-4444-8444-444444442203",
+        "clauseId": "finance-interest-6",
+        "clauseNumber": "6",
+        "benchmark": "SOFR",
+        "contractualRateTerms": {
+          "spreadBasisPoints": 250,
+          "resetFrequency": "monthly"
+        },
+        "evidence": {
+          "evidenceId": "ev-interest-financing",
+          "sourceLocator": "Financing clause 6",
+          "pageNumber": 6,
+          "excerpt": "The floating interest rate resets monthly at SOFR plus 250 bps.",
+          "reviewStatus": "verified"
+        },
+        "observation": {
+          "indicatorId": "interest.us.sofr",
+          "value": 3.92,
+          "unit": "percent per annum",
+          "currency": "USD",
+          "observationDate": "2026-11-06",
+          "retrievalTimestamp": "2026-11-09T08:00:00.000Z",
+          "sourceId": "nyfed",
+          "sourceName": "Federal Reserve Bank of New York",
+          "sourceReference": "https://markets.newyorkfed.org/static/docs/markets-api.html",
+          "freshnessStatus": "current",
+          "historical": false,
+          "updateStatus": "recorded"
+        },
+        "calculation": {
+          "status": "not_calculated",
+          "missingInputs": ["principal or payment amount", "next reset date", "day-count and accrual convention"]
+        },
+        "recommendation": {
+          "action": "Review the floating-rate methodology and required reset inputs."
+        }
+      },
+      {
+        "id": "ext-fuel-mro",
+        "category": "fuel",
+        "status": "verified_contractual_relationship",
+        "mechanism": "explicit_fuel_price_adjustment",
+        "contractId": "22222222-2222-4222-8222-222222222202",
+        "contractTitle": "Synthetic N-101 Maintenance Agreement",
+        "analysisRunId": "55555555-5555-4555-8555-555555552202",
+        "documentVersionId": "44444444-4444-4444-8444-444444442202",
+        "clauseId": "mro-fuel-2",
+        "clauseNumber": "2",
+        "evidence": {
+          "evidenceId": "ev-fuel-clause-mro",
+          "sourceLocator": "MRO clause 2",
+          "pageNumber": 2,
+          "excerpt": "The fuel surcharge uses the U.S. Gulf Coast jet fuel index.",
+          "reviewStatus": "verified"
+        },
+        "observation": {
+          "indicatorId": "fuel.jet.us.gulf_coast",
+          "value": 2.45,
+          "unit": "USD per gallon",
+          "currency": "USD",
+          "observationDate": "2026-11-06",
+          "retrievalTimestamp": "2026-11-09T08:00:00.000Z",
+          "sourceId": "eia",
+          "sourceName": "U.S. Energy Information Administration",
+          "sourceReference": "https://www.eia.gov/dnav/pet/hist/LeafHandler.ashx",
+          "freshnessStatus": "current",
+          "historical": false,
+          "updateStatus": "recorded"
+        },
+        "calculation": {
+          "status": "not_calculated",
+          "missingInputs": ["contractual adjustment formula", "contract quantity and payment amount"]
+        },
+        "recommendation": {
+          "action": "Verify the contractual formula, units, and applicability before quantifying any payment."
+        }
+      }
+    ]
+  }
+}

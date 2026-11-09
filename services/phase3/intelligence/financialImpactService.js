@@ -13,7 +13,10 @@ const CATEGORY_RULES = [
 ];
 
 function asMoney(value) {
-  return Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null;
+  if (value === null || value === undefined || typeof value === "boolean"
+    || typeof value === "string" && !value.trim()) return null;
+  const amount = Number(value);
+  return Number.isFinite(amount) && amount >= 0 ? amount : null;
 }
 
 function impactCategory(risk) {
@@ -31,14 +34,17 @@ function directEvidence(risk) {
 }
 
 function profileEvidence(finding) {
-  const evidence = finding?.evidence;
-  if (!evidence) return [];
-  return [{
-    evidenceId: evidence.evidenceId || null,
-    excerpt: evidence.evidenceText || null,
-    sourceLocator: evidence.sourceLocation || null,
-    pageNumber: evidence.pageNumber || null,
-  }].filter((item) => item.evidenceId || item.excerpt);
+  return [finding?.evidence, ...(finding?.evidenceCandidates || [])]
+    .filter(Boolean)
+    .map((evidence) => ({
+      evidenceId: evidence.evidenceId || null,
+      excerpt: evidence.evidenceText || null,
+      sourceLocator: evidence.sourceLocation || null,
+      pageNumber: evidence.pageNumber || null,
+      clauseId: evidence.clauseId || null,
+      clauseNumber: evidence.clauseNumber || null,
+    }))
+    .filter((item) => item.evidenceId || item.excerpt);
 }
 
 function addAmount(totals, currency, amount) {
@@ -64,7 +70,16 @@ function moneyLabel(amount, currency) {
   return new Intl.NumberFormat("en-GB", { style: "currency", currency, maximumFractionDigits: 2 }).format(amount);
 }
 
-export function buildFinancialImpact({ contractId, analysisRunId, clauses = [], obligations = [], deadlines = [], risks = [], profile = null } = {}) {
+export function buildFinancialImpact({
+  contractId,
+  analysisRunId,
+  clauses = [],
+  obligations = [],
+  deadlines = [],
+  risks = [],
+  profile = null,
+  calculationTimestamp = null,
+} = {}) {
   const clauseById = new Map(clauses.map((item) => [item.id, item]));
   const obligationById = new Map(obligations.map((item) => [item.id, item]));
   const deadlineById = new Map(deadlines.map((item) => [item.id, item]));
@@ -142,38 +157,156 @@ export function buildFinancialImpact({ contractId, analysisRunId, clauses = [], 
   const profileTerms = [
     commercialTerms.baseRent && { key: "base-rent", category: "base_rent", description: "Base rent", finding: commercialTerms.baseRent, frequency: commercialTerms.baseRent.frequency, aggregationEligible: false, nature: "explicit_contractual_amount" },
     commercialTerms.securityDeposit && { key: "security-deposit", category: "security", description: "Security deposit", finding: commercialTerms.securityDeposit, aggregationEligible: true, nature: "explicit_contractual_amount" },
-    commercialTerms.rentEscalation && { key: "rent-escalation", category: "escalation_indexation", description: "Rent escalation mechanism", finding: commercialTerms.rentEscalation, aggregationEligible: false, nature: "contractual_formula" },
+    commercialTerms.rentEscalation && { key: "rent-escalation", category: "escalation_indexation", description: "Rent escalation mechanism", finding: commercialTerms.rentEscalation, frequency: commercialTerms.rentEscalation.frequency, aggregationEligible: false, nature: "contractual_formula" },
+    ...(commercialTerms.financialTermConflicts || [])
+      .filter((conflict) => conflict.field === "base_rent")
+      .map((conflict, index) => ({
+        key: `financial-term-conflict-${index}`,
+        category: "financial_term_conflict",
+        description: "Conflicting base-rent terms",
+        finding: {
+          formula: conflict.description,
+          evidenceCandidates: (conflict.candidates || []).map((candidate) => candidate.evidence).filter(Boolean),
+        },
+        aggregationEligible: false,
+        nature: "conflicting_extracted_terms",
+      })),
     ...(commercialTerms.maintenanceReserves || []).map((reserve, index) => ({ key: `maintenance-reserve-${index}`, category: "maintenance_reserve", description: `${reserve.coveredComponent || "Component"} maintenance reserve`, finding: { ...reserve.rate, evidence: reserve.evidence }, frequency: reserve.paymentFrequency, unit: reserve.rate?.unit, aggregationEligible: false, nature: "explicit_contractual_rate", conditions: reserve.reimbursementMechanics || null })),
   ].filter(Boolean);
   const profileImpacts = profileTerms.map((term) => {
     const amount = asMoney(term.finding.amount);
     const currency = amount === null ? null : String(term.finding.currency || "").toUpperCase() || null;
     const formula = term.finding.formula || null;
-    const evidence = profileEvidence(term.finding);
-    const resultLabel = amount === null
+    const sourceClauseId = term.finding.evidence?.clauseId || null;
+    const linkedDeadlines = sourceClauseId
+      ? deadlines.filter((deadline) => (deadline.source_clause_id || deadline.clause_id || deadline.clauseId) === sourceClauseId)
+      : [];
+    const matchingPaymentDates = term.key === "base-rent" && sourceClauseId
+      ? (commercialTerms.paymentDates || []).filter((item) => item.evidence?.clauseId === sourceClauseId)
+      : [];
+    const paymentDateCandidates = [...new Map(matchingPaymentDates
+      .map((item) => [String(item.value || "").trim().toLowerCase(), item]))
+      .values()];
+    const paymentDateConflict = paymentDateCandidates.length > 1;
+    const matchingPaymentDate = paymentDateConflict ? null : paymentDateCandidates[0]?.value || null;
+    const paymentDateEvidence = profileEvidence({
+      evidenceCandidates: matchingPaymentDates.map((item) => item.evidence).filter(Boolean),
+    });
+    const baseRent = term.category === "escalation_indexation" ? commercialTerms.baseRent : null;
+    const baseRentAmount = asMoney(baseRent?.amount);
+    const baseRentCurrency = String(baseRent?.currency || "").toUpperCase() || null;
+    const rawEscalationRate = term.finding.ratePercent;
+    const escalationRate = (typeof rawEscalationRate === "number"
+      || typeof rawEscalationRate === "string" && rawEscalationRate.trim())
+      ? Number(rawEscalationRate)
+      : Number.NaN;
+    const formulaType = term.finding.formulaType || "fixed_percentage";
+    const escalationLimitations = [];
+    if (term.category === "escalation_indexation") {
+      if (formulaType === "cpi_index") escalationLimitations.push("CPI/index observations, reference dates, and the contractual adjustment interval are unavailable.");
+      else if (formulaType === "interest_rate_index") escalationLimitations.push("The contractual benchmark observations, reference dates, and adjustment interval are unavailable.");
+      else if (formulaType === "foreign_exchange_index") escalationLimitations.push("The contractual exchange-rate observations, reference dates, and adjustment interval are unavailable.");
+      else if (formulaType === "conflicting") escalationLimitations.push("Conflicting rent-adjustment mechanisms were found; human review is required before calculation.");
+      else {
+        if (formulaType !== "fixed_percentage" || !Number.isFinite(escalationRate) || escalationRate < 0) escalationLimitations.push("A valid non-negative fixed escalation rate is not established.");
+        if (term.finding.frequency !== "annual") escalationLimitations.push("An explicit annual escalation interval is not established.");
+      }
+      if (baseRentAmount === null || !baseRentCurrency) escalationLimitations.push("An evidence-backed base rent amount and currency are not available.");
+      if (!calculationTimestamp || !Number.isFinite(Date.parse(calculationTimestamp))) escalationLimitations.push("A valid calculation timestamp was not supplied.");
+    }
+    const calculatedAmount = term.category === "escalation_indexation" && formulaType === "fixed_percentage"
+      && !escalationLimitations.length
+      ? Number((baseRentAmount * (1 + escalationRate / 100)).toFixed(2))
+      : null;
+    const termEvidence = [...profileEvidence(term.finding), ...paymentDateEvidence];
+    const baseRentEvidence = term.category === "escalation_indexation" ? profileEvidence(baseRent) : [];
+    const evidence = [...new Map([...termEvidence, ...baseRentEvidence]
+      .map((item) => [`${item.evidenceId || ""}:${item.excerpt || ""}`, item])).values()];
+    const clauseEvidence = [
+      term.finding.evidence,
+      ...(term.finding.evidenceCandidates || []),
+      ...(term.category === "escalation_indexation" ? [baseRent?.evidence, ...(baseRent?.evidenceCandidates || [])] : []),
+      ...matchingPaymentDates.map((item) => item.evidence),
+    ]
+      .filter((item) => item?.clauseId);
+    const clausesById = new Map(clauseEvidence.map((item) => [item.clauseId, {
+      id: item.clauseId,
+      number: item.clauseNumber || null,
+      title: null,
+      text: item.evidenceText || null,
+    }]));
+    const resultLabel = calculatedAmount !== null
+      ? `${moneyLabel(calculatedAmount, baseRentCurrency)}${baseRent.frequency ? ` / ${baseRent.frequency}` : ""} after one annual adjustment`
+      : amount === null
       ? formula || "Amount not quantified"
       : `${moneyLabel(amount, currency)}${term.frequency ? ` / ${term.frequency}` : term.unit ? ` / ${term.unit.replaceAll("_", " ")}` : ""}`;
+    const linkedDeadlineDetails = linkedDeadlines.map((deadline) => ({
+      id: deadline.id,
+      timingExpression: deadline.timing_expression || null,
+      absoluteDate: deadline.absolute_date || null,
+      relationship: "same_source_clause",
+    }));
+    const paymentSchedule = term.frequency || term.unit || matchingPaymentDate || paymentDateConflict
+      ? {
+        frequency: term.frequency || null,
+        unit: term.unit || null,
+        dueRule: matchingPaymentDate || linkedDeadlines.map((deadline) => deadline.timing_expression).find(Boolean) || null,
+        dueRuleCandidates: paymentDateCandidates.map((item) => item.value).filter(Boolean),
+        nextPaymentDate: null,
+        occurrenceDatesGenerated: false,
+        status: paymentDateConflict ? "requires_review"
+          : term.frequency || matchingPaymentDate || linkedDeadlines.length ? "rule_identified" : "incomplete",
+      }
+      : null;
+    const calculationMethod = calculatedAmount !== null
+      ? "fixed_annual_rate_one_period"
+      : formula ? "contractual_formula_requires_inputs"
+        : amount === null ? "not_quantifiable_from_available_evidence"
+          : term.aggregationEligible ? "direct_contract_amount" : "direct_contract_rate";
+    const calculation = calculatedAmount !== null
+      ? `${moneyLabel(baseRentAmount, baseRentCurrency)} × (1 + ${escalationRate} / 100) = ${moneyLabel(calculatedAmount, baseRentCurrency)} after one annual adjustment`
+      : formula || (amount !== null ? `${resultLabel} stated in the evidence-linked contract profile` : null);
     const item = {
       id: `financial-impact:profile:${term.key}`,
       contractId, analysisRunId, sourceRiskId: null,
-      sourceClauseId: term.finding.evidence?.clauseId || null,
+      sourceClauseId,
       sourceClauseNumber: term.finding.evidence?.clauseNumber || null,
       sourceObligationIds: [], sourceDeadlineIds: [],
       sourceEvidenceIds: evidence.map((item) => item.evidenceId).filter(Boolean),
       category: term.category, exposureType: "current_contractual", financialNature: term.nature,
-      description: term.description, baseAmount: amount, currency,
+      description: term.description, baseAmount: amount, currency: currency || (calculatedAmount !== null ? baseRentCurrency : null),
       frequency: term.frequency || null, unit: term.unit || null, conditions: term.conditions || null,
       aggregationEligible: term.aggregationEligible,
-      calculationMethod: formula ? "contractual_formula_requires_inputs" : amount === null ? "not_quantifiable_from_available_evidence" : term.aggregationEligible ? "direct_contract_amount" : "direct_contract_rate",
-      calculation: formula || (amount !== null ? `${resultLabel} stated in the evidence-linked contract profile` : null),
-      assumptions: term.aggregationEligible ? ["The amount is stated directly in the contract."] : ["The stated rate is not converted into total exposure because the required duration or usage inputs are not established."],
+      calculatedAmount,
+      adjustmentFrequency: term.category === "escalation_indexation" ? term.finding.frequency || null : null,
+      recurrenceRule: term.category === "escalation_indexation" ? term.finding.recurrenceRule || null : null,
+      paymentSchedule,
+      calculationMethod,
+      calculation,
+      calculationTimestamp: calculatedAmount === null ? null : new Date(calculationTimestamp).toISOString(),
+      calculationInputs: calculatedAmount === null ? [] : [
+        { name: "Base rent", amount: baseRentAmount, currency: baseRentCurrency, inputDate: null, evidence: baseRentEvidence },
+        { name: "Fixed annual increase", ratePercent: escalationRate, currency: null, inputDate: null, evidence: termEvidence },
+      ],
+      calculationLimitations: calculatedAmount === null
+        ? escalationLimitations
+        : ["The adjustment effective date and input observation dates are not established; this is one-period arithmetic, not a due amount or forecast."],
+      assumptions: calculatedAmount !== null
+        ? ["Applies the stated fixed annual rate once to the evidence-backed base rent. Input dates are unavailable. This scenario does not establish that an adjustment is currently due or effective."]
+        : term.aggregationEligible ? ["The amount is stated directly in the contract."] : ["The stated rate is not converted into total exposure because the required duration or usage inputs are not established."],
       probability: null, confidence: term.finding.evidence?.confidence ?? null,
       timeHorizon: null, triggerEvent: null, consequence: null,
       mitigationAction: null, recommendationId: null,
       currentExposure: term.aggregationEligible ? amount : null, potentialEventExposure: null,
       estimatedExposureAfterMitigation: null, estimatedProtectedValue: null,
       resultLabel, remainingExposureLabel: "Remaining exposure not quantified", protectedValueLabel: "Protected value not quantified",
-      provenance: { clause: null, obligations: [], deadlines: [], evidence },
+      provenance: {
+        clause: clausesById.values().next().value || null,
+        clauses: [...clausesById.values()],
+        obligations: [],
+        deadlines: linkedDeadlineDetails,
+        evidence,
+      },
     };
     item.path = buildPath(item);
     if (term.aggregationEligible) {
@@ -204,6 +337,9 @@ export function buildFinancialImpact({ contractId, analysisRunId, clauses = [], 
     missingInputs: [
       !quantified.length && "No evidence-backed monetary amount was found in quantified risk findings.",
       profileImpacts.some((item) => !item.aggregationEligible && item.baseAmount !== null) && "Recurring rates are shown but not aggregated without evidence-backed duration or usage inputs.",
+      ...profileImpacts.flatMap((item) => item.calculationLimitations || []),
+      profileImpacts.some((item) => item.category === "financial_term_conflict") && "Conflicting base-rent terms are preserved as unquantified evidence; human review is required before relying on an amount or frequency.",
+      profileImpacts.some((item) => item.paymentSchedule?.status === "requires_review") && "Conflicting payment due rules share the financial-term clause; human review is required.",
       impacts.some((item) => item.mitigationAction && item.estimatedProtectedValue === null) && "Post-mitigation amounts are not present, so potential protected value cannot be calculated.",
       impacts.some((item) => item.exposureType === "event_driven" && item.probability === null) && "Event probabilities are unavailable; event-driven exposure is not probability-weighted.",
     ].filter(Boolean),

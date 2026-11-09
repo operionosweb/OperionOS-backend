@@ -16,7 +16,8 @@ export const RISK_TAXONOMY = Object.freeze({
   ]),
   timing: Object.freeze([
     "short_notice_period", "missed_deadline_exposure", "ambiguous_deadline",
-    "trigger_dependency", "recurring_compliance",
+    "trigger_dependency", "recurring_compliance", "upcoming_deadline_exposure",
+    "overdue_deadline_exposure", "conditional_deadline_exposure", "unresolved_lifecycle_requirement",
   ]),
   liability: Object.freeze([
     "broad_indemnity", "third_party_liability", "uncapped_liability", "insurance_gap",

@@ -120,6 +120,7 @@ function normalizeAnchor(value) {
     .replace(/[.,;:]$/, "")
     .replace(/\bbecoming aware of\b/i, "awareness of")
     .replace(/\breceipt of\b/i, "receipt of")
+    .replace(/\bexpiry date\b/i, "expiration date")
     .toLowerCase();
 }
 
@@ -152,7 +153,7 @@ function findRelative(text) {
 }
 
 function findEvent(text) {
-  const expirationDate = text.match(/\b(?:(on|at|upon|before|prior to|after|following)\s+)?(?:the\s+)?(Expiration Date)\b/i);
+  const expirationDate = text.match(/\b(?:(on|at|upon|before|prior to|after|following)\s+)?(?:the\s+)?(Expiration Date|Expiry Date)\b/i);
   if (expirationDate) {
     const relationship = expirationDate[1]?.toLowerCase();
     return {
@@ -161,6 +162,18 @@ function findEvent(text) {
         ? "before"
         : relationship === "after" || relationship === "following" ? "after" : "upon",
       anchor: normalizeAnchor(expirationDate[2]),
+    };
+  }
+
+  const definedDate = text.match(/\b(?:(on|at|upon|before|prior to|after|following)\s+)?(?:the\s+)?(Delivery Date|Effective Date|Execution Date|Termination Date)\b/i);
+  if (definedDate) {
+    const relationship = definedDate[1]?.toLowerCase();
+    return {
+      expression: definedDate[0],
+      direction: relationship === "before" || relationship === "prior to"
+        ? "before"
+        : relationship === "after" || relationship === "following" ? "after" : "upon",
+      anchor: normalizeAnchor(definedDate[2]),
     };
   }
 
@@ -188,7 +201,7 @@ function hasUnresolvedTemporalSignal(text) {
 }
 
 function findCurePeriodSource(obligationDescription, clauseText) {
-  if (!/\b(?:terminat\w*|uncured\s+(?:event of )?default|event of default)\b/i.test(obligationDescription || "")) return null;
+  if (!/\b(?:uncured\s+(?:event of )?default|event of default|cure period)\b/i.test(obligationDescription || "")) return null;
 
   return normalizeWhitespace(clauseText)
     .split(/(?<=[.!?])\s+/)
@@ -314,13 +327,13 @@ export function parseTemporalExpression(expression, options = {}) {
     };
   }
 
-  const monthlyBusinessDay = temporalText.match(/\b(?:on\s+)?the first Business Day of each month\b/i);
+  const monthlyBusinessDay = temporalText.match(/\b(?:on\s+)?the (first|second|third|fourth|fifth|last) Business Day of each month\b/i);
   if (monthlyBusinessDay) {
     return {
       deadline_type: "recurring",
       timing_expression: monthlyBusinessDay[0],
       condition,
-      recurrence: { frequency: "monthly", ordinal: "first", calendar_type: "business" },
+      recurrence: { frequency: "monthly", ordinal: monthlyBusinessDay[1].toLowerCase(), calendar_type: "business" },
       calendar_type: "business",
       computability: "recurrence_rule",
       absolute_date: null,
@@ -345,6 +358,22 @@ export function parseTemporalExpression(expression, options = {}) {
 
   const event = findEvent(temporalText);
   if (event) {
+    if (options.anchorDate && event.direction === "upon") {
+      return {
+        deadline_type: "absolute",
+        timing_expression: event.expression,
+        condition,
+        trigger_type: "event",
+        trigger_expression: event.anchor,
+        anchor_reference: event.anchor,
+        direction: event.direction,
+        computability: "absolute",
+        absolute_date: options.anchorDate,
+        status: "calculated",
+        ambiguity: null,
+        confidence: 0.99,
+      };
+    }
     return {
       deadline_type: condition ? "conditional" : "event_based",
       timing_expression: event.expression,
@@ -360,6 +389,7 @@ export function parseTemporalExpression(expression, options = {}) {
     };
   }
 
+  if (/\b(?:throughout|during)\s+(?:the\s+)?(?:term|extension)\b/i.test(temporalText)) return null;
   if (!hasUnresolvedTemporalSignal(originalExpression)) return null;
 
   return {
@@ -376,26 +406,43 @@ export function parseTemporalExpression(expression, options = {}) {
 
 function extractDateDefinitions(clauses) {
   const definitions = new Map();
+  const addDefinition = (anchor, clause, expression, dateExpression) => {
+    const parsed = parseAbsoluteDate(dateExpression);
+    const candidate = {
+      date: parsed?.date && !parsed.ambiguous ? parsed.date : null,
+      source_clause_id: clause.id,
+      source_evidence_id: clause.source_evidence_id || null,
+      expression,
+      ambiguity: parsed?.reason || (!parsed ? "Date expression is not in a supported format" : null),
+    };
+    const existing = definitions.get(anchor);
+    const candidates = [...(existing?.candidates || (existing ? [existing] : [])), candidate];
+    const dates = new Set(candidates.map((item) => item.date).filter(Boolean));
+    const conflict = candidates.some((item) => !item.date) || dates.size > 1;
+    definitions.set(anchor, {
+      ...candidate,
+      date: conflict ? null : candidate.date,
+      conflict,
+      candidates,
+      ambiguity: conflict
+        ? dates.size > 1
+          ? `Conflicting ${anchor} definitions require reviewer reconciliation`
+          : `Unresolved ${anchor} definition requires reviewer reconciliation`
+        : null,
+    });
+  };
+
   for (const clause of clauses) {
     const text = normalizeWhitespace(clause.source_text);
-    for (const match of text.matchAll(/\b(Effective Date|Execution Date|Delivery Date|Termination Date|Expiration Date)\b\s+(?:means|is|shall be)\s+([^.;]+)/gi)) {
-      const parsed = parseAbsoluteDate(match[2]);
-      const key = match[1].toLowerCase();
-      const candidate = {
-        date: parsed?.date && !parsed.ambiguous ? parsed.date : null,
-        source_clause_id: clause.id,
-        source_evidence_id: clause.source_evidence_id || null,
-        expression: match[0],
-      };
-      const candidates = [...(definitions.get(key)?.candidates || []), candidate];
-      const dates = new Set(candidates.map((entry) => entry.date));
-      const ambiguous = dates.size !== 1 || dates.has(null);
-      definitions.set(key, {
-        ...candidates[0],
-        date: ambiguous ? null : candidate.date,
-        ambiguity: ambiguous ? `Conflicting or unresolved definitions of ${key} require reviewer reconciliation` : null,
-        candidates,
-      });
+    const definedDates = /\b(Effective Date|Execution Date|Delivery Date|Termination Date|Expiration Date|Expiry Date)\b\s*(?::|means|is|shall be)\s*([^.;]+)/gi;
+    for (const match of text.matchAll(definedDates)) {
+      const anchor = match[1].toLowerCase() === "expiry date" ? "expiration date" : match[1].toLowerCase();
+      addDefinition(anchor, clause, match[0], match[2]);
+    }
+
+    const termEnds = /\b(?:lease\s+)?term\s+(?:expires|ends)\s+(?:on\s+)?([^.;]+)/gi;
+    for (const match of text.matchAll(termEnds)) {
+      addDefinition("expiration date", clause, match[0], match[1]);
     }
   }
   return definitions;
@@ -463,9 +510,17 @@ export function createDeadlineIntelligenceService({ repository = createDeadlineR
         let interpretation = parseTemporalExpression(sourceExpression, { condition: obligation.condition, clauseText: clause?.source_text });
         if (!interpretation) continue;
         const definition = interpretation?.anchor_reference ? definitions.get(interpretation.anchor_reference.toLowerCase()) : null;
-        if (definition?.ambiguity) {
-          interpretation = { ...interpretation, deadline_type: "ambiguous", computability: "ambiguous", absolute_date: null, status: "ambiguous", ambiguity: definition.ambiguity, confidence: 0.4 };
-        } else if (definition) {
+        if (definition?.conflict) {
+          interpretation = {
+            ...interpretation,
+            deadline_type: "ambiguous",
+            computability: "ambiguous",
+            absolute_date: null,
+            status: "ambiguous",
+            ambiguity: definition.ambiguity,
+            confidence: Math.min(interpretation.confidence || 0.6, 0.6),
+          };
+        } else if (definition?.date) {
           interpretation = parseTemporalExpression(sourceExpression, { condition: obligation.condition, clauseText: clause?.source_text, anchorDate: definition.date });
         }
         const primaryEvidence = obligation.evidence.find((link) => link.is_primary) || obligation.evidence[0];

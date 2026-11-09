@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   Bot,
   BrainCircuit,
+  BookOpen,
   CalendarClock,
   ChevronDown,
   CircleDollarSign,
@@ -101,6 +102,12 @@ export default function ProductionLayout() {
             <>
               <span className="op-product-nav-label">Operion internal</span>
               <NavItem to="/app/internal/commercial-intelligence" label="Commercial Intelligence" icon={BrainCircuit} />
+            </>
+          )}
+          {auth.hasPlatformPermission(PLATFORM_PERMISSIONS.PLATFORM_ADMIN) && (
+            <>
+              <span className="op-product-nav-label">Super Admin</span>
+              <NavItem to="/app/admin/blog" label="Insights CMS" icon={BookOpen} />
             </>
           )}
 

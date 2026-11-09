@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildDeterministicObligationCandidate,
+  buildDeterministicObligationCandidates,
   createGatewayObligationProvider,
 } from "../services/phase3/intelligence/deterministicObligationService.js";
 
@@ -27,6 +28,48 @@ test("deterministic preprocessing preserves conditional triggers and timing", ()
   assert.match(candidate.condition, /^If the Aircraft remains out of service/);
   assert.equal(candidate.timing_expression, "within 30 days");
   assert.equal(candidate.modality, "conditional");
+});
+
+test("financial obligation objects preserve thousands separators in amounts", () => {
+  const candidate = buildDeterministicObligationCandidate({
+    source_text: "The Lessee shall pay monthly rent of USD 175,000 on the fifth business day of each month.",
+  });
+
+  assert.match(candidate.object, /monthly rent of USD 175,000/);
+});
+
+test("multiple explicit lease duties are extracted while passive insurance terms remain unassigned", () => {
+  const candidates = buildDeterministicObligationCandidates({
+    source_text: `INSURANCE
+The Lessee shall maintain aviation liability insurance throughout the Term.
+The Lessor and Owner shall be named as additional insureds.
+The policy shall include a waiver of subrogation.
+The Lessee shall provide renewal evidence no later than 15 days before policy expiry.`,
+  });
+
+  assert.deepEqual(candidates.map(({ actor, action }) => [actor, action]), [
+    ["Lessee", "maintain"],
+    ["Lessee", "provide"],
+  ]);
+  assert.match(candidates[1].object, /^renewal evidence/);
+  assert.match(candidates[1].timing_expression, /15 days before policy expiry/i);
+});
+
+test("lease rejection rights and assignment restrictions retain their distinct modalities", () => {
+  const candidates = buildDeterministicObligationCandidates({
+    source_text: `If the Aircraft fails the Acceptance Criteria, the Lessee may reject delivery by written notice within 3 days.
+The Lessee shall not assign this Agreement without the Lessor's prior written consent.
+The Lessee shall not sublease the Aircraft without the Lessor's prior written consent.`,
+  });
+
+  assert.deepEqual(candidates.map(({ action, modality }) => [action, modality]), [
+    ["reject", "discretionary"],
+    ["assign", "prohibited"],
+    ["sublease", "prohibited"],
+  ]);
+  assert.equal(candidates[0].condition, "If the Aircraft fails the Acceptance Criteria");
+  assert.equal(candidates[1].condition, "without the Lessor's prior written consent");
+  assert.equal(candidates[2].condition, "without the Lessor's prior written consent");
 });
 
 test("deterministic preprocessing recognizes explicit termination actions without noun overmatch", () => {

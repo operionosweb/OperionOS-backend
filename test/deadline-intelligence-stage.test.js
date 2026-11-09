@@ -152,6 +152,106 @@ test("Effective Date definitions resolve deterministically with auditable anchor
   assert.equal(deadline.metadata.calculation.result, "2026-10-01");
 });
 
+test("Expiration Date definitions link an extension notice across clauses with auditable calculation evidence", async () => {
+  const extensionClauseId = crypto.randomUUID();
+  const expirationClauseId = crypto.randomUUID();
+  const expirationEvidenceId = crypto.randomUUID();
+  const source = obligation(
+    "The Lessee may extend the Term for 12 months by giving the Lessor 180 calendar days' written notice before the Expiration Date.",
+    { clause_id: extensionClauseId }
+  );
+  const repository = inMemoryRepository({
+    obligations: [source],
+    clauses: [
+      { id: extensionClauseId, source_text: source.description },
+      {
+        id: expirationClauseId,
+        source_evidence_id: expirationEvidenceId,
+        source_text: "Expiration Date: 31 December 2031.",
+      },
+    ],
+  });
+  const result = await createDeadlineIntelligenceService({ repository }).runStage(SCOPE);
+  const deadline = result.deadlines[0];
+
+  assert.equal(deadline.deadline_type, "relative");
+  assert.equal(deadline.anchor_reference, "expiration date");
+  assert.equal(deadline.absolute_date, "2031-07-04");
+  assert.equal(deadline.status, "calculated");
+  assert.equal(deadline.metadata.anchor_source.source_clause_id, expirationClauseId);
+  assert.equal(deadline.metadata.anchor_source.source_evidence_id, expirationEvidenceId);
+  assert.deepEqual(deadline.metadata.calculation, {
+    anchor_date: "2031-12-31",
+    offset: 180,
+    unit: "days",
+    direction: "before",
+    method: "utc_calendar_arithmetic",
+    reason: null,
+    result: "2031-07-04",
+  });
+});
+
+test("conflicting expiry definitions keep dependent extension deadlines unresolved", async () => {
+  const extensionClauseId = crypto.randomUUID();
+  const source = obligation(
+    "The Lessee may extend the Term for 12 months by giving the Lessor 180 calendar days' written notice before the Expiration Date.",
+    { clause_id: extensionClauseId }
+  );
+  const repository = inMemoryRepository({
+    obligations: [source],
+    clauses: [
+      { id: extensionClauseId, source_text: source.description },
+      { id: crypto.randomUUID(), source_text: "Expiration Date: 31 December 2031." },
+      { id: crypto.randomUUID(), source_text: "Expiry Date: 30 June 2032." },
+    ],
+  });
+  const result = await createDeadlineIntelligenceService({ repository }).runStage(SCOPE);
+  const deadline = result.deadlines[0];
+
+  assert.equal(deadline.absolute_date, null);
+  assert.equal(deadline.status, "ambiguous");
+  assert.equal(deadline.computability, "ambiguous");
+  assert.match(deadline.ambiguity, /Conflicting expiration date definitions/);
+  assert.equal(deadline.metadata.anchor_source.date, null);
+  assert.equal(deadline.metadata.anchor_source.candidates.length, 2);
+});
+
+test("an extension notice remains unresolved when its expiry anchor is not defined", async () => {
+  const extensionClauseId = crypto.randomUUID();
+  const source = obligation(
+    "The Lessee may extend the Term for 12 months by giving the Lessor 180 calendar days' written notice before the Expiration Date.",
+    { clause_id: extensionClauseId }
+  );
+  const repository = inMemoryRepository({
+    obligations: [source],
+    clauses: [{ id: extensionClauseId, source_text: source.description }],
+  });
+  const result = await createDeadlineIntelligenceService({ repository }).runStage(SCOPE);
+  const deadline = result.deadlines[0];
+
+  assert.equal(deadline.absolute_date, null);
+  assert.equal(deadline.status, "awaiting_trigger");
+  assert.equal(deadline.anchor_reference, "expiration date");
+  assert.equal(deadline.metadata.anchor_source, null);
+});
+
+test("Delivery Date field definitions calculate same-day delivery with linked source provenance", async () => {
+  const definitionClauseId = crypto.randomUUID();
+  const definitionEvidenceId = crypto.randomUUID();
+  const repository = inMemoryRepository({
+    obligations: [obligation("The Lessor shall deliver the Aircraft on the Delivery Date.")],
+    clauses: [{ id: definitionClauseId, source_evidence_id: definitionEvidenceId, source_text: "Delivery Date: 15 June 2027." }],
+  });
+  const result = await createDeadlineIntelligenceService({ repository }).runStage(SCOPE);
+  const deadline = result.deadlines[0];
+
+  assert.equal(deadline.deadline_type, "absolute");
+  assert.equal(deadline.absolute_date, "2027-06-15");
+  assert.equal(deadline.status, "calculated");
+  assert.equal(deadline.metadata.anchor_source.source_clause_id, definitionClauseId);
+  assert.equal(deadline.metadata.anchor_source.source_evidence_id, definitionEvidenceId);
+});
+
 test("unresolved and complex timing remains non-computable without invoking AI", async () => {
   const repository = inMemoryRepository({
     obligations: [obligation("The Lessee shall respond within a commercially appropriate operational window determined by prevailing circumstances.")],
@@ -250,6 +350,55 @@ test("deadline reads reject cross-tenant analysis runs before repository access"
     (error) => error.code === "ANALYSIS_RUN_NOT_FOUND"
   );
   assert.equal(repositoryCalled, false);
+});
+
+test("deadline reads attach deterministic monitoring within the authenticated run scope", async () => {
+  const deadline = {
+    id: "deadline-1",
+    organization_id: SCOPE.organizationId,
+    contract_id: SCOPE.contractId,
+    document_id: SCOPE.documentId,
+    document_version_id: SCOPE.documentVersionId,
+    analysis_run_id: SCOPE.analysisRunId,
+    absolute_date: "2027-01-31",
+    status: "calculated",
+    computability: "calculable",
+    review_status: "pending",
+  };
+  const result = await readAnalysisRunDeadlines({
+    organizationId: SCOPE.organizationId,
+    analysisRunId: SCOPE.analysisRunId,
+    asOf: "2027-01-01",
+    analysisRunRepository: {
+      async getById(analysisRunId, organizationId) {
+        assert.equal(analysisRunId, SCOPE.analysisRunId);
+        assert.equal(organizationId, SCOPE.organizationId);
+        return {
+          id: SCOPE.analysisRunId,
+          organization_id: SCOPE.organizationId,
+          contract_id: SCOPE.contractId,
+          document_version_id: SCOPE.documentVersionId,
+        };
+      },
+    },
+    deadlineRepository: {
+      async listByRunScope(scope) {
+        assert.deepEqual(scope, SCOPE);
+        return [deadline];
+      },
+    },
+    documentVersionResolver: async (documentVersionId, organizationId) => ({
+      id: documentVersionId,
+      document_id: SCOPE.documentId,
+      organization_id: organizationId,
+    }),
+  });
+
+  assert.equal(result[0].monitoring.status, "approaching");
+  assert.equal(result[0].monitoring.daysRemaining, 30);
+  assert.equal(result[0].monitoring.reviewRequired, true);
+  assert.equal(result[0].organization_id, undefined);
+  assert.equal(deadline.monitoring, undefined);
 });
 
 test("migration extends immutable deadlines without updating historical rows", async () => {

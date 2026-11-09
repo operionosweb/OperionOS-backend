@@ -5,7 +5,7 @@ export function InfoCard({ as: Element = "section", className = "", tone = "neut
   return <Element {...props} className={`op-infocard ${className}`.trim()} data-tone={tone}>{children}</Element>;
 }
 
-export function DemoBadge({ children = "DEMO DATA", tone = "demo" }) {
+export function DemoBadge({ children = "SYNTHETIC DEMO", tone = "demo" }) {
   return <span className={`od-badge od-badge-${tone}`}>{children}</span>;
 }
 
@@ -26,12 +26,16 @@ export function EmptyState({ title, description, action }) {
 }
 
 export function RiskBadge({ severity }) {
-  return <span className={`od-risk od-risk-${String(severity).toLowerCase()}`}>{severity}</span>;
+  return <span className={`od-risk od-risk-${String(severity).toLowerCase()}`} title="Synthetic illustrative risk label, not a measured customer assessment">{severity} · illustrative</span>;
 }
 
 export function Confidence({ value }) {
   const percent = value == null ? null : Math.round(Number(value) * 100);
-  return <span className="od-confidence">{percent == null ? "Confidence unavailable" : `${percent}% confidence`}</span>;
+  return <span className="od-confidence">{percent == null ? "Confidence unavailable" : `${percent}% synthetic confidence · not calibrated`}</span>;
+}
+
+export function DemoDisclosure() {
+  return <aside className="od-honesty-note" aria-label="Synthetic Demo limitations"><strong>Synthetic Demo — not production Phase 54–62 output</strong><p>All prepared analyses, amounts, risk/confidence labels, budgets, notifications and telemetry are synthetic or illustrative, not measured customer data. Demo does not display outcome history, immutable snapshots, verified backtests, or calibrated Bayesian/Monte Carlo forecasts. Actual probabilistic forecasts remain unavailable and unvalidated: justified model inputs and verified history are missing.</p></aside>;
 }
 
 export function EvidenceCard({ evidence, onOpen }) {

@@ -9,7 +9,7 @@ test("OCI Git deployment has its own root and never rewrites the public build", 
   assert.equal(publicConfig.outputDirectory, "dist");
   assert.match(own.buildCommand, /build-oci\.js/);
   assert.equal(own.rewrites[0].destination, "/oci.html");
-  assert.equal(publicConfig.rewrites[0].destination, "/index.html");
+  assert.equal(publicConfig.rewrites.at(-1).destination, "/index.html");
   const headers = own.headers[0].headers;
   assert.equal(headers.find((item) => item.key === "X-Frame-Options").value, "DENY");
   assert.match(headers.find((item) => item.key === "X-Robots-Tag").value, /noindex/);

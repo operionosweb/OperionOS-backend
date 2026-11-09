@@ -1,3 +1,17 @@
+import { SYNTHETIC_INDEXATION as syntheticIndexation, calculateSyntheticIndexation } from "./indexationJourney.js";
+import {
+  SYNTHETIC_AIRCRAFT_LEASE as syntheticLease,
+  calculateSyntheticFuelPriceAdjustment,
+  calculateSyntheticInterestRateScenarios,
+} from "./aviationIntelligenceJourney.js";
+
+const syntheticFuelAdjustment = calculateSyntheticFuelPriceAdjustment(syntheticLease);
+const syntheticFinancing = syntheticLease.aircraftFinancing;
+const syntheticInterestScenarios = calculateSyntheticInterestRateScenarios(syntheticFinancing);
+const syntheticInterestScenario = syntheticInterestScenarios.scenarios?.find(
+  (scenario) => scenario.scenarioChangePercentagePoints === 1,
+);
+
 const evidence = {
   lateReturn: { id: "ev-return", page: 89, locator: "Clause 22.4 - Aircraft Return Conditions", excerpt: "On the Termination Date, the Lessee shall return the Aircraft in airworthy condition with complete technical records. Failure to satisfy the return conditions may result in remediation costs and late-return fees." },
   termination: { id: "ev-termination", page: 74, locator: "Section 18.2 - Termination Rights", excerpt: "The Lessor may terminate this Agreement immediately upon written notice if the Lessee fails to return the Aircraft within 30 days of the Termination Date." },
@@ -6,7 +20,8 @@ const evidence = {
   payment: { id: "ev-payment", page: 18, locator: "Section 5.1 - Rent", excerpt: "Rent shall be paid monthly in advance on the first Business Day of each calendar month." },
 };
 
-const primaryContract = {
+const sharedContract = {
+  synthetic: true,
   id: "demo-aircraft-lease",
   title: "Aircraft Lease Agreement",
   contractId: "OPN-2025-00124",
@@ -99,14 +114,480 @@ const primaryContract = {
         exposureAfterAction: null,
         protectedValue: null,
       },
+      {
+        id: "fi-fuel-adjustment",
+        title: "Weekly fuel-price clause adjustment",
+        category: "Fuel-price adjustment",
+        exposureType: "Synthetic clause-derived illustration",
+        currency: syntheticFuelAdjustment.adjustment?.currency || "USD",
+        riskId: "rk-fuel-price",
+        clauseId: syntheticLease.fuelPriceAdjustment.clauseId,
+        obligationId: syntheticLease.fuelPriceAdjustment.obligationId,
+        evidenceId: syntheticLease.fuelPriceAdjustment.evidenceId,
+        evidenceIds: syntheticFuelAdjustment.evidenceIds || [
+          syntheticLease.fuelPriceAdjustment.evidenceId,
+          syntheticLease.fuelPriceAdjustment.observation.evidenceId,
+        ],
+        event: "Synthetic weekly benchmark exceeds the synthetic contractual baseline",
+        condition: "Only the explicit weekly volume, baseline, pass-through percentage and payer in the prepared sample clause are used",
+        baseAmount: syntheticFuelAdjustment.adjustment?.amount ?? null,
+        calculation: syntheticFuelAdjustment.status === "synthetic_calculated"
+          ? `${syntheticFuelAdjustment.formula} = ${syntheticFuelAdjustment.adjustment.currency} ${syntheticFuelAdjustment.adjustment.amount.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          : syntheticFuelAdjustment.reason,
+        variables: syntheticFuelAdjustment.status === "synthetic_calculated" ? [
+          { label: "Synthetic contractual baseline", value: `${syntheticFuelAdjustment.baselinePrice.amount.toFixed(2)} ${syntheticFuelAdjustment.baselinePrice.unit}` },
+          { label: "Synthetic reference illustration", value: `${syntheticFuelAdjustment.observation.value.toFixed(2)} ${syntheticFuelAdjustment.observation.unit} · ${syntheticFuelAdjustment.observation.observationDate}` },
+          { label: "Synthetic covered volume", value: `${syntheticFuelAdjustment.volume.amount.toLocaleString("en-GB")} ${syntheticFuelAdjustment.volume.unit}` },
+          { label: "Synthetic pass-through", value: `${syntheticFuelAdjustment.passThroughPercent}%` },
+        ] : [],
+        assumptions: [
+          syntheticFuelAdjustment.disclosure || "Synthetic fuel-price calculation inputs are incomplete; no value is inferred.",
+          ...(syntheticFuelAdjustment.limitations || []),
+        ],
+        consequence: `Clause-derived synthetic adjustment payable by the ${syntheticLease.fuelPriceAdjustment.payingParty}; not an invoice amount or net exposure.`,
+        action: "Reconcile the cited clause and matching benchmark period to the supplier invoice before settlement.",
+        actionWhy: "This demonstrates period-specific reconciliation without annualizing the synthetic adjustment or assuming recovery.",
+      },
     ],
   },
   evidence: Object.values(evidence),
 };
 
+const utilisationEvidence = [
+  { id: syntheticLease.clause.id, page: syntheticLease.clause.page, locator: `Synthetic clause ${syntheticLease.clause.number} - ${syntheticLease.clause.title}`, excerpt: syntheticLease.clause.excerpt, synthetic: true },
+  ...syntheticLease.readings.map(reading => ({
+    id: reading.evidenceId,
+    page: reading.page,
+    locator: reading.source,
+    excerpt: `Synthetic cumulative utilisation for ${reading.periodStart} through ${reading.periodEnd}: ${reading.cumulativeValue.toLocaleString("en-GB")} flight hours. Illustrative report, not an external observation.`,
+    synthetic: true,
+  })),
+];
+
+const syntheticOutcomeEvidence = {
+  id: syntheticLease.syntheticOutcome.evidenceId,
+  page: syntheticLease.syntheticOutcome.page,
+  locator: syntheticLease.syntheticOutcome.source,
+  excerpt: `Synthetic cumulative outcome example for ${syntheticLease.syntheticOutcome.periodStart} through ${syntheticLease.syntheticOutcome.periodEnd}: ${syntheticLease.syntheticOutcome.cumulativeValue.toLocaleString("en-GB")} flight hours. Illustrative only; not independently verified customer evidence.`,
+  synthetic: true,
+};
+
+const updatedSyntheticUtilisationEvidence = {
+  id: syntheticLease.updatedSyntheticObservation.evidenceId,
+  page: syntheticLease.updatedSyntheticObservation.page,
+  locator: syntheticLease.updatedSyntheticObservation.source,
+  excerpt: `Synthetic cumulative utilisation for ${syntheticLease.updatedSyntheticObservation.periodStart} through ${syntheticLease.updatedSyntheticObservation.periodEnd}: ${syntheticLease.updatedSyntheticObservation.cumulativeValue.toLocaleString("en-GB")} flight hours. Illustrative update for local Demo reassessment; not independently verified customer evidence.`,
+  synthetic: true,
+};
+
+const calendarYearUtilisationEvidence = [
+  {
+    id: syntheticLease.calendarYearAllowance.clause.id,
+    page: syntheticLease.calendarYearAllowance.clause.page,
+    locator: `Synthetic clause ${syntheticLease.calendarYearAllowance.clause.number} - ${syntheticLease.calendarYearAllowance.clause.title}`,
+    excerpt: syntheticLease.calendarYearAllowance.clause.excerpt,
+    synthetic: true,
+  },
+  ...syntheticLease.calendarYearAllowance.readings.map(reading => ({
+    id: reading.evidenceId,
+    page: reading.page,
+    locator: reading.source,
+    excerpt: `Synthetic cumulative calendar-year utilisation for ${reading.periodStart} through ${reading.periodEnd}: ${reading.cumulativeValue.toLocaleString("en-GB")} flight hours. Illustrative report, not an external observation.`,
+    synthetic: true,
+  })),
+];
+
+const fxPaymentEvidence = {
+  id: syntheticLease.fxPayment.evidenceId,
+  page: syntheticLease.fxPayment.page,
+  locator: `Synthetic clause ${syntheticLease.fxPayment.clauseNumber} - Maintenance reserve payment`,
+  excerpt: syntheticLease.fxPayment.excerpt,
+  synthetic: true,
+};
+const fxReferenceEvidence = syntheticLease.fxPayment.referenceObservations.map((observation) => ({
+  id: observation.evidenceId,
+  locator: "Synthetic reference-rate illustration · not a contract-document page or ECB observation",
+  excerpt: `Synthetic ${observation.quotePerEur} USD per EUR on ${observation.observationDate}; illustration only, not sourced from the ECB.`,
+  synthetic: true,
+}));
+const fuelClauseEvidence = {
+  id: syntheticLease.fuelPriceAdjustment.evidenceId,
+  page: syntheticLease.fuelPriceAdjustment.page,
+  locator: `Synthetic clause ${syntheticLease.fuelPriceAdjustment.clauseNumber} - ${syntheticLease.fuelPriceAdjustment.title}`,
+  excerpt: syntheticLease.fuelPriceAdjustment.excerpt,
+  synthetic: true,
+};
+const fuelObservationEvidence = {
+  id: syntheticLease.fuelPriceAdjustment.observation.evidenceId,
+  locator: "Synthetic benchmark illustration · not an EIA or live observation",
+  excerpt: `Synthetic ${syntheticLease.fuelPriceAdjustment.observation.value} ${syntheticLease.fuelPriceAdjustment.observation.unit} for ${syntheticLease.fuelPriceAdjustment.observation.market} on ${syntheticLease.fuelPriceAdjustment.observation.observationDate}; ${syntheticLease.fuelPriceAdjustment.observation.source}.`,
+  synthetic: true,
+};
+const financingClauseEvidence = {
+  id: syntheticFinancing.clause.id,
+  page: syntheticFinancing.clause.page,
+  locator: `Synthetic clause ${syntheticFinancing.clause.number} - ${syntheticFinancing.clause.title}`,
+  excerpt: syntheticFinancing.clause.excerpt,
+  synthetic: true,
+};
+const financingPrincipalEvidence = {
+  id: syntheticFinancing.principal.evidenceId,
+  locator: "Synthetic outstanding-principal statement · not lender-verified",
+  excerpt: `Synthetic outstanding principal: ${syntheticFinancing.principal.currency} ${syntheticFinancing.principal.amount.toLocaleString("en-US")} as of ${syntheticFinancing.principal.asOf}; illustrative only, not a lender statement.`,
+  synthetic: true,
+};
+const financingBenchmarkEvidence = {
+  id: syntheticFinancing.benchmark.evidenceId,
+  locator: "Synthetic benchmark assumption · not a New York Fed observation",
+  excerpt: `Synthetic ${syntheticFinancing.benchmark.name} assumption: ${syntheticFinancing.benchmark.value}% per annum on ${syntheticFinancing.benchmark.observationDate}; ${syntheticFinancing.benchmark.source}.`,
+  synthetic: true,
+};
+
+const primaryContract = {
+  ...sharedContract,
+  deadlines: [...sharedContract.deadlines, {
+    id: "dl-fuel-price-adjustment",
+    title: "Weekly fuel-price adjustment reconciliation",
+    type: "Recurring",
+    timing: "Weekly",
+    trigger: "Matching benchmark period closes",
+    condition: "Only when the explicit clause adjustment applies",
+    status: "Illustrative",
+    computability: "Requires matching benchmark and invoice evidence; Demo values are synthetic only",
+    confidence: null,
+    evidenceId: syntheticLease.fuelPriceAdjustment.evidenceId,
+    synthetic: true,
+  }],
+  clauses: [...sharedContract.clauses, {
+    id: "cl-utilisation", number: syntheticLease.clause.number, title: "Synthetic aircraft utilisation", category: "Utilisation", confidence: null, risk: "Medium",
+    text: syntheticLease.clause.excerpt, evidenceId: syntheticLease.clause.id, synthetic: true,
+  }, {
+    id: syntheticLease.fxPayment.clauseId,
+    number: syntheticLease.fxPayment.clauseNumber,
+    title: "Synthetic maintenance reserve payment",
+    category: "Foreign-currency payment",
+    confidence: null,
+    risk: "Unassessed",
+    text: syntheticLease.fxPayment.excerpt,
+    evidenceId: syntheticLease.fxPayment.evidenceId,
+    synthetic: true,
+  }, {
+    id: syntheticLease.fuelPriceAdjustment.clauseId,
+    number: syntheticLease.fuelPriceAdjustment.clauseNumber,
+    title: syntheticLease.fuelPriceAdjustment.title,
+    category: "Fuel-price adjustment",
+    confidence: null,
+    risk: "Unassessed",
+    text: syntheticLease.fuelPriceAdjustment.excerpt,
+    evidenceId: syntheticLease.fuelPriceAdjustment.evidenceId,
+    synthetic: true,
+  }, {
+    id: "cl-utilisation-calendar-year",
+    number: syntheticLease.calendarYearAllowance.clause.number,
+    title: syntheticLease.calendarYearAllowance.clause.title,
+    category: "Utilisation",
+    confidence: null,
+    risk: "Medium",
+    text: syntheticLease.calendarYearAllowance.clause.excerpt,
+    evidenceId: syntheticLease.calendarYearAllowance.clause.id,
+    synthetic: true,
+  }],
+  obligations: [...sharedContract.obligations, {
+    id: syntheticLease.obligation.id, title: `Synthetic: ${syntheticLease.obligation.title}`, actor: "Lessee", action: "Monitor and retain", object: "Cumulative flight hours and monthly utilisation reports",
+    modality: "Mandatory", timing: syntheticLease.limit.measurementPeriod, condition: "While aircraft is leased", frequency: "Monthly", confidence: null,
+    category: "Utilisation", evidenceId: syntheticLease.clause.id, clauseId: "cl-utilisation", synthetic: true,
+  }, {
+    id: syntheticLease.fxPayment.obligation.id,
+    title: `Synthetic: ${syntheticLease.fxPayment.obligation.title}`,
+    actor: "Lessee",
+    action: "Review and settle",
+    object: `${syntheticLease.fxPayment.amount.toLocaleString("en-GB")} ${syntheticLease.fxPayment.currency} maintenance reserve payment`,
+    modality: "Mandatory",
+    timing: syntheticLease.fxPayment.dueDate,
+    condition: "As stated in the synthetic payment clause",
+    frequency: "One-time",
+    confidence: null,
+    category: "Payment",
+    evidenceId: syntheticLease.fxPayment.evidenceId,
+    clauseId: syntheticLease.fxPayment.clauseId,
+    synthetic: true,
+  }, {
+    id: syntheticLease.fuelPriceAdjustment.obligationId,
+    title: "Synthetic: review weekly fuel-price adjustment",
+    actor: syntheticLease.fuelPriceAdjustment.payingParty,
+    action: "Review and pay",
+    object: "Clause-derived weekly fuel surcharge",
+    modality: "Mandatory",
+    timing: "Weekly",
+    condition: "When the matching synthetic benchmark exceeds the stated baseline",
+    frequency: "Weekly",
+    confidence: null,
+    category: "Fuel-price adjustment",
+    evidenceId: syntheticLease.fuelPriceAdjustment.evidenceId,
+    clauseId: syntheticLease.fuelPriceAdjustment.clauseId,
+    synthetic: true,
+  }, {
+    id: syntheticLease.calendarYearAllowance.obligation.id,
+    title: `Synthetic: ${syntheticLease.calendarYearAllowance.obligation.title}`,
+    actor: "Lessee",
+    action: "Monitor and report",
+    object: "Cumulative calendar-year flight hours",
+    modality: "Mandatory",
+    timing: syntheticLease.calendarYearAllowance.measurementPeriod,
+    condition: "During each calendar year",
+    frequency: "Monthly",
+    confidence: null,
+    category: "Utilisation",
+    evidenceId: syntheticLease.calendarYearAllowance.clause.id,
+    clauseId: "cl-utilisation-calendar-year",
+    synthetic: true,
+  }],
+  risks: [...sharedContract.risks, {
+    id: "rk-utilisation", title: "Synthetic utilisation allowance exposure", category: "Utilisation", type: "Synthetic contractual allowance", severity: "Medium", confidence: null,
+    rationale: "Synthetic cumulative readings illustrate consumption of a contractual flight-hour allowance; no breach is established.",
+    consequence: "Review allowance headroom and the synthetic reporting obligation. No monetary charge is established by this clause.",
+    financialExposure: "Unquantified — synthetic flight-hour headroom is not a monetary loss",
+    clauseId: "cl-utilisation", obligationId: syntheticLease.obligation.id, evidenceIds: utilisationEvidence.map(item => item.id), synthetic: true,
+  }, {
+    id: "rk-utilisation-calendar-year",
+    title: "Synthetic calendar-year utilisation projection",
+    category: "Utilisation",
+    type: "Synthetic deterministic projection",
+    severity: "Medium",
+    confidence: null,
+    rationale: "Synthetic verified cumulative calendar-year reports illustrate a constant-rate projection against an explicit annual allowance.",
+    consequence: "The projection is an early review signal only; the synthetic clause does not establish a monetary excess-use charge.",
+    financialExposure: "Unquantified — no synthetic excess-hour price is stated",
+    clauseId: "cl-utilisation-calendar-year",
+    obligationId: syntheticLease.calendarYearAllowance.obligation.id,
+    evidenceIds: [
+      syntheticLease.calendarYearAllowance.clause.id,
+      ...syntheticLease.calendarYearAllowance.readings.map(reading => reading.evidenceId),
+    ],
+    synthetic: true,
+  }, {
+    id: "rk-fuel-price",
+    title: "Synthetic weekly fuel-price adjustment",
+    category: "Fuel-price adjustment",
+    type: "Synthetic contractual external-reference calculation",
+    severity: "Unscored",
+    confidence: null,
+    rationale: syntheticFuelAdjustment.status === "synthetic_calculated"
+      ? syntheticFuelAdjustment.disclosure
+      : syntheticFuelAdjustment.reason,
+    consequence: syntheticFuelAdjustment.status === "synthetic_calculated"
+      ? `The synthetic clause calculation is ${syntheticFuelAdjustment.adjustment.currency} ${syntheticFuelAdjustment.adjustment.amount.toFixed(2)} for one week; it is not an invoice, forecast, or net exposure.`
+      : "No financial adjustment is inferred because synthetic calculation inputs are incomplete.",
+    financialExposure: syntheticFuelAdjustment.status === "synthetic_calculated"
+      ? `Synthetic ${syntheticFuelAdjustment.adjustment.currency} ${syntheticFuelAdjustment.adjustment.amount.toFixed(2)} for one week only`
+      : "Not calculated",
+    clauseId: syntheticLease.fuelPriceAdjustment.clauseId,
+    obligationId: syntheticLease.fuelPriceAdjustment.obligationId,
+    evidenceIds: syntheticFuelAdjustment.evidenceIds || [
+      syntheticLease.fuelPriceAdjustment.evidenceId,
+      syntheticLease.fuelPriceAdjustment.observation.evidenceId,
+    ],
+    synthetic: true,
+  }],
+  evidence: [...sharedContract.evidence, ...utilisationEvidence, syntheticOutcomeEvidence, updatedSyntheticUtilisationEvidence, ...calendarYearUtilisationEvidence, fxPaymentEvidence, ...fxReferenceEvidence, fuelClauseEvidence, fuelObservationEvidence],
+};
+
+const financingContract = {
+  synthetic: true,
+  id: syntheticFinancing.contractRouteId,
+  title: syntheticFinancing.contractTitle,
+  contractId: syntheticFinancing.contractId,
+  type: "Aircraft Financing Facility",
+  status: "Active sample",
+  counterparty: "Aviation Capital Partners",
+  lessor: "Aviation Capital Partners",
+  lessee: "Skyward Airlines",
+  aircraft: { registration: syntheticLease.aircraft, model: "B787-9", manufacturer: "Boeing" },
+  effective: "01 Jan 2026",
+  expiry: "31 Dec 2031",
+  pages: 86,
+  lastAnalysed: "06 Nov 2026",
+  health: "Medium",
+  clauses: [{
+    id: syntheticFinancing.clause.clauseId,
+    number: syntheticFinancing.clause.number,
+    title: syntheticFinancing.clause.title,
+    category: "Floating-rate financing",
+    confidence: null,
+    risk: "Unscored",
+    text: syntheticFinancing.clause.excerpt,
+    evidenceId: syntheticFinancing.clause.id,
+    synthetic: true,
+  }],
+  obligations: [{
+    id: syntheticFinancing.clause.obligationId,
+    title: "Synthetic: service floating-rate financing and review repricing",
+    actor: "Borrower",
+    action: "Pay interest and review",
+    object: "Interest calculated using SOFR plus the stated margin",
+    modality: "Mandatory",
+    timing: "Monthly repricing",
+    condition: "Subject to the contractual floor and cap",
+    frequency: "Monthly",
+    confidence: null,
+    category: "Financing",
+    evidenceId: syntheticFinancing.clause.id,
+    clauseId: syntheticFinancing.clause.clauseId,
+    synthetic: true,
+  }],
+  deadlines: [{
+    id: "dl-financing-monthly-reset",
+    title: "Synthetic monthly interest-rate reset review",
+    type: "Recurring",
+    timing: "Monthly",
+    trigger: "Contractual reset date",
+    condition: "Confirm the lender's calculation and current principal",
+    status: "Illustrative",
+    computability: "Exact reset dates are not supplied in the synthetic clause",
+    confidence: null,
+    evidenceId: syntheticFinancing.clause.id,
+    synthetic: true,
+  }],
+  risks: [{
+    id: "rk-interest-rate",
+    title: "Synthetic floating-rate financing sensitivity",
+    category: "Financing",
+    type: "Synthetic controlled interest-rate comparison",
+    severity: "Unscored",
+    confidence: null,
+    rationale: "The synthetic financing clause links a stated principal to SOFR plus a 250 basis-point margin, repriced monthly and subject to an explicit cap and floor.",
+    consequence: syntheticInterestScenario
+      ? `A synthetic +1 percentage-point SOFR assumption changes the simple annualized run-rate by ${syntheticFinancing.principal.currency} ${syntheticInterestScenario.annualizedDifference.amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. This is not a forecast or scheduled interest payment.`
+      : "No synthetic financial result is available because required terms are incomplete.",
+    financialExposure: syntheticInterestScenario
+      ? `Synthetic scenario-only difference: ${syntheticFinancing.principal.currency} ${syntheticInterestScenario.annualizedDifference.amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/year`
+      : "Not calculated",
+    clauseId: syntheticFinancing.clause.clauseId,
+    obligationId: syntheticFinancing.clause.obligationId,
+    evidenceIds: [syntheticFinancing.clause.id, syntheticFinancing.principal.evidenceId, syntheticFinancing.benchmark.evidenceId],
+    synthetic: true,
+  }],
+  financialImpact: {
+    currency: "USD",
+    currentContractualExposure: null,
+    eventDrivenExposure: null,
+    potentialAvoidableExposure: null,
+    potentialProtectedValue: null,
+    synthetic: true,
+    items: syntheticInterestScenario ? [{
+      id: "fi-interest-rate-scenario",
+      title: "Synthetic +1 percentage-point SOFR scenario",
+      category: "Interest-rate financing sensitivity",
+      exposureType: "Synthetic scenario-only annualized difference",
+      currency: syntheticInterestScenario.annualizedDifference.currency,
+      riskId: "rk-interest-rate",
+      clauseId: syntheticFinancing.clause.clauseId,
+      obligationId: syntheticFinancing.clause.obligationId,
+      evidenceId: syntheticFinancing.clause.id,
+      evidenceIds: syntheticInterestScenarios.evidenceIds,
+      event: "Synthetic benchmark assumption increases by one percentage point",
+      condition: "Same synthetic principal, contractual spread, monthly reset frequency and stated cap/floor are applied to baseline and scenario",
+      baseAmount: syntheticInterestScenario.annualizedDifference.amount,
+      calculation: `${syntheticFinancing.principal.amount.toLocaleString("en-US")} × (${syntheticInterestScenario.applicableRatePercent}% scenario rate − ${syntheticInterestScenarios.baseline.applicableRatePercent}% baseline rate) = ${syntheticFinancing.principal.currency} ${syntheticInterestScenario.annualizedDifference.amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} annualized simple run-rate difference`,
+      variables: [
+        { label: "Synthetic principal", value: `${syntheticFinancing.principal.currency} ${syntheticFinancing.principal.amount.toLocaleString("en-US")}` },
+        { label: "Synthetic SOFR baseline", value: `${syntheticFinancing.benchmark.value}% per annum` },
+        { label: "Synthetic contractual spread", value: `${syntheticFinancing.spreadBasisPoints} basis points` },
+        { label: "Synthetic rate protections", value: `${syntheticFinancing.floorRatePercent}% floor · ${syntheticFinancing.capRatePercent}% cap` },
+      ],
+      assumptions: [
+        syntheticInterestScenarios.disclosure,
+        ...syntheticInterestScenarios.limitations,
+      ],
+      consequence: "Scenario-only simple annualized difference; not accrued or payable interest, lender invoice, forecast, or hedge-adjusted exposure.",
+      action: syntheticInterestScenarios.recommendation.action,
+      actionWhy: "Review the verified-in-this-example clause wording, repricing, principal and rate protections; confirm actual lender data before decisions.",
+    }] : [],
+  },
+  evidence: [financingClauseEvidence, financingPrincipalEvidence, financingBenchmarkEvidence],
+};
+
+const indexationResult = calculateSyntheticIndexation();
+const indexationContract = {
+  synthetic: true, id: syntheticIndexation.contractRouteId,
+  title: "Synthetic MRO Indexation Agreement", contractId: syntheticIndexation.contractId,
+  type: "MRO Agreement", status: "Active sample", counterparty: "Synthetic Aviation Maintenance Ltd",
+  lessor: "Synthetic Aviation Maintenance Ltd", lessee: "Skyward Airlines",
+  aircraft: null, effective: "01 Jan 2026", expiry: "31 Dec 2028",
+  pages: 24, lastAnalysed: "09 Nov 2026", health: "Not scored",
+  clauses: [{
+    id: syntheticIndexation.clauseId, number: "7.3", title: "Annual CPI indexation",
+    category: "Indexation", confidence: null, risk: "Unscored",
+    text: syntheticIndexation.excerpt, evidenceId: syntheticIndexation.evidenceId, synthetic: true,
+  }],
+  obligations: [{
+    id: "ob-mro-indexation", title: "Synthetic: review annual indexed price", actor: "Customer",
+    action: "Review and pay", object: "Explicit formula-based MRO price", modality: "Mandatory",
+    timing: "2027-01-01", condition: "Matching reference-month index and notice",
+    frequency: "Annual", confidence: null, category: "Indexation",
+    clauseId: syntheticIndexation.clauseId, evidenceId: syntheticIndexation.evidenceId, synthetic: true,
+  }],
+  deadlines: [{
+    id: "dl-mro-indexation", title: "Synthetic indexation notice review", type: "Absolute",
+    timing: "2026-12-02", trigger: "Thirty days before 2027-01-01 adjustment",
+    condition: "Check notice compliance before price acceptance", status: "Upcoming",
+    computability: "Explicit synthetic date and thirty calendar days", confidence: null,
+    evidenceId: syntheticIndexation.evidenceId, synthetic: true,
+  }],
+  risks: [{
+    id: "rk-mro-indexation", title: "Synthetic MRO price escalation", category: "Indexation",
+    type: "Synthetic contractual formula", severity: "Unscored", confidence: null,
+    rationale: "Only 80% of the price is indexed. A 5% synthetic index rise becomes a 4% formula change, limited to 3% by the contractual cap.",
+    consequence: "Synthetic annual price changes from USD 100,000 to USD 103,000; no actual invoice or downstream recovery is established.",
+    financialExposure: "USD 3,000 synthetic incremental annual price, not net exposure",
+    clauseId: syntheticIndexation.clauseId, obligationId: "ob-mro-indexation", deadlineId: "dl-mro-indexation",
+    evidenceIds: indexationResult.evidenceIds, synthetic: true,
+  }],
+  evidence: [{
+    id: syntheticIndexation.evidenceId, page: 12, locator: "Synthetic MRO clause 7.3, version synthetic-mro-v1",
+    excerpt: syntheticIndexation.excerpt, synthetic: true,
+  }, {
+    id: syntheticIndexation.observationEvidenceId, page: null, locator: "Synthetic publication and review record, September 2026",
+    excerpt: `Synthetic index level 315 for September 2026; illustrative publication ${syntheticIndexation.observation.publicationTimestamp}. ${syntheticIndexation.disclosure}`,
+    synthetic: true,
+  }],
+  financialImpact: {
+    synthetic: true, currency: "USD", currentContractualExposure: null, eventDrivenExposure: null,
+    potentialAvoidableExposure: null, potentialProtectedValue: null,
+    items: [{
+      id: "fi-mro-indexation", title: "Synthetic annual MRO indexation", category: "Indexation",
+      exposureType: "Synthetic incremental contractual price", currency: "USD",
+      riskId: "rk-mro-indexation", clauseId: syntheticIndexation.clauseId, obligationId: "ob-mro-indexation",
+      deadlineId: "dl-mro-indexation", evidenceId: syntheticIndexation.evidenceId,
+      evidenceIds: indexationResult.evidenceIds, baseAmount: indexationResult.calculation.incrementalCost,
+      event: "Synthetic annual adjustment on 2027-01-01", condition: "Explicit matching index, formula and notice",
+      calculation: "100,000 * (1 + min(3%, max(0%, 80% * (315 / 300 - 1)))) = USD 103,000; difference USD 3,000 per year.",
+      variables: [{ label: "Synthetic baseline/index", value: "USD 100,000 / 300" }, { label: "Synthetic current index", value: "315 (September 2026)" }],
+      assumptions: [syntheticIndexation.disclosure],
+      consequence: "Illustrative contractual price only, not a settled invoice or net exposure.",
+      action: "Review exact index identity, baseline, cap and notice compliance before accepting the revised supplier price.",
+      actionWhy: "The actual contract mechanism, not the headline inflation rate, determines the price adjustment.",
+    }],
+  },
+};
+
 export const DEMO_CONTRACTS = [
   primaryContract,
-  { ...primaryContract, id: "demo-mro-agreement", contractId: "OPN-2026-00048", title: "Engine Maintenance Agreement", type: "MRO Agreement", counterparty: "Rolls-Royce plc", lessor: "Skyward Airlines", lessee: "Rolls-Royce plc", aircraft: { registration: "G-OPER", model: "Trent 1000", manufacturer: "Rolls-Royce" }, financialImpact: null, health: "Medium", status: "Active", lastAnalysed: "29 Aug 2026" },
-  { ...primaryContract, id: "demo-insurance-agreement", contractId: "OPN-2025-00077", title: "Aviation Hull Insurance Agreement", type: "Insurance Agreement", counterparty: "AIG Aviation", lessor: "AIG Aviation", lessee: "Skyward Airlines", aircraft: { registration: "G-OPER", model: "B787-9", manufacturer: "Boeing" }, financialImpact: null, health: "High", status: "Active", lastAnalysed: "25 Aug 2026" },
-  { ...primaryContract, id: "demo-ground-handling", contractId: "OPN-2026-00091", title: "Ground Handling Services Agreement", type: "Service Agreement", counterparty: "Dubai Aviation Services", aircraft: null, financialImpact: null, health: "Low", status: "Review", lastAnalysed: "18 Aug 2026" },
-];
+  financingContract,
+  indexationContract,
+  { ...sharedContract, id: "demo-insurance-agreement", contractId: "OPN-2025-00077", title: "Aviation Hull Insurance Agreement", type: "Insurance Agreement", counterparty: "AIG Aviation", lessor: "AIG Aviation", lessee: "Skyward Airlines", aircraft: { registration: "G-OPER", model: "B787-9", manufacturer: "Boeing" }, financialImpact: null, health: "High", status: "Active", lastAnalysed: "25 Aug 2026" },
+  { ...sharedContract, id: "demo-ground-handling", contractId: "OPN-2026-00091", title: "Ground Handling Services Agreement", type: "Service Agreement", counterparty: "Dubai Aviation Services", aircraft: null, financialImpact: null, health: "Low", status: "Review", lastAnalysed: "18 Aug 2026" },
+].map(contract => [primaryContract.id, financingContract.id, indexationContract.id].includes(contract.id) ? contract : {
+  ...contract,
+  analysisStatus: "synthetic_template",
+  health: "Not assessed",
+  clauses: [],
+  obligations: [],
+  deadlines: [],
+  risks: [],
+  evidence: [],
+});
+
+export function getDemoEvidence(contractId, evidenceId) {
+  return DEMO_CONTRACTS.find(contract => contract.id === contractId)?.evidence.find(item => item.id === evidenceId);
+}

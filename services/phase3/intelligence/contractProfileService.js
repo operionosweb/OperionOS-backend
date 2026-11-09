@@ -57,19 +57,27 @@ function evidenceFor(source, matchedText, confidence = 0.9) {
   };
 }
 
-function findSupportedValue(sources, pattern, map = (match) => match[1]?.trim()) {
+function sentenceForMatch(source, match) {
+  const sentenceStart = source.text.lastIndexOf(".", match.index) + 1;
+  const sentenceEnd = source.text.indexOf(".", match.index + match[0].length);
+  return source.text.slice(sentenceStart, sentenceEnd < 0 ? undefined : sentenceEnd + 1).trim();
+}
+
+function findSupportedValue(sources, pattern, map = (match) => match[1]?.trim(), evidenceText = (match) => match[0]) {
   for (const source of sources) {
     const match = source.text.match(pattern);
-    if (match) return { value: map(match), evidence: evidenceFor(source, match[0]) };
+    if (match) return { value: map(match, source), evidence: evidenceFor(source, evidenceText(match, source)) };
   }
   return { value: null, evidence: null };
 }
 
-function findAllSupportedValues(sources, pattern, map) {
+function findAllSupportedValues(sources, pattern, map, evidenceText = (match) => match[0]) {
   const findings = [];
+  const matcher = new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`);
   for (const source of sources) {
-    const match = source.text.match(pattern);
-    if (match) findings.push({ value: map(match, source), evidence: evidenceFor(source, match[0]) });
+    for (const match of source.text.matchAll(matcher)) {
+      findings.push({ value: map(match, source), evidence: evidenceFor(source, evidenceText(match, source)) });
+    }
   }
   return findings;
 }
@@ -180,45 +188,150 @@ function extractIdentifiers(sources) {
   const definitions = [
     ["AIRCRAFT_REGISTRATION", /(?:aircraft\s+)?(?:registration|tail number)\s*[:#]?\s*([A-Z0-9-]{3,12})/i],
     ["AIRCRAFT_MSN", /(?:manufacturer(?:'s)? serial number|aircraft msn|msn)\s*[:#]?\s*([A-Z0-9-]{2,20})/i],
-    ["ENGINE_IDENTIFIER", /(?:engine serial number|esn)\s*[:#]?\s*([A-Z0-9-]{2,24})/i],
   ];
-  return definitions.flatMap(([type, pattern]) => {
-    const match = findSupportedValue(sources, pattern);
-    return match.value ? [{ type, value: match.value.toUpperCase(), evidence: match.evidence }] : [];
-  });
+  const identifiers = definitions.flatMap(([type, pattern]) =>
+    findAllSupportedValues(sources, pattern, (match) => match[1].toUpperCase())
+      .map((item) => ({ type, value: item.value, evidence: item.evidence }))
+  );
+  const uniqueAircraftIdentifiers = [...new Map(
+    identifiers.map((identifier) => [`${identifier.type}:${identifier.value}`, identifier])
+  ).values()];
+  return [
+    ...uniqueAircraftIdentifiers,
+    ...findAllSupportedValues(sources, /(?:engine\s+serial\s+number|esn)\s*[:#]?\s*([A-Z0-9-]{2,24})/i, (match) => match[1].toUpperCase())
+      .map((item) => ({ type: "ENGINE_IDENTIFIER", value: item.value, evidence: item.evidence })),
+  ];
 }
 
-function extractAsset(sources) {
+function extractAsset(sources, aircraftIdentifiers) {
   const field = (pattern) => supportedFinding(findSupportedValue(sources, pattern));
+  const uniqueIdentifier = (type) => {
+    const identifiers = aircraftIdentifiers.filter((identifier) => identifier.type === type);
+    return new Set(identifiers.map((identifier) => identifier.value)).size === 1
+      ? { value: identifiers[0].value, evidence: identifiers[0].evidence }
+      : null;
+  };
   return {
     manufacturer: field(/(?:aircraft\s+)?manufacturer\s*[:#]?\s*([^.;\n]+)/i),
     model: field(/(?:aircraft\s+)?model\s*[:#]?\s*([A-Z0-9-]{2,30})/i),
     aircraftType: field(/aircraft\s+type\s*[:#]?\s*([A-Z0-9-]{2,30})/i),
-    registration: field(/(?:aircraft\s+)?(?:registration|tail number)\s*[:#]?\s*([A-Z0-9-]{3,12})/i),
-    serialNumber: field(/(?:manufacturer(?:'s)? serial number|aircraft msn|msn)\s*[:#]?\s*([A-Z0-9-]{2,20})/i),
+    registration: uniqueIdentifier("AIRCRAFT_REGISTRATION"),
+    serialNumber: uniqueIdentifier("AIRCRAFT_MSN"),
     deliveryDate: field(/delivery\s+date\s*[:]?\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2})/i),
     currentOperator: field(/current\s+operator\s*[:#]?\s*([^.;\n]+)/i),
   };
 }
 
 function extractCommercialTerms(sources) {
-  const baseRentResult = findSupportedValue(sources, /\b(monthly|quarterly|annual(?:ly)?)\s+(?:base\s+)?rent\s+of\s+(USD|EUR|GBP|AED|JPY|CHF|CAD|AUD)\s*([\d,]+(?:\.\d+)?)/i,
+  const baseRentCandidates = findAllSupportedValues(sources,
+    /\b(monthly|quarterly|annual(?:ly)?)\s+(?:base\s+)?rent\s+of\s+(USD|EUR|GBP|AED|JPY|CHF|CAD|AUD)\s*([\d,]+(?:\.\d+)?)/i,
     (match) => ({ ...moneyValue(match, 2, 3), frequency: match[1].toLowerCase().startsWith("annual") ? "annual" : match[1].toLowerCase() }));
+  const uniqueBaseRents = new Map(baseRentCandidates.map((candidate) => [
+    `${candidate.value?.amount}:${candidate.value?.currency}:${candidate.value?.frequency}`,
+    candidate,
+  ]));
+  const baseRentConflict = uniqueBaseRents.size > 1;
+  const baseRentResult = {
+    value: baseRentConflict ? null : baseRentCandidates[0]?.value || null,
+    evidence: baseRentConflict ? null : baseRentCandidates[0]?.evidence || null,
+  };
   const securityResult = findSupportedValue(sources, /\bsecurity deposit\s+of\s+(USD|EUR|GBP|AED|JPY|CHF|CAD|AUD)\s*([\d,]+(?:\.\d+)?)/i, (match) => moneyValue(match));
-  const escalationResult = findSupportedValue(sources, /\b(?:rent|base rent)[^.]{0,80}?increase\s+by\s+([\d.]+)\s*(?:percent|%)([^.]*)/i,
-    (match) => ({ ratePercent: Number(match[1]), formula: match[0].trim() }));
+  const indexedEscalationCandidates = findAllSupportedValues(sources,
+    /(?=[^.;\n]{0,240}\b(?:CPI|consumer price index|inflation|interest rate|SOFR|EURIBOR|foreign exchange|exchange rate|FX)\b)(?=[^.;\n]{0,240}\b(?:adjust|increase|escalat|index|vary|review)\w*\b)[^.;\n]+[.;]?/i,
+    (match) => {
+      const formula = match[0].trim();
+      const formulaType = /\b(?:CPI|consumer price index|inflation)\b/i.test(formula) ? "cpi_index"
+        : /\b(?:interest rate|SOFR|EURIBOR)\b/i.test(formula) ? "interest_rate_index"
+          : "foreign_exchange_index";
+      const annual = /\b(?:annually|per annum|each year|every year|yearly|each anniversary|every anniversary)\b/i.test(formula);
+      return {
+        ratePercent: null,
+        formula,
+        formulaType,
+        frequency: annual ? "annual" : null,
+        recurrenceRule: annual ? formula : null,
+      };
+    });
+  const fixedEscalationCandidates = findAllSupportedValues(sources, /\b(?:rent|base rent)[^.]{0,80}?increase\s+by\s+([\d.]+)\s*(?:percent|%)([^.]*)/i,
+    (match, source) => {
+      const sentence = sentenceForMatch(source, match);
+      const annual = /\b(?:annually|per annum|each year|every year|yearly|each anniversary|every anniversary)\b/i.test(sentence);
+      return {
+        ratePercent: Number(match[1]),
+        formula: sentence,
+        formulaType: "fixed_percentage",
+        frequency: annual ? "annual" : null,
+        recurrenceRule: annual ? sentence : null,
+      };
+    },
+    (match, source) => sentenceForMatch(source, match));
+  const escalationCandidates = [...indexedEscalationCandidates, ...fixedEscalationCandidates];
+  const uniqueEscalations = new Map(escalationCandidates.map((candidate) => {
+    const value = candidate.value || {};
+    const key = [
+      value.formulaType,
+      value.ratePercent,
+      value.frequency,
+      value.recurrenceRule?.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(),
+    ].join(":");
+    return [key, candidate];
+  }));
+  const escalationConflict = uniqueEscalations.size > 1;
+  const escalationResult = escalationConflict
+    ? {
+      value: {
+        ratePercent: null,
+        formulaType: "conflicting",
+        formula: "Conflicting rent adjustment mechanisms were found; human review is required.",
+        frequency: null,
+        conflictCandidates: [...uniqueEscalations.values()].map((item) => item.value),
+      },
+      evidence: null,
+    }
+    : uniqueEscalations.values().next().value || { value: null, evidence: null };
+  const financialTermConflicts = [
+    ...(baseRentConflict ? [{
+      field: "base_rent",
+      description: "Multiple incompatible base-rent amounts or frequencies were found.",
+      candidates: [...uniqueBaseRents.values()],
+    }] : []),
+    ...(escalationConflict ? [{
+      field: "rent_escalation",
+      description: "Multiple incompatible fixed or indexed rent-adjustment terms were found.",
+      candidates: [...uniqueEscalations.values()],
+    }] : []),
+  ];
   const commencementResult = findSupportedValue(sources, /\brent\s+shall\s+commence\s+(?:on|upon)\s+([^.;]+)/i);
   const reserveResults = findAllSupportedValues(sources,
-    /\b(airframe|engine|landing gear|apu|auxiliary power unit)\s+maintenance reserve\s+of\s+(USD|EUR|GBP|AED|JPY|CHF|CAD|AUD)\s*([\d,]+(?:\.\d+)?)\s+per\s+(flight hour|flight cycle|cycle|calendar month)/i,
-    (match) => ({ reserveType: "maintenance_reserve", coveredComponent: match[1].toLowerCase(), rate: { ...moneyValue(match, 2, 3), unit: match[4].toLowerCase().replaceAll(" ", "_") } }));
+    /\b(airframe|engine|landing gear|apu|auxiliary power unit)\s+maintenance reserve\s+of\s+(USD|EUR|GBP|AED|JPY|CHF|CAD|AUD)\s*([\d,]+(?:\.\d+)?)\s+per\s+(flight hour|flight cycle|cycle|calendar month)(?:\s+(monthly|quarterly|annually))?/i,
+    (match, source) => {
+      const reimbursement = source.text.match(/\breimbursement\s+requires?\b[^.;]*/i);
+      const endOfLease = source.text.match(/\bunclaimed\s+reserves?\b[^.;]*/i);
+      return {
+        reserveType: "maintenance_reserve",
+        coveredComponent: match[1].toLowerCase(),
+        rate: { ...moneyValue(match, 2, 3), unit: match[4].toLowerCase().replaceAll(" ", "_") },
+        paymentFrequency: match[5]?.toLowerCase() || null,
+        paymentFrequencyEvidence: match[5] ? evidenceFor(source, match[0]) : null,
+        reimbursementMechanics: reimbursement?.[0] || null,
+        reimbursementEvidence: reimbursement ? evidenceFor(source, reimbursement[0]) : null,
+        endOfLeaseTreatment: endOfLease?.[0] || null,
+        endOfLeaseTreatmentEvidence: endOfLease ? evidenceFor(source, endOfLease[0]) : null,
+      };
+    });
   const fees = findAllSupportedValues(sources, /\b(?:fee|charge)\s+of\s+(USD|EUR|GBP|AED|JPY|CHF|CAD|AUD)\s*([\d,]+(?:\.\d+)?)/i, (match) => moneyValue(match));
   return {
     baseRent: baseRentResult.value ? { ...baseRentResult.value, evidence: baseRentResult.evidence } : null,
     rentCommencement: supportedFinding(commencementResult),
-    rentEscalation: escalationResult.value ? { ...escalationResult.value, evidence: escalationResult.evidence } : null,
+    rentEscalation: escalationResult.value ? {
+      ...escalationResult.value,
+      evidence: escalationResult.evidence,
+      evidenceCandidates: escalationConflict ? [...uniqueEscalations.values()].map((item) => item.evidence) : [],
+    } : null,
+    financialTermConflicts,
     securityDeposit: securityResult.value ? { ...securityResult.value, evidence: securityResult.evidence } : null,
     letterOfCredit: supportedFinding(findSupportedValue(sources, /\bletter of credit\b[^.;]*/i, (match) => match[0].trim())),
-    maintenanceReserves: reserveResults.map((item) => ({ ...item.value, paymentFrequency: /\bmonthly\b/i.test(item.evidence.evidenceText) ? "monthly" : null, reimbursementMechanics: /reimburse[^.]*|paid invoices?[^.]*/i.exec(item.evidence.evidenceText)?.[0] || null, endOfLeaseTreatment: /unclaimed reserves?[^.]*/i.exec(item.evidence.evidenceText)?.[0] || null, evidence: item.evidence })),
+    maintenanceReserves: reserveResults.map((item) => ({ ...item.value, evidence: item.evidence })),
     paymentDates: findAllSupportedValues(sources, /\b(?:on|by)\s+the\s+([^.;]*?(?:business day|day)[^.;]*)/i, (match) => match[1].trim()).map((item) => ({ value: item.value, evidence: item.evidence })),
     latePayment: supportedFinding(findSupportedValue(sources, /\blate payment\b[^.;]*/i, (match) => match[0].trim())),
     fees: fees.map((item) => ({ ...item.value, evidence: item.evidence })),
@@ -234,20 +347,61 @@ function requirementFindings(sources, patterns) {
 }
 
 function extractRedelivery(sources) {
-  const returnLocation = supportedFinding(findSupportedValue(sources, /\breturn\s+the\s+aircraft\s+to\s+(.+?)(?=\s+in\s+an?\s+|[,.;])/i));
-  const requirements = requirementFindings(sources, [
-    ["aircraft_condition", /\b(?:airworthy condition|free of liens)\b[^.;]*/i, true],
-    ["engine_condition", /\beach engine\b[^.;]*/i, true],
+  const returnSources = sources.filter((source) => (
+    /\b(?:redeliver(?:y|ed|ing)|return conditions?|return(?:ing)? the aircraft|aircraft shall be returned)\b/i
+      .test(`${source.title || ""}\n${source.text}`)
+  ));
+  const locationCandidates = findAllSupportedValues(
+    returnSources,
+    /\breturn\s+the\s+aircraft\s+to\s+(.+?)(?=\s+in\s+an?\s+|[,.;])/i,
+    (match) => match[1].trim()
+  );
+  const locationsByValue = new Map();
+  for (const candidate of locationCandidates) {
+    const key = candidate.value.toLowerCase();
+    const existing = locationsByValue.get(key);
+    if (existing) existing.evidence.push(candidate.evidence);
+    else locationsByValue.set(key, { value: candidate.value, evidence: [candidate.evidence] });
+  }
+  const candidates = [...locationsByValue.values()];
+  const returnLocation = {
+    value: candidates.length === 1 ? candidates[0].value : null,
+    evidence: candidates.length === 1 ? candidates[0].evidence[0] : null,
+    status: candidates.length > 1 ? "conflicting" : candidates.length === 1 ? "explicit" : "not_established",
+    candidates,
+  };
+  const definitions = [
+    ["aircraft_condition", /\b(?:airworthy condition|free of liens|aircraft condition)\b[^.;]*/i, true],
+    ["engine_condition", /\b(?:each engine|engine condition|engines? shall)\b[^.;]*/i, true],
+    ["apu_condition", /\b(?:APU|auxiliary power unit)\b[^.;]*/i, true],
+    ["landing_gear_condition", /\blanding gear\b[^.;]*/i, true],
     ["llp", /\b(?:life limited part|LLP)s?\b[^.;]*/i, true],
-    ["maintenance_status", /\bcurrent maintenance status\b[^.;]*/i, true],
-    ["technical_records", /\b(?:complete technical records|missing records)\b[^.;]*/i, true],
-    ["inspection", /\b(?:inspect|inspection)\b[^.;]*/i],
+    ["maintenance_status", /\b(?:current maintenance status|outstanding maintenance|maintenance programme|maintenance program)\b[^.;]*/i, true],
+    ["technical_records", /\b(?:complete technical records|technical records|maintenance records|missing records)\b[^.;]*/i, true],
+    ["airworthiness_documentation", /\b(?:airworthiness documentation|airworthiness records|certificate of airworthiness)\b[^.;]*/i, true],
+    ["modifications_repairs", /\b(?:modifications?|repairs?)\b[^.;]*/i],
+    ["damage_defects", /\b(?:damage|defects?)\b[^.;]*/i, true],
+    ["inspection_acceptance", /\b(?:inspect(?:ion)?|acceptance condition|accept the aircraft)\b[^.;]*/i],
     ["cleaning_configuration", /\b(?:clean|configuration)\b[^.;]*/i],
     ["paint_livery", /\b(?:painted|paint|livery)\b[^.;]*/i],
     ["missing_parts", /\b(?:all installed parts|missing parts)\b[^.;]*/i],
+    ["preparation_notice", /\b(?:notice|prepar(?:e|ation)|prior to redelivery|before redelivery)\b[^.;]*/i],
     ["compensation", /\b(?:at the lessee['’]s cost|compensation|adjustment)\b[^.;]*/i, true],
-  ]);
-  return { returnLocation, requirements };
+  ];
+  const requirements = definitions.flatMap(([category, pattern, important = false]) =>
+    findAllSupportedValues(returnSources, pattern, (match) => match[0].trim())
+      .map((item) => ({
+        category,
+        requirement: item.value,
+        important,
+        evidence: item.evidence,
+      }))
+  );
+  const uniqueRequirements = [...new Map(requirements.map((item) => [
+    `${item.category}:${item.evidence.clauseId || ""}:${item.requirement.toLowerCase()}`,
+    item,
+  ])).values()];
+  return { returnLocation, requirements: uniqueRequirements };
 }
 
 function extractInsurance(sources) {
@@ -279,9 +433,102 @@ function extractDefaultTermination(sources) {
 }
 
 function extractRenewalExtension(sources) {
-  const options = findAllSupportedValues(sources, /\b(?:may\s+)?extend\s+the\s+term\s+for\s+(\d+)\s+(months?|years?)[^.]*?(\d+)\s+(business\s+)?days?['’]?\s+(?:written\s+)?notice[^.]*/i,
-    (match) => ({ extensionTerm: { amount: Number(match[1]), unit: match[2].toLowerCase() }, noticePeriod: { amount: Number(match[3]), unit: match[4] ? "business_days" : "days" }, pricing: /rent[^.]*agreed by the parties/i.test(match[0]) ? "To be agreed by the parties" : null }));
+  const options = findAllSupportedValues(sources, /\b(?:may\s+)?extend\s+the\s+term\s+for\s+(\d+)\s+(months?|years?)[^.]*?(\d+)\s+(?:(business|calendar)\s+)?days?['’]?\s+(?:written\s+)?notice[^.]*/i,
+    (match) => {
+      const noticeAnchor = match[0].match(/\b(?:before|prior to)\s+(?:the\s+)?(?:expiration|expiry) date\b/i);
+      return {
+        extensionTerm: { amount: Number(match[1]), unit: match[2].toLowerCase() },
+        noticePeriod: {
+          amount: Number(match[3]),
+          unit: match[4]?.toLowerCase() === "business" ? "business_days" : "days",
+          calendarType: match[4]?.toLowerCase() || null,
+          anchorReference: noticeAnchor ? "expiration date" : null,
+          expression: match[0],
+        },
+        pricing: /rent[^.]*agreed by the parties/i.test(match[0]) ? "To be agreed by the parties" : null,
+      };
+    });
   return { options: options.map((item) => ({ ...item.value, evidence: item.evidence })) };
+}
+
+function extractExpirationDate(sources) {
+  const candidates = findAllSupportedValues(
+    sources,
+    /(?:\b(?:expiration|expiry)\s+date\s*[:]?[\s]*|\b(?:lease\s+)?term\s+(?:expires|ends)\s+(?:on\s+)?)(\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2})/i,
+    (match) => toIsoDate(match[1])
+  );
+  const values = new Set(candidates.map((item) => item.value).filter(Boolean));
+  const hasInvalidDate = candidates.some((item) => !item.value);
+  const conflicting = values.size > 1 || (hasInvalidDate && values.size > 0);
+  const status = conflicting ? "conflicting"
+    : hasInvalidDate ? "invalid"
+      : values.size ? "explicit" : "missing";
+  const selected = !conflicting && !hasInvalidDate ? candidates.find((item) => item.value) : null;
+
+  return {
+    value: selected?.value || null,
+    evidence: selected?.evidence || null,
+    provenance: {
+      status,
+      candidates: candidates.map((item) => ({ value: item.value, evidence: item.evidence })),
+      reason: conflicting
+        ? "Multiple incompatible expiry values were found; verify the controlling provision."
+        : hasInvalidDate ? "An expiry date was stated but could not be normalized safely." : null,
+    },
+  };
+}
+
+function buildLifecycleRelationships({ renewalExtension, expirationDate, deadlines }) {
+  return renewalExtension.options.map((option) => {
+    const optionClauseId = option.evidence?.clauseId || null;
+    const deadline = deadlines.find((item) => (
+      optionClauseId
+      && item.source_clause_id === optionClauseId
+      && String(item.anchor_reference || "").toLowerCase() === "expiration date"
+    )) || null;
+    const expirationSource = expirationDate.evidence;
+    const expiryConflict = expirationDate.provenance.status === "conflicting" || expirationDate.provenance.status === "invalid";
+    const unqualifiedDayCalculation = Boolean(
+      deadline?.absolute_date
+      && option.noticePeriod.unit === "days"
+      && !option.noticePeriod.calendarType
+    );
+    const calculationUnavailable = Boolean(deadline && !deadline.absolute_date && deadline.metadata?.calculation?.reason);
+    const status = expiryConflict || unqualifiedDayCalculation || calculationUnavailable ? "requires_review"
+      : deadline?.status || (option.noticePeriod.anchorReference
+        ? expirationDate.value ? "deadline_not_materialized" : "awaiting_expiry_date"
+        : "notice_anchor_not_established");
+
+    return {
+      type: "extension_option_notice_deadline",
+      status,
+      exerciseStatus: "not_established",
+      extensionTerm: option.extensionTerm,
+      noticePeriod: option.noticePeriod,
+      expirationDate: expirationDate.value,
+      noticeDeadline: deadline?.absolute_date || null,
+      deadlineStatus: deadline?.status || null,
+      calculation: deadline?.metadata?.calculation || null,
+      calculationBasis: deadline?.metadata?.calculation?.method || null,
+      uncertainty: expiryConflict
+        ? expirationDate.provenance.reason
+        : unqualifiedDayCalculation
+          ? "The clause says days without an explicit calendar-day basis; the parser used calendar-day arithmetic. Verify the contract's definitions and notice-counting rules."
+        : deadline?.ambiguity || deadline?.metadata?.calculation?.reason || (!option.noticePeriod.anchorReference
+          ? "The notice provision does not identify the lease expiry as its trigger."
+          : !expirationDate.value
+            ? "The lease expiry date is not established, so no absolute notice date can be calculated."
+            : deadline?.status === "ambiguous"
+              ? "The notice deadline is ambiguous; no absolute date is asserted."
+              : deadline ? null : "No matching notice deadline was materialized for this option."),
+      sourceReferences: [
+        { type: "extension_option", clauseId: optionClauseId },
+        ...(expirationSource?.clauseId ? [{ type: "lease_expiry", clauseId: expirationSource.clauseId }] : []),
+        ...(deadline?.id ? [{ type: "deadline", id: deadline.id }] : []),
+      ],
+      evidence: [option.evidence, expirationSource].filter(Boolean),
+    };
+  });
 }
 
 const LEASE_MISSING_CHECKLIST = Object.freeze({
@@ -336,6 +583,91 @@ function operationalRecommendation(risk, isConfirmedLease) {
   return { action: "Assign the relevant contract owner to resolve the evidence-backed exposure and record the mitigation decision.", owner: "CONTRACT_OWNER", priority: risk.severity === "critical" ? "critical" : "medium" };
 }
 
+function recommendationCategory(recommendation) {
+  const source = `${recommendation.title || ""} ${recommendation.action || ""} ${recommendation.suggestedOwner || ""}`.toLowerCase();
+  if (/\b(negotiate|renegotiate|amend|redline)\b/.test(source)) return "negotiation_intelligence";
+  if (/\b(payment|rent|escalat|financial|reserve|finance|cpi|interest rate|foreign exchange)\b/.test(source)) return "commercial_protection";
+  if (/\b(deadline|notice|renewal|extension|overdue|due date)\b/.test(source)) return "deadline_obligation_management";
+  if (/\b(aircraft|lease|mro|maintenance|redelivery|return|insurance|delivery|acceptance|ground handling|service level)\b/.test(source)) return "operational_protection";
+  return "contractual_protection";
+}
+
+function normalizedExcerpt(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function recommendationEvidence(items, sources) {
+  const sourcesByClause = new Map();
+  const sourcesByEvidence = new Map();
+  for (const source of sources) {
+    if (source.clauseId) sourcesByClause.set(source.clauseId, [...(sourcesByClause.get(source.clauseId) || []), source]);
+    if (source.evidenceId) sourcesByEvidence.set(source.evidenceId, [...(sourcesByEvidence.get(source.evidenceId) || []), source]);
+  }
+
+  return [...new Map((Array.isArray(items) ? items : []).flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    if (String(item.reviewStatus || item.review_status || "").toLowerCase() === "rejected") return [];
+    const clauseMatches = item.clauseId ? sourcesByClause.get(item.clauseId) || [] : [];
+    const evidenceMatches = item.evidenceId ? sourcesByEvidence.get(item.evidenceId) || [] : [];
+    if (clauseMatches.length > 1 || evidenceMatches.length > 1) return [];
+    const clauseSource = clauseMatches[0] || null;
+    const evidenceSource = evidenceMatches[0] || null;
+    if (clauseSource && evidenceSource && clauseSource.clauseId !== evidenceSource.clauseId) return [];
+    const source = clauseSource || evidenceSource;
+    if (!source?.clauseId || !source.text.trim()) return [];
+    const excerpt = item.evidenceText || item.excerpt || item.source?.excerpt || source.text;
+    if (!normalizedExcerpt(excerpt) || !normalizedExcerpt(source.text).includes(normalizedExcerpt(excerpt))) return [];
+    return [[`${source.clauseId}:${normalizedExcerpt(excerpt)}`, {
+      evidenceId: item.evidenceId || source.evidenceId,
+      clauseId: source.clauseId,
+      clauseNumber: source.clauseNumber,
+      pageNumber: item.pageNumber || item.source?.page_number || source.pageNumber,
+      sourceLocation: item.sourceLocation || item.source?.source_locator || source.sourceLocation,
+      evidenceText: excerpt,
+      confidence: item.confidence ?? null,
+      reviewStatus: item.reviewStatus || item.review_status || null,
+      ambiguityReason: item.ambiguityReason || item.ambiguity_reason || null,
+    }]];
+  })).values()];
+}
+
+function enrichRecommendation(recommendation, sources) {
+  const evidence = recommendationEvidence(recommendation.evidence, sources);
+  if (!evidence.length) return null;
+  const confidences = evidence.map((item) => Number(item.confidence))
+    .filter((value) => Number.isFinite(value) && value >= 0 && value <= 1);
+  const allConfidenceKnown = confidences.length === evidence.length;
+  const lowConfidence = confidences.some((value) => value < 0.85);
+  const evidenceNeedsHumanReview = evidence.some((item) => (
+    item.reviewStatus && item.reviewStatus !== "verified"
+  ) || item.ambiguityReason);
+  let evidenceSufficiency = "source_linked_unverified";
+  if (lowConfidence) evidenceSufficiency = "low_confidence_review_required";
+  else if (evidenceNeedsHumanReview) evidenceSufficiency = "human_review_required";
+  else if (!allConfidenceKnown) evidenceSufficiency = "confidence_not_established";
+  else if (evidence.every((item) => item.reviewStatus === "verified")) evidenceSufficiency = "verified_source_support";
+  const missingInformation = Array.isArray(recommendation.missingInformation)
+    ? recommendation.missingInformation.filter((item) => typeof item === "string" && item.trim())
+    : [];
+  if ((lowConfidence || evidence.some((item) => item.ambiguityReason))
+    && !missingInformation.some((item) => /source|clause|context/i.test(item))) {
+    missingInformation.push("Verify the cited source and surrounding contractual context before acting.");
+  }
+  return {
+    ...recommendation,
+    category: recommendationCategory(recommendation),
+    observedFacts: evidence.map((item) => item.evidenceText),
+    interpretation: recommendation.reason || null,
+    potentialImpact: typeof recommendation.potentialImpact === "string" && recommendation.potentialImpact.trim()
+      ? recommendation.potentialImpact
+      : null,
+    evidenceConfidence: allConfidenceKnown ? Math.min(...confidences) : null,
+    evidenceSufficiency,
+    missingInformation,
+    evidence,
+  };
+}
+
 function compactFinding(item, fallbackType) {
   return {
     id: item.id || null,
@@ -359,7 +691,7 @@ export function buildContractProfile({ clauses = [], obligations = [], deadlines
   const contractNumber = findSupportedValue(sources, /(?:contract|agreement)\s*(?:number|no\.?|#)\s*[:#]?\s*([A-Z0-9][A-Z0-9._/-]{2,30})/i);
   const effectiveDate = findSupportedValue(sources, /effective\s+(?:as\s+of|date)?\s*[:]?\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2})/i, (match) => toIsoDate(match[1]));
   const executionDate = findSupportedValue(sources, /(?:execution|signed)\s+date\s*[:]?\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2})/i, (match) => toIsoDate(match[1]));
-  const expirationDate = findSupportedValue(sources, /(?:expiration|expiry|termination)\s+date\s*[:]?[\s]*(\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2})/i, (match) => toIsoDate(match[1]));
+  const expirationDate = extractExpirationDate(sources);
   const renewalDate = findSupportedValue(sources, /renewal\s+date\s*[:]?[\s]*(\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2})/i, (match) => toIsoDate(match[1]));
   const governingLaw = findSupportedValue(sources, /governed by (?:and construed in accordance with )?the laws? of\s+([^.;\n]+)/i);
   const jurisdiction = findSupportedValue(sources, /courts? of\s+([^.;\n]+?)\s+(?:shall\s+)?have\s+(?:exclusive\s+)?jurisdiction/i);
@@ -368,14 +700,25 @@ export function buildContractProfile({ clauses = [], obligations = [], deadlines
   const parties = extractParties(sources);
   const classification = classifyContract(sources);
   const aircraftIdentifiers = extractIdentifiers(sources);
-  const asset = extractAsset(sources);
+  const asset = extractAsset(sources, aircraftIdentifiers);
+  const conflictingAssetIdentifiers = ["AIRCRAFT_REGISTRATION", "AIRCRAFT_MSN"]
+    .map((type) => ({
+      type,
+      candidates: aircraftIdentifiers.filter((identifier) => identifier.type === type),
+    }))
+    .filter(({ candidates }) => new Set(candidates.map((candidate) => candidate.value)).size > 1);
   if (asset.deliveryDate) asset.deliveryDate.value = toIsoDate(asset.deliveryDate.value);
   const commercialTerms = extractCommercialTerms(sources);
   const redelivery = extractRedelivery(sources);
   const insurance = extractInsurance(sources);
   const defaultTermination = extractDefaultTermination(sources);
   const renewalExtension = extractRenewalExtension(sources);
-  const commencementDate = commercialTerms.rentCommencement?.value && /delivery date/i.test(commercialTerms.rentCommencement.value) && asset.deliveryDate?.value
+  const isConfirmedLease = classification.status === "confirmed" && classification.type === "AIRCRAFT_LEASE";
+  const lifecycleRelationships = isConfirmedLease
+    ? buildLifecycleRelationships({ renewalExtension, expirationDate, deadlines })
+    : [];
+  const commencementDateIsDerived = Boolean(commercialTerms.rentCommencement?.value && /delivery date/i.test(commercialTerms.rentCommencement.value) && asset.deliveryDate?.value);
+  const commencementDate = commencementDateIsDerived
     ? { value: asset.deliveryDate.value, evidence: commercialTerms.rentCommencement.evidence }
     : findSupportedValue(sources, /(?:lease )?commencement\s+date\s*[:]?\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{1,2},?\s+\d{4}|\d{4}-\d{2}-\d{2})/i, (match) => toIsoDate(match[1]));
   const metadataFields = { title, contractNumber, effectiveDate, executionDate, commencementDate, expirationDate, renewalDate, governingLaw, jurisdiction, currency, autoRenewal };
@@ -401,11 +744,33 @@ export function buildContractProfile({ clauses = [], obligations = [], deadlines
     currency: currency.value,
     parties: parties.parties,
     contractStatus: null,
+    assetIdentificationReview: {
+      status: conflictingAssetIdentifiers.length
+        ? "requires_review"
+        : aircraftIdentifiers.some((identifier) => ["AIRCRAFT_REGISTRATION", "AIRCRAFT_MSN"].includes(identifier.type))
+          ? "unambiguous"
+          : "not_established",
+      conflicts: conflictingAssetIdentifiers,
+    },
+    factProvenance: {
+      commencementDate: {
+        status: commencementDateIsDerived ? "derived" : commencementDate.value ? "explicit" : "missing",
+        derivation: commencementDateIsDerived
+          ? "Resolved the rent commencement reference to the contract's stated Delivery Date."
+          : null,
+        evidence: commencementDateIsDerived
+          ? [commercialTerms.rentCommencement.evidence, asset.deliveryDate.evidence].filter(Boolean)
+          : commencementDate.evidence ? [commencementDate.evidence] : [],
+      },
+      expirationDate: {
+        ...expirationDate.provenance,
+        evidence: expirationDate.provenance.candidates.map((candidate) => candidate.evidence),
+      },
+    },
   };
   const missing = buildMissingTerms({ classification, metadata, asset, commercialTerms, redelivery, insurance, defaultTermination, renewalExtension, deadlines });
-  const isConfirmedLease = classification.status === "confirmed" && classification.type === "AIRCRAFT_LEASE";
   metadata.leaseIntelligence = isConfirmedLease
-    ? { asset, commercialTerms, redelivery, insurance, defaultTermination, renewalExtension }
+    ? { asset, commercialTerms, redelivery, insurance, defaultTermination, renewalExtension, lifecycleRelationships }
     : null;
   const { recommendations: aviationRecommendations, ...aviationCore } = buildAviationContractCore(sources);
   metadata.aviationCore = aviationCore;
@@ -431,12 +796,29 @@ export function buildContractProfile({ clauses = [], obligations = [], deadlines
       title: `Address ${String(risk.title || risk.risk_category || "contract exposure").toLowerCase()}`,
       action: risk.recommendation || operation.action,
       reason: risk.rationale || risk.description || "The evidence-backed finding may affect contractual performance.",
+      potentialImpact: typeof risk.consequence === "string" ? risk.consequence : null,
+      missingInformation: risk.missing_information || risk.missingInformation || [],
       suggestedOwner: operation.owner,
       priority: operation.priority,
       triggerDeadline: risk.condition || deadlines.find((item) => risk.affected_deadline_ids?.includes(item.id))?.timing_expression || null,
       disclaimer: "Operational review recommendation; not legal advice.",
       evidence: risk.evidence || [],
     };
+  });
+  lifecycleRelationships.forEach((relationship) => {
+    recommendations.push({
+      riskId: null,
+      title: "Review the aircraft lease extension option",
+      action: "Confirm the commercial decision on exercising this option and, if proceeding, validate the cited notice date and service requirements.",
+      reason: "The agreement contains a conditional extension right; the available evidence does not establish that the option has been exercised.",
+      suggestedOwner: "LEASE_COMMERCIAL",
+      priority: relationship.noticeDeadline ? "high" : "medium",
+      triggerDeadline: relationship.noticeDeadline || relationship.noticePeriod.expression || null,
+      deadlineStatus: relationship.deadlineStatus || relationship.status,
+      deadlineCalculation: relationship.calculation,
+      disclaimer: "Operational review recommendation; not legal advice.",
+      evidence: relationship.evidence,
+    });
   });
   if (isConfirmedLease && redelivery.requirements.length && !recommendations.some((item) => item.suggestedOwner === "LEASE_RETURN_TECHNICAL")) {
     recommendations.push({ riskId: null, title: "Create a redelivery compliance plan", action: "Assign the lease return and technical team to convert the cited redelivery conditions into a tracked compliance checklist.", reason: "The agreement states multiple aircraft, engine, records, and inspection requirements for return.", suggestedOwner: "LEASE_RETURN_TECHNICAL", priority: "high", triggerDeadline: metadata.expirationDate, disclaimer: "Operational review recommendation; not legal advice.", evidence: redelivery.requirements.flatMap((item) => [item.evidence]).slice(0, 4) });
@@ -445,6 +827,9 @@ export function buildContractProfile({ clauses = [], obligations = [], deadlines
     recommendations.push({ riskId: null, title: "Monitor contractual rent escalation", action: "Assign finance to maintain the contractual escalation inputs and calculate each adjustment from the cited formula.", reason: isConfirmedLease ? "The lease contains an express rent adjustment mechanism." : "The cited text contains an express rent adjustment mechanism.", suggestedOwner: "FINANCE", priority: "high", triggerDeadline: "Each contractual escalation date", disclaimer: "Operational review recommendation; not legal advice.", evidence: [commercialTerms.rentEscalation.evidence] });
   }
   recommendations.push(...aviationRecommendations);
+  const evidenceGroundedRecommendations = recommendations
+    .map((item) => enrichRecommendation(item, sources))
+    .filter(Boolean);
   metadata.executiveSynthesis = {
     contractAtAGlance: {
       contractType: classification.type,
@@ -454,9 +839,19 @@ export function buildContractProfile({ clauses = [], obligations = [], deadlines
       keyFinancialCommitment: commercialTerms.baseRent || null,
     },
     materialExposures: risks.slice(0, 5).map((risk) => ({ id: risk.id || null, title: risk.title || risk.risk_category, consequence: risk.consequence || null, evidence: risk.evidence || [] })),
-    criticalDates: deadlines.slice(0, 5).map((deadline) => ({ id: deadline.id || null, type: deadline.deadline_type, date: deadline.absolute_date || null, trigger: deadline.timing_expression || deadline.trigger_expression || null, evidence: deadline.evidence || [] })),
+    criticalDates: [
+      ...deadlines.slice(0, 5).map((deadline) => ({ id: deadline.id || null, type: deadline.deadline_type, date: deadline.absolute_date || null, trigger: deadline.timing_expression || deadline.trigger_expression || null, evidence: deadline.evidence || [] })),
+      ...lifecycleRelationships.filter((relationship) => relationship.noticeDeadline).map((relationship) => ({
+        id: null,
+        type: "extension_notice",
+        date: relationship.noticeDeadline,
+        trigger: relationship.noticePeriod.expression,
+        evidence: relationship.evidence,
+        calculation: relationship.calculation,
+      })),
+    ].slice(0, 5),
     keyRisks: risks.slice(0, 5).map((risk) => compactFinding(risk, "risk")),
-    recommendedActions: recommendations.slice(0, 5),
+    recommendedActions: evidenceGroundedRecommendations.slice(0, 5),
   };
   const commercialSummary = [
     commercialTerms.baseRent && { type: "base_rent", title: "Base rent", value: { amount: commercialTerms.baseRent.amount, currency: commercialTerms.baseRent.currency, frequency: commercialTerms.baseRent.frequency }, evidence: commercialTerms.baseRent.evidence },
@@ -485,7 +880,7 @@ export function buildContractProfile({ clauses = [], obligations = [], deadlines
       keyRisks: risks.slice(0, 8).map((item) => compactFinding(item, "risk")),
       unusualOrMissingTerms: missing,
     },
-    recommendations,
+    recommendations: evidenceGroundedRecommendations,
     evidenceClaims: claims,
     confidence: supportedConfidences.length ? supportedConfidences.reduce((sum, value) => sum + value, 0) / supportedConfidences.length : 0.2,
   };

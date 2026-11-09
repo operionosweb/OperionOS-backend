@@ -1,0 +1,29 @@
+AIRCRAFT LEASE AGREEMENT
+Agreement Number: PH12-LEASE-001
+
+This synthetic benchmark agreement is between Meridian Aircraft Leasing Ltd. (the "Lessor") and Northwind Airways Ltd. (the "Lessee").
+
+1. AIRCRAFT DELIVERY AND ACCEPTANCE
+Aircraft Registration: N-OPER
+Aircraft MSN: 77881
+Delivery Date: 15 June 2027.
+The Lessor shall deliver the Aircraft to the Lessee on the Delivery Date.
+The Lessee shall accept the Aircraft within 2 business days after the Delivery Date.
+If the Aircraft fails the Acceptance Criteria, the Lessee may reject delivery by written notice within 3 days.
+
+2. RENT AND SECURITY
+The Lessee shall pay monthly rent of USD 175,000 on the fifth business day of each month.
+The Lessee shall pay a security deposit of USD 525,000 before Delivery.
+
+3. MAINTENANCE RESERVES
+The Lessee shall pay an airframe maintenance reserve of USD 275 per flight hour monthly. Reimbursement requires paid invoices and complete shop visit records. Unclaimed reserve balances remain with the Lessor at the end of the Term.
+The Lessee shall pay an engine maintenance reserve of USD 85 per flight cycle monthly.
+
+4. MAINTENANCE RECORDS AND RETURN
+The Lessee shall maintain the Aircraft in accordance with Section 7.2 of this Agreement.
+Within 10 business days after each shop visit, the Lessee shall provide complete technical records to the Lessor.
+On the Expiration Date, the Lessee shall return the Aircraft to the Lessor with complete technical records and current maintenance status.
+
+5. ASSIGNMENT AND SUBLEASING
+The Lessee shall not assign this Agreement without the Lessor's prior written consent.
+The Lessee shall not sublease the Aircraft without the Lessor's prior written consent.

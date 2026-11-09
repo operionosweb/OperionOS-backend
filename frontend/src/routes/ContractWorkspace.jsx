@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import Reveal from "../components/ui/Reveal";
 import Button from "../components/ui/Button";
 import { LoadingState, ErrorState, EmptyState } from "../components/ui/States";
@@ -8,6 +8,12 @@ import ContractAssistantPanel from "../components/intelligence/ContractAssistant
 import IntelligenceStatus from "../components/intelligence/IntelligenceStatus";
 import FinancialImpactSection from "../components/intelligence/FinancialImpactSection";
 import AviationContractCoreSection from "../components/intelligence/AviationContractCoreSection";
+import ObligationFulfilmentReview from "../components/intelligence/ObligationFulfilmentReview";
+import AviationLeaseRiskAssessment from "../components/intelligence/AviationLeaseRiskAssessment";
+import AviationExternalRiskIntelligence from "../components/intelligence/AviationExternalRiskIntelligence";
+import AviationEventImpactPanel from "../components/intelligence/AviationEventImpactPanel";
+import AviationRedeliveryIntelligence from "../components/intelligence/AviationRedeliveryIntelligence";
+import PortfolioContractAssistantPanel from "../components/intelligence/PortfolioContractAssistantPanel";
 import OrganizationGate from "../components/demo/OrganizationGate";
 import { useOrganization } from "../context/OrganizationContext";
 import { ORGANIZATION_PERMISSIONS } from "../lib/permissions";
@@ -25,6 +31,7 @@ import {
   listAnalysisRunRelationships,
   searchContractIntelligence,
   listAnalysisRunClauses,
+  compareAnalysisRuns,
   listAnalysisRunObligations,
   listAnalysisRunDeadlines,
   listAnalysisRunRisks,
@@ -35,7 +42,12 @@ import {
   analyzeDeadlines,
   analyzeRisks,
 } from "../lib/contractsApi";
-import { CONTRACT_INTELLIGENCE_HIERARCHY, INTELLIGENCE_AVAILABILITY, deriveAvailabilityState } from "../lib/contractIntelligenceModel";
+import {
+  CONTRACT_INTELLIGENCE_HIERARCHY,
+  INTELLIGENCE_AVAILABILITY,
+  deriveAvailabilityState,
+  resolveContractWorkspaceAnalysisRunId,
+} from "../lib/contractIntelligenceModel";
 
 const INTELLIGENCE_SECTIONS = CONTRACT_INTELLIGENCE_HIERARCHY
   .filter((node) => ["clauses", "obligations", "deadlines", "risks", "evidence", "recommendations"].includes(node.id))
@@ -50,6 +62,7 @@ const INTELLIGENCE_SECTIONS = CONTRACT_INTELLIGENCE_HIERARCHY
 const WORKSPACE_SECTIONS = Object.freeze({
   overview: "Overview",
   relationships: "Parties & Aircraft",
+  redelivery: "Redelivery",
   "commercial-terms": "Commercial Terms",
   obligations: "Obligations",
   deadlines: "Key Dates",
@@ -93,6 +106,32 @@ function formatDeadlineTiming(deadline) {
   return deadline.timing_expression || "Timing not computable";
 }
 
+function formatDeadlineMonitoring(monitoring) {
+  if (!monitoring) return null;
+  switch (monitoring.status) {
+    case "passed":
+      return `Date passed ${Math.abs(monitoring.daysRemaining)} day${Math.abs(monitoring.daysRemaining) === 1 ? "" : "s"} ago`;
+    case "due_today":
+      return "Date is today";
+    case "approaching":
+      return `${monitoring.daysRemaining} day${monitoring.daysRemaining === 1 ? "" : "s"} remaining`;
+    case "scheduled":
+      return `${monitoring.daysRemaining} days remaining`;
+    case "awaiting_condition":
+      return "Awaiting condition confirmation";
+    case "awaiting_trigger":
+      return "Awaiting trigger date";
+    case "unresolved":
+      return "Timing could not be calculated";
+    case "unverified_date":
+      return "Date requires verification";
+    case "excluded":
+      return "Excluded after review";
+    default:
+      return "No calculated date";
+  }
+}
+
 function formatIntelligenceLabel(value) {
   return value ? String(value).replaceAll("_", " ").toLowerCase() : "Not established";
 }
@@ -107,7 +146,7 @@ function getFindingReviewLabel(item, incomplete = false) {
   ) {
     return "Human review required";
   }
-  if (["reviewed", "approved", "confirmed"].includes(item?.review_status)) return "Reviewed";
+  if (["verified", "reviewed", "approved", "confirmed"].includes(item?.review_status)) return "Reviewed";
   return "Evidence review pending";
 }
 
@@ -132,27 +171,78 @@ function formatCommercialTerm(term) {
 function normalizeProfileEvidence(items = []) {
   return items.map((item) => ({
     id: item.evidenceId,
+    clause_id: item.clauseId,
     excerpt: item.evidenceText || item.source?.excerpt,
     source_locator: item.sourceLocation || item.source?.source_locator,
     page_number: item.pageNumber || item.source?.page_number,
   }));
 }
 
+function evidenceBackedRecommendations(items = [], clauses = []) {
+  if (!Array.isArray(items)) return [];
+  const clausesById = new Map(clauses
+    .filter((clause) => clause && typeof clause === "object" && clause.id)
+    .map((clause) => [clause.id, clause]));
+  return items.map((item) => {
+    if (!item || typeof item !== "object") return null;
+    const evidence = (Array.isArray(item.evidence) ? item.evidence : []).filter((source) => {
+      if (!source || typeof source !== "object") return false;
+      const clause = clausesById.get(source.clauseId);
+      if (!clause || typeof source.evidenceText !== "string" || !source.evidenceText.trim()) return false;
+      const clauseText = String(clause.source_text || "").replace(/\s+/g, " ").trim();
+      const excerpt = source.evidenceText.replace(/\s+/g, " ").trim();
+      return clauseText.includes(excerpt);
+    });
+    return { ...item, evidence };
+  }).filter((item) => item && item.evidence.length > 0);
+}
+
+const RECOMMENDATION_CATEGORY_LABELS = Object.freeze({
+  contractual_protection: "Contractual protection",
+  commercial_protection: "Commercial protection",
+  operational_protection: "Aviation operations",
+  deadline_obligation_management: "Deadline and obligation",
+  negotiation_intelligence: "Negotiation review",
+});
+
+function formatComparisonSource(candidate) {
+  return `${candidate.documentName} · version ${candidate.documentVersionNumber} · source created ${candidate.sourceCreatedAt
+    ? new Date(candidate.sourceCreatedAt).toLocaleDateString()
+    : "date unavailable"}`;
+}
+
 export default function ContractDetail() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
+  const requestedAnalysisRunId = searchParams.get("analysisRunId") || "";
   const organization = useOrganization();
   const { organizationId } = organization;
 
-  return <OrganizationGate><ContractWorkspace contractId={id} organizationId={organizationId} canAnalyze={organization.hasOrganizationPermission(ORGANIZATION_PERMISSIONS.CONTRACT_ANALYZE)} /></OrganizationGate>;
+  return <OrganizationGate><ContractWorkspace
+    contractId={id}
+    organizationId={organizationId}
+    requestedAnalysisRunId={requestedAnalysisRunId}
+    canAnalyze={organization.hasOrganizationPermission(ORGANIZATION_PERMISSIONS.CONTRACT_ANALYZE)}
+    canReview={organization.hasOrganizationPermission(ORGANIZATION_PERMISSIONS.CONTRACT_WRITE)}
+  /></OrganizationGate>;
 }
 
-function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
+function ContractWorkspace({ contractId, organizationId, requestedAnalysisRunId, canAnalyze, canReview }) {
   const [state, setState] = useState("loading");
   const [contract, setContract] = useState(null);
   const [documents, setDocuments] = useState([]);
+  const [activeDocumentVersion, setActiveDocumentVersion] = useState(null);
   const [structure, setStructure] = useState({ pages: [], sections: [], chunks: [] });
-  const [latestVersionId, setLatestVersionId] = useState("");
+  const [latestExtractionStatus, setLatestExtractionStatus] = useState(null);
   const [analysisRun, setAnalysisRun] = useState(null);
+  const [comparisonSources, setComparisonSources] = useState([]);
+  const [comparisonSourcesState, setComparisonSourcesState] = useState("loading");
+  const [comparisonSourcesError, setComparisonSourcesError] = useState("");
+  const [sourceAAnalysisRunId, setSourceAAnalysisRunId] = useState("");
+  const [sourceBAnalysisRunId, setSourceBAnalysisRunId] = useState("");
+  const [changeComparison, setChangeComparison] = useState(null);
+  const [changeComparisonState, setChangeComparisonState] = useState("idle");
+  const [changeComparisonError, setChangeComparisonError] = useState("");
   const [clauses, setClauses] = useState([]);
   const [obligations, setObligations] = useState([]);
   const [deadlines, setDeadlines] = useState([]);
@@ -163,7 +253,9 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
   const [relationships, setRelationships] = useState([]);
   const [financialImpact, setFinancialImpact] = useState(null);
   const [financialImpactState, setFinancialImpactState] = useState("loading");
+  const [aviationLeaseAssessment, setAviationLeaseAssessment] = useState(null);
   const [processingState, setProcessingState] = useState("idle");
+  const [processingStatusError, setProcessingStatusError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [searchState, setSearchState] = useState("idle");
@@ -186,6 +278,9 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
   useEffect(() => {
     let cancelled = false;
     setState("loading");
+    setLatestExtractionStatus(null);
+    setActiveDocumentVersion(null);
+    setAviationLeaseAssessment(null);
 
     Promise.all([
       getContract(contractId, organizationId),
@@ -199,38 +294,76 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
         setDocuments(nextDocuments);
 
         const latestDocument = nextDocuments[0];
-        let nextAnalysisRunId = "";
+        let selectedDocument = latestDocument;
+        let selectedVersion = null;
+        let requestedAnalysisRun = null;
+        let storedAnalysisRunId = "";
 
         try {
-          nextAnalysisRunId = localStorage.getItem(`operion.activeAnalysisRunId.${contractId}`) || "";
+          storedAnalysisRunId = localStorage.getItem(`operion.activeAnalysisRunId.${contractId}`) || "";
         } catch {
-          nextAnalysisRunId = "";
+          storedAnalysisRunId = "";
+        }
+        let nextAnalysisRunId = resolveContractWorkspaceAnalysisRunId({
+          hasLatestDocument: Boolean(latestDocument),
+          storedRunId: storedAnalysisRunId,
+        });
+
+        if (requestedAnalysisRunId) {
+          const requestedRunResult = await getAnalysisRun(requestedAnalysisRunId, organizationId);
+          requestedAnalysisRun = requestedRunResult?.analysisRun;
+          if (!requestedAnalysisRun || requestedAnalysisRun.contract_id !== contractId || requestedAnalysisRun.status !== "completed") {
+            throw new Error("The requested source analysis is unavailable for this contract.");
+          }
+          const versionGroups = await Promise.all(nextDocuments.map(async (document) => ({
+            document,
+            versions: (await listDocumentVersions(document.id, organizationId))?.versions || [],
+          })));
+          const selectedSource = versionGroups
+            .flatMap(({ document, versions }) => versions.map((version) => ({ document, version })))
+            .find(({ version }) => version.id === requestedAnalysisRun.document_version_id);
+          if (!selectedSource) {
+            throw new Error("The requested source version is unavailable for this contract.");
+          }
+          selectedDocument = selectedSource.document;
+          selectedVersion = selectedSource.version;
+          nextAnalysisRunId = requestedAnalysisRunId;
         }
 
-        if (!latestDocument && !nextAnalysisRunId) {
+        if (!selectedDocument && !nextAnalysisRunId) {
+          setLatestExtractionStatus(null);
           setState("ready");
           return;
         }
 
-        if (latestDocument) {
+        if (selectedDocument) {
           try {
-            const [versionsResult, structureResult] = await Promise.all([
-              listDocumentVersions(latestDocument.id, organizationId),
-              getDocumentStructure(latestDocument.id, organizationId),
-            ]);
-            const latestVersion = versionsResult?.versions?.[0];
-            setLatestVersionId(latestVersion?.id || "");
+            const structureResult = await getDocumentStructure(selectedDocument.id, organizationId);
+            if (cancelled) return;
+            if (!requestedAnalysisRunId) {
+              const versionsResult = await listDocumentVersions(selectedDocument.id, organizationId);
+              selectedVersion = versionsResult?.versions?.[0] || null;
+            }
+            if (cancelled) return;
+            setActiveDocumentVersion(selectedVersion);
+            setLatestExtractionStatus(selectedVersion?.extraction_status || null);
             setStructure({
               pages: structureResult?.pages || [],
               sections: structureResult?.sections || [],
               chunks: structureResult?.chunks || [],
             });
-            if (latestVersion && latestVersion.analysis_run_id) {
-              nextAnalysisRunId = latestVersion.analysis_run_id;
+            if (!requestedAnalysisRunId) {
+              nextAnalysisRunId = resolveContractWorkspaceAnalysisRunId({
+                hasLatestDocument: true,
+                latestVersion: selectedVersion,
+                storedRunId: storedAnalysisRunId,
+              });
             }
-          } catch {
-            setStructure({ pages: [], sections: [], chunks: [] });
-            nextAnalysisRunId = nextAnalysisRunId || "";
+          } catch (error) {
+            if (cancelled) return;
+            setErrorMessage(error.message || "The selected document and version could not be verified.");
+            setState("error");
+            return;
           }
         }
 
@@ -246,12 +379,15 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
           setRelationships([]);
           setFinancialImpact(null);
           setFinancialImpactState("ready");
+          setAviationLeaseAssessment(null);
           setState("ready");
           return;
         }
 
         Promise.all([
-          getAnalysisRun(nextAnalysisRunId, organizationId),
+          requestedAnalysisRun
+            ? Promise.resolve({ analysisRun: requestedAnalysisRun })
+            : getAnalysisRun(nextAnalysisRunId, organizationId),
           listAnalysisRunClauses(nextAnalysisRunId, organizationId),
           listAnalysisRunObligations(nextAnalysisRunId, organizationId),
           listAnalysisRunDeadlines(nextAnalysisRunId, organizationId),
@@ -293,6 +429,7 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
             setRelationships([]);
             setFinancialImpact(null);
             setFinancialImpactState("unavailable");
+            setAviationLeaseAssessment(null);
             setState("error");
           });
       })
@@ -305,24 +442,94 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
     return () => {
       cancelled = true;
     };
-  }, [contractId, organizationId]);
+  }, [contractId, organizationId, requestedAnalysisRunId]);
+
+  useEffect(() => {
+    if (state !== "ready" || !requestedAnalysisRunId || !window.location.hash) return;
+    const sourceElement = document.getElementById(window.location.hash.slice(1));
+    sourceElement?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [state, requestedAnalysisRunId, clauses]);
+
+  useEffect(() => {
+    if (state !== "ready") return undefined;
+    let cancelled = false;
+    setComparisonSourcesState("loading");
+    setComparisonSourcesError("");
+    setChangeComparison(null);
+    setChangeComparisonState("idle");
+    setSourceAAnalysisRunId("");
+    setSourceBAnalysisRunId("");
+    if (!documents.length) {
+      setComparisonSources([]);
+      setComparisonSourcesState("ready");
+      return undefined;
+    }
+
+    Promise.all(documents.map(async (document) => {
+      const result = await listDocumentVersions(document.id, organizationId);
+      return (result?.versions || [])
+        .filter((version) => version.extraction_status === "completed"
+          && version.analysis_run_status === "completed"
+          && version.analysis_run_id)
+        .map((version) => ({
+          analysisRunId: version.analysis_run_id,
+          sourceCreatedAt: version.created_at,
+          documentId: document.id,
+          documentName: document.filename || "Untitled document",
+          documentVersionId: version.id,
+          documentVersionNumber: version.version_number,
+        }));
+    }))
+      .then((sourceGroups) => {
+        if (cancelled) return;
+        const uniqueSources = [...new Map(sourceGroups.flat().map((source) => [source.analysisRunId, source])).values()];
+        setComparisonSources(uniqueSources);
+        setComparisonSourcesState("ready");
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setComparisonSources([]);
+        setComparisonSourcesError(error.message || "Completed contract analyses could not be loaded.");
+        setComparisonSourcesState("error");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [documents, organizationId, state]);
 
   useEffect(() => {
     if (processingState !== "processing" || !activeAnalysisRunId) return undefined;
+    let cancelled = false;
     const timer = window.setInterval(() => {
       getAnalysisRun(activeAnalysisRunId, organizationId)
-        .then((result) => setAnalysisRun(result?.analysisRun || null))
-        .catch(() => {});
+        .then((result) => {
+          if (cancelled) return;
+          setAnalysisRun(result?.analysisRun || null);
+          setProcessingStatusError("");
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            setProcessingStatusError(error.message || "Processing status could not be refreshed.");
+          }
+        });
     }, 2000);
-    return () => window.clearInterval(timer);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [processingState, activeAnalysisRunId, organizationId]);
 
   async function handleFullProcessing() {
-    if (!analysisRun?.id) return;
+    if (!analysisRun?.id || latestExtractionStatus !== "completed") return;
     setProcessingState("processing");
+    setProcessingStatusError("");
     setErrorMessage("");
     try {
       await processContractIntelligence(analysisRun.id, organizationId);
+      const financialImpactLoad = getAnalysisRunFinancialImpact(analysisRun.id, organizationId)
+        .then((result) => ({ result, error: null }))
+        .catch((error) => ({ result: null, error }));
       const [runResult, clausesResult, obligationsResult, deadlinesResult, risksResult, evidenceResult, profileResult, relationshipsResult, financialImpactResult] = await Promise.all([
         getAnalysisRun(analysisRun.id, organizationId),
         listAnalysisRunClauses(analysisRun.id, organizationId),
@@ -332,7 +539,7 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
         listAnalysisRunEvidence(analysisRun.id, organizationId),
         getAnalysisRunProfile(analysisRun.id, organizationId),
         listAnalysisRunRelationships(analysisRun.id, organizationId),
-        getAnalysisRunFinancialImpact(analysisRun.id, organizationId),
+        financialImpactLoad,
       ]);
       setAnalysisRun(runResult?.analysisRun || null);
       setClauses(clausesResult?.clauses || []);
@@ -342,8 +549,9 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
       setEvidence(evidenceResult?.evidence || []);
       setProfile(profileResult?.profile || null);
       setRelationships(relationshipsResult?.relationships || []);
-      setFinancialImpact(financialImpactResult?.financialImpact || null);
-      setFinancialImpactState("ready");
+      setFinancialImpact(financialImpactResult.result?.financialImpact || null);
+      setFinancialImpactState(financialImpactResult.error ? "unavailable" : "ready");
+      setProcessingStatusError("");
       setProcessingState("ready");
     } catch (error) {
       setErrorMessage(error.message || "Contract intelligence processing failed.");
@@ -362,6 +570,22 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
     } catch (error) {
       setErrorMessage(error.message || "Contract search failed.");
       setSearchState("error");
+    }
+  }
+
+  async function handleChangeComparison(event) {
+    event.preventDefault();
+    if (!sourceAAnalysisRunId || !sourceBAnalysisRunId || sourceAAnalysisRunId === sourceBAnalysisRunId) return;
+    setChangeComparisonState("loading");
+    setChangeComparisonError("");
+    setChangeComparison(null);
+    try {
+      const result = await compareAnalysisRuns(sourceAAnalysisRunId, sourceBAnalysisRunId, organizationId);
+      setChangeComparison(result?.comparison || null);
+      setChangeComparisonState("ready");
+    } catch (error) {
+      setChangeComparisonError(error.message || "The selected analyses could not be compared.");
+      setChangeComparisonState("error");
     }
   }
 
@@ -472,8 +696,14 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
   const keyRisks = [...risks].sort((left, right) => (severityOrder[left.severity] ?? 4) - (severityOrder[right.severity] ?? 4)).slice(0, 3);
   const parties = profile?.metadata?.parties || [];
   const aircraftIdentifiers = profile?.aircraft_identifiers || [];
-  const recommendations = profile?.recommendations || [];
+  const assetIdentificationReview = profile?.metadata?.assetIdentificationReview || {};
+  const profileRunId = profile?.analysis_run_id || profile?.analysisRunId;
+  const recommendations = analysisRun?.id === activeAnalysisRunId
+    && (!profileRunId || profileRunId === activeAnalysisRunId)
+    ? evidenceBackedRecommendations(profile?.recommendations || [], clauses)
+    : [];
   const leaseIntelligence = profile?.metadata?.leaseIntelligence || profile?.metadata?.lease_intelligence || {};
+  const leaseLifecycleRelationships = leaseIntelligence.lifecycleRelationships || [];
   const keyCommercialTerms = profile?.key_commercial_terms || [];
   const operationalTerms = profile?.key_operational_terms || [];
   const missingTerms = profile?.unusual_or_missing_terms || [];
@@ -482,8 +712,16 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
   const workspaceSectionOrder = [...new Set([
     ...(roleIntelligence?.sectionOrder || []),
     ...Object.keys(WORKSPACE_SECTIONS),
-  ])].filter((sectionId) => WORKSPACE_SECTIONS[sectionId]);
-  const processingStage = PROCESSING_STAGES[analysisRun?.status] || ["Document structured", "Contract Intelligence has not started yet."];
+  ])].filter((sectionId) => WORKSPACE_SECTIONS[sectionId]
+    && (sectionId !== "redelivery" || Boolean(leaseIntelligence.redelivery)));
+  const extractionBlocked = latestExtractionStatus !== "completed";
+  const processingStage = extractionBlocked
+    ? latestExtractionStatus === "requires_ocr"
+      ? ["OCR required", "One or more pages could not be extracted. Contract analysis is blocked until document text extraction is complete."]
+      : latestExtractionStatus
+        ? ["Extraction incomplete", `Document extraction status is ${latestExtractionStatus}. Contract analysis is unavailable until extraction completes.`]
+        : ["Extraction status unavailable", "Contract analysis is unavailable until the document's completed extraction status can be verified."]
+    : PROCESSING_STAGES[analysisRun?.status] || ["Document structured", "Contract Intelligence has not started yet."];
   const financialActionsByRisk = new Map((financialImpact?.actions || []).map((action) => [action.riskId, action]));
   const partyEvidence = normalizeProfileEvidence([profile?.evidence_claims?.find((claim) => claim.field === "parties")?.evidence].filter(Boolean));
   const evidenceFor = (item) => {
@@ -564,7 +802,13 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
           <div className="op-surface-plane-secondary" style={{ padding: "var(--op-space-5)" }}>
             <p className="op-kicker" style={{ marginBottom: "var(--op-space-2)" }}>Document structure</p>
             <p className="op-body-sm" style={{ marginBottom: "var(--op-space-3)" }}>
-              Deterministic structure is ready for later Contract Intelligence analysis.
+              {latestExtractionStatus === "completed"
+                ? "Document extraction completed. Review the source structure before Contract Intelligence analysis."
+                : latestExtractionStatus === "requires_ocr"
+                  ? "Some pages need successful OCR before this document can be analysed. The original upload is retained."
+                  : latestExtractionStatus
+                    ? `Document extraction is ${latestExtractionStatus}; Contract Intelligence is blocked until extraction completes.`
+                    : "Completed document extraction could not be confirmed; Contract Intelligence remains unavailable."}
             </p>
             <div className="op-inspector-kv"><span className="op-body-sm">Pages</span><span className="op-body-sm">{structure.pages.length}</span></div>
             <div className="op-inspector-kv"><span className="op-body-sm">Sections</span><span className="op-body-sm">{structure.sections.length}</span></div>
@@ -577,7 +821,10 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
               <span>{processingStage[0]}</span>
               <p>{processingStage[1]}</p>
             </div>
-            {canAnalyze && analysisRun && analysisRun.status !== "completed" && <Button type="button" variant="primary" onClick={handleFullProcessing} disabled={processingState === "processing"}>
+            {processingStatusError && processingState === "processing" && <p className="op-body-sm" role="status" style={{ marginTop: "var(--op-space-3)" }}>
+              {processingStatusError} Contract Intelligence processing continues; this status will retry automatically.
+            </p>}
+            {canAnalyze && analysisRun && analysisRun.status !== "completed" && latestExtractionStatus === "completed" && <Button type="button" variant="primary" onClick={handleFullProcessing} disabled={processingState === "processing"}>
               {processingState === "processing" ? processingStage[0] : analysisRun.status === "failed" ? "Retry analysis" : "Analyse contract"}
             </Button>}
             {processingState === "error" && <p className="op-body-sm" style={{ color: "var(--op-signal-risk)", marginTop: "var(--op-space-3)" }}>{errorMessage}</p>}
@@ -639,6 +886,30 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
                 {aircraftIdentifiers.length ? aircraftIdentifiers.map((identifier) => <div className="op-profile-identifier" key={`${identifier.type}-${identifier.value}`}><p className="op-body-sm"><strong>{identifier.value}</strong> · {formatIntelligenceLabel(identifier.type)}</p><EvidencePanel findingLabel={`${identifier.value} identifier`} evidence={normalizeProfileEvidence([identifier.evidence].filter(Boolean))} /></div>) : <p className="op-body-sm">No aircraft or engine identifier was established.</p>}
               </section>
             </div>
+            {leaseLifecycleRelationships.length > 0 && (
+              <section className="op-surface-plane-secondary" style={{ padding: "var(--op-space-4)", marginTop: "var(--op-space-4)" }}>
+                <p className="op-kicker">Lease lifecycle relationships</p>
+                {leaseLifecycleRelationships.map((relationship, index) => (
+                  <article className="op-relationship-item" key={`${relationship.type}-${index}`}>
+                    <div>
+                      <strong className="op-body">Conditional extension option</strong>
+                      <p className="op-body-sm">
+                        {relationship.noticeDeadline
+                          ? `Derived latest notice date: ${relationship.noticeDeadline}`
+                          : `Notice deadline: ${NOT_ESTABLISHED}`}
+                      </p>
+                      <p className="op-body-sm">
+                        {relationship.exerciseStatus === "not_established"
+                          ? "Option exercise is not established by the available evidence."
+                          : "Option exercise status requires review."}
+                      </p>
+                      {relationship.uncertainty && <p className="op-body-sm op-relationship-boundary">{relationship.uncertainty}</p>}
+                    </div>
+                    <EvidencePanel findingLabel="Extension option and related lease expiry" evidence={normalizeProfileEvidence(relationship.evidence || [])} />
+                  </article>
+                ))}
+              </section>
+            )}
             <div className="op-grid op-grid-3" style={{ marginTop: "var(--op-space-4)" }}>
               <section className="op-surface-plane-secondary" style={{ padding: "var(--op-space-4)" }}>
                 <p className="op-kicker">Material exposures</p>
@@ -714,6 +985,7 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
       )}
 
       <Reveal id="assistant" style={{ marginBottom: "var(--op-space-6)", scrollMarginTop: 90 }}>
+        <PortfolioContractAssistantPanel organizationId={organizationId} />
         <ContractAssistantPanel analysisRunId={analysisRun?.id} organizationId={organizationId} />
       </Reveal>
 
@@ -778,6 +1050,103 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
 
       <Reveal id="clauses" style={{ marginBottom: "var(--op-space-5)", scrollMarginTop: 90 }}>
         <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-3)" }}>Clauses</h2>
+        <section className="op-surface-plane-secondary" style={{ padding: "var(--op-space-4)", marginBottom: "var(--op-space-4)" }}>
+          <h3 className="op-heading-sm" style={{ marginBottom: "var(--op-space-2)" }}>Compare contract sources</h3>
+          <p className="op-body-sm" style={{ marginBottom: "var(--op-space-3)" }}>
+            Compare two explicitly selected completed analyses. This identifies candidate text changes and linked intelligence for review; it does not determine amendment status, legal effect, or which source governs.
+          </p>
+          {comparisonSourcesState === "loading" ? (
+            <LoadingState label="Loading completed analyses…" />
+          ) : comparisonSourcesState === "error" ? (
+            <ErrorState message={comparisonSourcesError} />
+          ) : comparisonSources.length < 2 ? (
+            <p className="op-body-sm">Two completed, extracted analyses for this contract are required before comparison is available.</p>
+          ) : (
+            <form onSubmit={handleChangeComparison}>
+              <div className="op-grid op-grid-2" style={{ marginBottom: "var(--op-space-3)" }}>
+                <label className="op-body-sm">Source A
+                  <select value={sourceAAnalysisRunId} onChange={(event) => setSourceAAnalysisRunId(event.target.value)} required>
+                    <option value="">Select a completed analysis</option>
+                    {comparisonSources.map((source) => <option key={source.analysisRunId} value={source.analysisRunId}>{formatComparisonSource(source)}</option>)}
+                  </select>
+                </label>
+                <label className="op-body-sm">Source B
+                  <select value={sourceBAnalysisRunId} onChange={(event) => setSourceBAnalysisRunId(event.target.value)} required>
+                    <option value="">Select a completed analysis</option>
+                    {comparisonSources.map((source) => <option key={source.analysisRunId} value={source.analysisRunId}>{formatComparisonSource(source)}</option>)}
+                  </select>
+                </label>
+              </div>
+              <Button type="submit" variant="secondary" disabled={!sourceAAnalysisRunId || !sourceBAnalysisRunId || sourceAAnalysisRunId === sourceBAnalysisRunId || changeComparisonState === "loading"}>
+                {changeComparisonState === "loading" ? "Comparing sources…" : "Compare selected sources"}
+              </Button>
+              {changeComparisonState === "error" && <p className="op-body-sm" role="alert" style={{ color: "var(--op-signal-risk)", marginTop: "var(--op-space-3)" }}>{changeComparisonError}</p>}
+            </form>
+          )}
+          {changeComparison && (
+            <div style={{ marginTop: "var(--op-space-4)" }}>
+              <p className="op-body-sm" role="status">
+                Candidate comparison · {Object.entries(changeComparison.summary).map(([type, count]) => `${count} ${type.replaceAll("_", " ")}`).join(" · ") || "no matches"}
+              </p>
+              <p className="op-body-sm" style={{ marginTop: "var(--op-space-2)" }}>
+                Source A/B order is user-selected, not contractual chronology. Execution, effective date, legal applicability, and supersession status are unknown. No historical findings were changed.
+              </p>
+              <div className="op-list-table" style={{ marginTop: "var(--op-space-3)" }}>
+                {changeComparison.changes.map((change, index) => (
+                  <details key={`${change.type}-${change.original?.clauseId || "none"}-${change.comparison?.clauseId || "none"}-${index}`} className="op-list-row" style={{ display: "block", padding: "var(--op-space-3)" }}>
+                    <summary className="op-body-sm" style={{ cursor: "pointer" }}>
+                      <strong>{change.type.replaceAll("_", " ")}</strong>
+                      {" · "}{change.original?.clauseNumber || change.comparison?.clauseNumber || "Clause identity unresolved"}
+                      {" · "}{change.original?.title || change.comparison?.title || "Untitled clause"}
+                      {change.financialTermReviewRequired ? " · financial term review" : ""}
+                    </summary>
+                    <p className="op-body-sm" style={{ marginTop: "var(--op-space-2)" }}>
+                      Impact review: {formatIntelligenceLabel(change.impactStatus)}. {change.type === "unchanged"
+                        ? "The clause text matches; related intelligence has not been independently revalidated."
+                        : "A source relationship or wording match is not proof that a finding is invalid or legally superseded."}
+                    </p>
+                    <div className="op-grid op-grid-2" style={{ marginTop: "var(--op-space-3)" }}>
+                      {[["Source A", change.original], ["Source B", change.comparison]].map(([label, source]) => (
+                        <section key={label} className="op-surface" style={{ padding: "var(--op-space-3)" }}>
+                          <p className="op-kicker">{label}{source ? ` · ${source.category || "uncategorized"}` : " · no unique match"}</p>
+                          {source && <>
+                            <p className="op-body-sm">{source.text}</p>
+                            {source.evidenceStatus === "missing" && <p className="op-body-sm" role="note">No linked page evidence is available for this clause; verify the source document manually.</p>}
+                            {source.evidence.map((item) => <p key={item.id} className="op-body-sm" style={{ marginTop: "var(--op-space-2)" }}>
+                              {item.sourceLocator || (item.pageNumber ? `Page ${item.pageNumber}` : "Page unavailable")}: “{item.excerpt}”
+                            </p>)}
+                          </>}
+                        </section>
+                      ))}
+                    </div>
+                    {change.type !== "unchanged" && <div style={{ marginTop: "var(--op-space-3)" }}>
+                      <p className="op-kicker">Existing findings to review</p>
+                      {[["Source A", change.linkedIntelligence.original], ["Source B", change.linkedIntelligence.comparison]].map(([label, intelligence]) => (
+                        <section key={label} style={{ marginTop: "var(--op-space-2)" }}>
+                          <p className="op-body-sm">
+                            {label}: {intelligence.obligations.length} linked obligations · {intelligence.deadlines.length} linked deadlines · {intelligence.risks.length} linked risk findings · {intelligence.financialAssessments.length} linked financial assessments · {intelligence.potentiallyRelatedDeadlines.length} potentially related term deadlines
+                          </p>
+                          {intelligence.obligations.map((item) => <p key={`obligation-${item.id}`} className="op-body-sm">Possible obligation impact requiring review: {item.description} ({formatIntelligenceLabel(item.status)}; {formatIntelligenceLabel(item.reviewStatus)}).</p>)}
+                          {intelligence.deadlines.map((item) => <p key={`deadline-${item.id}`} className="op-body-sm">Linked deadline requiring review: {item.timingExpression || "Timing not established"}{item.absoluteDate ? ` · ${item.absoluteDate}` : ""} ({formatIntelligenceLabel(item.reviewStatus)}).</p>)}
+                          {intelligence.risks.map((item) => <p key={`risk-${item.id}`} className="op-body-sm">Linked risk requiring review: {item.title} ({formatIntelligenceLabel(item.severity)}; {formatIntelligenceLabel(item.reviewStatus)}).</p>)}
+                          {intelligence.financialAssessments.map((item) => <p key={`financial-${item.id}`} className="op-body-sm">Financial assessment requiring review: {item.description || item.category}{Number.isFinite(item.baseAmount) ? ` · ${formatFinancialAmount(item.baseAmount, item.currency)}${item.frequency ? ` / ${item.frequency}` : ""}` : " · amount not quantified"}. No assessment was recalculated.</p>)}
+                          {intelligence.potentiallyRelatedDeadlines.map((item) => <div key={`possible-deadline-${item.id}`}>
+                            <p className="op-body-sm">Potentially affected deadline requiring confirmation: {item.timingExpression || "Timing not established"}{item.absoluteDate ? ` · ${item.absoluteDate}` : ""}.</p>
+                            {item.potentiallyAffectedObligations.map((obligation) => <p key={`possible-obligation-${obligation.id}`} className="op-body-sm">Possible dependent obligation: {obligation.description}.</p>)}
+                            {item.potentiallyAffectedRisks.map((risk) => <p key={`possible-risk-${risk.id}`} className="op-body-sm">Possible dependent risk: {risk.title}.</p>)}
+                          </div>)}
+                          {change.financialTermReviewRequired && !intelligence.financialAssessments.length && <p className="op-body-sm">Financial term changed, but no linked financial assessment was available in this analysis.</p>}
+                        </section>
+                      ))}
+                      <p className="op-body-sm" style={{ marginTop: "var(--op-space-2)" }}>{change.recommendedAction}</p>
+                    </div>}
+                  </details>
+                ))}
+              </div>
+              <p className="op-body-sm" style={{ marginTop: "var(--op-space-3)" }}>{changeComparison.limitations.join(" ")}</p>
+            </div>
+          )}
+        </section>
         {!activeAnalysisRunId ? (
           <EmptyState title="No active analysis run selected" description="This contract has no active run selected, so no clause records can be shown yet." />
         ) : clauseAvailability === INTELLIGENCE_AVAILABILITY.LOADING ? (
@@ -828,6 +1197,7 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
                 <span className="op-body-sm">{obligation.timing_expression || obligation.frequency || "Timing not stated"}</span>
                 <div><span className="op-badge">{getFindingReviewLabel(obligation, !obligation.actor || !obligation.action || !obligation.object)}</span>{obligation.confidence != null && <p className="op-body-sm" style={{ marginTop: "var(--op-space-1)" }}>{Math.round(obligation.confidence * 100)}% confidence</p>}</div>
                 <EvidencePanel findingLabel={obligation.description || "Obligation"} evidence={evidenceFor(obligation)} />
+                <ObligationFulfilmentReview analysisRunId={activeAnalysisRunId} organizationId={organizationId} obligation={obligation} canReview={canReview} />
               </div>
             ))}
           </div>
@@ -854,28 +1224,37 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
         ) : !deadlines.length ? (
           <EmptyState title="Deadline intelligence has not been built" description="The current obligations are ready for deterministic temporal interpretation." />
         ) : (
-          <div className="op-list-table">
-            {deadlines.map((deadline) => {
-              const obligation = obligations.find((item) => item.id === deadline.obligation_id);
-              const calculation = deadline.metadata?.calculation;
-              return (
-                <div id={`deadline-${deadline.id}`} key={deadline.id} className="op-list-row" style={{ gridTemplateColumns: "1.4fr 1.1fr 0.8fr auto auto", scrollMarginTop: 90 }}>
-                  <div>
-                    <span className="op-body-sm">{obligation?.description || "Linked obligation"}</span>
-                    <p className="op-body-sm" style={{ margin: "var(--op-space-1) 0 0" }}>{obligation?.actor || "Actor unclear"}</p>
+          <>
+            <p className="op-body-sm" style={{ marginBottom: "var(--op-space-3)" }}>
+              Date monitoring is calculated from established absolute dates, does not determine whether an obligation was performed, and requires source verification before action.
+            </p>
+            <div className="op-list-table">
+              {deadlines.map((deadline) => {
+                const obligation = obligations.find((item) => item.id === deadline.obligation_id);
+                const calculation = deadline.metadata?.calculation;
+                return (
+                  <div id={`deadline-${deadline.id}`} key={deadline.id} className="op-list-row" style={{ gridTemplateColumns: "1.4fr 1.1fr 0.8fr auto auto", scrollMarginTop: 90 }}>
+                    <div>
+                      <span className="op-body-sm">{obligation?.description || "Linked obligation"}</span>
+                      <p className="op-body-sm" style={{ margin: "var(--op-space-1) 0 0" }}>{obligation?.actor || "Actor unclear"}</p>
+                    </div>
+                    <div>
+                      <strong className="op-body-sm">{formatDeadlineTiming(deadline)}</strong>
+                      <p className="op-body-sm" style={{ margin: "var(--op-space-1) 0 0" }}>
+                        {formatDeadlineMonitoring(deadline.monitoring)}
+                        {deadline.monitoring?.reviewRequired ? " - extracted date is not verified" : ""}
+                      </p>
+                      {calculation?.result && <p className="op-body-sm" style={{ margin: "var(--op-space-1) 0 0" }}>Calculated from {deadline.anchor_reference || "anchor"} {deadline.direction} {deadline.amount} {deadline.unit?.replaceAll("_", " ")}.</p>}
+                      {!deadline.absolute_date && deadline.condition && <p className="op-body-sm" style={{ margin: "var(--op-space-1) 0 0" }}>Condition: {deadline.condition}</p>}
+                    </div>
+                    <div><span className="op-badge">{deadline.deadline_type?.replaceAll("_", " ")}</span><p className="op-body-sm" style={{ margin: "var(--op-space-1) 0 0" }}>{getFindingReviewLabel(deadline, ["non_computable", "ambiguous"].includes(deadline.computability))}</p>{deadline.confidence != null && <p className="op-body-sm">{Math.round(deadline.confidence * 100)}% confidence</p>}</div>
+                    <button type="button" className="op-body-sm" onClick={() => document.getElementById(`clause-${deadline.source_clause_id}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}>View source</button>
+                    <EvidencePanel findingLabel={deadline.timing_expression || "Deadline"} evidence={evidenceFor(deadline)} />
                   </div>
-                  <div>
-                    <strong className="op-body-sm">{formatDeadlineTiming(deadline)}</strong>
-                    {calculation?.result && <p className="op-body-sm" style={{ margin: "var(--op-space-1) 0 0" }}>Calculated from {deadline.anchor_reference || "anchor"} {deadline.direction} {deadline.amount} {deadline.unit?.replaceAll("_", " ")}.</p>}
-                    {!deadline.absolute_date && deadline.condition && <p className="op-body-sm" style={{ margin: "var(--op-space-1) 0 0" }}>Condition: {deadline.condition}</p>}
-                  </div>
-                  <div><span className="op-badge">{deadline.deadline_type?.replaceAll("_", " ")}</span><p className="op-body-sm" style={{ margin: "var(--op-space-1) 0 0" }}>{getFindingReviewLabel(deadline, ["non_computable", "ambiguous"].includes(deadline.computability))}</p>{deadline.confidence != null && <p className="op-body-sm">{Math.round(deadline.confidence * 100)}% confidence</p>}</div>
-                  <button type="button" className="op-body-sm" onClick={() => document.getElementById(`clause-${deadline.source_clause_id}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}>View source</button>
-                  <EvidencePanel findingLabel={deadline.timing_expression || "Deadline"} evidence={evidenceFor(deadline)} />
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </Reveal>
 
@@ -884,6 +1263,21 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
         <p className="op-body-sm" style={{ marginBottom: "var(--op-space-4)", maxWidth: 760 }}>
           Risk findings are evidence-linked screening signals, not confirmed legal conclusions. Review low-confidence findings and cure or notice periods against the source clause.
         </p>
+        {analysisRun && profile?.classification?.type === "AIRCRAFT_LEASE" && profile?.classification?.status === "confirmed" && (
+          <AviationLeaseRiskAssessment
+            analysisRunId={analysisRun.id}
+            organizationId={organizationId}
+            canReview={canReview}
+            onAssessmentChange={setAviationLeaseAssessment}
+          />
+        )}
+        {analysisRun && (
+          <AviationExternalRiskIntelligence
+            contractId={contractId}
+            analysisRunId={analysisRun.id}
+            organizationId={organizationId}
+          />
+        )}
         {analysisRun && clauses.length > 0 && !risks.length && (
           <div className="op-surface-plane-secondary" style={{ padding: "var(--op-space-4)", marginBottom: "var(--op-space-4)" }}>
             <p className="op-body-sm" style={{ marginBottom: "var(--op-space-3)" }}>
@@ -965,6 +1359,8 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
                       <p className="op-body-sm" style={{ marginBottom: "var(--op-space-3)" }}>{risk.description || risk.exposure}</p>
                       {risk.consequence && <><p className="op-kicker">Potential consequence</p><p className="op-body-sm" style={{ marginBottom: "var(--op-space-3)" }}>{risk.consequence}</p></>}
                       {risk.financial_exposure && <><p className="op-kicker">Financial exposure</p><p className="op-body-sm" style={{ marginBottom: "var(--op-space-3)" }}>{risk.financial_exposure.type === "quantified" ? `${risk.financial_exposure.currency} ${Number(risk.financial_exposure.amount).toLocaleString()}` : "Unquantified / potentially uncapped"}</p></>}
+                      {(risk.recommended_action || risk.metadata?.recommended_action) && <><p className="op-kicker">Suggested action</p><p className="op-body-sm" style={{ marginBottom: "var(--op-space-3)" }}>{risk.recommended_action || risk.metadata.recommended_action}</p></>}
+                      {risk.deadline_monitoring && <p className="op-body-sm" style={{ marginBottom: "var(--op-space-3)" }}>Current deadline status: {formatDeadlineMonitoring(risk.deadline_monitoring)}. This date status does not establish performance or breach.</p>}
                       <p className="op-kicker">Related intelligence</p>
                       {relatedObligations.length ? relatedObligations.map((item) => <p key={item.id} className="op-body-sm">Obligation: {item.description}</p>) : <p className="op-body-sm">No related obligation record.</p>}
                       {relatedDeadlines.map((item) => <p key={item.id} className="op-body-sm">Deadline: {formatDeadlineTiming(item)}</p>)}
@@ -995,6 +1391,22 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
           <div className="op-relationship-grid">
             <section className="op-surface-plane-primary" style={{ padding: "var(--op-space-4)" }}>
               <p className="op-kicker">Materialized aircraft links</p>
+              {assetIdentificationReview.status === "requires_review" && (
+                <div className="op-surface-plane-secondary" role="note" style={{ marginBottom: "var(--op-space-3)", padding: "var(--op-space-3)" }}>
+                  <p className="op-kicker">Conflicting aircraft identifiers</p>
+                  <p className="op-body-sm">Review the source candidates below. No aircraft relationship or event impact was inferred.</p>
+                  {assetIdentificationReview.conflicts.map((conflict) => (
+                    <div key={conflict.type} style={{ marginTop: "var(--op-space-2)" }}>
+                      <p className="op-body-sm">{formatIntelligenceLabel(conflict.type)}</p>
+                      {conflict.candidates.map((candidate) => <p className="op-body-sm" key={`${conflict.type}-${candidate.value}`}>
+                        <strong>{candidate.value}</strong>
+                        {candidate.evidence?.sourceLocation ? ` · ${candidate.evidence.sourceLocation}` : ""}
+                        {candidate.evidence?.evidenceText ? ` · “${candidate.evidence.evidenceText}”` : ""}
+                      </p>)}
+                    </div>
+                  ))}
+                </div>
+              )}
               {relationships.length ? relationships.map((relationship) => (
                 <div className="op-relationship-item" key={relationship.id}>
                   <div><strong className="op-body">{relationship.registration || relationship.serial_number || "Aircraft identity unavailable"}</strong><p className="op-body-sm">{[relationship.manufacturer, relationship.model, relationship.aircraft_type].filter(Boolean).join(" · ") || "Aircraft details unavailable"}</p></div>
@@ -1010,7 +1422,21 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
             </section>
           </div>
         )}
+        {activeAnalysisRunId && <AviationEventImpactPanel
+          analysisRunId={activeAnalysisRunId}
+          organizationId={organizationId}
+          relationships={relationships}
+        />}
       </Reveal>
+
+      {leaseIntelligence.redelivery && <AviationRedeliveryIntelligence
+        redelivery={leaseIntelligence.redelivery}
+        relationships={relationships}
+        obligations={obligations}
+        deadlines={deadlines}
+        leaseAssessment={aviationLeaseAssessment}
+        financialImpact={financialImpact}
+      />}
 
       <Reveal id="financial-impact" style={{ marginBottom: "var(--op-space-5)", scrollMarginTop: 90 }}>
         <span className="op-page-kicker">Contract intelligence to financial exposure</span>
@@ -1021,7 +1447,13 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
         {!activeAnalysisRunId ? (
           <EmptyState title="Financial impact is not available yet" description="Select or complete a contract analysis run before financial exposure can be assessed." />
         ) : (
-          <FinancialImpactSection financialImpact={financialImpact} state={financialImpactState} />
+          <FinancialImpactSection
+            financialImpact={financialImpact}
+            obligations={obligations}
+            deadlines={deadlines}
+            leaseRiskAssessment={aviationLeaseAssessment}
+            state={financialImpactState}
+          />
         )}
       </Reveal>
 
@@ -1047,6 +1479,11 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
       <Reveal id="actions" style={{ marginBottom: "var(--op-space-5)", scrollMarginTop: 90 }}>
         <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-3)" }}>Recommended actions</h2>
         <p className="op-body-sm" style={{ marginBottom: "var(--op-space-4)", maxWidth: 760 }}>These are operational review suggestions derived from identified contract findings. They are not extracted contractual requirements and should be approved by the responsible contract owner.</p>
+        {latestExtractionStatus && latestExtractionStatus !== "completed" && (
+          <p className="op-body-sm" role="status" style={{ marginBottom: "var(--op-space-3)" }}>
+            Source extraction is {formatIntelligenceLabel(latestExtractionStatus)}. Recommendations reflect only available extracted passages and may omit contract content; verify the complete source before acting.
+          </p>
+        )}
         {!profile ? (
           <EmptyState title="Recommendations unavailable" description="Recommendations require a completed contract profile and evidence-backed risks." />
         ) : !recommendations.length ? (
@@ -1058,10 +1495,15 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
                 <div>
                   <span className="op-kicker">Grounded recommendation {index + 1}</span>
                   <h3 className="op-heading-sm">{recommendation.title}</h3>
+                  <span className="op-badge">{RECOMMENDATION_CATEGORY_LABELS[recommendation.category] || "Contract review"}</span>
                   <p className="op-body">{recommendation.action}</p>
-                  {recommendation.reason && <p className="op-body-sm"><strong>Reason:</strong> {recommendation.reason}</p>}
+                  {recommendation.observedFacts?.length > 0 && <p className="op-body-sm"><strong>Observed source fact:</strong> {recommendation.observedFacts.join(" · ")}</p>}
+                  {recommendation.interpretation && <p className="op-body-sm"><strong>Interpretation:</strong> {recommendation.interpretation}</p>}
+                  {recommendation.potentialImpact && <p className="op-body-sm"><strong>Potential impact (not quantified):</strong> {recommendation.potentialImpact}</p>}
+                  {recommendation.missingInformation?.length > 0 && <p className="op-body-sm"><strong>Information still required:</strong> {recommendation.missingInformation.join(" · ")}</p>}
                   <p className="op-body-sm"><strong>Owner:</strong> {recommendation.suggestedOwner ? formatIntelligenceLabel(recommendation.suggestedOwner) : NOT_ESTABLISHED} · <strong>Priority:</strong> {recommendation.priority || NOT_ESTABLISHED}</p>
                   {recommendation.triggerDeadline && <p className="op-body-sm"><strong>Trigger / deadline:</strong> {recommendation.triggerDeadline}</p>}
+                  <p className="op-body-sm"><strong>Evidence review:</strong> {formatIntelligenceLabel(recommendation.evidenceSufficiency)}{recommendation.evidenceConfidence !== null && recommendation.evidenceConfidence !== undefined ? ` · lowest linked extraction confidence ${Math.round(recommendation.evidenceConfidence * 100)}% (not probability)` : ""}</p>
                   <p className="op-body-sm">{recommendation.disclaimer}</p>
                   {recommendation.riskId && financialActionsByRisk.has(recommendation.riskId) && (() => {
                     const actionValue = financialActionsByRisk.get(recommendation.riskId);
@@ -1070,6 +1512,14 @@ function ContractWorkspace({ contractId, organizationId, canAnalyze }) {
                 </div>
                 <div className="op-action-controls">
                   {recommendation.riskId && <button type="button" className="op-body-sm" onClick={() => document.getElementById(`risk-${recommendation.riskId}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}>View linked risk</button>}
+                  {recommendation.evidence[0]?.clauseId && activeDocumentVersion?.id === analysisRun?.document_version_id && (
+                    <Link
+                      className="op-body-sm"
+                      to={`/app/contracts/${encodeURIComponent(contractId)}?analysisRunId=${encodeURIComponent(activeAnalysisRunId)}#clause-${encodeURIComponent(recommendation.evidence[0].clauseId)}`}
+                    >
+                      Open cited source · version {activeDocumentVersion.version_number ?? activeDocumentVersion.number ?? analysisRun.document_version_id}
+                    </Link>
+                  )}
                   <EvidencePanel findingLabel={recommendation.title} evidence={normalizeProfileEvidence(recommendation.evidence)} />
                 </div>
               </article>

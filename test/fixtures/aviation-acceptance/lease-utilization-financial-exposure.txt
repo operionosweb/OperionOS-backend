@@ -1,0 +1,7 @@
+Synthetic aircraft operating lease — utilization and excess charge terms
+
+12.4 Utilization allowance. The Lessee shall not exceed 300 flight hours or 500 flight cycles during each lease year.
+12.5 Excess flight-hour charges. Any excess flight hours shall be charged at USD 1,000 per flight hour.
+12.6 Excess flight-cycle charges. Any excess flight cycles shall be charged at EUR 1,000 per flight cycle.
+12.7 Annual cap. Aggregate excess flight-hour charges are capped at USD 100,000 per lease year.
+12.8 Measurement date. The lease year ends on 2026-12-31.

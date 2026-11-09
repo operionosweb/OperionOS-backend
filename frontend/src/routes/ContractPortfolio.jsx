@@ -5,6 +5,8 @@ import Reveal from "../components/ui/Reveal";
 import { LoadingState, ErrorState, EmptyState } from "../components/ui/States";
 import OrganizationGate from "../components/demo/OrganizationGate";
 import UploadContract from "../components/demo/UploadContract";
+import AviationContractPortfolioIntelligence from "../components/intelligence/AviationContractPortfolioIntelligence";
+import AviationExternalRiskIntelligence from "../components/intelligence/AviationExternalRiskIntelligence";
 import { useOrganization } from "../context/OrganizationContext";
 import { listContracts } from "../lib/contractsApi";
 
@@ -36,6 +38,7 @@ export default function ContractPortfolio() {
         </Reveal>
 
         <OrganizationGate>
+          <AviationExternalRiskIntelligence organizationId={organizationId} />
           <PortfolioList organizationId={organizationId} />
         </OrganizationGate>
       </Section>
@@ -89,6 +92,7 @@ function PortfolioList({ organizationId }) {
 
   return (
     <div>
+      <AviationContractPortfolioIntelligence organizationId={organizationId} />
       <Reveal style={{ marginBottom: "var(--op-space-6)" }}>
         <div className="op-surface-plane-primary" style={{ padding: "var(--op-space-5)" }}>
           <p className="op-kicker" style={{ marginBottom: "var(--op-space-2)" }}>Contextual layer</p>

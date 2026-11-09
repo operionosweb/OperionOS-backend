@@ -1,0 +1,7 @@
+Synthetic aircraft lease change instrument - Source B. Execution and applicability are unknown.
+1.1	commercial/payment	Monthly rent	1	The Lessee shall pay monthly rent of USD 135,000 in advance on each payment date.
+1.2	maintenance	Maintenance reserves	2	The Lessee shall pay a maintenance reserve of USD 400 per flight hour for engine maintenance.
+1.3	insurance	Insurance	3	The Lessee shall maintain hull insurance of not less than USD 300,000,000 and provide renewal evidence.
+1.4	delivery/redelivery	Aircraft redelivery	4	At redelivery, the Lessee shall return the Aircraft airworthy with technical records and life limited parts status.
+1.5	termination/default	Lease expiry	5	The Lease term expires on 30 June 2029.
+1.6	renewal/notice	Extension notice	6	The Lessee shall give written notice at least 180 days before lease expiry to exercise the extension option.

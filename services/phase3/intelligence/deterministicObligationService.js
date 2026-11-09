@@ -69,9 +69,10 @@ function extractParty(text) {
 function extractAction(text) {
   if (/\b(?:(?:shall|must|will|may|can)(?:\s+not)?|required to|is required to|agree to|agrees to)\s+return\b/i.test(text)) return "return";
   if (/\b(?:(?:shall|must|will|may|can)(?:\s+not)?|required to|is required to|agree to|agrees to)\s+extend\b/i.test(text)) return "extend";
-  const match = text.match(/\b(pay|reimburse|fund|maintain|inspect|repair|overhaul|provid(?:e|es)|operate|comply|obtain|notify|report|deliver|accept|redeliver|indemnif(?:y|ies)|cooperate|obtain consent|terminat(?:e|es|ed|ing))\b/i)?.[1] || null;
+  const match = text.match(/\b(pay|reimburse|fund|maintain|inspect|repair|overhaul|provid(?:e|es)|operate|exceed(?:s|ed|ing)?|comply|obtain|notify|report|give|deliver|accept|reject|assign|sublease|redeliver|indemnif(?:y|ies)|cooperate|obtain consent|terminat(?:e|es|ed|ing))\b/i)?.[1] || null;
   if (/^indemnif/i.test(match || "")) return "indemnify";
   if (/^provid/i.test(match || "")) return "provide";
+  if (/^exceed/i.test(match || "")) return "exceed";
   return match && /^terminat/i.test(match) ? "terminate" : match;
 }
 
@@ -82,8 +83,9 @@ function extractObject(text, action) {
       : action === "provide" ? "provid(?:e|es)"
       : action === "return" ? "(?:(?:shall|must|will|may|can)(?:\\s+not)?|required to|is required to|agree to|agrees to)\\s+return"
         : action === "extend" ? "(?:(?:shall|must|will|may|can)(?:\\s+not)?|required to|is required to|agree to|agrees to)\\s+extend"
-      : action;
-  const match = text.match(new RegExp(`\\b${actionPattern}\\b(?:\\s+the)?\\s+([^,.]+)`, "i"));
+      : action === "exceed" ? "exceed(?:s|ed|ing)?"
+        : action;
+  const match = text.match(new RegExp(`\\b${actionPattern}\\b(?:\\s+the)?\\s+((?:[^;.!?]|\\.(?=\\d))+?)(?=[;!?]|\\.(?!\\d)|$)`, "i"));
   const object = match?.[1]?.trim() || null;
   if (action === "terminate" && /^(?:following|after|upon|before|within|on)\b/i.test(object || "")) return "Agreement";
   return object;
@@ -98,7 +100,9 @@ function extractFrequency(text) {
 }
 
 function extractCondition(text) {
-  return text.match(/\b(if|unless|provided that|when)\b[^.]+/i)?.[0] || null;
+  return text.match(/\b(if|unless|provided that|when)\b[^.;,]+/i)?.[0]
+    || text.match(/\bwithout\b[^.;,]*\bconsent\b[^.;,]*/i)?.[0]
+    || null;
 }
 
 function extractConsequence(text) {
@@ -169,32 +173,32 @@ function detectObligationType(text) {
   return "other";
 }
 
-function extractObligationSentence(sourceText) {
+function extractObligationSentences(sourceText) {
   const cleaned = normalizeWhitespace(sourceText);
-  if (!cleaned) return null;
+  if (!cleaned) return [];
 
-  const obligationSignal = /\b(?:shall|must|required to|is required to|agree to|agrees to|will|(?:may|can)\s+(?:terminate|return|extend)|(?:lessor|lessee|airline|mro provider|supplier|airport|ground handler|manufacturer|insurer)\s+(?:terminates|indemnifies|provides\s+notice))\b/i;
-  if (!obligationSignal.test(cleaned)) return null;
+  const obligationSignal = /\b(?:shall|must|required to|is required to|agree to|agrees to|will|(?:may|can)\s+(?:terminate|return|extend|reject)|(?:lessor|lessee|airline|mro provider|supplier|airport|ground handler|manufacturer|insurer)\s+(?:terminates|indemnifies|provides\s+notice))\b/i;
+  if (!obligationSignal.test(cleaned)) return [];
 
   const parts = cleaned
     .split(/(?<=[.;!?])\s+|\n+/)
     .map((part) => part.trim())
     .filter(Boolean);
 
-  const match = parts.find((part) => obligationSignal.test(part));
-  const description = normalizeWhitespace(match || cleaned);
-  const conditionalNotice = description.match(/\b(?:if|unless|provided that|when)\s+((?:the\s+)?(?:lessor|lessee|airline|mro provider|supplier|airport|ground handler|manufacturer|insurer)\s+provides\s+notice\b[^.]*)/i);
-  return normalizeWhitespace(conditionalNotice?.[1] || description);
+  return parts.filter((part) => obligationSignal.test(part)).map((description) => {
+    const conditionalNotice = description.match(/\b(?:if|unless|provided that|when)\s+((?:the\s+)?(?:lessor|lessee|airline|mro provider|supplier|airport|ground handler|manufacturer|insurer)\s+provides\s+notice\b[^.]*)/i);
+    return {
+      description: normalizeWhitespace(conditionalNotice?.[1] || description),
+      conditionalNotice: Boolean(conditionalNotice),
+    };
+  });
 }
 
-export function buildDeterministicObligationCandidate(clause) {
-  const sourceText = clause.source_text || "";
-  const description = extractObligationSentence(sourceText);
-  if (!description) return null;
+function buildObligationCandidate(clause, { description, conditionalNotice: isConditionalNotice }) {
   const actor = extractParty(description);
   const action = extractAction(description);
-  const conditionalNotice = /\b(?:if|unless|provided that|when)\s+(?:the\s+)?(?:lessor|lessee|airline|mro provider|supplier|airport|ground handler|manufacturer|insurer)\s+provides\s+notice\b/i.test(sourceText);
-  const condition = conditionalNotice ? null : extractCondition(sourceText);
+  if (!action) return null;
+  const condition = isConditionalNotice ? null : extractCondition(description);
 
   return {
     description,
@@ -207,13 +211,27 @@ export function buildDeterministicObligationCandidate(clause) {
     trigger_expression: extractTiming(description) || undefined,
     timing_expression: extractTiming(description) || undefined,
     consequence: extractConsequence(description) || undefined,
-    modality: /\b(may|can)\b/i.test(description) ? "discretionary" : /\b(shall not|must not)\b/i.test(description) ? "prohibited" : conditionalNotice || condition ? "conditional" : "mandatory",
+    modality: /\b(may|can)\b/i.test(description) ? "discretionary" : /\b(shall not|must not)\b/i.test(description) ? "prohibited" : isConditionalNotice || condition ? "conditional" : "mandatory",
     frequency: extractFrequency(description) || undefined,
     priority: undefined,
     status: undefined,
     confidence: undefined,
     review_status: undefined,
   };
+}
+
+export function buildDeterministicObligationCandidates(clause) {
+  const candidates = extractObligationSentences(clause.source_text || [])
+    .map((sentence) => buildObligationCandidate(clause, sentence))
+    .filter(Boolean);
+  return [...new Map(candidates.map((candidate) => [
+    normalizeObligationDescription(candidate.description),
+    candidate,
+  ])).values()];
+}
+
+export function buildDeterministicObligationCandidate(clause) {
+  return buildDeterministicObligationCandidates(clause)[0] || null;
 }
 
 function isTransientProviderFailure(error) {
@@ -455,8 +473,8 @@ export function createDeterministicObligationService({
 
         for (const clause of clauses) {
           const clauseLinks = linksByClauseId.get(clause.id) || [];
-          const deterministicCandidate = buildDeterministicObligationCandidate(clause);
-          if (!deterministicCandidate) continue;
+          const deterministicCandidates = buildDeterministicObligationCandidates(clause);
+          if (!deterministicCandidates.length) continue;
           analysedClauses += 1;
 
           if (!clauseLinks.length) {
@@ -483,96 +501,98 @@ export function createDeterministicObligationService({
             }
           }
 
-          let normalized = deterministicCandidate;
+          for (const deterministicCandidate of deterministicCandidates) {
+            let normalized = deterministicCandidate;
 
-          if (useProviderNormalization) {
-            if (!provider || typeof provider.analyzeStructured !== "function") {
-              throw stageError("PROVIDER_NOT_CONFIGURED", "Provider normalization requested but provider is unavailable", 422);
+            if (useProviderNormalization) {
+              if (!provider || typeof provider.analyzeStructured !== "function") {
+                throw stageError("PROVIDER_NOT_CONFIGURED", "Provider normalization requested but provider is unavailable", 422);
+              }
+
+              emit("provider_request_metadata", {
+                organization_id: organizationId,
+                user_id: userId,
+                taxonomy_version: OBLIGATION_TAXONOMY_VERSION,
+                prompt_version: OBLIGATION_PROMPT_VERSION,
+                schema_version: OBLIGATION_SCHEMA_VERSION,
+                analysis_run_id: analysisRunId,
+                clause_id: clause.id,
+                timeout_ms: providerTimeoutMs,
+                max_retries: providerMaxRetries,
+              });
+
+              const providerPayload = {
+                organization_id: organizationId,
+                analysis_run_id: analysisRunId,
+                clause_id: clause.id,
+                clause_number: clause.clause_number || null,
+                clause_title: clause.title,
+                clause_text: clause.source_text,
+                deterministic_candidate: {
+                  description: deterministicCandidate.description,
+                  obligation_type: deterministicCandidate.obligation_type,
+                },
+                evidence_ids: evidenceLinks.map((link) => link.evidence_id),
+              };
+
+              normalized = {
+                ...deterministicCandidate,
+                ...await normalizeWithProvider({
+                  provider,
+                  payload: providerPayload,
+                  timeoutMs: providerTimeoutMs,
+                  maxRetries: providerMaxRetries,
+                }),
+              };
             }
 
-            emit("provider_request_metadata", {
-              organization_id: organizationId,
-              user_id: userId,
-              taxonomy_version: OBLIGATION_TAXONOMY_VERSION,
-              prompt_version: OBLIGATION_PROMPT_VERSION,
-              schema_version: OBLIGATION_SCHEMA_VERSION,
-              analysis_run_id: analysisRunId,
-              clause_id: clause.id,
-              timeout_ms: providerTimeoutMs,
-              max_retries: providerMaxRetries,
+            const parsed = ProviderOutputSchema.safeParse(normalized);
+            if (!parsed.success) {
+              const validationError = stageError("OBLIGATION_VALIDATION_FAILED", "Obligation candidate validation failed", 422);
+              validationError.issues = parsed.error.issues;
+              throw validationError;
+            }
+
+            const output = parsed.data;
+            const description = normalizeWhitespace(output.description);
+            const obligationType = output.obligation_type;
+            const obligationIdentity = computeObligationIdentity({
+              organizationId,
+              analysisRunId,
+              clauseId: clause.id,
+              obligationType,
+              description,
             });
 
-            const providerPayload = {
+            obligations.push({
               organization_id: organizationId,
+              contract_id: contractId,
+              document_id: documentId,
+              document_version_id: documentVersionId,
               analysis_run_id: analysisRunId,
               clause_id: clause.id,
-              clause_number: clause.clause_number || null,
-              clause_title: clause.title,
-              clause_text: clause.source_text,
-              deterministic_candidate: {
-                description: deterministicCandidate.description,
-                obligation_type: deterministicCandidate.obligation_type,
-              },
-              evidence_ids: evidenceLinks.map((link) => link.evidence_id),
-            };
+              description,
+              obligation_type: obligationType,
+              trigger_expression: output.trigger_expression || null,
+              conditionality: output.conditionality || null,
+              frequency: output.frequency || null,
+              actor: output.actor || deterministicCandidate.actor || null,
+              action: output.action || deterministicCandidate.action || null,
+              object: output.object || deterministicCandidate.object || null,
+              beneficiary: output.beneficiary || deterministicCandidate.beneficiary || null,
+              condition: output.condition || deterministicCandidate.condition || null,
+              timing_expression: output.timing_expression || deterministicCandidate.timing_expression || null,
+              consequence: output.consequence || deterministicCandidate.consequence || null,
+              modality: output.modality || deterministicCandidate.modality || "mandatory",
+              priority: output.priority || "medium",
+              status: output.status || "identified",
+              confidence: output.confidence ?? 0.5,
+              review_status: output.review_status || "pending",
+              obligation_identity: obligationIdentity,
+            });
 
-            normalized = {
-              ...deterministicCandidate,
-              ...await normalizeWithProvider({
-              provider,
-              payload: providerPayload,
-              timeoutMs: providerTimeoutMs,
-              maxRetries: providerMaxRetries,
-              }),
-            };
+            obligationEvidenceByIdentity.set(obligationIdentity, evidenceLinks);
           }
-
-          const parsed = ProviderOutputSchema.safeParse(normalized);
-          if (!parsed.success) {
-            const validationError = stageError("OBLIGATION_VALIDATION_FAILED", "Obligation candidate validation failed", 422);
-            validationError.issues = parsed.error.issues;
-            throw validationError;
-          }
-
-          const output = parsed.data;
-          const description = normalizeWhitespace(output.description);
-          const obligationType = output.obligation_type;
-          const obligationIdentity = computeObligationIdentity({
-            organizationId,
-            analysisRunId,
-            clauseId: clause.id,
-            obligationType,
-            description,
-          });
-
-          obligations.push({
-            organization_id: organizationId,
-            contract_id: contractId,
-            document_id: documentId,
-            document_version_id: documentVersionId,
-            analysis_run_id: analysisRunId,
-            clause_id: clause.id,
-            description,
-            obligation_type: obligationType,
-            trigger_expression: output.trigger_expression || null,
-            conditionality: output.conditionality || null,
-            frequency: output.frequency || null,
-            actor: output.actor || deterministicCandidate.actor || null,
-            action: output.action || deterministicCandidate.action || null,
-            object: output.object || deterministicCandidate.object || null,
-            beneficiary: output.beneficiary || deterministicCandidate.beneficiary || null,
-            condition: output.condition || deterministicCandidate.condition || null,
-            timing_expression: output.timing_expression || deterministicCandidate.timing_expression || null,
-            consequence: output.consequence || deterministicCandidate.consequence || null,
-            modality: output.modality || deterministicCandidate.modality || "mandatory",
-            priority: output.priority || "medium",
-            status: output.status || "identified",
-            confidence: output.confidence ?? 0.5,
-            review_status: output.review_status || "pending",
-            obligation_identity: obligationIdentity,
-          });
-
-          obligationEvidenceByIdentity.set(obligationIdentity, evidenceLinks);
         }
 
         emit("validation_result", {

@@ -1,0 +1,25 @@
+AIRCRAFT LEASE AGREEMENT
+Agreement Number: PH12-LEASE-RISK-002
+
+This synthetic benchmark agreement is between Meridian Aircraft Leasing Ltd. (the "Lessor") and Northwind Airways Ltd. (the "Lessee").
+
+1. RENT AND SECURITY
+The Lessee shall pay monthly rent of EUR 210,000 on the first business day of each month.
+The Lessee shall pay a security deposit of EUR 1,200,000 before Delivery.
+
+2. INSURANCE
+The Lessee shall maintain hull all risks insurance of not less than USD 90,000,000 and aviation liability insurance of not less than USD 60,000,000 throughout the Term.
+The Lessee shall provide policy renewal evidence at least 20 days before each Policy Expiry.
+The Lessor and Owner shall be named as additional insureds. This sentence does not assign responsibility for obtaining that status to either named party.
+
+3. INDEMNITY
+The Lessee shall indemnify the Lessor against all losses and claims arising from operation of the Aircraft.
+No indemnity for indirect loss is created by this paragraph.
+
+4. EVENTS OF DEFAULT AND TERMINATION
+Failure to pay any amount within 10 business days after written notice constitutes an Event of Default.
+Following an uncured Event of Default, the Lessor may terminate this Agreement and may repossess the Aircraft.
+The Lessor shall give any termination notice required by Section 9.4 of this Agreement.
+
+5. EXTENSION OPTION
+The Lessee may extend the Term for 12 months at rent to be agreed by the parties by giving not less than 180 days' written notice before the Expiration Date. No fixed extension rent amount is stated.

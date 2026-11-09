@@ -42,7 +42,15 @@ export default function UploadContract({ organizationId, onUploaded }) {
     setError("");
     try {
       const result = await uploadContract({ file, organizationId });
-      setSuccessMessage(result?.duplicate ? "This document has already been uploaded." : "Contract uploaded and ready for analysis.");
+      setSuccessMessage(
+        result?.duplicate
+          ? "This document has already been uploaded."
+          : result?.status === "requires_ocr"
+            ? "The document was uploaded, but OCR could not extract every page. Contract analysis is blocked until extraction is complete."
+            : result?.status === "ready"
+              ? "Contract uploaded and ready for analysis."
+              : "The document was uploaded, but its extraction status is not ready for analysis."
+      );
       setState("success");
       onUploaded?.(result);
     } catch (err) {

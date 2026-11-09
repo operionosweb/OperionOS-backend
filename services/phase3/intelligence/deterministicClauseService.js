@@ -82,13 +82,13 @@ function clauseError(code, message, status = 400) {
 function splitLines(text) {
   const lines = [];
   let start = 0;
-  const matcher = /.*(?:\r\n|\n|\r|$)/g;
+  const matcher = /[^\r\n\f]*(?:\r\n|\n|\r|\f|$)/g;
   let match;
 
   while ((match = matcher.exec(text)) !== null) {
     if (match[0].length === 0) break;
     const raw = match[0];
-    const content = raw.replace(/(?:\r\n|\n|\r)$/, "");
+    const content = raw.replace(/(?:\r\n|\n|\r|\f)$/, "");
     lines.push({ raw, content, start, end: start + raw.length });
     start += raw.length;
   }
@@ -278,6 +278,7 @@ function classifyCategory(text) {
 function classifyHeadingCategory(title) {
   const normalized = title.toLowerCase().replace(/\s+/g, " ").trim();
   if (!normalized || /\bagreement$/.test(normalized)) return null;
+  if (/^aircraft(?: details| identification)?$/.test(normalized)) return "general";
 
   for (const category of HEADING_CATEGORY_PRECEDENCE) {
     const baseKeywords = CATEGORY_RULES.find(([candidate]) => candidate === category)?.[1] || [];
@@ -294,7 +295,7 @@ function classifyHeadingCategory(title) {
 function buildSegment({ source, start, end, heading, parentClauseNumber = null, isUnstructured = false }) {
   const sourceText = source.text.slice(start, end);
   const sourcePage = source.pageBoundaries === "explicit"
-    ? source.pages?.find((page) => start >= page.char_start && start <= page.char_end)
+    ? source.pages?.find((page) => start >= page.char_start && start < page.char_end)
     : null;
   const category = classifyHeadingCategory(heading.title) || classifyCategory(sourceText);
   const numbered = Boolean(heading.number);

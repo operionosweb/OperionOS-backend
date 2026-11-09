@@ -96,6 +96,24 @@ test("explicit notice periods take precedence over term durations", () => {
   assert.equal(noticeOnly.anchor_reference, "expiration date");
 });
 
+test("calendar-day and unqualified day expressions retain deterministic calendar arithmetic", () => {
+  const calendarDays = parseTemporalExpression(
+    "The Lessee shall give notice within 10 calendar days after the Expiration Date.",
+    { anchorDate: "2031-12-31" }
+  );
+  assert.equal(calendarDays.calendar_type, "calendar");
+  assert.equal(calendarDays.absolute_date, "2032-01-10");
+  assert.equal(calendarDays.status, "calculated");
+
+  const unspecifiedDays = parseTemporalExpression(
+    "The Lessee shall give notice within 10 days after the Expiration Date.",
+    { anchorDate: "2031-12-31" }
+  );
+  assert.equal(unspecifiedDays.calendar_type, "calendar");
+  assert.equal(unspecifiedDays.absolute_date, "2032-01-10");
+  assert.equal(unspecifiedDays.status, "calculated");
+});
+
 test("recurring aviation timing stores rules without generating occurrences", () => {
   for (const [text, frequency] of [
     ["Rent shall be paid monthly.", "monthly"],
@@ -112,15 +130,31 @@ test("recurring aviation timing stores rules without generating occurrences", ()
   const businessDay = parseTemporalExpression("The Lessee shall pay Rent on the first Business Day of each month.");
   assert.deepEqual(businessDay.recurrence, { frequency: "monthly", ordinal: "first", calendar_type: "business" });
   assert.equal(businessDay.calendar_type, "business");
+
+  const fifthBusinessDay = parseTemporalExpression("The Lessee shall pay rent on the fifth business day of each month.");
+  assert.deepEqual(fifthBusinessDay.recurrence, { frequency: "monthly", ordinal: "fifth", calendar_type: "business" });
+  assert.match(fifthBusinessDay.timing_expression, /fifth business day/i);
+  assert.equal(fifthBusinessDay.absolute_date, null);
 });
 
 test("event-based and aviation-specific anchors remain awaiting triggers", () => {
-  for (const text of ["Upon termination", "before redelivery", "following a C-check", "after regulatory action"]) {
+  for (const text of ["Upon termination", "before redelivery", "following a C-check", "after regulatory action", "on the Delivery Date"]) {
     const result = parseTemporalExpression(text);
     assert.equal(result.deadline_type, "event_based");
     assert.equal(result.status, "awaiting_trigger");
     assert.equal(result.absolute_date, null);
   }
+});
+
+test("a defined delivery date is only calculated when its source date is supplied", () => {
+  const unresolved = parseTemporalExpression("The Lessor shall deliver the Aircraft on the Delivery Date.");
+  assert.equal(unresolved.deadline_type, "event_based");
+  assert.equal(unresolved.absolute_date, null);
+
+  const resolved = parseTemporalExpression("The Lessor shall deliver the Aircraft on the Delivery Date.", { anchorDate: "2027-06-15" });
+  assert.equal(resolved.deadline_type, "absolute");
+  assert.equal(resolved.absolute_date, "2027-06-15");
+  assert.equal(resolved.status, "calculated");
 });
 
 test("Expiration Date uses the existing unresolved named-event representation", () => {
@@ -139,7 +173,7 @@ test("Expiration Date uses the existing unresolved named-event representation", 
   assert.equal(priorToExpiration.direction, "before");
 
   for (const text of ["throughout the Term", "during the extension"]) {
-    assert.equal(parseTemporalExpression(text).deadline_type, "non_computable");
+    assert.equal(parseTemporalExpression(text), null);
   }
   const unrelatedExpiration = parseTemporalExpression("The report describes component expiration procedures.");
   assert.equal(unrelatedExpiration.deadline_type, "non_computable");

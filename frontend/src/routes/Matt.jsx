@@ -408,7 +408,7 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
           </select></label>
           <details className="matt-context-details"><summary>Scope and contract search</summary>
             <label>Search available contract names<input type="search" value={contractSearch} onChange={(event) => setContractSearch(event.target.value)} placeholder="Contract title"/></label>
-            <p>{demo ? "Prepared illustrative agreements only. Non-lease agreements reuse sample lease evidence, not independent analyses. No customer records. Connecting live Matt requires approved external processing; without a connection, answers remain prepared demonstrations." : "Names come from your authorized organization catalog. Each question searches only the selected contract; no portfolio-wide ranking or automatic extraction."}</p>
+            <p>{demo ? "Prepared contract-specific synthetic illustrations only, not independent real-world analyses. Navigation templates have no analysis or evidence. No customer records. Connecting live Matt requires approved external processing; without a connection, answers remain prepared demonstrations." : "Names come from your authorized organization catalog. Each question searches only the selected contract; no portfolio-wide ranking or automatic extraction."}</p>
           </details>
           {catalogState === "loading" && <p role="status">Loading available contract context...</p>}
           {scopeError && <p role="alert">{scopeError}</p>}

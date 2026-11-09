@@ -12,6 +12,7 @@ const NAV_LINKS = [
   { to: "/aviation", label: "Aviation" },
   { to: "/solutions", label: "Solutions" },
   { to: "/resources", label: "Resources" },
+  { to: "/blog", label: "Insights" },
   { to: "/about", label: "About us" },
 ];
 const MORE_LINKS = [
@@ -149,6 +150,7 @@ function CorporateFooter() {
             <Link to="/how-it-works">How It Works</Link>
             <Link to="/solutions">Solutions</Link>
             <Link to="/scenarios">Scenarios</Link>
+            <Link to="/blog">Insights</Link>
             <Link to="/enterprise">Enterprise</Link>
             <Link to="/security">Security</Link>
           </div>
@@ -156,6 +158,7 @@ function CorporateFooter() {
             <h3>Company</h3>
             <Link to="/about">About</Link>
             <Link to="/resources">Resources</Link>
+            <Link to="/blog">Insights</Link>
             <Link to="/request-demo">Contact</Link>
             <Link to="/privacy">Privacy</Link>
             <Link to="/legal">Legal / Terms</Link>

@@ -76,10 +76,15 @@ test("prepared contract and Globe sources are shared, isolated, cloned and never
     const context = await readMattDemoContext({ organizationId: MATT_DEMO_ORGANIZATION_ID, analysisRunId: resolveMattDemoAnalysis(contract.id) });
     assert.equal(context.demonstration, true);
     assert.deepEqual(context.clauses, contract.clauses);
-    assert.match(context.notice, /not independent analyses/);
-    assert.equal(context.evidence[0].excerpt, contract.evidence[0].excerpt);
-    context.evidence[0].excerpt = "tampered";
-    assert.notEqual((await readMattDemoContext({ organizationId: MATT_DEMO_ORGANIZATION_ID, analysisRunId: resolveMattDemoAnalysis(contract.id) })).evidence[0].excerpt, "tampered");
+    assert.match(context.notice, /not an uploaded or executed contract/);
+    if (contract.analysisStatus === "synthetic_template") {
+      assert.deepEqual(context.evidence, []);
+      assert.match(context.notice, /No contract-type analysis or evidence/);
+    } else {
+      assert.equal(context.evidence[0].excerpt, contract.evidence[0].excerpt);
+      context.evidence[0].excerpt = "tampered";
+      assert.notEqual((await readMattDemoContext({ organizationId: MATT_DEMO_ORGANIZATION_ID, analysisRunId: resolveMattDemoAnalysis(contract.id) })).evidence[0].excerpt, "tampered");
+    }
   }
   for (const flight of createDemonstrationScenarios()) {
     const context = await readMattDemoContext({ organizationId: MATT_DEMO_ORGANIZATION_ID, analysisRunId: resolveMattDemoAnalysis(flight.id) });
@@ -90,6 +95,22 @@ test("prepared contract and Globe sources are shared, isolated, cloned and never
   }
   for (const alias of ["customer-contract", "../admin", "00000000-0000-4000-8000-000000000001", { id: "demo-aircraft-lease" }]) assert.throws(() => resolveMattDemoAnalysis(alias), { code: "MATT_DEMO_CONTEXT_DENIED" });
   await assert.rejects(readMattDemoContext({ organizationId: "customer-org", analysisRunId: resolveMattDemoAnalysis("demo-aircraft-lease") }), { code: "MATT_DEMO_CONTEXT_DENIED" });
+});
+
+test("Demo account context keeps distinct synthetic illustrations and excludes template evidence", async () => {
+  const context = await readMattDemoContext({ organizationId: MATT_DEMO_ORGANIZATION_ID, contextMode: "account", pageId: "dashboard" });
+  const prepared = DEMO_CONTRACTS.filter((contract) => contract.analysisStatus !== "synthetic_template");
+  assert.deepEqual(context.analyses.map((analysis) => analysis.contractId), prepared.map((contract) => contract.id));
+  assert.ok(context.analyses.some((analysis) => analysis.contractId === "demo-mro-agreement" && analysis.evidence.some((item) => /indexed share/i.test(item.excerpt))));
+  assert.ok(context.analyses.some((analysis) => analysis.contractId === "demo-aircraft-financing"));
+  assert.ok(context.coverage.every((item) => item.independentAnalysis === false));
+  for (const template of DEMO_CONTRACTS.filter((contract) => contract.analysisStatus === "synthetic_template")) {
+    assert.ok(!context.analyses.some((analysis) => analysis.contractId === template.id));
+    assert.equal(context.coverage.find((item) => item.contractId === template.id).preparedAnalysisSource, null);
+  }
+  const originalExcerpt = context.analyses[0].evidence[0].excerpt;
+  context.analyses[0].evidence[0].excerpt = "tampered";
+  assert.equal((await readMattDemoContext({ organizationId: MATT_DEMO_ORGANIZATION_ID, contextMode: "account", pageId: "dashboard" })).analyses[0].evidence[0].excerpt, originalExcerpt);
 });
 
 test("Demo account and platform modes cross the actual shared HTTP and reasoning path without accepting foreign context", async () => {
@@ -104,9 +125,9 @@ test("Demo account and platform modes cross the actual shared HTTP and reasoning
       assert.equal(generated.at(-1).context.pageId, "dashboard");
       assert.ok(generated.at(-1).context.platform.features.every((feature) => feature.path.startsWith("/demo/")));
       if (contextMode === "account") {
-        assert.equal(generated.at(-1).context.contracts.length, 4);
-        assert.equal(generated.at(-1).context.analyses.length, 1, "Repeated sample lease data is represented once, not as four independent reviews");
-        assert.equal(generated.at(-1).context.coverage.filter((item) => item.independentAnalysis).length, 1);
+        assert.equal(generated.at(-1).context.contracts.length, DEMO_CONTRACTS.length);
+        assert.equal(generated.at(-1).context.analyses.length, DEMO_CONTRACTS.filter((contract) => contract.analysisStatus !== "synthetic_template").length);
+        assert.equal(generated.at(-1).context.coverage.filter((item) => item.independentAnalysis).length, 0, "Synthetic illustrations are never independent real-world analyses");
       } else assert.equal(generated.at(-1).context.contracts, undefined);
       const calls = generated.length;
       for (const attack of [{ analysisRunId: "foreign-contract" }, { flightId: "other-flight" }, { reportId: "other-report" }, { account: { organizationId: "foreign" } }, { contextMode: "vector" }]) {

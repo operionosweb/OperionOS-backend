@@ -11,10 +11,15 @@ import {
   uploadDocumentSource,
 } from "./documentStorageService.js";
 import { parseDocumentStructure, persistDocumentStructure } from "./documentStructureService.js";
+import {
+  createDocumentOcrProvider,
+  localPdfOcrProvider,
+} from "./localPdfOcrService.js";
 
 export const MAX_FILE_SIZE = Number(process.env.CONTRACT_UPLOAD_MAX_BYTES || 20 * 1024 * 1024);
 const MAX_PERSISTED_TEXT_LENGTH = 1_000_000;
 const PIPELINE_VERSION = "ingestion-v1";
+const MIN_DIGITAL_PAGE_TEXT_LENGTH = 20;
 
 function appError(code, message, status = 400) {
   const error = new Error(message);
@@ -127,45 +132,220 @@ export async function renderPdfPage(pageData) {
     disableCombineTextItems: false,
   });
   let previousY = null;
+  let previousX = null;
+  let previousWidth = 0;
   let pageText = "";
   for (const item of content.items || []) {
+    const currentX = item.transform?.[4] ?? null;
     const currentY = item.transform?.[5] ?? null;
-    const separator = pageText && previousY !== null && currentY !== previousY ? "\n" : pageText ? " " : "";
+    let separator = "";
+    if (pageText && previousY !== null && currentY !== null && currentY !== previousY) {
+      separator = "\n";
+    } else if (pageText) {
+      const horizontalGap = currentX !== null && previousX !== null
+        ? currentX - previousX - previousWidth
+        : null;
+      separator = horizontalGap !== null && horizontalGap >= 20 ? "\t" : " ";
+    }
     pageText += `${separator}${item.str || ""}`;
     previousY = currentY;
+    previousX = currentX;
+    previousWidth = Number(item.width) || 0;
   }
   return pageText;
 }
 
-async function parsePdf(buffer) {
+export function validatePdfPageExtraction(pageCount, pages) {
+  if (!Number.isInteger(pageCount) || pageCount < 1) {
+    throw appError("INVALID_PDF", "The PDF has no readable pages", 422);
+  }
+  if (!Array.isArray(pages)
+    || pages.length !== pageCount
+    || Array.from(pages).some((page, index) => {
+      if (typeof page === "string") return false;
+      return !page
+        || typeof page.text !== "string"
+        || page.pageNumber !== index + 1;
+    })) {
+    throw appError("PDF_PAGE_EXTRACTION_INCOMPLETE", "The PDF page text could not be completely extracted", 422);
+  }
+}
+
+export function validatePersistedTextLength(text) {
+  if (typeof text !== "string") {
+    throw appError("SOURCE_TEXT_UNAVAILABLE", "Extracted document text is required", 422);
+  }
+  if (text.length > MAX_PERSISTED_TEXT_LENGTH) {
+    throw appError("DOCUMENT_TEXT_TOO_LARGE", "The extracted document exceeds the supported text limit", 422);
+  }
+}
+
+function mergePageText(digitalText, ocrText) {
+  const digital = digitalText.trim();
+  const recognized = ocrText.trim();
+  if (!digital) return recognized;
+  if (!recognized) return digital;
+
+  const normalizedDigital = digital.replace(/\s+/g, " ").toLowerCase();
+  const normalizedOcr = recognized.replace(/\s+/g, " ").toLowerCase();
+  return normalizedOcr.includes(normalizedDigital)
+    ? recognized
+    : `${digital}\n${recognized}`;
+}
+
+export async function processPdfPageText({ pageData, pageNumber, digitalText, ocrProvider = null }) {
+  const text = typeof digitalText === "string" ? digitalText : "";
+  if (text.trim().length >= MIN_DIGITAL_PAGE_TEXT_LENGTH) {
+    return {
+      pageNumber,
+      text,
+      extractionMethod: "digital",
+      extractionStatus: "completed",
+      confidence: null,
+      errorCode: null,
+    };
+  }
+
+  if (!ocrProvider || typeof ocrProvider.processPage !== "function") {
+    return {
+      pageNumber,
+      text,
+      extractionMethod: "none",
+      extractionStatus: "requires_ocr",
+      confidence: null,
+      errorCode: "OCR_RUNTIME_UNAVAILABLE",
+    };
+  }
+
+  let result;
+  try {
+    result = await ocrProvider.processPage({ pageData, pageNumber, digitalText: text });
+  } catch (error) {
+    return {
+      pageNumber,
+      text,
+      extractionMethod: "ocr",
+      extractionStatus: "failed",
+      confidence: null,
+      errorCode: [
+        "OCR_RUNTIME_UNAVAILABLE",
+        "OCR_TIMEOUT",
+        "OCR_PAGE_LIMIT",
+        "OCR_DOCUMENT_TIMEOUT",
+      ].includes(error?.code)
+        ? error.code
+        : "OCR_FAILED",
+    };
+  }
+
+  if (result?.status === "blank") {
+    return {
+      pageNumber,
+      text,
+      extractionMethod: text.trim() ? "ocr" : "blank",
+      extractionStatus: "completed",
+      confidence: null,
+      errorCode: null,
+    };
+  }
+
+  const confidence = result?.confidence ?? null;
+  if (result?.status === "unreadable") {
+    return {
+      pageNumber,
+      text,
+      extractionMethod: "ocr",
+      extractionStatus: "failed",
+      confidence: Number.isFinite(confidence) && confidence >= 0 && confidence <= 1
+        ? confidence
+        : null,
+      errorCode: "OCR_LOW_CONFIDENCE",
+    };
+  }
+
+  const validConfidence = confidence === null
+    || (Number.isFinite(confidence) && confidence >= 0 && confidence <= 1);
+  if (result?.status !== "recognized"
+    || typeof result.text !== "string"
+    || !result.text.trim()
+    || !validConfidence) {
+    return {
+      pageNumber,
+      text,
+      extractionMethod: "ocr",
+      extractionStatus: "failed",
+      confidence: validConfidence ? confidence : null,
+      errorCode: "OCR_OUTPUT_INVALID",
+    };
+  }
+
+  return {
+    pageNumber,
+    text: mergePageText(text, result.text),
+    extractionMethod: "ocr",
+    extractionStatus: "completed",
+    confidence,
+    errorCode: null,
+  };
+}
+
+function buildOcrSummary(pages) {
+  const ocrPages = pages.filter((page) => page.extractionMethod === "ocr");
+  const confidenceValues = ocrPages
+    .map((page) => page.confidence)
+    .filter((confidence) => Number.isFinite(confidence));
+  return {
+    attemptedPages: ocrPages.length,
+    completedPages: ocrPages.filter((page) => page.extractionStatus === "completed").length,
+    failedPages: ocrPages.filter((page) => page.extractionStatus === "failed").length,
+    timeoutPages: ocrPages.filter((page) => page.errorCode === "OCR_TIMEOUT").length,
+    limitedPages: ocrPages.filter((page) => ["OCR_PAGE_LIMIT", "OCR_DOCUMENT_TIMEOUT"].includes(page.errorCode)).length,
+    unavailablePages: pages.filter((page) => page.errorCode === "OCR_RUNTIME_UNAVAILABLE").length,
+    blankPages: pages.filter((page) => page.extractionMethod === "blank").length,
+    meanConfidence: confidenceValues.length
+      ? confidenceValues.reduce((total, confidence) => total + confidence, 0) / confidenceValues.length
+      : null,
+  };
+}
+
+async function parsePdf(buffer, { ocrProvider = localPdfOcrProvider } = {}) {
   try {
     const pages = [];
+    const documentOcrProvider = ocrProvider
+      ? createDocumentOcrProvider(ocrProvider)
+      : null;
     const parsed = await pdfParse(buffer, {
       pagerender: async (pageData) => {
-        const pageText = await renderPdfPage(pageData);
-        pages.push(pageText);
-        return pageText;
+        const digitalText = await renderPdfPage(pageData);
+        const page = await processPdfPageText({
+          pageData,
+          pageNumber: Number(pageData.pageNumber) || pages.length + 1,
+          digitalText,
+          ocrProvider: documentOcrProvider,
+        });
+        pages.push(page);
+        return page.text;
       },
     });
-    const fallbackText = typeof parsed.text === "string" ? parsed.text : "";
-    const text = pages.length ? pages.join("\f") : fallbackText;
-    const pageCount = Number(parsed.numpages) || null;
-
-    if (!pageCount) {
-      throw appError("INVALID_PDF", "The PDF has no readable pages");
-    }
+    const pageCount = Number(parsed.numpages) || 0;
+    const orderedPages = pages.toSorted((left, right) => left.pageNumber - right.pageNumber);
+    validatePdfPageExtraction(pageCount, orderedPages);
+    const text = orderedPages.map((page) => page.text).join("\f");
+    const ocrSummary = buildOcrSummary(orderedPages);
+    const requiresOcr = orderedPages.some((page) => page.extractionStatus !== "completed")
+      || text.trim().length < MIN_DIGITAL_PAGE_TEXT_LENGTH;
 
     return {
       pageCount,
       text,
-      pages: pages.map((pageText, index) => ({
-        pageNumber: index + 1,
-        text: pageText,
-      })),
-      requiresOcr: text.trim().length < 20,
+      pages: orderedPages,
+      requiresOcr,
+      ocrSummary,
+      extractionErrorCode: orderedPages.find((page) => page.errorCode)?.errorCode
+        || (requiresOcr ? "PDF_REQUIRES_OCR" : null),
     };
   } catch (error) {
-    if (error.code === "INVALID_PDF") throw error;
+    if (["INVALID_PDF", "PDF_PAGE_EXTRACTION_INCOMPLETE"].includes(error.code)) throw error;
     const invalidPdf = appError("INVALID_PDF", "The PDF could not be parsed");
     invalidPdf.cause = error;
     throw invalidPdf;
@@ -186,12 +366,12 @@ async function parseDocument(buffer, extension) {
   return extension === ".docx" ? parseDocx(buffer) : parsePdf(buffer);
 }
 
-export async function extractPdfMetadata(buffer) {
-  return parsePdf(buffer);
+export async function extractPdfMetadata(buffer, options = {}) {
+  return parsePdf(buffer, options);
 }
 
-export async function extractDocumentMetadata(buffer, extension = ".pdf") {
-  return parseDocument(buffer, extension);
+export async function extractDocumentMetadata(buffer, extension = ".pdf", options = {}) {
+  return extension === ".docx" ? parseDocument(buffer, extension) : parsePdf(buffer, options);
 }
 
 async function findDuplicateVersion(organizationId, sha256) {
@@ -421,10 +601,10 @@ export async function ingestContractUpload({
   title,
   contractId = null,
   documentId = null,
+  ocrProvider = localPdfOcrProvider,
 }) {
   const validated = validateDocumentFile(file);
   const sha256 = calculateSha256(validated.buffer);
-  const parsed = await parseDocument(validated.buffer, validated.extension);
   const context = {
     organizationId,
     userId,
@@ -449,6 +629,10 @@ export async function ingestContractUpload({
       status: "duplicate",
     };
   }
+  const parsed = validated.extension === ".docx"
+    ? await parseDocument(validated.buffer, validated.extension)
+    : await parsePdf(validated.buffer, { ocrProvider });
+  validatePersistedTextLength(parsed.text);
 
   let createdContractId = contractId;
   let createdDocumentId = documentId;
@@ -572,9 +756,9 @@ export async function ingestContractUpload({
       await storeExtraction({
         organizationId,
         versionId: version.id,
-        text: null,
+        text: parsed.text,
         status: "requires_ocr",
-        errorCode: "PDF_REQUIRES_OCR",
+        errorCode: parsed.extractionErrorCode,
       });
       await updateStatus({
         organizationId,
@@ -586,8 +770,21 @@ export async function ingestContractUpload({
         runStatus: null,
         startedAt,
         completedAt: new Date().toISOString(),
-        errorCode: "PDF_REQUIRES_OCR",
-        errorMessage: "PDF contains no usable text",
+        errorCode: parsed.extractionErrorCode,
+        errorMessage: parsed.extractionErrorCode === "OCR_RUNTIME_UNAVAILABLE"
+          ? "OCR is not configured for one or more pages"
+          : "OCR did not produce complete text for every required page",
+      });
+      await audit("document.ocr_required", context, {
+        page_count: parsed.pageCount,
+        ocr: parsed.ocrSummary,
+        page_extraction: parsed.pages.map(({ pageNumber, extractionMethod, extractionStatus, confidence, errorCode }) => ({
+          page_number: pageNumber,
+          method: extractionMethod,
+          status: extractionStatus,
+          confidence,
+          error_code: errorCode,
+        })),
       });
       return {
         contractId: createdContractId,
@@ -597,7 +794,15 @@ export async function ingestContractUpload({
         status: "requires_ocr",
         sha256,
         pageCount: parsed.pageCount,
-        textLength: 0,
+        textLength: parsed.text.length,
+        ocr: parsed.ocrSummary,
+        pageExtraction: parsed.pages.map(({ pageNumber, extractionMethod, extractionStatus, confidence, errorCode }) => ({
+          pageNumber,
+          method: extractionMethod,
+          status: extractionStatus,
+          confidence,
+          errorCode,
+        })),
       };
     }
 
@@ -632,6 +837,13 @@ export async function ingestContractUpload({
       status: "ready",
       page_count: parsed.pageCount,
       text_length: parsed.text.length,
+      ocr: parsed.ocrSummary,
+      page_extraction: parsed.pages.map(({ pageNumber, extractionMethod, extractionStatus, confidence }) => ({
+        page_number: pageNumber,
+        method: extractionMethod,
+        status: extractionStatus,
+        confidence,
+      })),
     });
 
     return {
@@ -644,6 +856,13 @@ export async function ingestContractUpload({
       pageCount: parsed.pageCount,
       textLength: parsed.text.length,
       structure: structureCounts,
+      ocr: parsed.ocrSummary,
+      pageExtraction: parsed.pages.map(({ pageNumber, extractionMethod, extractionStatus, confidence }) => ({
+        pageNumber,
+        method: extractionMethod,
+        status: extractionStatus,
+        confidence,
+      })),
     };
   } catch (error) {
     if (analysisRunId) {
@@ -772,7 +991,35 @@ export async function listDocumentVersions(documentId, organizationId) {
     .order("version_number", { ascending: false });
 
   if (error) throw appError("STORAGE_ERROR", "Document version lookup failed", 503);
-  return data || [];
+  const versions = data || [];
+  if (!versions.length) return versions;
+
+  const { data: analysisRuns, error: analysisRunsError } = await supabase
+    .from("analysis_runs")
+    .select("id, document_version_id, status, created_at")
+    .eq("organization_id", organizationId)
+    .in("document_version_id", versions.map((version) => version.id))
+    .order("created_at", { ascending: false });
+
+  if (analysisRunsError) {
+    throw appError("STORAGE_ERROR", "Analysis run lookup failed", 503);
+  }
+
+  const latestRunByVersion = new Map();
+  for (const run of analysisRuns || []) {
+    if (!latestRunByVersion.has(run.document_version_id)) {
+      latestRunByVersion.set(run.document_version_id, run);
+    }
+  }
+
+  return versions.map((version) => {
+    const latestRun = latestRunByVersion.get(version.id);
+    return {
+      ...version,
+      analysis_run_id: latestRun?.id || null,
+      analysis_run_status: latestRun?.status || null,
+    };
+  });
 }
 
 export async function getContractProcessingStatus(contractId, organizationId) {

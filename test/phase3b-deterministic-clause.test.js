@@ -9,6 +9,7 @@ import {
   runDeterministicClauseStage,
   computeClauseIdentity,
 } from "../services/phase3/intelligence/deterministicClauseService.js";
+import { parseDocumentStructure } from "../services/documentStructureService.js";
 import { buildCanonicalPageSource } from "../services/phase3/source/deterministicSourcePageAdapter.js";
 import { createDocumentVersionSourceService } from "../services/phase3/source/documentVersionSourceService.js";
 import { createClauseRepository } from "../repositories/phase3/clauseRepository.js";
@@ -525,6 +526,48 @@ test("canonical source page adapter and atomic persistence boundaries", async (s
     assert.equal(source.pageBoundaries, "explicit");
     assert.equal(source.sourceStatus, "extracted");
     assert.match(source.sourceLocator(10, text.length), /page:2:char:10-18$/);
+  });
+
+  await suite.test("blank PDF pages preserve later clause extraction and exact page evidence", () => {
+    const text = "1. Rent\nMonthly rent is USD 175,000.\f\f3. Return\nAircraft must be returned in serviceable condition.";
+    const structure = parseDocumentStructure({ text });
+    const pageRows = structure.pages.map((page) => ({
+      page_number: page.pageNumber,
+      text_content: page.text,
+      char_start: page.charStart,
+      char_end: page.charEnd,
+    }));
+    const source = buildCanonicalPageSource({
+      documentVersion: { id: UUID_PLACEHOLDER, organization_id: UUID_PLACEHOLDER },
+      document: { id: UUID_PLACEHOLDER, contract_id: UUID_PLACEHOLDER, organization_id: UUID_PLACEHOLDER },
+      analysisRun: { id: UUID_PLACEHOLDER, organization_id: UUID_PLACEHOLDER, status: "extracting" },
+      extraction: { text_content: text, extraction_status: "completed", text_truncated: false },
+      pageRows,
+    });
+
+    const returnClause = segmentDeterministicClauses(source).find((clause) => clause.clause_number === "3");
+
+    assert.equal(source.pageBoundaries, "explicit");
+    assert.deepEqual(source.pages.map((page) => page.page_number), [1, 2, 3]);
+    assert.equal(source.pages[1].text_content, "");
+    assert.ok(returnClause);
+    assert.equal(returnClause.evidence.page_number, 3);
+    assert.match(returnClause.evidence.source_locator, /page:3:/);
+  });
+
+  await suite.test("incomplete persisted page coverage is not presented as explicit provenance", () => {
+    const text = "Page one\fPage two";
+    const source = buildCanonicalPageSource({
+      documentVersion: { id: UUID_PLACEHOLDER, organization_id: UUID_PLACEHOLDER },
+      document: { id: UUID_PLACEHOLDER, contract_id: UUID_PLACEHOLDER, organization_id: UUID_PLACEHOLDER },
+      analysisRun: { id: UUID_PLACEHOLDER, organization_id: UUID_PLACEHOLDER, status: "extracting" },
+      extraction: { text_content: text, extraction_status: "completed", text_truncated: false },
+      pageRows: [{ page_number: 1, char_start: 0, char_end: 8, text_content: "Page one" }],
+    });
+
+    assert.equal(source.pageBoundaries, "derived_unavailable");
+    assert.equal(source.sourceStatus, "derived_unavailable");
+    assert.match(source.sourceLocator(10, text.length), /:char:10-17$/);
   });
 
   await suite.test("runDeterministicClauseStage preserves atomic persistence contract", async () => {

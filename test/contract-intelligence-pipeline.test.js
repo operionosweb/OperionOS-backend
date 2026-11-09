@@ -9,17 +9,20 @@ const documentId = "33333333-3333-4333-8333-333333333333";
 const documentVersionId = "44444444-4444-4444-8444-444444444444";
 const analysisRunId = "55555555-5555-4555-8555-555555555555";
 
-function fixture({ status = "queued", failClauseStage = false } = {}) {
+function fixture({ status = "queued", failClauseStage = false, failFailureStateUpdate = false, conflictingIdentifiers = false } = {}) {
   const transitions = [];
   const calls = [];
   const indexed = [];
   const relationships = [];
   let run = { id: analysisRunId, organization_id: organizationId, contract_id: contractId, document_version_id: documentVersionId, status };
   const evidence = { id: "66666666-6666-4666-8666-666666666666", page_number: 1, source_locator: "page:1:char:0-120", excerpt: "AIRCRAFT LEASE AGREEMENT", char_start: 0, char_end: 120, confidence: 0.95 };
-  const clause = { id: "77777777-7777-4777-8777-777777777777", clause_number: "1", title: "AIRCRAFT LEASE AGREEMENT", source_text: "AIRCRAFT LEASE AGREEMENT\nRegistration: G-SYN1\nThe Lessee shall maintain the Aircraft." };
+  const clause = { id: "77777777-7777-4777-8777-777777777777", clause_number: "1", title: "AIRCRAFT LEASE AGREEMENT", source_text: `AIRCRAFT LEASE AGREEMENT\nRegistration: G-SYN1${conflictingIdentifiers ? "\nRegistration: G-SYN2" : ""}\nThe Lessee shall maintain the Aircraft.` };
   const analysisRunRepository = {
     getById: async () => run,
     updateStatus: async (update) => {
+      if (failFailureStateUpdate && update.status === "failed") {
+        throw Object.assign(new Error("private status update detail"), { code: "STATUS_WRITE_FAILED" });
+      }
       transitions.push({ status: update.status, errorMessage: update.errorMessage || null });
       run = { ...run, status: update.status };
       return run;
@@ -58,7 +61,7 @@ function fixture({ status = "queued", failClauseStage = false } = {}) {
       async materializeContractRelationships(input) {
         calls.push("relationships");
         relationships.push(input);
-        return [{ id: "relationship-1" }];
+        return input.identifiers.length ? [{ id: "relationship-1" }] : [];
       },
     },
   });
@@ -81,6 +84,16 @@ test("pipeline composes deterministic stages and completes an evidence-grounded 
   assert.equal(result.counts.aircraftRelationships, 1);
 });
 
+test("pipeline withholds aircraft relationship materialization when identifiers conflict", async () => {
+  const context = fixture({ conflictingIdentifiers: true });
+  const result = await context.pipeline.run({ organizationId, analysisRunId });
+
+  assert.equal(result.status, "completed");
+  assert.equal(result.profile.metadata.assetIdentificationReview.status, "requires_review");
+  assert.deepEqual(context.relationships[0].identifiers, []);
+  assert.equal(result.counts.aircraftRelationships, 0);
+});
+
 test("completed pipeline runs are idempotent", async () => {
   const context = fixture({ status: "completed" });
   const result = await context.pipeline.run({ organizationId, analysisRunId });
@@ -100,4 +113,30 @@ test("pipeline persists a sanitized failed state", async () => {
 
   assert.deepEqual(context.transitions.map((item) => item.status), ["processing", "extracting", "failed"]);
   assert.equal(context.transitions.at(-1).errorMessage, "Contract intelligence processing failed");
+});
+
+test("pipeline reports failed status persistence without masking the processing error", async () => {
+  const context = fixture({ failClauseStage: true, failFailureStateUpdate: true });
+  const errors = [];
+  const originalConsoleError = console.error;
+  console.error = (...args) => errors.push(args);
+
+  try {
+    await assert.rejects(
+      context.pipeline.run({ organizationId, analysisRunId }),
+      (error) => error.code === "CLAUSE_FAILED"
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
+
+  assert.deepEqual(errors, [[
+    "contract_intelligence_failure_status_update_failed",
+    {
+      organizationId,
+      analysisRunId,
+      processingErrorCode: "CLAUSE_FAILED",
+      statusUpdateErrorCode: "STATUS_WRITE_FAILED",
+    },
+  ]]);
 });

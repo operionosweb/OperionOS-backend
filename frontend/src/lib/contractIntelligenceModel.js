@@ -35,3 +35,10 @@ export function deriveAvailabilityState({ isExposed = false, isLoading = false, 
   if (Array.isArray(items) && items.length === 0) return INTELLIGENCE_AVAILABILITY.EMPTY;
   return INTELLIGENCE_AVAILABILITY.AVAILABLE;
 }
+
+export function resolveContractWorkspaceAnalysisRunId({ hasLatestDocument, latestVersion, storedRunId } = {}) {
+  if (!hasLatestDocument) return storedRunId || "";
+  return typeof latestVersion?.analysis_run_id === "string"
+    ? latestVersion.analysis_run_id
+    : "";
+}

@@ -15,7 +15,9 @@ function register(alias, context) {
 for (const contract of DEMO_CONTRACTS) {
   register(contract.id, {
     demonstration: true,
-    notice: "Prepared fictional demonstration, not an uploaded or executed contract. Other agreement types reuse the primary lease excerpts; they are not independent analyses. Numerical confidence labels are illustrative, not measured accuracy.",
+    notice: contract.analysisStatus === "synthetic_template"
+      ? "Synthetic navigation template, not an uploaded or executed contract. No contract-type analysis or evidence is available; do not substitute another contract's findings."
+      : "Prepared fictional demonstration, not an uploaded or executed contract or customer result. Contract-specific synthetic clauses, assumptions and financial illustrations are not verified real-world evidence. Numerical confidence labels are illustrative, not measured accuracy.",
     contract: { id: contract.id, title: contract.title, type: contract.type, aircraft: contract.aircraft },
     clauses: contract.clauses,
     obligations: contract.obligations,
@@ -59,15 +61,15 @@ export async function readMattDemoContext({ organizationId, analysisRunId, conte
     const account = { name: "Operion prepared Demo account", permissions: ["contract:read"], synthetic: true };
     if (contextMode === "platform") return { demonstration: true, notice: "Platform guidance only; no customer sources.", account, pageId, evidence: [] };
     const contracts = DEMO_CONTRACTS.map(({ id, title, status }) => ({ id, title, status }));
-    const primary = DEMO_CONTRACTS[0];
-    const analyses = [{ contractId: primary.id, ...structuredClone(contexts.get(aliases.get(primary.id))) }];
-    return { demonstration: true, notice: "Prepared Demo account only; non-primary agreements reuse the lease evidence, not independent analyses.", account, pageId, contracts, analyses,
-      coverage: contracts.map(({ id }) => ({ contractId: id, preparedAnalysisSource: primary.id, independentAnalysis: id === primary.id })),
+    const preparedContracts = DEMO_CONTRACTS.filter((contract) => contract.analysisStatus !== "synthetic_template");
+    const analyses = preparedContracts.map(({ id }) => ({ contractId: id, ...structuredClone(contexts.get(aliases.get(id))) }));
+    return { demonstration: true, notice: "Prepared Demo account only. Contract-specific synthetic illustrations are not customer analyses; navigation templates have no analysis.", account, pageId, contracts, analyses,
+      coverage: DEMO_CONTRACTS.map(({ id, analysisStatus }) => ({ contractId: id, preparedAnalysisSource: analysisStatus === "synthetic_template" ? null : id, independentAnalysis: false, preparedIllustration: analysisStatus !== "synthetic_template" })),
       evidence: [
         { id: "account:catalog", excerpt: JSON.stringify(contracts), source_locator: "Prepared fictional Demo contract catalog" },
-        ...structuredClone(contexts.get(aliases.get(DEMO_CONTRACTS[0].id)).evidence),
+        ...analyses.flatMap((analysis) => analysis.evidence),
       ],
-      limitations: ["Do not count repeated sample clauses as distinct portfolio obligations or sum repeated modeled exposures. No real aircraft/flight or customer records are available."] };
+      limitations: ["Do not treat synthetic illustrations as independent real-world analyses or sum unlike currencies, periods or exposure categories. Navigation templates have no evidence. No real aircraft/flight or customer records are available."] };
   }
   if (!contexts.has(analysisRunId)) throw reject();
   return structuredClone(contexts.get(analysisRunId));

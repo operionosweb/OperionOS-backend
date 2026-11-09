@@ -1,3 +1,6 @@
+import { SYNTHETIC_AIRCRAFT_LEASE } from "../demo/aviationIntelligenceJourney";
+import { SYNTHETIC_INDEXATION } from "../demo/indexationJourney";
+
 export const PUBLIC_DEMO_NOTICE = "This demonstration uses prepared sample data and does not represent live customer information.";
 
 export const PUBLIC_DEMO_CONTRACTS = [
@@ -27,10 +30,28 @@ export const PUBLIC_DEMO_CONTRACTS = [
         context: "Return obligation",
         evidence: "Sample source text from the prepared lease agreement.",
       },
+      {
+        id: SYNTHETIC_AIRCRAFT_LEASE.fuelPriceAdjustment.clauseId,
+        number: SYNTHETIC_AIRCRAFT_LEASE.fuelPriceAdjustment.clauseNumber,
+        title: SYNTHETIC_AIRCRAFT_LEASE.fuelPriceAdjustment.title,
+        category: "Fuel-price adjustment",
+        sourceText: SYNTHETIC_AIRCRAFT_LEASE.fuelPriceAdjustment.excerpt,
+        context: "Synthetic weekly external-reference adjustment",
+        evidence: "Synthetic source excerpt only. No live EIA observation or customer contract is connected.",
+      },
     ],
     obligations: [
       { id: "demo-lease-obligation-1", description: "Maintain the aircraft under the approved maintenance programme", responsibleParty: "Lessee", deadline: "As defined by the maintenance programme", status: "Open", clauseId: "demo-lease-maintenance", consequence: "Review maintenance evidence before the relevant reporting point." },
       { id: "demo-lease-obligation-2", description: "Return the aircraft in the agreed condition", responsibleParty: "Lessee", deadline: "End of lease term", status: "Planned", clauseId: "demo-lease-return", consequence: "Review return conditions before redelivery planning." },
+      {
+        id: SYNTHETIC_AIRCRAFT_LEASE.fuelPriceAdjustment.obligationId,
+        description: "Review and pay the stated weekly synthetic fuel-price adjustment when applicable",
+        responsibleParty: SYNTHETIC_AIRCRAFT_LEASE.fuelPriceAdjustment.payingParty,
+        deadline: "Weekly, subject to the matching adjustment period",
+        status: "Illustrative",
+        clauseId: SYNTHETIC_AIRCRAFT_LEASE.fuelPriceAdjustment.clauseId,
+        consequence: "Reconcile the cited clause, benchmark period, covered gallons, and supplier invoice; this demo calculation is not an invoice amount.",
+      },
     ],
   },
   {
@@ -41,6 +62,13 @@ export const PUBLIC_DEMO_CONTRACTS = [
     status: "Active sample",
     description: "A prepared MRO example showing service levels, turnaround expectations and maintenance commitments.",
     clauses: [
+      {
+        id: SYNTHETIC_INDEXATION.clauseId, number: "7.3",
+        title: "Synthetic annual CPI indexation", category: "Indexation",
+        sourceText: SYNTHETIC_INDEXATION.excerpt,
+        context: "Exact-series, partially indexed and capped synthetic price adjustment",
+        evidence: SYNTHETIC_INDEXATION.disclosure,
+      },
       {
         id: "demo-mro-sla",
         number: "4.1",
@@ -63,6 +91,7 @@ export const PUBLIC_DEMO_CONTRACTS = [
     obligations: [
       { id: "demo-mro-obligation-1", description: "Complete scheduled maintenance within the applicable turnaround period", responsibleParty: "Service provider", deadline: "Work-package dependent", status: "Open", clauseId: "demo-mro-sla", consequence: "Review the work package and service-level evidence." },
       { id: "demo-mro-obligation-2", description: "Provide installed-parts and warranty documentation", responsibleParty: "Service provider", deadline: "On work-package completion", status: "Open", clauseId: "demo-mro-parts", consequence: "Confirm records are available for technical review." },
+      { id: "demo-mro-indexation", description: "Review synthetic annual formula-based price and notice", responsibleParty: "Customer", deadline: "2027-01-01 adjustment; 2026-12-02 notice review", status: "Illustrative", clauseId: SYNTHETIC_INDEXATION.clauseId, consequence: "Confirm the exact index, share, cap, reference month and notice before accepting any supplier increase." },
     ],
   },
   {
