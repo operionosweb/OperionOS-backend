@@ -47,7 +47,7 @@ function ReviewWorkspace() {
   const load = () => Promise.all([listCommercialSourceReviews(), listCommercialProposals(), listCommercialEntityMatches()])
     .then(([sources, proposals, matches]) => setData({ sources: sources.sources, proposals: proposals.proposals, matches: matches.matches }))
     .catch((requestError) => setError(requestError.message));
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
   const decide = async (kind, id, decision) => {
     try {
       let changes = {};
@@ -145,7 +145,7 @@ function CompanyDetail() {
   const { companyId } = useParams(); const [data, setData] = useState(null); const [error, setError] = useState("");
   const load = () => getCommercialCompany(companyId).then(setData).catch((requestError) => setError(requestError.message));
   const reviewSignal = async (signalId, status) => { try { await updateCommercialSignal(signalId, { status }); await load(); } catch (requestError) { setError(requestError.message); } };
-  useEffect(load, [companyId]);
+  useEffect(() => { load(); }, [companyId]);
   if (error) return <ErrorState message={error} />; if (!data) return <LoadingState label="Loading company intelligence…" />;
   const { company, people, signals, opportunities, sources } = data;
   return <Shell kicker="Company intelligence" title={company.name} description={company.operion_relevance || "Operion relevance has not yet been established."} actions={<Badge value={sources.some((source) => source.verification_status === "VERIFIED_FACT") ? "VERIFIED_FACT" : "UNVERIFIED_SIGNAL"} />}>
@@ -163,7 +163,7 @@ function Opportunities() {
 
 function OpportunityDetail() {
   const { opportunityId } = useParams(); const [data, setData] = useState(null); const [error, setError] = useState(""); const [working, setWorking] = useState(false);
-  const load = () => getCommercialOpportunity(opportunityId).then(setData).catch((requestError) => setError(requestError.message)); useEffect(load, [opportunityId]);
+  const load = () => getCommercialOpportunity(opportunityId).then(setData).catch((requestError) => setError(requestError.message)); useEffect(() => { load(); }, [opportunityId]);
   const setStatus = async (event) => { setWorking(true); try { await updateCommercialOpportunity(opportunityId, { status: event.target.value, markReviewed: true }); await load(); } catch (requestError) { setError(requestError.message); } finally { setWorking(false); } };
   const reason = async () => { setWorking(true); try { await reasonCommercialOpportunity(opportunityId); await load(); } catch (requestError) { setError(requestError.message); } finally { setWorking(false); } };
   const setActionStatus = async (actionId, status) => { setWorking(true); try { await updateCommercialAction(actionId, { status }); await load(); } catch (requestError) { setError(requestError.message); } finally { setWorking(false); } };

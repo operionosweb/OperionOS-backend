@@ -19,6 +19,7 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const read = (file) => fs.readFile(path.join(root, file), "utf8");
 const ID = "fcaabfe0-83ee-4ec5-8721-c312b9317f54";
 const MEDIA_ID = "bcaabfe0-83ee-4ec5-8721-c312b9317f54";
+const fixtureAuthor = async () => ({ author_id: ID, author_name: "Verified Fixture Author", author_role: "", author_bio: "", author_url: `https://operionos.com/blog/authors/${ID}`, author_avatar_media: MEDIA_ID });
 
 function responseRecorder() {
   return {
@@ -182,9 +183,9 @@ test("public blog reads filter to published articles and redirects remain local"
   const listingResponse = responseRecorder();
   await controller.listPublished({ query: { category: "Aircraft Leasing" } }, listingResponse);
   assert.deepEqual(listingResponse.body.posts.map((post) => post.status), ["published"]);
-  assert.match(calls[0].sql, /status = 'published' AND archived_at IS NULL/);
+  assert.match(calls[0].sql, /status IN \('published','scheduled'\) AND published_at<=NOW\(\) AND archived_at IS NULL/);
   assert.match(calls[0].sql.split("FROM blog_posts")[0], /\bstatus\b/);
-  assert.deepEqual(calls[0].params, ["Aircraft Leasing"]);
+  assert.deepEqual(calls[0].params, ["Aircraft Leasing", "", null]);
 
   const articleResponse = responseRecorder();
   await controller.getPublished({ params: { slug: "old-lease-guide" } }, articleResponse);
@@ -212,6 +213,7 @@ test("CMS draft, edit, publish, unpublish, archive, and restore lifecycle keeps 
   const auditActions = [];
   const controller = createBlogController({
     database: {},
+    authorResolver: fixtureAuthor,
     queryFn: async (sql, params = []) => {
       if (sql.includes("FROM blog_posts") && sql.includes("FOR UPDATE")) {
         return { rows: post ? [{ ...post }] : [] };
@@ -242,6 +244,7 @@ test("CMS draft, edit, publish, unpublish, archive, and restore lifecycle keeps 
           updated_by: params[18],
           published_at: null,
           archived_at: null,
+          updated_at: "2030-01-01T10:00:00.000Z",
         };
         return { rows: [{ ...post }] };
       }
@@ -274,7 +277,7 @@ test("CMS draft, edit, publish, unpublish, archive, and restore lifecycle keeps 
         post = { ...post, status: "published", published_at: post.published_at || "2026-11-09T12:00:00.000Z", archived_at: null };
         return { rows: [{ ...post }] };
       }
-      if (sql.includes("UPDATE blog_posts SET status='draft'") && sql.includes("status='published'")) {
+      if (sql.includes("UPDATE blog_posts SET status='draft'") && sql.includes("status IN ('published','scheduled')")) {
         post = { ...post, status: "draft" };
         return { rows: [{ ...post }] };
       }
@@ -307,7 +310,7 @@ test("CMS draft, edit, publish, unpublish, archive, and restore lifecycle keeps 
     author_name: "Operion Editorial",
     content: [{ type: "paragraph", text: "Check each obligation against its clause and evidence." }],
   };
-  const request = (body = articleInput) => ({ body, user: { id: ID }, params: { id: ID }, query: {} });
+  const request = (body = articleInput) => ({ body: { ...body, expected_updated_at: "2030-01-01T10:00:00.000Z" }, user: { id: ID }, params: { id: ID }, query: {} });
 
   const created = responseRecorder();
   await controller.create(request(), created);
@@ -330,7 +333,7 @@ test("CMS draft, edit, publish, unpublish, archive, and restore lifecycle keeps 
   assert.equal(edited.body.post.status, "draft");
 
   const published = responseRecorder();
-  await controller.publish(request(), published);
+  await controller.publish(request({ confirm_review: true }), published);
   assert.equal(published.statusCode, 200);
   assert.equal(published.body.post.status, "published");
   const visibleAfterPublish = responseRecorder();
@@ -345,7 +348,7 @@ test("CMS draft, edit, publish, unpublish, archive, and restore lifecycle keeps 
   assert.equal(hiddenAfterUnpublish.statusCode, 404);
 
   const republished = responseRecorder();
-  await controller.publish(request(), republished);
+  await controller.publish(request({ confirm_review: true }), republished);
   assert.equal(republished.body.post.status, "published");
   const archived = responseRecorder();
   await controller.archive(request(), archived);
@@ -375,10 +378,11 @@ test("slug updates preserve redirects without creating redirect cycles", async (
   const calls = [];
   const controller = createBlogController({
     database: {},
+    authorResolver: fixtureAuthor,
     queryFn: async (sql, params) => {
       calls.push({ sql, params });
-      if (sql.includes("FOR UPDATE")) return { rows: [{ id: ID, status: "published", slug: "lease-old" }] };
-      if (sql.includes("UPDATE blog_posts SET")) return { rows: [{ id: ID, status: "published", slug: "lease-new" }] };
+      if (sql.includes("FOR UPDATE")) return { rows: [{ id: ID, status: "draft", slug: "lease-old", updated_at: "2030-01-01T10:00:00.000Z" }] };
+      if (sql.includes("UPDATE blog_posts SET")) return { rows: [{ id: ID, status: "draft", slug: "lease-new" }] };
       return { rows: [] };
     },
   });
@@ -389,6 +393,7 @@ test("slug updates preserve redirects without creating redirect cycles", async (
     body: {
       title: "Aircraft lease obligations",
       slug: "lease-new",
+      expected_updated_at: "2030-01-01T10:00:00.000Z",
       excerpt: "Evidence-led guide to the lease.",
       category: "Aircraft Leasing",
       author_name: "Operion Editorial",
@@ -443,7 +448,7 @@ test("Super Admin authentication and permission middleware wrap every CMS operat
   const controller = Object.fromEntries([
     "listPublished", "getPublished", "sitemap", "publicMedia", "listAdmin", "getAdmin",
     "create", "update", "publish", "unpublish", "archive", "restore", "history",
-    "uploadMedia", "adminMedia",
+    "uploadMedia", "adminMedia", "authorPage", "profile", "updateProfile", "mediaLibrary", "schedule", "analyze", "deleteArchived",
   ].map((key) => [key, () => {}]));
   const router = createBlogRouter({ controller, authenticate, authorize });
   const adminLayer = router.stack.find((layer) => layer.name === "router");
@@ -496,7 +501,7 @@ test("SEO routing serves crawler-readable pages and generated published-only sit
   });
   const response = responseRecorder();
   await controller.sitemap({}, response);
-  assert.match(sql, /status = 'published' AND archived_at IS NULL AND is_indexable = TRUE/);
+  assert.match(sql, /status IN \('published','scheduled'\) AND published_at<=NOW\(\) AND archived_at IS NULL AND is_indexable = TRUE/);
   assert.match(response.body, /https:\/\/operionos\.com\/blog\/published-guide/);
   assert.doesNotMatch(response.body, /\/app\//);
 });

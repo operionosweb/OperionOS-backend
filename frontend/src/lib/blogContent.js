@@ -1,3 +1,5 @@
+import { normalizeRichText, articlePlainText } from "./richText.js";
+
 export const BLOG_CATEGORIES = Object.freeze([
   "Aircraft Leasing",
   "Aviation Contract Intelligence",
@@ -7,7 +9,7 @@ export const BLOG_CATEGORIES = Object.freeze([
   "Predictive Contract Intelligence",
 ]);
 
-const BLOCK_TYPES = new Set(["heading", "paragraph", "unordered_list", "ordered_list", "quote", "table", "link", "image"]);
+const BLOCK_TYPES = new Set(["heading", "paragraph", "unordered_list", "ordered_list", "quote", "table", "link", "image", "rich_text"]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function slugFromTitle(value = "") {
@@ -50,6 +52,8 @@ export function normalizeBlogBlocks(value) {
     }
 
     switch (block.type) {
+      case "rich_text":
+        return { type: "rich_text", document: normalizeRichText(block.document) };
       case "heading": {
         const level = Number(block.level);
         if (![2, 3].includes(level)) throw new TypeError(`Heading block ${index + 1} must use level 2 or 3`);
@@ -88,11 +92,15 @@ export function normalizeBlogBlocks(value) {
       }
       case "image":
         if (!UUID_PATTERN.test(block.mediaId || "")) throw new TypeError(`Image block ${index + 1} must reference uploaded blog media`);
+        if (block.alignment !== undefined && !["left", "center", "right"].includes(block.alignment)) throw new TypeError("Unsupported image alignment");
+        if (block.size !== undefined && !["compact", "wide", "full"].includes(block.size)) throw new TypeError("Unsupported image size");
         return {
           type: "image",
           mediaId: block.mediaId,
           alt: boundedText(block.alt, 300, "Image alt text", { required: true }),
           caption: boundedText(block.caption, 500, "Image caption"),
+          ...(block.alignment ? { alignment: block.alignment } : {}),
+          ...(block.size ? { size: block.size } : {}),
         };
       default:
         throw new TypeError(`Content block ${index + 1} has an unsupported type`);
@@ -152,6 +160,14 @@ export function normalizeBlogPostInput(payload, { partial = false } = {}) {
     social_description: boundedText(payload.social_description, 200, "Social description") || generatedDescription,
     is_indexable: payload.is_indexable === undefined ? true : payload.is_indexable === true,
   };
+  if (payload.tags !== undefined) {
+    if (!Array.isArray(payload.tags) || payload.tags.length > 12) throw new TypeError("Use at most 12 tags.");
+    input.tags = [...new Set(payload.tags.map(tag => boundedText(tag, 60, "Tag", { required: true })))];
+  }
+  if (payload.is_featured !== undefined) {
+    if (typeof payload.is_featured !== "boolean") throw new TypeError("Featured preference must be a boolean.");
+    input.is_featured = payload.is_featured;
+  }
 
   if (input.cover_image && !UUID_PATTERN.test(input.cover_image)) throw new TypeError("Cover image must reference uploaded blog media");
   if (input.cover_image && !input.cover_image_alt) throw new TypeError("Cover image alt text is required");
@@ -176,6 +192,7 @@ export function validateForPublication(article) {
   ];
   const missing = required.filter(([field]) => !article[field]).map(([, message]) => message);
   if (!Array.isArray(article.content) || article.content.length === 0) missing.push("Add article content.");
+  else if (!articlePlainText(article).trim() && !article.content.some(block => block.type === "image")) missing.push("Add substantive article content; an empty editor cannot be published.");
   if (!article.is_indexable) return missing;
   return missing;
 }

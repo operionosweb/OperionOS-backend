@@ -1,0 +1,13 @@
+# Operion
+
+> Aviation Contract Intelligence and Predictive Scenario Simulation.
+
+## Public resources
+- [Corporate site](https://operionos.com/): Product, aviation focus and contact information.
+- [Published insights](https://operionos.com/blog): Public editorial articles only.
+- [XML sitemap](https://operionos.com/sitemap.xml): Discoverable public pages.
+- [RSS](https://operionos.com/blog/feed.xml): Published and indexable articles.
+
+Private application routes, drafts and internal administration are not public resources.
+Synthetic Demo material is illustrative, not measured customer outcomes or validated forecasts.
+This supplementary file does not guarantee inclusion in any search or AI retrieval service.

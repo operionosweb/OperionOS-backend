@@ -31,14 +31,22 @@ export function createBlogRouter({
   router.get("/", controller.listPublished);
   router.get("/sitemap.xml", controller.sitemap);
   router.get("/media/:id", controller.publicMedia);
+  router.get("/authors/:id", controller.authorPage);
 
   admin.use(authenticate, authorize);
+  admin.use((_req, res, next) => { res.set("Cache-Control", "private, no-store"); next(); });
   admin.get("/posts", controller.listAdmin);
+  admin.get("/profile", controller.profile);
+  admin.put("/profile", controller.updateProfile);
+  admin.get("/media", controller.mediaLibrary);
   admin.post("/posts", controller.create);
   admin.get("/posts/:id/history", controller.history);
   admin.get("/posts/:id", controller.getAdmin);
   admin.put("/posts/:id", controller.update);
+  admin.delete("/posts/:id", controller.deleteArchived);
   admin.post("/posts/:id/publish", controller.publish);
+  admin.post("/posts/:id/schedule", controller.schedule);
+  admin.post("/posts/:id/analyze", controller.analyze);
   admin.post("/posts/:id/unpublish", controller.unpublish);
   admin.post("/posts/:id/archive", controller.archive);
   admin.post("/posts/:id/restore", controller.restore);

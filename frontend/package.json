@@ -17,6 +17,12 @@
     "test:acceptance:install": "playwright install chromium"
   },
   "dependencies": {
+    "@tiptap/react": "^3.33.1",
+    "@tiptap/starter-kit": "^3.33.1",
+    "@tiptap/extension-text-style": "^3.33.1",
+    "@tiptap/extension-highlight": "^3.33.1",
+    "@tiptap/extension-text-align": "^3.33.1",
+    "@tiptap/extension-table": "^3.33.1",
     "@daily-co/daily-js": "0.87.0",
     "@cesium/engine": "19.0.0",
     "@cesium/widgets": "13.0.0",

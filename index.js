@@ -13,6 +13,7 @@ import providerRoutes from "./routes/providerRoutes.js";
 import searchRoutes from "./routes/searchRoutes.js";
 import portfolioRoutes from "./routes/portfolioRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import platformAdminRoutes from "./routes/platformAdminRoutes.js";
 import blogRoutes from "./routes/blogRoutes.js";
 import healthRoutes from "./routes/healthRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
@@ -173,6 +174,7 @@ app.use("/api/verification", verificationRoutes);
  * ADMIN
  */
 app.use("/api/admin", adminRoutes);
+app.use("/api/platform-admin", platformAdminRoutes);
 
 /**
  * HEALTH CHECK

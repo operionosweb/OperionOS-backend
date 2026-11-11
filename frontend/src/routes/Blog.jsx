@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowRight, BookOpen, CalendarDays, ChevronRight } from "lucide-react";
 import { apiRequest } from "../lib/apiClient";
 import { useAuth } from "../context/AuthContext";
-import { blogMediaUrl } from "../lib/blogRendering";
+import { blogMediaUrl, renderRichTextHtml } from "../lib/blogRendering";
+import { readingMinutes } from "../lib/richText";
 import { applyRouteMetadata } from "../components/seo/RouteMetadata";
 
 const SITE_URL = "https://operionos.com";
@@ -28,7 +29,7 @@ function articleStructuredData(post, canonical) {
         articleSection: post.category,
         datePublished: post.published_at,
         dateModified: post.updated_at || post.published_at,
-        author: { "@type": "Person", name: post.author_name || "Operion", ...(post.author_url ? { url: post.author_url } : {}) },
+        author: { "@type": "Person", name: post.author_name || "Profile unavailable", ...(post.author_url ? { url: post.author_url } : {}), ...(post.author_avatar_media ? { image: blogMediaUrl(post.author_avatar_media, API_BASE_URL) } : {}) },
         publisher: { "@type": "Organization", "@id": `${SITE_URL}/#organization`, name: "Operion", url: `${SITE_URL}/` },
         mainEntityOfPage: { "@type": "WebPage", "@id": canonical },
         ...(post.cover_image ? { image: blogMediaUrl(post.cover_image, API_BASE_URL) } : {}),
@@ -48,11 +49,14 @@ function articleStructuredData(post, canonical) {
 export function PrivateMediaImage({ mediaId, alt }) {
   const { session } = useAuth();
   const [src, setSrc] = useState("");
+  const [error, setError] = useState("");
+  const [dimensions, setDimensions] = useState("");
 
   useEffect(() => {
     let active = true;
     let objectUrl = "";
-    if (!session?.access_token) return undefined;
+    setSrc(""); setError("");
+    if (!session?.access_token) { setError("Sign in to preview private media."); return undefined; }
     fetch(`${API_BASE_URL}/api/blog/admin/media/${encodeURIComponent(mediaId)}`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     }).then((response) => {
@@ -62,19 +66,21 @@ export function PrivateMediaImage({ mediaId, alt }) {
       if (!active) return;
       objectUrl = URL.createObjectURL(blob);
       setSrc(objectUrl);
-    }).catch(() => active && setSrc(""));
+    }).catch(failure => { if (active) { setSrc(""); setError(failure.message || "Private image preview failed."); } });
     return () => {
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [mediaId, session?.access_token]);
 
-  return src ? <img src={src} alt={alt || ""} /> : <span className="op-blog-private-image">Private image preview</span>;
+  return src ? <span className="op-blog-media-preview"><img src={src} alt={alt || ""} onLoad={e => setDimensions(`${e.currentTarget.naturalWidth} x ${e.currentTarget.naturalHeight} px`)} /><small>{dimensions}</small></span> : <span className="op-blog-private-image" role={error ? "alert" : "status"}>{error || "Loading private image preview..."}</span>;
 }
 
 function BlogBlock({ block, privateMedia = false }) {
   if (!block || typeof block !== "object") return null;
   switch (block.type) {
+    case "rich_text":
+      return <div dangerouslySetInnerHTML={{ __html: renderRichTextHtml(block.document) }} />;
     case "heading": {
       const Tag = [2, 3].includes(Number(block.level)) ? `h${Number(block.level)}` : "h2";
       return <Tag>{block.text}</Tag>;
@@ -103,7 +109,7 @@ function BlogBlock({ block, privateMedia = false }) {
       return <p><a href={url.href} rel="noopener noreferrer">{block.text || url.href}</a></p>;
     }
     case "image":
-      return <figure>{privateMedia
+      return <figure className={`op-blog-image ${["compact", "wide", "full"].includes(block.size) ? block.size : "full"} align-${["left", "center", "right"].includes(block.alignment) ? block.alignment : "center"}`}>{privateMedia
         ? <PrivateMediaImage mediaId={block.mediaId} alt={block.alt} />
         : <img src={blogMediaUrl(block.mediaId, API_BASE_URL)} alt={block.alt || ""} loading="lazy" decoding="async" />}
       <figcaption>{block.caption}</figcaption></figure>;
@@ -129,9 +135,10 @@ function ArticleCard({ post }) {
       </Link>}
       <div className="op-blog-card-copy">
         <p className="op-blog-eyebrow">{post.category}</p>
+        {post.is_featured && <span className="op-blog-eyebrow">Featured editorial</span>}
         <h2><Link to={`/blog/${encodeURIComponent(post.slug)}`}>{post.title}</Link></h2>
         {post.excerpt && <p>{post.excerpt}</p>}
-        <div className="op-blog-byline"><span>{post.author_name || "Operion"}</span><span aria-hidden="true">·</span><time dateTime={post.published_at || undefined}>{dateLabel(post.published_at)}</time></div>
+        <div className="op-blog-byline">{post.author_avatar_media && <img className="op-blog-avatar" src={blogMediaUrl(post.author_avatar_media, API_BASE_URL)} alt={post.author_name || ""} loading="lazy" />}<span>{post.author_name || "Profile incomplete"}</span><span aria-hidden="true">·</span><time dateTime={post.published_at || undefined}>{dateLabel(post.published_at)}</time><span>{readingMinutes(post)} min read</span></div>
         <Link className="op-blog-read-more" to={`/blog/${encodeURIComponent(post.slug)}`}>Read article <ArrowRight size={17} aria-hidden="true" /></Link>
       </div>
     </article>
@@ -139,9 +146,12 @@ function ArticleCard({ post }) {
 }
 
 export function BlogIndex() {
+  const [params] = useSearchParams();
   const [posts, setPosts] = useState([]);
-  const [category, setCategory] = useState("All topics");
+  const [category, setCategory] = useState(() => params.get("category") || "All topics");
   const [error, setError] = useState("");
+  const [search, setSearch] = useState(() => params.get("search") || "");
+  const [tag, setTag] = useState(() => params.get("tag") || "");
 
   useEffect(() => {
     let active = true;
@@ -168,7 +178,10 @@ export function BlogIndex() {
   }, []);
 
   const categories = useMemo(() => ["All topics", ...new Set(posts.map((post) => post.category).filter(Boolean))], [posts]);
-  const visiblePosts = category === "All topics" ? posts : posts.filter((post) => post.category === category);
+  const tags = [...new Set(posts.flatMap(p => p.tags || []))];
+  const visiblePosts = posts.filter(post => (category === "All topics" || post.category === category)
+    && (!tag || post.tags?.includes(tag))
+    && `${post.title} ${post.excerpt || ""}`.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="op-blog-page">
@@ -190,6 +203,7 @@ export function BlogIndex() {
         <div className="op-blog-category-list" aria-label="Filter articles by topic">
           {categories.map((item) => <button type="button" className={category === item ? "is-active" : ""} key={item} onClick={() => setCategory(item)} aria-pressed={category === item}>{item}</button>)}
         </div>
+        <div className="op-blog-search"><label>Search insights<input value={search} onChange={e => setSearch(e.target.value)} maxLength={160} /></label><label>Tag<select value={tag} onChange={e => setTag(e.target.value)}><option value="">All tags</option>{tags.map(t => <option key={t}>{t}</option>)}</select></label></div>
         {error ? <div className="op-blog-state" role="alert">{error}</div>
           : posts.length === 0 ? <LoadingNotice label="New aviation insights are in editorial development. Please check back soon." />
             : visiblePosts.length ? <div className="op-blog-grid">{visiblePosts.map((post) => <ArticleCard key={post.id} post={post} />)}</div>
@@ -201,10 +215,31 @@ export function BlogIndex() {
   );
 }
 
+export function BlogAuthor() {
+  const { id } = useParams();
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    const controller = new AbortController();
+    setData(null); setError("");
+    apiRequest(`/api/blog/authors/${encodeURIComponent(id)}`, { signal: controller.signal }).then(result => {
+      if (controller.signal.aborted) return;
+      setData(result);
+      applyRouteMetadata({ title: `${result.author.name} | Operion Insights`, canonical: `${SITE_URL}/blog/authors/${id}`, description: result.author.biography || "Operion aviation editorial author." });
+    }).catch(failure => { if (!controller.signal.aborted) setError(failure.message); });
+    return () => controller.abort();
+  }, [id]);
+  return <section className="op-blog-content"><Link to="/blog">All insights</Link>{error ? <p role="alert">{error}</p> : !data ? <LoadingNotice label="Loading published author..." /> : <>
+    {data.author.avatar_media && <img className="op-blog-avatar" src={blogMediaUrl(data.author.avatar_media, API_BASE_URL)} alt={data.author.name || ""} />}
+    <h1>{data.author.name || "Profile unavailable"}</h1><p>{data.author.biography}</p><div className="op-blog-grid">{data.posts.map(p => <ArticleCard key={p.id} post={p} />)}</div>
+  </>}</section>;
+}
+
 export function BlogArticle() {
   const { slug = "" } = useParams();
   const navigate = useNavigate();
   const [post, setPost] = useState(null);
+  const [related, setRelated] = useState([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -221,6 +256,7 @@ export function BlogArticle() {
         if (!result.post) throw new Error("Article not found.");
         const value = result.post;
         setPost(value);
+        setRelated(result.related || []);
         const canonical = value.canonical_url ? new URL(value.canonical_url, SITE_URL).href : `${SITE_URL}/blog/${encodeURIComponent(value.slug)}`;
         applyRouteMetadata({
           title: value.seo_title || value.title,
@@ -251,13 +287,15 @@ export function BlogArticle() {
         {post.subtitle && <p className="op-blog-subtitle">{post.subtitle}</p>}
         {post.excerpt && <p className="op-blog-deck">{post.excerpt}</p>}
         <div className="op-blog-author">
-          <span className="op-blog-author-mark" aria-hidden="true">{(post.author_name || "O").slice(0, 1)}</span>
-          <span><strong>{post.author_name || "Operion"}</strong>{post.author_role && <small>{post.author_role}</small>}</span>
+          {post.author_avatar_media ? <img className="op-blog-avatar" src={blogMediaUrl(post.author_avatar_media, API_BASE_URL)} alt={post.author_name || ""} /> : <span>Profile photograph unavailable</span>}
+          <span>{post.author_url ? <a href={post.author_url}><strong>{post.author_name || "Profile incomplete"}</strong></a> : <strong>{post.author_name || "Profile incomplete"}</strong>}{post.author_role && <small>{post.author_role}</small>}</span>
           <span className="op-blog-date"><CalendarDays size={15} aria-hidden="true" /><time dateTime={post.published_at || undefined}>{published}</time></span>
         </div>
+        <p>{readingMinutes(post)} min read · Updated {dateLabel(post.updated_at)}</p><div className="op-blog-tags">{post.tags?.map(t => <a key={t} href={`/blog?tag=${encodeURIComponent(t)}`}>{t}</a>)}</div>
       </header>
       {post.cover_image && <figure className="op-blog-cover"><img src={blogMediaUrl(post.cover_image, API_BASE_URL)} alt={post.cover_image_alt || ""} fetchPriority="high" /></figure>}
       <BlogArticleBody post={post} />
+      {related.length > 0 && <section><h2>Related aviation insights</h2><p>Selected by shared editorial category, not engagement ranking.</p><div className="op-blog-grid">{related.map(p => <ArticleCard key={p.id} post={p} />)}</div></section>}
       <aside className="op-blog-editorial-note">Operion articles share industry information and product perspectives; they are not legal advice. Verify contractual interpretation with qualified advisers.</aside>
       <section className="op-blog-article-cta"><p className="op-blog-eyebrow">OPERION / AVIATION CONTRACT INTELLIGENCE</p><h2>Connect contract terms to decisions.</h2><Link to="/request-demo">Explore Operion <ArrowRight size={17} aria-hidden="true" /></Link></section>
     </article>

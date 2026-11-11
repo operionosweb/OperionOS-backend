@@ -107,6 +107,10 @@ export default function ProductionLayout() {
           {auth.hasPlatformPermission(PLATFORM_PERMISSIONS.PLATFORM_ADMIN) && (
             <>
               <span className="op-product-nav-label">Super Admin</span>
+              <NavItem to="/app/admin" label="Command Centre" icon={Gauge} end />
+              <NavItem to="/app/admin/users" label="Users" icon={ShieldAlert} />
+              <NavItem to="/app/admin/organizations" label="Companies & tenants" icon={FileText} />
+              <NavItem to="/app/admin/analytics" label="Platform analytics" icon={BrainCircuit} />
               <NavItem to="/app/admin/blog" label="Insights CMS" icon={BookOpen} />
             </>
           )}

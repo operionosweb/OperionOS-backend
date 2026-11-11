@@ -1,9 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": { "deploymentEnabled": false },
   "installCommand": "npm ci",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
+    { "source": "/blog/feed.xml", "destination": "/api/blog-feed" },
+    { "source": "/blog/authors/:id", "destination": "/api/blog-author?id=:id" },
     {
       "source": "/blog",
       "destination": "/api/blog"

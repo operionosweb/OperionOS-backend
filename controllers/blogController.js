@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import { getSupabaseClient } from "../config/supabase.js";
+import { resolveAuthor, createEditorialAnalyzer, articleRevision } from "../services/blogEditorialService.js";
 import { query, default as pool } from "../db.js";
 import {
   normalizeBlogPostInput,
@@ -10,9 +12,10 @@ const PUBLIC_POST_FIELDS = `
   id, title, subtitle, slug, excerpt, content, cover_image, cover_image_alt,
   category, seo_title, seo_description, canonical_url, social_title,
   social_description, author_name, author_role, author_bio, author_url,
-  is_indexable, status, published_at, created_at, updated_at
+  is_indexable, status, published_at, created_at, updated_at,
+  author_id, author_avatar_media, tags, is_featured
 `;
-const ADMIN_POST_FIELDS = `${PUBLIC_POST_FIELDS}, created_by, updated_by, archived_at`;
+const ADMIN_POST_FIELDS = `${PUBLIC_POST_FIELDS}, created_by, updated_by, archived_at, ai_analysis`;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function httpError(status, message) {
@@ -25,7 +28,7 @@ function errorResponse(res, error, operation) {
   if (error?.code === "23505") {
     return res.status(409).json({ success: false, error: "That article URL is already in use." });
   }
-  const status = Number.isInteger(error?.status) ? error.status : error?.code === "DATABASE_NOT_CONFIGURED" ? 503 : 500;
+  const status = Number.isInteger(error?.status) ? error.status : error instanceof TypeError || error instanceof RangeError ? 400 : error?.code === "DATABASE_NOT_CONFIGURED" ? 503 : 500;
   if (status >= 500) console.error("blog_operation_failed", { operation, code: error?.code || "BLOG_REQUEST_FAILED" });
   return res.status(status).json({
     success: false,
@@ -62,6 +65,11 @@ async function transaction(database, queryFn, callback) {
 function requiredId(value, label) {
   if (!UUID_PATTERN.test(value || "")) throw httpError(400, `${label} is invalid.`);
   return value;
+}
+function assertRevision(body, current) {
+  const expected = typeof body?.expected_updated_at === "string" ? Date.parse(body.expected_updated_at) : NaN;
+  const actual = new Date(current.updated_at).getTime();
+  if (!Number.isFinite(expected) || expected !== actual) throw httpError(409, "This article changed or its saved revision is missing. Reload and review before continuing.");
 }
 
 function imageMime(buffer) {
@@ -114,17 +122,19 @@ function auditSnapshot(row, actorId, action) {
   ];
 }
 
-export function createBlogController({ queryFn = query, database = pool } = {}) {
+export function createBlogController({ queryFn = query, database = pool, authorResolver = resolveAuthor, analyzer = createEditorialAnalyzer(), authClient = getSupabaseClient } = {}) {
   const runTransaction = (callback) => transaction(database, queryFn, callback);
 
   const listPublished = withRequest("list_published", async (req, res) => {
-    const values = [req.query.category || null];
+    const values = [req.query.category || null, String(req.query.search || "").slice(0, 160), req.query.tag || null];
     const result = await queryFn(
       `SELECT ${PUBLIC_POST_FIELDS}
        FROM blog_posts
-       WHERE status = 'published' AND archived_at IS NULL
+       WHERE status IN ('published','scheduled') AND published_at<=NOW() AND archived_at IS NULL
          AND ($1::text IS NULL OR category = $1)
-       ORDER BY published_at DESC, id DESC`,
+         AND ($2='' OR position(lower($2) in lower(title||' '||coalesce(excerpt,'')))>0)
+         AND ($3::text IS NULL OR $3=ANY(tags))
+       ORDER BY is_featured DESC,published_at DESC, id DESC LIMIT 200`,
       values
     );
     return res.json({ success: true, posts: result.rows });
@@ -133,10 +143,15 @@ export function createBlogController({ queryFn = query, database = pool } = {}) 
   const getPublished = withRequest("get_published", async (req, res) => {
     const result = await queryFn(
       `SELECT ${PUBLIC_POST_FIELDS} FROM blog_posts
-       WHERE slug = $1 AND status = 'published' AND archived_at IS NULL LIMIT 1`,
+       WHERE slug = $1 AND status IN ('published','scheduled') AND published_at<=NOW() AND archived_at IS NULL LIMIT 1`,
       [req.params.slug]
     );
-    if (result.rows[0]) return res.json({ success: true, post: result.rows[0] });
+    if (result.rows[0]) {
+      const post = result.rows[0];
+      const related = await queryFn(`select ${PUBLIC_POST_FIELDS} from blog_posts where category=$1 and id<>$2
+        and status in ('published','scheduled') and published_at<=now() and archived_at is null order by published_at desc limit 3`, [post.category, post.id]);
+      return res.json({ success: true, post, related: related.rows.filter(p => p.id !== post.id) });
+    }
 
     const redirect = await queryFn(
       "SELECT new_slug FROM blog_slug_redirects WHERE old_slug = $1 LIMIT 1",
@@ -150,7 +165,7 @@ export function createBlogController({ queryFn = query, database = pool } = {}) 
     const result = await queryFn(
       `SELECT slug, GREATEST(updated_at, published_at) AS lastmod
        FROM blog_posts
-       WHERE status = 'published' AND archived_at IS NULL AND is_indexable = TRUE
+       WHERE status IN ('published','scheduled') AND published_at<=NOW() AND archived_at IS NULL AND is_indexable = TRUE
        ORDER BY published_at DESC`
     );
     const staticPaths = [
@@ -190,14 +205,15 @@ export function createBlogController({ queryFn = query, database = pool } = {}) 
     const actorId = req.user.id;
     await assertMediaExists(queryFn, mediaIdsFor(article));
     const result = await runTransaction(async (execute) => {
+      Object.assign(article, await authorResolver(execute, actorId));
       const inserted = await execute(
         `INSERT INTO blog_posts (
           title, subtitle, slug, excerpt, content, cover_image, cover_image_alt,
           category, seo_title, seo_description, canonical_url, social_title,
           social_description, author_name, author_role, author_bio, author_url,
-          is_indexable, status, created_by, updated_by
+          is_indexable, status, created_by, updated_by,author_id,author_avatar_media,tags,is_featured
         ) VALUES (
-          $1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'draft',$19,$19
+          $1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'draft',$19,$19,$20,$21,$22,$23
         ) RETURNING ${ADMIN_POST_FIELDS}`,
         [
           article.title, article.subtitle || null, article.slug, article.excerpt || null,
@@ -205,7 +221,7 @@ export function createBlogController({ queryFn = query, database = pool } = {}) 
           article.category || null, article.seo_title || null, article.seo_description || null,
           article.canonical_url || null, article.social_title || null, article.social_description || null,
           article.author_name || null, article.author_role || null, article.author_bio || null,
-          article.author_url || null, article.is_indexable, actorId,
+          article.author_url || null, article.is_indexable, actorId,article.author_id,article.author_avatar_media,article.tags || [],article.is_featured || false,
         ]
       );
       await execute(
@@ -231,6 +247,9 @@ export function createBlogController({ queryFn = query, database = pool } = {}) 
       const current = currentResult.rows[0];
       if (!current) throw httpError(404, "Article not found.");
       if (current.status === "archived") throw httpError(409, "Restore the archived article before editing it.");
+      if (current.status !== "draft") throw httpError(409, "Unpublish or cancel scheduling before editing. Public articles are not autosaved.");
+      assertRevision(req.body, current);
+      Object.assign(article, await authorResolver(execute, current.author_id || current.created_by || actorId));
       if (current.slug !== article.slug) {
         await execute("DELETE FROM blog_slug_redirects WHERE old_slug = $1", [article.slug]);
         await execute(
@@ -251,7 +270,7 @@ export function createBlogController({ queryFn = query, database = pool } = {}) 
           seo_description=$10, canonical_url=$11, social_title=$12,
           social_description=$13, author_name=$14, author_role=$15,
           author_bio=$16, author_url=$17, is_indexable=$18, updated_by=$19,
-          updated_at=NOW()
+          updated_at=NOW(),author_id=$21,author_avatar_media=$22,tags=$23,is_featured=$24,ai_analysis=NULL
          WHERE id=$20 RETURNING ${ADMIN_POST_FIELDS}`,
         [
           article.title, article.subtitle || null, article.slug, article.excerpt || null,
@@ -259,7 +278,7 @@ export function createBlogController({ queryFn = query, database = pool } = {}) 
           article.category || null, article.seo_title || null, article.seo_description || null,
           article.canonical_url || null, article.social_title || null, article.social_description || null,
           article.author_name || null, article.author_role || null, article.author_bio || null,
-          article.author_url || null, article.is_indexable, actorId, id,
+          article.author_url || null, article.is_indexable, actorId, id,article.author_id,article.author_avatar_media,article.tags || [],article.is_featured || false,
         ]
       );
       await execute(
@@ -273,6 +292,7 @@ export function createBlogController({ queryFn = query, database = pool } = {}) 
   });
 
   const publish = withRequest("publish", async (req, res) => {
+    if (req.body?.confirm_review !== true) throw httpError(400, "Explicit editorial review approval is required.");
     const id = requiredId(req.params.id, "Article ID");
     const result = await runTransaction(async (execute) => {
       const currentResult = await execute(
@@ -282,14 +302,19 @@ export function createBlogController({ queryFn = query, database = pool } = {}) 
       const current = currentResult.rows[0];
       if (!current) throw httpError(404, "Article not found.");
       if (current.status === "archived") throw httpError(409, "Restore the archived article before publishing it.");
+      if (current.status !== "draft") throw httpError(409, "Only a reviewed saved draft can be published.");
+      assertRevision(req.body, current);
+      const author = await authorResolver(execute, current.author_id || current.created_by || req.user.id, { requireComplete: true });
+      Object.assign(current, author);
       const issues = validateForPublication(current);
       if (issues.length) throw httpError(400, `Article is not ready to publish: ${issues.join(" ")}`);
       await assertMediaExists(execute, mediaIdsFor(current));
       const updated = await execute(
-        `UPDATE blog_posts SET status='published', published_at=COALESCE(published_at,NOW()),
-          archived_at=NULL, updated_by=$1, updated_at=NOW()
+        `UPDATE blog_posts SET status='published', published_at=NOW(),
+          archived_at=NULL, updated_by=$1, updated_at=NOW(),approved_at=NOW(),
+          author_name=$3,author_bio=$4,author_url=$5,author_id=$6,author_avatar_media=$7,author_role=$8
          WHERE id=$2 RETURNING ${ADMIN_POST_FIELDS}`,
-        [req.user.id, id]
+        [req.user.id, id,author.author_name,author.author_bio,author.author_url,author.author_id,author.author_avatar_media,author.author_role]
       );
       await execute(
         `INSERT INTO blog_post_audit (post_id, actor_id, action, snapshot)
@@ -305,8 +330,8 @@ export function createBlogController({ queryFn = query, database = pool } = {}) 
     const id = requiredId(req.params.id, "Article ID");
     const result = await runTransaction(async (execute) => {
       const updated = await execute(
-        `UPDATE blog_posts SET status='draft', updated_by=$1, updated_at=NOW()
-         WHERE id=$2 AND status='published' RETURNING ${ADMIN_POST_FIELDS}`,
+        `UPDATE blog_posts SET status='draft', updated_by=$1, updated_at=NOW(),approved_at=NULL
+         WHERE id=$2 AND status IN ('published','scheduled') RETURNING ${ADMIN_POST_FIELDS}`,
         [req.user.id, id]
       );
       if (!updated.rows[0]) throw httpError(404, "Published article not found.");
@@ -409,19 +434,108 @@ export function createBlogController({ queryFn = query, database = pool } = {}) 
       `SELECT m.mime_type, m.image_bytes FROM blog_media m
        WHERE m.id=$1 AND EXISTS (
          SELECT 1 FROM blog_posts p
-         WHERE p.status='published' AND p.archived_at IS NULL
-           AND (p.cover_image=m.id::text OR p.content @> jsonb_build_array(jsonb_build_object('mediaId',m.id::text)))
+         WHERE p.status IN ('published','scheduled') AND p.published_at<=NOW() AND p.archived_at IS NULL
+           AND (p.cover_image=m.id::text OR p.author_avatar_media=m.id OR p.content @> jsonb_build_array(jsonb_build_object('mediaId',m.id::text)))
        )`,
       [id]
     );
     if (!result.rows[0]) return res.status(404).end();
-    res.set({ "Content-Type": result.rows[0].mime_type, "X-Content-Type-Options": "nosniff", "Cache-Control": "public, max-age=86400, immutable" });
+    res.set({ "Content-Type": result.rows[0].mime_type, "X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store" });
     return res.send(result.rows[0].image_bytes);
+  });
+
+  const mediaLibrary = withRequest("list_media", async (_req, res) => {
+    const result = await queryFn(`select id,mime_type,alt_text,caption,created_by,created_at,
+      octet_length(image_bytes) as bytes from blog_media order by created_at desc limit 100`);
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true, media: result.rows });
+  });
+  const profile = withRequest("author_profile", async (req, res) => {
+    const author = await authorResolver(queryFn, req.user.id);
+    res.json({ success: true, profile: author, complete: !!author.author_name && !!author.author_avatar_media });
+  });
+  const updateProfile = withRequest("update_author_profile", async (req, res) => {
+    const name = String(req.body.full_name || "").trim();
+    const biography = String(req.body.biography || "").trim();
+    const avatar = requiredId(req.body.avatar_media_id, "Profile photograph");
+    if (!name || name.includes("@") || name.length > 120 || biography.length > 800) throw httpError(400, "Provide your actual full name (not email) and a biography up to 800 characters.");
+    const owned = await queryFn("select id from blog_media where id=$1 and created_by=$2", [avatar, req.user.id]);
+    if (!owned.rows.length) throw httpError(400, "Choose a profile photograph you uploaded.");
+    await queryFn(`insert into audit_events(actor_id,action,entity_type,entity_id) values($1,'AUTHOR_PROFILE_UPDATE_REQUESTED','user',$1)`, [req.user.id]);
+    const { error } = await authClient().auth.admin.updateUserById(req.user.id, { user_metadata: { full_name: name, biography, avatar_media_id: avatar } });
+    if (error) throw httpError(502, "Author profile update failed.");
+    res.json({ success: true, profile: await authorResolver(queryFn, req.user.id) });
+  });
+  const schedule = withRequest("schedule", async (req, res) => {
+    if (req.body?.confirm_review !== true) throw httpError(400, "Explicit editorial review approval is required.");
+    const id = requiredId(req.params.id, "Article ID");
+    if (typeof req.body.published_at !== "string" || !/(Z|[+-]\d{2}:\d{2})$/.test(req.body.published_at)) throw httpError(400, "Publication time must include a timezone.");
+    const due = new Date(req.body.published_at);
+    if (!Number.isFinite(due.getTime()) || due.getTime() <= Date.now()) throw httpError(400, "Choose a future publication time including timezone.");
+    const post = await runTransaction(async execute => {
+      const result = await execute(`select ${ADMIN_POST_FIELDS} from blog_posts where id=$1 for update`, [id]);
+      const current = result.rows[0];
+      if (!current || current.status !== "draft") throw httpError(409, "Only a saved draft can be scheduled.");
+      assertRevision(req.body, current);
+      const author = await authorResolver(execute, current.author_id || current.created_by, { requireComplete: true });
+      const issues = validateForPublication({ ...current, ...author });
+      if (issues.length) throw httpError(400, issues.join(" "));
+      await assertMediaExists(execute, mediaIdsFor(current));
+      const updated = await execute(`update blog_posts set status='scheduled',published_at=$1,approved_at=now(),updated_by=$2,updated_at=now(),
+        author_name=$4,author_bio=$5,author_url=$6,author_id=$7,author_avatar_media=$8,author_role=$9
+        where id=$3 returning ${ADMIN_POST_FIELDS}`, [due.toISOString(), req.user.id, id, author.author_name, author.author_bio, author.author_url, author.author_id, author.author_avatar_media, author.author_role]);
+      await execute("insert into blog_post_audit(post_id,actor_id,action,snapshot) values($1,$2,'scheduled',$3::jsonb)", [id, req.user.id, JSON.stringify(updated.rows[0])]);
+      return updated.rows[0];
+    });
+    res.json({ success: true, post });
+  });
+  const analyze = withRequest("ai_analyze", async (req, res) => {
+    const id = requiredId(req.params.id, "Article ID");
+    const organizationId = requiredId(req.body.organization_id, "Publishing budget organization");
+    const member = await queryFn(`select 1 from organization_memberships m join organizations o on o.id=m.organization_id
+      where m.user_id=$1 and m.organization_id=$2 and m.status='active' and o.status='active'
+      and m.role in ('owner','admin','ORG_ADMIN','CUSTOMER_ADMIN')`, [req.user.id, organizationId]);
+    if (!member.rows.length) throw httpError(403, "An active administrator membership in the explicitly selected AI-budget organization is required.");
+    const result = await queryFn(`select ${ADMIN_POST_FIELDS} from blog_posts where id=$1`, [id]);
+    const current = result.rows[0];
+    if (!current || current.status !== "draft") throw httpError(409, "Save a draft before AI analysis.");
+    const analysis = await analyzer(current, { organizationId, consent: req.body.public_editorial_consent });
+    const updated = await runTransaction(async execute => {
+      const locked = await execute(`select ${ADMIN_POST_FIELDS} from blog_posts where id=$1 for update`, [id]);
+      if (!locked.rows[0] || locked.rows[0].status !== "draft" || articleRevision(locked.rows[0]) !== analysis.revision) throw httpError(409, "Article changed during AI analysis; regenerate against the saved revision.");
+      await execute("update blog_posts set ai_analysis=$1::jsonb where id=$2", [JSON.stringify(analysis), id]);
+      await execute("insert into blog_post_audit(post_id,actor_id,action,snapshot) values($1,$2,'ai_analyzed',$3::jsonb)", [id, req.user.id, JSON.stringify({ revision: analysis.revision, provider: analysis.provider })]);
+      return analysis;
+    });
+    res.json({ success: true, analysis: updated });
+  });
+  const authorPage = withRequest("public_author", async (req, res) => {
+    const id = requiredId(req.params.id, "Author ID");
+    const result = await queryFn(`select ${PUBLIC_POST_FIELDS} from blog_posts where author_id=$1
+      and status in ('published','scheduled') and published_at<=now() and archived_at is null order by published_at desc limit 100`, [id]);
+    if (!result.rows.length) throw httpError(404, "Published author not found.");
+    const p = result.rows[0];
+    res.json({ success: true, author: { id, name: p.author_name, biography: p.author_bio, avatar_media: p.author_avatar_media, url: p.author_url }, posts: result.rows });
+  });
+  const deleteArchived = withRequest("delete_archived", async (req, res) => {
+    const id = requiredId(req.params.id, "Article ID");
+    await runTransaction(async execute => {
+      const { rows } = await execute(`select ${ADMIN_POST_FIELDS} from blog_posts where id=$1 for update`, [id]);
+      const current = rows[0];
+      if (!current || current.status !== "archived") throw httpError(409, "Only an archived article can be permanently deleted.");
+      assertRevision(req.body, current);
+      if (req.body?.confirm_title !== current.title) throw httpError(400, "Type the exact archived article title to confirm permanent deletion.");
+      await execute("insert into blog_post_audit(post_id,actor_id,action,snapshot) values($1,$2,'deleted',$3::jsonb)", [id, req.user.id, JSON.stringify(current)]);
+      await execute("delete from blog_slug_redirects where new_slug=$1 or old_slug=$1", [current.slug]);
+      await execute("delete from blog_posts where id=$1", [id]);
+    });
+    res.json({ success: true, deleted: true });
   });
 
   return {
     listPublished, getPublished, sitemap, listAdmin, getAdmin, create, update,
     publish, unpublish, archive, restore, history, uploadMedia, adminMedia, publicMedia,
+    mediaLibrary, profile, updateProfile, schedule, analyze, authorPage, deleteArchived,
   };
 }
 

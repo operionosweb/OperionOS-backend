@@ -1168,3 +1168,12 @@
     transition: none;
   }
 }
+.op-blog-avatar { width:48px; height:48px; object-fit:cover; border-radius:50%; flex-shrink:0; }
+.op-blog-search { display:flex; flex-wrap:wrap; gap:12px; align-items:end; margin:24px 0; padding:20px; border:1px solid #d5e0eb; border-radius:14px; background:#fff; }
+.op-blog-search label { display:grid; gap:6px; flex:1 1 180px; font-size:13px; color:#26435e; }
+.op-blog-search input,.op-blog-search select { min-width:0; width:100%; padding:12px; border:1px solid #aebfd0; border-radius:7px; color:#193249; background:#fff; }
+.op-blog-search button { padding:12px 20px; border:0; border-radius:8px; background:#133b5b; color:#fff; }
+.op-blog-tags { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; }
+.op-blog-tags a { background:#e9f2f9; color:#174260; border-radius:20px; padding:6px 12px; font-size:12px; }
+.op-blog-image.compact { max-width:480px; }.op-blog-image.wide { max-width:800px; }
+.op-blog-image.align-left { margin-left:0; margin-right:auto; }.op-blog-image.align-right { margin-left:auto; margin-right:0; }.op-blog-image.align-center { margin-left:auto; margin-right:auto; }

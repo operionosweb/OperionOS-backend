@@ -1,0 +1,15 @@
+.git
+**/node_modules
+**/.env
+**/.env.*
+**/.vercel
+**/dist
+**/dist-oci
+**/build
+**/.acceptance-temp
+**/test-results
+**/playwright-report
+uploads
+recovery/source
+recovery/reports
+.DS_Store

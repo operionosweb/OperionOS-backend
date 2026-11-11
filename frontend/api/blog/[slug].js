@@ -1,4 +1,5 @@
 import { renderBlogArticleHtml } from "../../src/lib/blogRendering.js";
+import { isPublicArticle } from "../../src/lib/richText.js";
 
 function backendUrl() {
   const configured = process.env.OPERION_BACKEND_URL || process.env.VITE_API_BASE_URL;
@@ -31,11 +32,11 @@ export default async function blogArticle(req, res) {
     if (result.redirectTo && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(result.redirectTo)) {
       return res.redirect(301, `/blog/${encodeURIComponent(result.redirectTo)}`);
     }
-    if (!result.post || result.post.status !== "published" || result.post.archived_at) return res.status(404).send("Article not found.");
+    if (!isPublicArticle(result.post)) return res.status(404).send("Article not found.");
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Cache-Control", "public, max-age=0, s-maxage=0, must-revalidate");
-    return res.status(200).send(renderBlogArticleHtml(result.post, base));
+    return res.status(200).send(renderBlogArticleHtml(result.post, base, (result.related || []).filter(p => isPublicArticle(p))));
   } catch {
     console.error("blog_ssr_article_failed");
     return res.status(503).send("Operion Insights is temporarily unavailable.");
