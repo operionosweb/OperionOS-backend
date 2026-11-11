@@ -74,7 +74,7 @@ test("every intentionally indexable public route has route metadata and sitemap 
     assert.match(metadata, new RegExp(`"${route.replaceAll("/", "\\/")}"`), `metadata missing for ${route}`);
     assert.ok(sitemap.includes(`"${route}"`), `dynamic sitemap missing ${route}`);
   }
-  assert.match(sitemap, /status = 'published' AND archived_at IS NULL AND is_indexable = TRUE/);
+  assert.match(sitemap, /status IN \('published','scheduled'\) AND published_at<=NOW\(\) AND archived_at IS NULL AND is_indexable = TRUE/);
   assert.doesNotMatch(sitemap, /\/app\//);
   assert.doesNotMatch(sitemap, /\/login/);
   assert.match(vercel, /"source": "\/sitemap\.xml"[\s\S]*?"destination": "\/api\/blog-sitemap"/);

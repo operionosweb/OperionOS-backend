@@ -100,6 +100,10 @@ processing authority. The new path is not enabled by default.
   in a callback because this implementation has no provider callback route.
 - Existing model gateway controls business reasoning and budget confirmation.
   Answer text must satisfy existing output/evidence checks before avatar delivery.
+- The gateway module also owns the Realtime HTTP transport. Speech remains a
+  separately approved and billed service: its calls do not consume the text
+  intelligence budget, and its own privacy, spending and session controls remain
+  mandatory.
 - Only generated answer text goes to Tavus. That text can itself be confidential;
   separating processors does not eliminate the need for authority/agreements.
 - Realtime automatic response and interruption flags are false, output modality

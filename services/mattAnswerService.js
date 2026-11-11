@@ -9,7 +9,10 @@ export function createMattAnswerService({ readContext, gateway }) {
     signal?.throwIfAborted();
     const authorized = await readContext({ organizationId, userId, analysisRunId, contextMode, pageId, account });
     const platform = readOperionPlatformKnowledge({ demo: authorized.demonstration === true });
-    const context = { ...authorized, platform: { version: platform.version, features: platform.features.map(({ id, status, path, permission }) => ({ id, status, path, permission })) }, evidence: [...authorized.evidence, ...platform.evidence] };
+    const analyses = authorized.demonstration && contextMode === "account"
+      ? authorized.analyses.map(({ evidence, ...analysis }) => ({ ...analysis, evidenceIds: evidence.map(({ id }) => id) }))
+      : authorized.analyses;
+    const context = { ...authorized, ...(analyses ? { analyses } : {}), platform: { version: platform.version, features: platform.features.map(({ id, status, path, permission }) => ({ id, status, path, permission })) }, evidence: [...authorized.evidence, ...platform.evidence] };
     signal?.throwIfAborted();
     // Prior conversation is context, never a substitute for authorized source evidence.
     const input = JSON.stringify({ question, history, context, principal: { userId }, contextMode });

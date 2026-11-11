@@ -87,6 +87,7 @@ for (const [alias, code] of Object.entries({
   "United Kingdom of Great Britain and Northern Ireland": "GB",
   USA: "US", "United States of America": "US", "Czech Republic": "CZ",
   Turkey: "TR", "Russian Federation": "RU", "Republic of Ireland": "IE",
+  "Hong Kong": "HK",
 })) legacyCountries.set(normaliseLegacy(alias), code);
 export function mapLegacyCountry(value) {
   return typeof value === "string" ? legacyCountries.get(normaliseLegacy(value)) || null : null;

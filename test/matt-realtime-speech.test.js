@@ -37,6 +37,8 @@ test("actual HTTP adapter uses documented SDP calls, server-only credentials and
   const session = await provider.create(sdp);
   assert.deepEqual(session, { id: "rtc_test", sdp });
   assert.equal(seen[0].url, "https://api.openai.com/v1/realtime/calls");
+  assert.equal(seen[0].options.redirect, "error");
+  assert.ok(seen[0].options.signal instanceof AbortSignal);
   assert.equal(seen[0].options.body.get("sdp"), sdp);
   const config = JSON.parse(seen[0].options.body.get("session"));
   assert.deepEqual(config, mattSpeechSessionConfiguration());
@@ -46,7 +48,18 @@ test("actual HTTP adapter uses documented SDP calls, server-only credentials and
   assert.deepEqual(config.tools, []);
   await provider.end(session.id);
   assert.equal(seen[1].url, "https://api.openai.com/v1/realtime/calls/rtc_test/hangup");
+  assert.equal(seen[1].options.redirect, "error");
+  assert.ok(seen[1].options.signal instanceof AbortSignal);
   assert.equal(JSON.stringify(session).includes("test-secret"), false);
+});
+test("speech transport timeout leaves creation explicitly uncertain and never retries", async () => {
+  let calls = 0;
+  const provider = createOpenaiMattSpeechProvider({ apiKey: "test", fetchImpl: async () => {
+    calls++;
+    throw new DOMException("timeout", "TimeoutError");
+  } });
+  await assert.rejects(provider.create(sdp), (error) => error.code === "MATT_SPEECH_CREATION_UNCERTAIN" && error.uncertain === true);
+  assert.equal(calls, 1);
 });
 test("malformed remote SDP is terminated and provider error bodies are never exposed", async () => {
   let ended = false;

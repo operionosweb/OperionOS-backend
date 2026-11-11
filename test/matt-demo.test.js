@@ -128,6 +128,15 @@ test("Demo account and platform modes cross the actual shared HTTP and reasoning
         assert.equal(generated.at(-1).context.contracts.length, DEMO_CONTRACTS.length);
         assert.equal(generated.at(-1).context.analyses.length, DEMO_CONTRACTS.filter((contract) => contract.analysisStatus !== "synthetic_template").length);
         assert.equal(generated.at(-1).context.coverage.filter((item) => item.independentAnalysis).length, 0, "Synthetic illustrations are never independent real-world analyses");
+        const source = await readMattDemoContext({ organizationId: MATT_DEMO_ORGANIZATION_ID, contextMode: "account", pageId: "dashboard" });
+        for (const [index, analysis] of generated.at(-1).context.analyses.entries()) {
+          assert.deepEqual(analysis.evidenceIds, source.analyses[index].evidence.map(({ id }) => id));
+          assert.equal(analysis.evidence, undefined);
+          for (const item of source.analyses[index].evidence) assert.deepEqual(generated.at(-1).context.evidence.find(({ id }) => id === item.id), JSON.parse(JSON.stringify(item)));
+        }
+        const followUp = await request(`/sessions/${id}/turns`, { method: "POST", token, body: { ...body, question: "Explain the financing illustration." } });
+        assert.equal(followUp.status, 200, JSON.stringify(followUp.body));
+        assert.equal(generated.at(-1).history.length, 2);
       } else assert.equal(generated.at(-1).context.contracts, undefined);
       const calls = generated.length;
       for (const attack of [{ analysisRunId: "foreign-contract" }, { flightId: "other-flight" }, { reportId: "other-report" }, { account: { organizationId: "foreign" } }, { contextMode: "vector" }]) {
@@ -137,6 +146,16 @@ test("Demo account and platform modes cross the actual shared HTTP and reasoning
       assert.equal(generated.length, calls);
     }
   });
+});
+
+test("oversized Demo context fails before a provider request", async () => {
+  let calls = 0;
+  const answer = createMattAnswerService({ readContext: readMattDemoContext, gateway: { async request() { calls++; } } });
+  await assert.rejects(answer({
+    organizationId: MATT_DEMO_ORGANIZATION_ID, userId: "offline", contextMode: "account",
+    pageId: "dashboard", question: "Summarise the account", history: [{ content: "x".repeat(60000) }],
+  }), { code: "MATT_CONTEXT_TOO_LARGE" });
+  assert.equal(calls, 0);
 });
 
 test("Demo configuration requires every separate approval, exact origin, bounded allocation and fixed Demo allowlist", () => {

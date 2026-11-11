@@ -129,7 +129,7 @@ test("territories use their own assigned code, not parent-state membership", () 
 
 test("legacy mapping is exact and unambiguous, without rewriting the original fields", () => {
   for (const [value, code] of [[" Spain ", "ES"], ["UNITED KINGDOM", "GB"], ["UK", "GB"], ["U.K.", "GB"],
-    ["Great Britain", "GB"], ["GB", "GB"], ["United States of America", "US"], ["Czech Republic", "CZ"], ["Turkey", "TR"]])
+    ["Great Britain", "GB"], ["GB", "GB"], ["United States of America", "US"], ["Czech Republic", "CZ"], ["Turkey", "TR"], ["Hong Kong", "HK"]])
     assert.equal(mapLegacyCountry(value), code, value);
   for (const value of ["Georgia", "Congo", "Korea", "Europe", "London", "Spain / France", "Unknown", "", null, {}, 5])
     assert.equal(mapLegacyCountry(value), null, String(value));

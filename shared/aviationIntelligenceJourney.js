@@ -102,6 +102,7 @@ export const SYNTHETIC_AIRCRAFT_LEASE = Object.freeze({
       unit: "percent per annum",
       currency: "USD",
       observationDate: "2026-11-06",
+      evidenceId: "ev-financing-benchmark",
       source: "Synthetic benchmark assumption — not sourced from the New York Fed",
       synthetic: true,
     }),

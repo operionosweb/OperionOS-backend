@@ -19,6 +19,7 @@ import { readAnalysisRunClauses, readAnalysisRunObligations, readAnalysisRunDead
 import { readMattDemoContext, MATT_DEMO_ORGANIZATION_ID } from "../services/mattDemoContext.js";
 import { OPERION_PLATFORM_KNOWLEDGE } from "../shared/operionPlatformKnowledge.js";
 import { preparedPlatformGuide } from "../shared/mattPreparedGuide.js";
+import { DEMO_CONTRACTS } from "../shared/mattDemoContracts.js";
 
 const uuid = (number) => `00000000-0000-4000-8000-${String(number).padStart(12, "0")}`;
 const tenants = [0, 1].map((index) => ({
@@ -238,7 +239,7 @@ test("reviewed platform knowledge distinguishes configuration, Demo and roadmap;
   assert.match(preparedPlatformGuide("How can I upload and analyze a contract?").answer, /configuration_required/);
   assert.match(preparedPlatformGuide("Is scenario simulation predictive risk available?").answer, /roadmap/);
   const context = await readMattDemoContext({ organizationId: MATT_DEMO_ORGANIZATION_ID, contextMode: "account" });
-  assert.equal(context.contracts.length, 4);
+  assert.deepEqual(context.contracts.map(({ id }) => id), DEMO_CONTRACTS.map(({ id }) => id));
   assert.ok(!JSON.stringify(context).includes(tenants[0].sentinel));
   await assert.rejects(readMattDemoContext({ organizationId: tenants[0].organizationId, contextMode: "platform" }), { code: "MATT_DEMO_CONTEXT_DENIED" });
   await assert.rejects(readMattDemoContext({ organizationId: MATT_DEMO_ORGANIZATION_ID, contextMode: "account", analysisRunId: tenants[0].runId }), { code: "MATT_CONTEXT_DENIED" });
