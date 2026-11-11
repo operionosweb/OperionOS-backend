@@ -22,8 +22,6 @@ async function fixture(width = 1440, solarTime = "2026-03-20T12:00:00Z") {
   await page.goto(`${origin}/demo/live-tracking`, { waitUntil: "domcontentloaded" });
   const consent = page.getByRole("button", { name: "Decline", exact: true });
   if (await consent.isVisible()) await consent.click();
-  const closeMatt = page.getByRole("button", { name: "Close Matt panel", exact: true });
-  await closeMatt.click();
   const shell = page.locator(".od-cesium-shell");
   await shell.locator("canvas").waitFor();
   await shell.scrollIntoViewIfNeeded();

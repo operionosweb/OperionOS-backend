@@ -55,7 +55,8 @@ export function MattPresenceOnly({ compact = false }) {
   const [mediaError, setMediaError] = useState("");
   const [question, setQuestion] = useState("");
   const [guide, setGuide] = useState(null);
-  return <main className={`matt-page${compact ? " matt-compact" : ""}`} data-matt-mode="platform-presence-only">
+  const Root = compact ? "div" : "main";
+  return <Root className={`matt-page${compact ? " matt-compact" : ""}`} data-matt-mode="platform-presence-only">
     {!compact && <header className="matt-heading"><div><span className="matt-eyebrow">OPERION / PLATFORM SESSION</span><h1>Matt</h1><p>Video presence without an organisation contract context.</p></div></header>}
     <div className="matt-layout">
       <MattEnvironment introductionKey={`user:${user?.id}`} phase={mediaStatus} onMediaStatus={setMediaStatus} onMediaError={setMediaError}/>
@@ -72,7 +73,7 @@ export function MattPresenceOnly({ compact = false }) {
         {mediaError && <p className="matt-error" role="alert">{mediaError}</p>}
       </section>
     </div>
-  </main>;
+  </Root>;
 }
 
 export function MattExperience({ demo = false, organizationId, contract: selectedContract, analysisRunId: selectedAnalysis, flight = null, compact = false, reportOnly = false, initialMode, onScopeChange }) {
@@ -360,8 +361,9 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
     {result ? <article><h2>Response</h2><p>{result.answer}</p><h2>Findings</h2><ol>{result.findings.map((finding) => <li key={`${finding.type}-${finding.id}`}>{finding.type}: {finding.label}</li>)}</ol>
       <h2>Source evidence</h2>{result.evidence.map((source, i) => <EvidenceCard key={i} evidence={{ excerpt: source.excerpt, page: source.page_number, locator: source.source_locator }}/>)}
       <MattProposal result={result} demo={demo} onCompose={compose}/></article> : <p>This session has no completed response. Matt does not fabricate a report.</p>}</main>;
-  return <main className={`matt-page matt-studio matt-cockpit${compact ? " matt-compact" : ""}`} data-mode={demo ? "demo" : "authenticated"} data-state={state.phase} data-experience="unified-matt" data-context={flight ? flight.id : contractId} data-question-scope={contextMode} data-text={showResponseText ? "visible" : "hidden"}>
-    {studio ? <PageHeader eyebrow="MATT / YOUR OPERION COLLEAGUE" title="Ask Matt" description="Ask. Investigate. Understand the evidence." actions={<DemoBadge tone="neutral">{demo ? "PREPARED DEMO DATA" : "AUTHORIZED CONTEXT"}</DemoBadge>}/> : <header className="matt-heading"><div><span className="matt-eyebrow">MATT / YOUR OPERION COLLEAGUE</span><h1>Let's look at what matters.</h1><p>Ask. Investigate. Understand the evidence.</p></div>
+  const Root = compact ? "div" : "main";
+  return <Root className={`matt-page matt-studio matt-cockpit${compact ? " matt-compact" : ""}`} data-mode={demo ? "demo" : "authenticated"} data-state={state.phase} data-experience="unified-matt" data-context={flight ? flight.id : contractId} data-question-scope={contextMode} data-text={showResponseText ? "visible" : "hidden"}>
+    {studio ? !compact && <PageHeader eyebrow="MATT / YOUR OPERION COLLEAGUE" title="Ask Matt" description="Ask. Investigate. Understand the evidence." actions={<DemoBadge tone="neutral">{demo ? "PREPARED DEMO DATA" : "AUTHORIZED CONTEXT"}</DemoBadge>}/> : <header className="matt-heading"><div><span className="matt-eyebrow">MATT / YOUR OPERION COLLEAGUE</span><h1>Let's look at what matters.</h1><p>Ask. Investigate. Understand the evidence.</p></div>
       <span className="matt-provenance">{demo ? "DEMONSTRATION / PREPARED CONTRACT DATA" : "AUTHENTICATED / SELECTED CONTRACT SCOPE"}</span></header>}
     {studio && <div className="matt-studio-notice" role="status">{mediaStatus === "error" ? <VideoOff size={18} aria-hidden="true"/> : <Video size={18} aria-hidden="true"/>}<div>
       <strong>{live.connected ? `Live Matt: ${live.state.toLowerCase()}` : "One-time introduction / live connection"}</strong>
@@ -448,5 +450,5 @@ export function MattExperience({ demo = false, organizationId, contract: selecte
         {(!studio || showResponseText) && <details className="matt-history"><summary>Conversation ({state.messages.length} messages, this visit only)</summary>{state.messages.map((message, index) => <p key={index}><strong>{message.role === "user" ? "You" : "Matt"}</strong> {message.text}</p>)}</details>}
       </section>
     </div>
-  </main>;
+  </Root>;
 }

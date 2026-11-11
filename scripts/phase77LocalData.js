@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { createOciRepository } from "../repositories/ociRepository.js";
 import { createOciService, validateOciData } from "../services/ociService.js";
 import { mapLegacyCountry } from "../shared/ociGeography.js";
@@ -52,6 +53,7 @@ export function prospectAccount(item) {
   const countryCode = mapLegacyCountry(item.country);
   assert.ok(countryCode, `Resolve country before importing ${item.name}`);
   const q = item.qualification;
+  const review = item.phase77gCertification || item.phase77fCertification;
   return validateOciData("accounts", {
     name: item.name, website: item.website, country: item.country,
     country_code: countryCode, headquarters: item.headquarters || undefined,
@@ -86,12 +88,13 @@ export function prospectAccount(item) {
       "No expressed demand or available customer budget has been verified.",
     ]), 4000, "Needs"),
     classification: "Research finding", source: bounded(sourceText(item), 4000, "Sources"),
-    researchDate: item.contact.verifiedAt.slice(0, 10), confidence: "Medium",
+    researchDate: (review?.verifiedAt || item.contact.verifiedAt).slice(0, 10), confidence: "Medium",
     researchNotes: bounded(lines([
       `Phase77B research identifier: ${item.id}; commercial priority ${item.priority}.`,
       q.reasoning, "Objections: " + q.objections.join("; "),
       "Uncertainties: " + q.uncertainties.join("; "),
       item.ranking?.rank ? `Shortlist rank ${item.ranking.rank}: ${item.ranking.whyAttractive}` : "",
+      review ? `Independent review ${review.verifiedAt}: ${review.confidence} ${review.contactConfidence}` : "",
       "Target role: " + item.contact.targetRole,
       "Official channel: " + item.contact.officialChannel,
     ]), 4000, "Research notes"),
@@ -169,6 +172,56 @@ export function prepareArticle(item, founderId, coverImage, authorAvatar = null)
     author_id: founderId, author_avatar_media: authorAvatar,
   };
 }
+function validateProspect(item) {
+  publicUrl(item.website);
+  assert.ok(item.sources.length > 0 && item.verifiedFacts.length > 0, "Company evidence is missing.");
+  for (const source of item.sources) {
+    publicUrl(source.url); text(source.description);
+    assert.ok(Number.isFinite(Date.parse(source.verifiedAt)), "Source verification time is missing.");
+  }
+  for (const fact of item.verifiedFacts) {
+    text(fact.fact);
+    assert.ok(item.sources.some(source => source.url === fact.sourceUrl), `${item.name}: fact lacks a retained source.`);
+  }
+  for (const key of ["reasonToApproach", "contractExposure", "paidPilot", "reasoning"]) text(item.qualification[key]);
+  for (const key of ["contractCategories", "potentialChallenges", "existingOperionCapabilities", "objections", "uncertainties"]) {
+    assert.ok(Array.isArray(item.qualification[key]) && item.qualification[key].length, `Missing ${key}`);
+  }
+  assert.ok(["A", "B", "C"].includes(item.priority));
+  publicUrl(item.contact.officialChannel); publicUrl(item.contact.sourceUrl);
+  for (const url of [item.contact.officialChannel, item.contact.sourceUrl]) {
+    assert.ok(item.sources.some(source => source.url === url), `${item.name}: contact channel lacks a retained source.`);
+  }
+  assert.ok(Number.isFinite(Date.parse(item.contact.verifiedAt)), "Contact verification time is missing.");
+  text(item.contact.targetRole);
+  if (item.contact.email) assert.match(item.contact.email, /^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Invalid professional email.");
+  assert.equal(item.contact.relationshipStatus, "Not contacted");
+  if (item.contact.name) { text(item.contact.jobTitle); text(item.contact.name); }
+  for (const key of ["opening", "reason", "challenge", "valueProposition", "recommendedDecisionMaker",
+    "subject", "email", "meetingRequest", "followUpEmail", "followUpTiming"]) text(item.outreach[key]);
+  assert.equal(item.outreach.status, "Draft - founder approval required");
+  return { account: prospectAccount(item), activities: prospectActivities(item), contact: prospectContact(item) };
+}
+
+export function prepareOciProspectImport(prospects) {
+  assert.ok(Array.isArray(prospects) && prospects.length, "At least one reviewed prospect is required.");
+  assert.equal(new Set(prospects.map(item => text(item.id))).size, prospects.length, "Duplicate research identity.");
+  const identities = new Set();
+  return prospects.map(item => {
+    const review = item.phase77gCertification || item.phase77fCertification;
+    assert.ok(review && /^Certified prospect;/.test(review.status), `${item.name}: independent certification is required.`);
+    assert.ok(Number.isFinite(Date.parse(review.verifiedAt)), `${item.name}: certification date is missing.`);
+    text(review.confidence); text(review.contactConfidence);
+    const { phase77fCertification, phase77gCertification, ...reviewed } = item;
+    assert.equal(review.reviewedHash, bundleHash(reviewed), `${item.name}: prospect changed since certification; review it again.`);
+    const prepared = validateProspect(item);
+    const identity = `${prepared.account.name.toLowerCase().trim()}|${prepared.account.country_code}`;
+    assert.ok(!identities.has(identity), `${item.name}: duplicate account identity.`);
+    identities.add(identity);
+    return { item, ...prepared };
+  });
+}
+
 export function validatePhase77Bundle({ prospects, articles, founderId }) {
   assert.ok(Array.isArray(prospects) && prospects.length >= 100, "At least 100 complete prospects are required.");
   assert.ok(Array.isArray(articles) && articles.length >= 10, "At least ten complete articles are required.");
@@ -177,35 +230,8 @@ export function validatePhase77Bundle({ prospects, articles, founderId }) {
   assert.equal(new Set(articles.map(item => item.slug)).size, articles.length, "Duplicate article slug.");
   const ranks = [];
   for (const item of prospects) {
-    publicUrl(item.website);
-    assert.ok(item.sources.length > 0 && item.verifiedFacts.length > 0, "Company evidence is missing.");
-    for (const source of item.sources) {
-      publicUrl(source.url); text(source.description);
-      assert.ok(Number.isFinite(Date.parse(source.verifiedAt)), "Source verification time is missing.");
-    }
-    for (const fact of item.verifiedFacts) {
-      text(fact.fact);
-      assert.ok(item.sources.some(source => source.url === fact.sourceUrl), `${item.name}: fact lacks a retained source.`);
-    }
-    for (const key of ["reasonToApproach", "contractExposure", "paidPilot", "reasoning"]) text(item.qualification[key]);
-    for (const key of ["contractCategories", "potentialChallenges", "existingOperionCapabilities", "objections", "uncertainties"]) {
-      assert.ok(Array.isArray(item.qualification[key]) && item.qualification[key].length, `Missing ${key}`);
-    }
-    assert.ok(["A", "B", "C"].includes(item.priority));
-    publicUrl(item.contact.officialChannel); publicUrl(item.contact.sourceUrl);
-    for (const url of [item.contact.officialChannel, item.contact.sourceUrl]) {
-      assert.ok(item.sources.some(source => source.url === url), `${item.name}: contact channel lacks a retained source.`);
-    }
-    assert.ok(Number.isFinite(Date.parse(item.contact.verifiedAt)), "Contact verification time is missing.");
-    text(item.contact.targetRole);
-    if (item.contact.email) assert.match(item.contact.email, /^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Invalid professional email.");
-    assert.equal(item.contact.relationshipStatus, "Not contacted");
-    if (item.contact.name) { text(item.contact.jobTitle); text(item.contact.name); }
-    for (const key of ["opening", "reason", "challenge", "valueProposition", "recommendedDecisionMaker",
-      "subject", "email", "meetingRequest", "followUpEmail", "followUpTiming"]) text(item.outreach[key]);
-    assert.equal(item.outreach.status, "Draft - founder approval required");
+    validateProspect(item);
     if (item.ranking?.rank) ranks.push(item.ranking.rank);
-    prospectAccount(item); prospectActivities(item); prospectContact(item);
   }
   assert.deepEqual(ranks.sort((a, b) => a - b), Array.from({ length: 20 }, (_, i) => i + 1), "Exactly twenty distinct shortlist ranks are required.");
   assert.equal(new Set(prospects.map(item => item.outreach.email)).size, prospects.length, "Duplicate outreach emails.");
@@ -250,42 +276,44 @@ export async function assertPhase77LocalTarget(client, { database, dataDirectory
 }
 export async function importOciProspects(client, { prospects, founderId, dataDirectory }) {
   await assertPhase77LocalTarget(client, { database: "operion_p77b_oci", dataDirectory });
+  const prepared = prepareOciProspectImport(prospects);
   const service = createOciService(createOciRepository(client.query.bind(client)));
   const result = { createdAccounts: 0, retainedAccounts: 0, createdActivities: 0, createdContacts: 0 };
   await client.query("BEGIN");
   try {
     await client.query("SELECT pg_advisory_xact_lock(782134,22)");
-    for (const item of prospects) {
-      const data = prospectAccount(item);
+    for (const { item, account: data, activities, contact } of prepared) {
       const existing = await client.query(`select * from public.oci_records
-        where kind='accounts' and lower(btrim(data->>'name'))=lower($1)
-        and lower(btrim(coalesce(data->>'country','')))=lower($2) and status='active'`, [data.name, data.country]);
-      let account = existing.rows[0];
+        where kind='accounts' and lower(btrim(data->>'name'))=lower($1) and status='active'`, [data.name]);
+      const matches = existing.rows.filter(row =>
+        row.data.country_code === data.country_code || mapLegacyCountry(row.data.country) === data.country_code
+        || String(row.data.country || "").trim().toLowerCase() === data.country.trim().toLowerCase());
+      assert.ok(matches.length <= 1, `${item.name}: multiple existing account identities require review.`);
+      let account = matches[0];
       if (account) {
-        assert.deepEqual(account.data, data, `Existing ${item.name} was edited; preserve it and resolve the import conflict explicitly.`);
+        assert.ok(isDeepStrictEqual(account.data, data), `Existing ${item.name} was edited; preserve it and resolve the import conflict explicitly.`);
         result.retainedAccounts++;
       } else {
         account = await service.createRecord("accounts", { data }, founderId);
         result.createdAccounts++;
       }
-      const contact = prospectContact(item);
       if (contact) {
         const found = await client.query(`select data from public.oci_records
           where kind='contacts' and account_id=$1 and data->>'name'=$2 and status='active'`, [account.id, contact.name]);
         if (found.rows.length) {
           assert.equal(found.rows.length, 1);
-          assert.deepEqual(found.rows[0].data, contact, "Existing contact was edited; no overwrite permitted.");
+          assert.ok(isDeepStrictEqual(found.rows[0].data, contact), "Existing contact was edited; no overwrite permitted.");
         } else {
           await service.createRecord("contacts", { data: contact, accountId: account.id }, founderId);
           result.createdContacts++;
         }
       }
-      for (const activity of prospectActivities(item)) {
+      for (const activity of activities) {
         const found = await client.query(`select data from public.oci_records
           where kind='activities' and account_id=$1 and data->>'title'=$2 and status='active'`, [account.id, activity.title]);
         if (found.rows.length) {
           assert.equal(found.rows.length, 1);
-          assert.deepEqual(found.rows[0].data, activity, "Existing outreach was edited; no overwrite permitted.");
+          assert.ok(isDeepStrictEqual(found.rows[0].data, activity), "Existing outreach was edited; no overwrite permitted.");
         } else {
           await service.createRecord("activities", { data: activity, accountId: account.id }, founderId);
           result.createdActivities++;

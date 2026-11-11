@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 import {
   assertPhase77LocalTarget, bodyWordCount, bundleHash, importBlogArticles,
-  importOciProspects, prepareArticle, prospectAccount, prospectActivities,
+  importOciProspects, prepareArticle, prepareOciProspectImport, prospectAccount, prospectActivities,
   prospectContact, validatePhase77Bundle,
 } from "../scripts/phase77LocalData.js";
 import { createPhase77FeaturedImage, preparePhase77AuthorPhotograph } from "../scripts/phase77EditorialImages.js";
@@ -112,6 +112,62 @@ test("missing qualification, source evidence or follow-up cannot count as a comp
     const b = bundle(); mutate(b);
     assert.throws(() => validatePhase77Bundle(b));
   }
+});
+test("OCI dry run requires a current independent review and preserves mapped evidence without inventing contacts", () => {
+  const p = prospect();
+  assert.throws(() => prepareOciProspectImport([p]), /independent certification/);
+  p.phase77gCertification = {
+    status: "Certified prospect; buyer unverified", verifiedAt: when,
+    confidence: "Synthetic test review", contactConfidence: "Synthetic channel",
+    reviewedHash: bundleHash(p),
+  };
+  const [prepared] = prepareOciProspectImport([p]);
+  assert.equal(prepared.contact, null);
+  assert.equal(prepared.activities.length, 2);
+  assert.ok(prepared.account.source.includes("https://example.com/evidence"));
+  p.outreach.email = "Changed after review";
+  assert.throws(() => prepareOciProspectImport([p]), /changed since certification/);
+});
+test("OCI dry run rejects duplicate account identities even with distinct research IDs", () => {
+  const first = prospect(1), second = prospect(2);
+  second.name = first.name.toUpperCase();
+  for (const p of [first, second]) p.phase77gCertification = {
+    status: "Certified prospect; buyer unverified", verifiedAt: when,
+    confidence: "Synthetic test review", contactConfidence: "Synthetic channel",
+    reviewedHash: bundleHash(p),
+  };
+  assert.throws(() => prepareOciProspectImport([first, second]), /duplicate account identity/);
+});
+test("OCI import rejects an unreviewed prospect before opening a write transaction", async () => {
+  const statements = [];
+  const client = localClient({
+    query: async sql => {
+      statements.push(sql);
+      return { rows: [{ database: "operion_p77b_oci", address: "127.0.0.1", port: 55477, directory: dataDirectory }] };
+    },
+  });
+  await assert.rejects(importOciProspects(client, { prospects: [prospect()], founderId, dataDirectory }), /independent certification/);
+  assert.equal(statements.length, 1, "Only the read-only local-target check ran");
+});
+test("OCI import detects an existing account under a country alias without overwriting it", async () => {
+  const p = prospect();
+  p.phase77gCertification = {
+    status: "Certified prospect; buyer unverified", verifiedAt: when,
+    confidence: "Synthetic test review", contactConfidence: "Synthetic channel",
+    reviewedHash: bundleHash(p),
+  };
+  const statements = [];
+  const client = localClient({
+    query: async sql => {
+      statements.push(sql);
+      if (sql.includes("current_database()")) return { rows: [{ database: "operion_p77b_oci", address: "127.0.0.1", port: 55477, directory: dataDirectory }] };
+      if (sql.includes("from public.oci_records")) return { rows: [{ data: { ...prospectAccount(p), country: "UK" } }] };
+      return { rows: [] };
+    },
+  });
+  await assert.rejects(importOciProspects(client, { prospects: [p], founderId, dataDirectory }), /was edited/);
+  assert.equal(statements.at(-1), "ROLLBACK");
+  assert.equal(statements.some(sql => /^\s*insert/i.test(sql)), false);
 });
 test("all ten outreach fields persist through existing account and planned-activity contracts", () => {
   const p = prospect();

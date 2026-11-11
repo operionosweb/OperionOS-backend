@@ -460,6 +460,12 @@ test(`Xweather layers are individually selectable on ${route} without client cre
       await page.goto(`${target.origin}${route}`, { waitUntil: "domcontentloaded" });
       await page.locator(".od-cesium-globe canvas").scrollIntoViewIfNeeded();
       await page.locator('.od-cesium-globe[data-aircraft-models-ready="20"]').waitFor({ timeout: 30000 });
+      if (route.startsWith("/demo/")) {
+        await page.locator(".od-real-weather-layers summary").evaluate((element) => element.scrollIntoView({ block: "start" }));
+        const summary = await page.locator(".od-real-weather-layers summary").boundingBox();
+        const topbar = await page.locator(".od-topbar").boundingBox();
+        assert.ok(summary.y >= topbar.y + topbar.height, `${route}: weather controls remain below the sticky header`);
+      }
       await page.locator(".od-real-weather-layers summary").click();
       const filters = page.getByRole("region", { name: "Provider weather layer filters" });
       for (const label of ["Radar (regional coverage)", "Satellite / clouds (GeoColor)", "Surface wind speed (10 m)", "Administrative boundaries"]) {

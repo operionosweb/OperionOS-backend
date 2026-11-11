@@ -65,6 +65,11 @@ function ScrollToTop() {
   return null;
 }
 
+function NonDemoAnalytics() {
+  const { pathname } = useLocation();
+  return /^\/demo(?:\/|$)/i.test(pathname) ? null : <Analytics />;
+}
+
 export default function App() {
   const isCommercialIntelligenceHost = window.location.hostname.toLowerCase() === "intelligence.operionos.com";
   return (
@@ -158,7 +163,7 @@ export default function App() {
           </Routes>
           </Suspense>
           <RouteMetadata />
-          <Analytics />
+          <NonDemoAnalytics />
         </BrowserRouter>
         </MattSessionBoundary>
       </OrganizationProvider>

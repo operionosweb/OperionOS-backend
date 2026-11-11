@@ -13,6 +13,13 @@
 .matt-compact .matt-report { position: static !important; width: 100% !important; height: auto !important; max-height: 420px !important; }
 .matt-compact .matt-composer { position: static !important; transform: none !important; width: 100% !important; }
 .matt-compact .matt-workspace { margin-top: 12px; }
+.matt-inline-introduction { margin-bottom: 24px; padding: 16px; border: 1px solid #b7d4ee; border-radius: 14px; background: #f5faff; }
+.matt-inline-introduction h2 { margin: 0 0 6px; }
+.matt-inline-introduction > p { margin: 0 0 12px; }
+.matt-inline-introduction .matt-environment { position: relative; top: auto; min-height: 0; height: 280px; }
+.matt-inline-introduction .matt-character { position: absolute; height: 100%; }
+.matt-inline-introduction button { min-height: 44px; padding: 8px 12px; border: 1px solid #b7d4ee; border-radius: 10px; background: #fff; color: #194c76; cursor: pointer; }
+.matt-inline-introduction button:focus-visible { outline: 3px solid #2567a3; outline-offset: 3px; }
 @media (max-width: 768px) {
   .matt-floating { right: 8px; bottom: calc(78px + env(safe-area-inset-bottom)); }
   .matt-floating-panel { position: fixed; left: 2px; right: 2px; top: 64px; bottom: calc(136px + env(safe-area-inset-bottom)); width: auto; max-height: none; }

@@ -99,6 +99,31 @@ deployment methods. The local importer retains a sourced public business email
 as account-level evidence without inventing a named person. Source availability
 does not establish purchasing authority, permission to contact, or a relationship.
 
+The Phase 77 OCI preparation helper `prepareOciProspectImport` is a read-only
+dry run; it validates each recorded certification, source references, mapped
+fields, country and duplicate identity before returning proposed records. A
+reviewer must independently verify each dossier and record its dated
+certification and confidence; the helper cannot verify source claims itself.
+Its `reviewedHash` is `bundleHash` of the complete dossier excluding the
+`phase77fCertification` and `phase77gCertification` fields. Any subsequent
+dossier change requires a fresh review and hash. An absent, incomplete or stale
+certification is rejected before the local importer starts a write transaction.
+The helper returns private research and draft outreach in memory, so do not
+print or store its output in public logs. The import remains restricted to its
+named session-local scratch database; this dry run is not an authorized hosted
+OCI import or evidence of database or UI persistence.
+
+From the repository root, an operator can check the complete local prospect
+file without connecting to a database:
+
+```powershell
+node --input-type=module -e "import {readFileSync} from 'node:fs'; import path from 'node:path'; import {prepareOciProspectImport} from './scripts/phase77LocalData.js'; const records=JSON.parse(readFileSync(path.join('data','phase77','prospects.json'),'utf8')); const plan=prepareOciProspectImport(records); console.log('Reviewed accounts prepared without writes:', plan.length);"
+```
+
+Failures can identify a private candidate; keep diagnostics private. This
+command fails until every included dossier has passed independent review. An
+authorized operator may instead prepare a reviewed subset using the same helper.
+
 ## Local verification evidence
 
 - OCI backend/security/workflow/deployment tests: 38 passed, offline.

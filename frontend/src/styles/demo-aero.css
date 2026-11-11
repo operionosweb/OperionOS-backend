@@ -63,6 +63,8 @@
 }
 .od-shell .od-sidebar-foot a { color: #0056d1; }
 
+html:has(.od-shell) { scroll-padding-top: 88px; }
+.od-shell .od-main > .op-consent { position: static; width: auto; margin-bottom: 24px; }
 .od-shell .od-frame { margin-left: 258px; }
 .od-shell .od-topbar {
   height: 72px;

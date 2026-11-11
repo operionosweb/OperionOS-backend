@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import BrandMark from "../ui/BrandMark";
 import OperionAssistant from "../demo/OperionAssistant";
+import Analytics from "../analytics/Analytics";
 import { DemoDataProvider, useDemoData } from "../../demo/DemoDataProvider";
 import { DemoBadge, DemoDisclosure } from "../../demo/DemoUI";
 
@@ -116,12 +117,11 @@ function DemoShellContent() {
         </div>
         {notificationsOpen && <div className="od-popover"><DemoBadge>SYNTHETIC NOTICES</DemoBadge><strong>3 illustrative intelligence notices</strong><p>Prepared lease examples only, not detected customer events: late-return risk, insurance evidence, and the maintenance-record deadline.</p></div>}
       </header>
-      <main className="od-main"><DemoDisclosure /><Outlet /></main>
+      <main className="od-main"><Analytics /><DemoDisclosure />{!location.pathname.startsWith("/demo/matt") && <OperionAssistant />}<Outlet /></main>
       <nav className="od-bottom-nav" aria-label="Mobile demo navigation">{mainNav.slice(0,5).map(([to,label,Icon]) => <NavLink key={to} to={to} className={({isActive})=>isActive?"is-active":""}><Icon size={19}/><span>{label === "Upload Contract" ? "Upload" : label}</span></NavLink>)}</nav>
     </div>
 
     {paletteOpen && <div className="od-command-backdrop" role="presentation" onClick={() => setPaletteOpen(false)}><section className="od-command" role="dialog" aria-modal="true" aria-label="Demo command palette" onClick={(event)=>event.stopPropagation()}><label><Search size={18}/><input autoFocus value={query} onChange={(event)=>setQuery(event.target.value)} placeholder="Search the demonstration environment"/><kbd>ESC</kbd></label><div>{filtered.map(({to,label,detail,icon:Icon})=><Link key={`${to}-${label}`} to={to}><Icon size={17}/><span><strong>{label}</strong>{detail && <small>{detail}</small>}</span></Link>)}</div><footer><DemoBadge>DEMO DATA</DemoBadge><span>Searches prepared demonstration content only.</span></footer></section></div>}
-    {!location.pathname.startsWith("/demo/matt") && <OperionAssistant />}
   </div>;
 }
 

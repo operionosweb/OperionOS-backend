@@ -53,7 +53,6 @@ test("Globe selection, switching, closing, floating and expanded Matt keep only 
   try {
     await f.page.goto(`${origin}/demo/live-tracking`);
     await f.page.getByRole("button", { name: "Skip introduction", exact: true }).click();
-    await f.page.getByRole("button", { name: "Close Matt panel", exact: true }).click();
     const decline = f.page.getByRole("button", { name: "Decline", exact: true });
     if (await decline.count()) await decline.click();
     const shell = f.page.locator(".od-cesium-shell");
@@ -301,20 +300,88 @@ for (const [width, height] of [[320, 780], [390, 844], [768, 1024], [1024, 768],
   });
 }
 
-test("84317 first platform visit offers optional approved introduction and persists disable on reload", async () => {
+test("84317 first Demo visit shows the introduction inline and persists disable on reload", async () => {
   const f = await fixture(390);
   try {
     await f.page.goto(`${origin}/demo/dashboard`);
-    const panel = f.page.getByRole("dialog", { name: "Matt contextual assistant", exact: true });
-    await panel.waitFor();
-    assert.equal(await panel.locator("video source").getAttribute("src"), "/matt/reference.mp4");
-    await panel.getByRole("button", { name: "Do not show introduction again", exact: true }).click();
-    await panel.getByRole("button", { name: "Close Matt panel", exact: true }).click();
+    const introduction = f.page.getByRole("region", { name: "Meet Matt", exact: true });
+    await introduction.waitFor();
+    assert.equal(await introduction.locator("video source").getAttribute("src"), "/matt/reference.mp4");
+    assert.equal(await f.page.getByRole("dialog", { name: "Matt contextual assistant", exact: true }).count(), 0);
+    await f.page.getByRole("button", { name: "Company fleet", exact: true }).click();
+    assert.equal(await f.page.getByRole("button", { name: "Company fleet", exact: true }).getAttribute("aria-pressed"), "true");
+    await introduction.getByRole("button", { name: "Do not show introduction again", exact: true }).click();
     await f.page.reload();
     await f.page.locator(".matt-floating-trigger[aria-expanded='false']").waitFor();
     await f.page.locator(".matt-floating-trigger").click();
+    const panel = f.page.getByRole("dialog", { name: "Matt contextual assistant", exact: true });
+    assert.equal(await panel.locator("main, .od-page-header h1").count(), 0, "Compact Matt does not add a nested main or duplicate page heading");
     assert.equal(await panel.locator("video").count(), 0);
     assert.equal(await panel.locator(".matt-environment").getAttribute("data-intro-outcome"), "intro_disabled");
+    assert.deepEqual(f.errors, []);
+  } finally { await f.context.close(); }
+});
+
+test("Demo analytics choices remain available without covering first-visit controls", async () => {
+  const f = await fixture(390);
+  try {
+    await f.page.goto(`${origin}/demo/dashboard`);
+    const preferences = f.page.getByRole("complementary", { name: "Analytics preferences" });
+    await preferences.waitFor();
+    assert.equal(await preferences.evaluate((element) => getComputedStyle(element).position), "static");
+    assert.equal(await preferences.getByRole("button", { name: "Allow analytics" }).isVisible(), true);
+    await f.page.getByRole("button", { name: "Company fleet", exact: true }).click();
+    assert.equal(await f.page.getByRole("button", { name: "Company fleet", exact: true }).getAttribute("aria-pressed"), "true");
+    await preferences.getByRole("button", { name: "Decline" }).click();
+    assert.equal(await f.page.evaluate(() => localStorage.getItem("operion-analytics-consent")), "denied");
+    await f.page.reload();
+    await f.page.locator(".od-main").waitFor();
+    assert.equal(await preferences.count(), 0);
+    assert.deepEqual(f.errors, []);
+  } finally { await f.context.close(); }
+});
+
+test("case-insensitive Demo routes mount one analytics prompt", async () => {
+  const f = await fixture();
+  try {
+    await f.page.goto(`${origin}/DeMo/dashboard`);
+    const preferences = f.page.getByRole("complementary", { name: "Analytics preferences" });
+    await preferences.waitFor();
+    assert.equal(await preferences.count(), 1);
+    assert.equal(await preferences.evaluate((element) => getComputedStyle(element).position), "static");
+    assert.deepEqual(f.errors, []);
+  } finally { await f.context.close(); }
+});
+
+test("opening floating Matt transfers an unfinished inline introduction without marking it complete", async () => {
+  const f = await fixture();
+  try {
+    await f.page.goto(`${origin}/demo/dashboard`);
+    const introduction = f.page.getByRole("region", { name: "Meet Matt", exact: true });
+    await introduction.waitFor();
+    await f.page.locator(".matt-floating-trigger").click();
+    await introduction.waitFor({ state: "detached" });
+    const panel = f.page.getByRole("dialog", { name: "Matt contextual assistant", exact: true });
+    await panel.getByRole("button", { name: "Skip introduction", exact: true }).waitFor();
+    assert.equal(await panel.locator("video source").getAttribute("src"), "/matt/reference.mp4");
+    assert.equal(await f.page.evaluate(() => localStorage.getItem("operion:matt:intro:demo")), null);
+    await panel.getByRole("button", { name: "Skip introduction", exact: true }).click();
+    assert.equal(await f.page.evaluate(() => localStorage.getItem("operion:matt:intro:demo")), "intro_skipped");
+    assert.deepEqual(f.errors, []);
+  } finally { await f.context.close(); }
+});
+
+test("an inline introduction playback failure remains visible until dismissed", async () => {
+  const f = await fixture();
+  try {
+    await f.page.route("**/matt/reference.mp4", (route) => route.abort());
+    await f.page.goto(`${origin}/demo/dashboard`);
+    const introduction = f.page.getByRole("region", { name: "Meet Matt", exact: true });
+    const alert = introduction.getByRole("alert");
+    await alert.waitFor();
+    assert.match(await alert.innerText(), /introduction could not play/i);
+    await introduction.getByRole("button", { name: "Dismiss introduction", exact: true }).click();
+    await introduction.waitFor({ state: "detached" });
     assert.deepEqual(f.errors, []);
   } finally { await f.context.close(); }
 });
