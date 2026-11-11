@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
 import {
   assertPhase77LocalTarget, bodyWordCount, bundleHash, importBlogArticles,
@@ -11,6 +14,14 @@ import { createPhase77FeaturedImage, preparePhase77AuthorPhotograph } from "../s
 const founderId = "11111111-1111-4111-8111-111111111111";
 const dataDirectory = String.raw`C:\test\phase77\postgres-verified`;
 const when = "2026-11-11T13:00:00Z";
+test("private Phase 77 research and unpublished drafts are excluded from Git and Vercel uploads", () => {
+  const root = fileURLToPath(new URL("../", import.meta.url));
+  const files = ["data/phase77/prospects.json", "data/phase77/articles.json"];
+  const ignored = execFileSync("git", ["check-ignore", "--no-index", "--", ...files], { cwd: root, encoding: "utf8" });
+  assert.deepEqual(ignored.trim().split(/\r?\n/), files);
+  const vercelIgnore = readFileSync(new URL("../.vercelignore", import.meta.url), "utf8").split(/\r?\n/);
+  assert.ok(vercelIgnore.includes("data/phase77"));
+});
 function prospect(index = 1) {
   return {
     id: `test-${index}`, name: `Synthetic test aviation ${index}`, website: `https://example.com/test-${index}`,
@@ -126,6 +137,16 @@ test("official channels and professional contact references require retained dat
   const b = bundle();
   b.prospects[0].contact.verifiedAt = "not-a-date";
   assert.throws(() => validatePhase77Bundle(b), /Contact verification time/);
+});
+test("a sourced public business email is retained without inventing a named contact", () => {
+  const b = bundle();
+  const p = b.prospects[0];
+  p.contact.email = "sales@example.com";
+  validatePhase77Bundle(b);
+  assert.ok(prospectAccount(p).stakeholderEvidence.includes("Public business email: sales@example.com"));
+  assert.equal(prospectContact(p), null);
+  p.contact.email = "not a valid email";
+  assert.throws(() => validatePhase77Bundle(b), /Invalid professional email/);
 });
 test("role hypotheses never become fabricated people or relationship-verified contacts", () => {
   const p = prospect();

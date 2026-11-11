@@ -782,6 +782,7 @@ test('customer Globe inspects scoped associations in place, rejects stale respon
       return json({})
     })
     await page.goto(`${origin}/app/live-tracking`, { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Close Matt panel', exact: true }).click()
     const canvas = page.locator('.op-aviation-globe canvas')
     await canvas.waitFor()
     assert.equal(await page.locator('.op-flight-sheet').count(), 0)

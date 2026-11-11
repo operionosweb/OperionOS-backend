@@ -92,6 +92,13 @@ before confirming, then verify the contact and audit result. This does not erase
 related free-text notes, exports, provider logs or backups; apply the approved
 retention/legal procedure to those systems separately. Archive alone is not erasure.
 
+Phase 77 research and unpublished drafts under `data/phase77` are private: Git
+and repository-root Vercel upload ignore rules exclude that directory. Do not
+force-add it or publish its contents; those rules do not secure other copies or
+deployment methods. The local importer retains a sourced public business email
+as account-level evidence without inventing a named person. Source availability
+does not establish purchasing authority, permission to contact, or a relationship.
+
 ## Local verification evidence
 
 - OCI backend/security/workflow/deployment tests: 38 passed, offline.

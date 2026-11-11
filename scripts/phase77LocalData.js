@@ -76,6 +76,7 @@ export function prospectAccount(item) {
       item.contact.name ? `${item.contact.name}, ${item.contact.jobTitle}: ${item.contact.sourceUrl}`
         : "Role hypothesis only; no named decision-maker verified.",
       `Official company channel: ${item.contact.officialChannel}`,
+      item.contact.email ? `Public business email: ${item.contact.email}` : "",
       `Channel source: ${item.contact.sourceUrl}; verified ${item.contact.verifiedAt}`,
       "Not contacted; public availability does not establish a relationship or purchasing authority.",
     ]), 4000, "Stakeholder evidence"),
@@ -196,6 +197,7 @@ export function validatePhase77Bundle({ prospects, articles, founderId }) {
     }
     assert.ok(Number.isFinite(Date.parse(item.contact.verifiedAt)), "Contact verification time is missing.");
     text(item.contact.targetRole);
+    if (item.contact.email) assert.match(item.contact.email, /^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Invalid professional email.");
     assert.equal(item.contact.relationshipStatus, "Not contacted");
     if (item.contact.name) { text(item.contact.jobTitle); text(item.contact.name); }
     for (const key of ["opening", "reason", "challenge", "valueProposition", "recommendedDecisionMaker",
