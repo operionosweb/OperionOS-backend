@@ -7,40 +7,45 @@ import { AVIATION_MAP_STYLES, getAviationMapStyle } from "../frontend/src/demo/a
 test("synthetic aviation provider returns isolated aircraft snapshots", async () => {
   const first = await SyntheticAviationProvider.getAircraft();
   const second = await SyntheticAviationProvider.getAircraft();
+  const originalContractIds = [...second[0].contractIds];
 
   first[0].longitude = 0;
   first[0].contractIds.length = 0;
 
   assert.notEqual(second[0].longitude, 0);
-  assert.equal(second[0].contractIds.length, 3);
-  assert.equal(second.length >= 10, true);
+  assert.ok(originalContractIds.length > 0);
+  assert.deepEqual(second[0].contractIds, originalContractIds);
+  assert.equal(second.length, 20);
   assert.equal(first.every((aircraft) => aircraft.manufacturer && aircraft.model), true);
   assert.equal(second.every((aircraft) => aircraft.route.origin.latitude && aircraft.route.destination.longitude), true);
   assert.equal(second.every((aircraft) => aircraft.contractIds.length > 0), true);
 });
 
 test("dependency graphs are scoped to the selected aircraft", async () => {
-  const primary = await SyntheticAviationProvider.getContractDependencies("ac-goper");
-  const secondary = await SyntheticAviationProvider.getContractDependencies("ac-gopra");
-  const longHaul = await SyntheticAviationProvider.getContractDependencies("ac-n712av");
-
-  assert.equal(primary.aircraftId, "ac-goper");
-  assert.equal(primary.nodes.length > 13, true);
-  assert.equal(secondary.nodes.length > 4, true);
-  assert.equal(longHaul.nodes.length > 5, true);
-  assert.equal(primary.nodes.filter((node) => node.type === "contract").length, 3);
-  assert.equal(primary.nodes.filter((node) => node.type === "obligation").length, 3);
-  assert.equal(primary.nodes.filter((node) => node.type === "dependency").length, 3);
-  assert.equal(primary.nodes.some((node) => node.type === "contract" && node.linkedAircraftCount > 1), true);
-  assert.equal(primary.nodes.some((node) => node.type === "linkedAircraft" && node.aircraftId), true);
+  const aircraft = await SyntheticAviationProvider.getAircraft();
+  const selected = [aircraft[0], aircraft[2], aircraft[3]];
+  for (const item of selected) {
+    const graph = await SyntheticAviationProvider.getContractDependencies(item.id);
+    assert.equal(graph.aircraftId, item.id);
+    assert.equal(graph.nodes.find((node) => node.type === "aircraft").label, item.registration);
+    assert.deepEqual(graph.nodes.filter((node) => node.type === "contract").map((node) => node.contractId), item.contractIds);
+    assert.equal(graph.nodes.filter((node) => node.type === "dependency").length, item.contractIds.length);
+    const linked = graph.nodes.filter((node) => node.type === "linkedAircraft");
+    assert.ok(linked.length > 0);
+    assert.ok(linked.every((node) => node.aircraftId !== item.id && aircraft.some((other) => other.id === node.aircraftId && other.contractIds.some((id) => item.contractIds.includes(id)))));
+    assert.ok(graph.edges.every((edge) => graph.nodes.some((node) => node.id === edge.source) && graph.nodes.some((node) => node.id === edge.target)));
+  }
+  assert.equal((await SyntheticAviationProvider.getContractDependencies()).aircraftId, aircraft[0].id);
 });
 
 test("contract relationships resolve back to isolated linked aircraft", async () => {
   const mroAircraft = await SyntheticAviationProvider.getContractAircraft("demo-mro-agreement");
   const next = await SyntheticAviationProvider.getContractAircraft("demo-mro-agreement");
+  const aircraft = await SyntheticAviationProvider.getAircraft();
   mroAircraft[0].contractIds.length = 0;
 
-  assert.deepEqual(next.map((item) => item.registration), ["G-OPER", "DEMO-005", "DEMO-007"]);
+  assert.ok(next.length > 1);
+  assert.deepEqual(next.map((item) => item.id), aircraft.filter((item) => item.contractIds.includes("demo-mro-agreement")).map((item) => item.id));
   assert.equal(next.every((item) => item.route && item.weather), true);
   assert.notEqual(next[0].contractIds.length, 0);
 });
@@ -62,9 +67,9 @@ test("summary metrics and alert states are internally coherent", async () => {
   const flights = await SyntheticAviationProvider.getFlights();
 
   assert.equal(summary.state, "synthetic");
-  assert.equal(summary.liveFlights >= summary.trackedAircraft, true);
-  assert.equal(summary.activeRoutes >= summary.trackedAircraft, true);
-  assert.deepEqual(new Set(flights.map((item) => item.status)), new Set(["On time", "Delayed", "Diverted", "Weather impact", "Maintenance", "Cancelled", "Rerouted"]));
+  assert.equal(summary.liveFlights, 0, "Synthetic scenarios must not be presented as live flights");
+  assert.equal(summary.activeRoutes, new Set(flights.map((item) => `${item.origin}-${item.destination}`)).size);
+  assert.deepEqual(new Set(flights.map((item) => item.status)), new Set(["On time", "Delayed", "Diverted", "Weather impact", "Rerouted"]));
   assert.equal(summary.flightAlerts, flights.flatMap((item) => item.alerts).length);
   assert.equal(summary.trackedAircraft, flights.length);
 });

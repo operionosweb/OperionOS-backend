@@ -11,6 +11,7 @@ const segments = {
   "Aircraft leasing": ["Aircraft lessor", "Leasing company"],
   MRO: ["MRO", "MRO organisation"],
   "Aviation consultancy": ["Aviation consultancy", "Consultancy"],
+  "Aviation supplier": ["Aviation supplier", "Aviation supplier"],
   "Ground handling": ["Ground handling", "Ground handler"],
   "Airport operator": ["Airport operator", "Airport operator"],
 };

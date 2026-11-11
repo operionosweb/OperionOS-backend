@@ -128,6 +128,13 @@ test("all ten outreach fields persist through existing account and planned-activ
   p.outreach.email = "x".repeat(4001);
   assert.throws(() => prospectActivities(p), /rather than truncating/);
 });
+test("aviation suppliers retain their own classification instead of becoming ground handlers", () => {
+  const p = prospect();
+  p.segment = "Aviation supplier";
+  const account = prospectAccount(p);
+  assert.equal(account.segment, "Aviation supplier");
+  assert.equal(account.company_type, "Aviation supplier");
+});
 test("official channels and professional contact references require retained dated evidence", () => {
   for (const field of ["sourceUrl", "officialChannel"]) {
     const b = bundle();

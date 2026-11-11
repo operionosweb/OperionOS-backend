@@ -67,7 +67,7 @@ export const SyntheticAviationProvider = {
   async getAircraftContracts(id) { return [...(aircraft.find((item) => item.id === id)?.contractIds || [])]; },
   async getAircraftRelationships(id) { return structuredClone(relationships[id] || []); },
   async getContractAircraft(contractId) { return (contractAircraft[contractId] || []).map((id) => cloneAircraft(aircraft.find((item) => item.id === id))); },
-  async getContractDependencies(id = "ac-goper") { return buildDependencyGraph(id); },
+  async getContractDependencies(id = aircraft[0].id) { return buildDependencyGraph(id); },
   async getWeather() { return { state: "synthetic", source: "Deterministic scenario weather, not observed conditions", observedAt: "Scenario T+00:00", cells: structuredClone(weatherCells), legend: ["Illustrative cloud"] }; },
 };
 export const LiveAviationProvider = {
