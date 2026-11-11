@@ -113,19 +113,24 @@ export default function BlogCMS() {
   const [analysis, setAnalysis] = useState(null);
   const [previewWidth, setPreviewWidth] = useState("desktop");
   const savingRef = useRef(false);
+  const postsRequest = useRef(0);
   const postRef = useRef(post);
   postRef.current = post;
 
   async function loadPosts() {
+    const request = ++postsRequest.current;
     setLoading(true);
+    setPostsLoaded(false);
     try {
       const result = await apiRequest("/api/blog/admin/posts");
-      setPosts(result.posts || []);
+      if (request !== postsRequest.current) return;
+      if (!Array.isArray(result?.posts)) throw new Error("Article list response is invalid.");
+      setPosts(result.posts);
       setPostsLoaded(true);
     } catch (failure) {
-      setError(failure.message || "Unable to load articles.");
+      if (request === postsRequest.current) setError(failure.message || "Unable to load articles.");
     } finally {
-      setLoading(false);
+      if (request === postsRequest.current) setLoading(false);
     }
   }
 
@@ -402,9 +407,9 @@ export default function BlogCMS() {
       </details>
       <div className="op-blog-cms-layout">
         <aside className="op-blog-cms-list" aria-label="Articles">
-          <div className="op-blog-cms-list-heading"><h2>All articles</h2><span>{posts.length}</span></div>
+          <div className="op-blog-cms-list-heading"><h2>All articles</h2>{postsLoaded && <span>{posts.length}</span>}</div>
           <label>Search articles<input value={search} onChange={e => setSearch(e.target.value)} /></label><label>Status<select value={filter} onChange={e => setFilter(e.target.value)}>{["all", "draft", "published", "scheduled", "archived"].map(s => <option key={s}>{s}</option>)}</select></label><label>Sort<select value={sort} onChange={e => setSort(e.target.value)}><option value="updated">Recently edited</option><option value="title">Title</option></select></label>
-          {loading ? <p className="op-blog-muted">Loading articles…</p> : visiblePosts.length === 0 ? <p className="op-blog-muted">No matching articles available. If loading failed, resolve the error before creating content.</p> : visiblePosts.map((item) => (
+          {loading ? <p className="op-blog-muted">Loading articles…</p> : !postsLoaded ? <p className="op-blog-muted">Article list unavailable. Resolve the error before creating content.</p> : visiblePosts.length === 0 ? <p className="op-blog-muted">No matching articles available.</p> : visiblePosts.map((item) => (
             <button type="button" key={item.id} className={`op-blog-cms-list-item${selectedId === item.id ? " is-active" : ""}`} onClick={() => selectPost(item.id)}>
               <span className={`op-blog-status is-${item.status}`}>{item.status}</span><strong>{item.title}</strong><small>{item.category || "Uncategorised"} · {item.slug}</small>
             </button>

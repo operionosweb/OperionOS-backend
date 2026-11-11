@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiRequest } from "../lib/apiClient";
 import { useAuth } from "../context/AuthContext";
@@ -47,6 +47,7 @@ function Overview({ analytics = false }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [health, setHealth] = useState(null);
+  const healthRequest = useRef(0);
   useEffect(() => {
     const controller = new AbortController();
     setData(null); setError("");
@@ -54,11 +55,17 @@ function Overview({ analytics = false }) {
     return () => controller.abort();
   }, [days]);
   async function checkHealth() {
-    setError("");
-    try { setHealth(await apiRequest("/api/admin/health")); } catch (e) { setError(e.message); }
+    const request = ++healthRequest.current;
+    setError(""); setHealth(null);
+    try {
+      const result = await apiRequest("/api/admin/health");
+      if (request === healthRequest.current) setHealth(result);
+    } catch (e) {
+      if (request === healthRequest.current) setError(e.message);
+    }
   }
   return <>
-    <div className="op-admin-actions"><label>Activity window <select value={days} onChange={e => setDays(Number(e.target.value))}>{[7, 30, 90].map(n => <option key={n} value={n}>{n} days</option>)}</select></label><button onClick={checkHealth}>Check protected API health</button>{health && <span role="status">{health.admin_system} · <DateValue value={health.timestamp} /></span>}</div>
+    <div className="op-admin-actions"><label>Activity window <select value={days} onChange={e => setDays(Number(e.target.value))}>{[7, 30, 90].map(n => <option key={n} value={n}>{n} days</option>)}</select></label><button onClick={checkHealth}>Check protected API health</button>{health && <span role="status">Admin access: {health.admin_system} · <DateValue value={health.timestamp} />. Blog and OCI persistence not checked.</span>}</div>
     <ErrorNotice error={error} />
     <ContractIntelligence />
     {!data && !error && <p role="status">Loading verified platform aggregates...</p>}
@@ -68,7 +75,7 @@ function Overview({ analytics = false }) {
       <div className="op-admin-columns"><Panel title="Administrative activity · UTC">
         {data.activity.length ? <figure className="op-admin-chart"><figcaption>Recorded events per day; absent days have no recorded events.</figcaption>{data.activity.map(item => <div key={item.day}><span>{item.day}</span><meter min="0" max={Math.max(1, ...data.activity.map(a => a.events))} value={item.events}>{item.events}</meter><strong>{item.events}</strong></div>)}</figure> : <p>No recorded administrative events in this window.</p>}
       </Panel><Panel title="Recent administrative events"><Events events={data.events} /></Panel></div>
-      <Panel title="Readiness and source boundaries"><ul>{data.dependencies.map(d => <li key={d.name}><code>{d.name}</code>: {d.available ? "Schema object present; not a data-quality certification" : "Unavailable: approved migration prerequisite missing"}</li>)}</ul>{data.unavailable.map(item => <p key={item}>{item}</p>)}</Panel>
+      <Panel title="Readiness and source boundaries"><ul>{data.dependencies.map(d => <li key={d.name}><code>{d.name}</code>: {d.available ? "Schema object present; not a data-quality certification" : "Unavailable: schema object not found"}</li>)}</ul>{data.unavailable.map(item => <p key={item}>{item}</p>)}</Panel>
       {analytics && <Panel title="Intelligence workspaces"><p>Customer contract, aviation, fuel, indexation and risk analysis remain membership-scoped. Platform aggregates do not authorize reading customer documents.</p><div className="op-admin-actions"><Link to="/app/aviation">Aviation intelligence</Link><Link to="/app/contracts">Contract analytics</Link><Link to="/app/internal/commercial-intelligence">Commercial analytics</Link><Link to="/demo/intelligence">Clearly labelled synthetic Demo</Link></div><p>Outcome backtesting, external observations and durable recommendations require their approved schema and real evidence. No calibrated forecast or unavailable conversion metric is fabricated.</p></Panel>}
     </>}
   </>;

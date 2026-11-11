@@ -18,6 +18,9 @@ const fixtureApi = `
     const body = options.body;
     if (path === "/api/blog/admin/posts") {
       if (options.method === "POST") { post = {...body,id:OTHER,author_id:ACTOR,author_name:"Local Fixture Author",updated_at:new Date().toISOString()}; return { post: clone(post) }; }
+      if (window.fixturePostsDeferred) return await new Promise(resolve => { window.resolveFixturePosts = resolve; });
+      if (window.fixturePostsUnavailable) throw new Error("Blog service is unavailable.");
+      if (window.fixturePostsInvalid) return null;
       return { posts: [clone(post)] };
     }
     if (path === "/api/blog/admin/posts/"+OTHER) {
@@ -30,7 +33,8 @@ const fixtureApi = `
     }
     if (path === "/api/blog/admin/profile") return {profile:{author_name:"Local Fixture Author",author_bio:"In-memory fixture",author_avatar_media:null}};
     if (path === "/api/blog/admin/media") return {media:[]};
-    if (path.startsWith("/api/platform-admin/summary")) return {metrics:{users:1,contracts:0},sources:{users:"Local isolated test fixture, not production",contracts:"Local fixture"},activity:[{day:"2030-01-01",events:2}],events:[],dependencies:[],unavailable:["Revenue unavailable"],generatedAt:"2030-01-01T10:00:00Z"};
+    if (path.startsWith("/api/platform-admin/summary")) return {metrics:{users:1,contracts:0},sources:{users:"Local isolated test fixture, not production",contracts:"Local fixture"},activity:[{day:"2030-01-01",events:2}],events:[],dependencies:[{name:"fixture_missing_table",available:false}],unavailable:["Revenue unavailable"],generatedAt:"2030-01-01T10:00:00Z"};
+    if (path === "/api/admin/health") { if (window.fixtureHealthDeferred) return await new Promise(resolve => { window.resolveFixtureHealth = resolve; }); if (window.fixtureHealthUnavailable) throw new Error("Health check unavailable."); return {admin_system:"healthy",timestamp:"2030-01-01T10:00:00Z"}; }
     if (path === "/api/platform-admin/contract-intelligence") return {metrics:[
       {key:"clauses",label:"Extracted clause records",value:0,available:true,source:"Synthetic source with repeated analyses."},
       {key:"risks",label:"Identified risk records",value:null,available:false,source:"Synthetic missing source."}
@@ -62,7 +66,7 @@ async function bundle(section) {
   return result.outputFiles[0].text;
 }
 const css = (await Promise.all(["public\\blog.css", "src\\styles\\admin.css", "src\\styles\\publishing.css"].map(path => readFile(`${resolveDir}\\${path}`, "utf8")))).join("\n");
-async function fixture(section, width, run) {
+async function fixture(section, width, run, setup) {
   const script = await bundle(section);
   const browser = await chromium.launch({headless:true});
   try {
@@ -71,7 +75,9 @@ async function fixture(section, width, run) {
     const page = await context.newPage(); const errors=[];
     page.setDefaultTimeout(10000);
     page.on("pageerror", e => errors.push(e.message));
-    await page.setContent('<div id="root"></div>'); await page.addStyleTag({content:css}); await page.addScriptTag({content:script});
+    await page.setContent('<div id="root"></div>'); await page.addStyleTag({content:css});
+    if (setup) await setup(page);
+    await page.addScriptTag({content:script});
     await run(page);
     assert.deepEqual(errors, [], "No runtime page errors in tested isolated journey");
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 2);
@@ -89,11 +95,68 @@ for (const width of [1440,768,390,320]) {
       assert.equal(await available.locator("strong").innerText(), "0");
       assert.equal(await missing.locator("strong").innerText(), "Unavailable");
       await page.getByText(/Cross-customer peer benchmarking is unavailable/).waitFor();
+      await page.getByText(/Unavailable: schema object not found/).waitFor();
       assert.equal(await page.getByRole("link",{name:"Publishing Studio",exact:true}).count(),1);
       assert.equal(await page.getByRole("link",{name:"Commercial Intelligence",exact:true}).count(),1);
     });
   });
 }
+test("a failed health recheck clears the previous success", async () => {
+  await fixture("overview",1440,async page => {
+    const check = page.getByRole("button",{name:"Check protected API health"});
+    await check.click();
+    await page.getByText(/healthy/,{exact:false}).waitFor();
+    await page.getByText(/Blog and OCI persistence not checked/).waitFor();
+    await page.evaluate(() => { window.fixtureHealthUnavailable = true; });
+    await check.click();
+    await page.getByRole("alert").filter({hasText:"Health check unavailable."}).waitFor();
+    assert.equal(await page.getByText(/healthy/,{exact:false}).count(),0);
+    await page.evaluate(() => { window.fixtureHealthDeferred = true; });
+    await check.click();
+    await page.waitForFunction(() => typeof window.resolveFixtureHealth === "function");
+    await page.evaluate(() => { window.fixtureHealthDeferred = false; });
+    await check.click();
+    await page.getByRole("alert").filter({hasText:"Health check unavailable."}).waitFor();
+    await page.evaluate(() => window.resolveFixtureHealth({admin_system:"healthy",timestamp:"2030-01-01T10:00:00Z"}));
+    await page.waitForTimeout(100);
+    assert.equal(await page.getByText(/healthy/,{exact:false}).count(),0);
+  });
+});
+test("a failed article refresh hides stale records and counts", async () => {
+  await fixture("studio",1440,async page => {
+    const article = page.locator(".op-blog-cms-list-item").filter({hasText:"Local aviation fixture"});
+    await article.click();
+    await page.getByText(/Article management · 1 actual records/).waitFor();
+    await page.evaluate(() => { window.fixturePostsUnavailable = true; });
+    await page.getByLabel("Article title",{exact:true}).fill("Updated fixture");
+    await page.getByRole("button",{name:"Save draft",exact:true}).click();
+    await page.getByRole("alert").filter({hasText:"Blog service is unavailable."}).waitFor();
+    await page.getByText("Article list unavailable. Resolve the error before creating content.",{exact:true}).waitFor();
+    assert.equal(await page.locator(".op-blog-cms-list-item").count(),0);
+    assert.equal(await page.getByText(/Article management ·/).count(),0);
+    assert.equal(await page.locator(".op-publishing-metrics").count(),0);
+    assert.equal(await page.locator(".op-blog-cms-list-heading span").count(),0);
+    await page.evaluate(() => { window.fixturePostsUnavailable = false; window.fixturePostsInvalid = true; });
+    await page.getByLabel("Article title",{exact:true}).fill("Updated fixture again");
+    await page.getByRole("button",{name:"Save draft",exact:true}).click();
+    await page.getByRole("alert").filter({hasText:"Article list response is invalid."}).waitFor();
+    assert.equal(await page.locator(".op-publishing-metrics").count(),0);
+  });
+});
+test("an older article response cannot hide a newer refresh failure", async () => {
+  await fixture("studio",1440,async page => {
+    await page.waitForFunction(() => typeof window.resolveFixturePosts === "function");
+    await page.evaluate(() => { window.fixturePostsDeferred = false; window.fixturePostsUnavailable = true; });
+    await page.getByLabel("Article title",{exact:true}).fill("New local fixture");
+    await page.getByRole("button",{name:"Save draft",exact:true}).click();
+    await page.getByRole("alert").filter({hasText:"Blog service is unavailable."}).waitFor();
+    await page.evaluate(() => window.resolveFixturePosts({posts:[{id:"old",title:"Stale fixture",status:"draft"}]}));
+    await page.waitForTimeout(100);
+    await page.getByText("Article list unavailable. Resolve the error before creating content.",{exact:true}).waitFor();
+    assert.equal(await page.locator(".op-blog-cms-list-item").count(),0);
+    assert.equal(await page.locator(".op-publishing-metrics").count(),0);
+  }, async page => { await page.evaluate(() => { window.fixturePostsDeferred = true; }); });
+});
 test("user administration submits Auth account creation with a reason and exposes no secret fields", async () => {
   await fixture("users",1440,async page => {
     await page.getByRole("button",{name:"Local Fixture User",exact:true}).waitFor();

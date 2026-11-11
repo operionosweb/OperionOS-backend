@@ -328,6 +328,30 @@ test("production diagnostics do not query an unverified database connection", as
   assert.equal(result.schema.status, "unverified");
   assert.equal(queried, false);
 });
+test("production diagnostics hide pooler connection and query failure details", async () => {
+  const project = "abcdefghijklmnopqrst";
+  const host = "region.pooler.supabase.com";
+  const sensitive = "fixture-secret-token";
+  const client = {
+    host, user: `postgres.${project}`, ssl: { rejectUnauthorized: true },
+    connection: { stream: { encrypted: true, authorized: true, getPeerCertificate: () => ({ subjectaltname: `DNS:${host}` }) } },
+    async query() { throw new Error(`Sensitive database failure: ${sensitive}`); },
+    release() {},
+  };
+  const diagnostic = createProductionDiagnosticService({
+    database: { connect: async () => client },
+    oci: { connect: async () => { throw new Error(`Sensitive OCI failure: ${sensitive}`); } },
+    env: { NODE_ENV: sensitive, RENDER_GIT_COMMIT: sensitive, DATABASE_URL: sensitive },
+  });
+  const result = await diagnostic();
+  assert.equal(result.database.connectionType, "supabase_pooler");
+  assert.equal(result.database.projectIdentifier, project);
+  assert.equal(result.schema.status, "query_failed");
+  assert.equal(result.oci.status, "unavailable");
+  assert.equal(result.environment, "unknown");
+  assert.equal(result.deploymentCommit, null);
+  assert.doesNotMatch(JSON.stringify(result), /fixture-secret-token|region\.pooler|postgres\./);
+});
 test("missing Blog schema returns an explicit unavailable response without leaking database errors", async () => {
   const controller = createBlogController({ queryFn: async () => { throw Object.assign(new Error("private relation details"), { code: "42P01" }); } });
   const res = response();
