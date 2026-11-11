@@ -21,6 +21,27 @@ function Pagination({ page, total, onPage }) {
 function Events({ events = [] }) {
   return events.length ? <ol className="op-admin-events">{events.map(event => <li key={event.id}><strong>{event.action.replaceAll("_", " ")}</strong><small>{event.entity_type} <DateValue value={event.created_at} /></small></li>)}</ol> : <p>No recorded activity in this scope.</p>;
 }
+function ContractIntelligence() {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    const controller = new AbortController();
+    apiRequest(`${base}/contract-intelligence`, { signal: controller.signal }).then(setData).catch(e => {
+      if (!controller.signal.aborted) setError(e.message);
+    });
+    return () => controller.abort();
+  }, []);
+  return <Panel title="Global contract intelligence">
+    <p>Platform-wide aggregate records only; no customer contract text or individual identities are shown. Historical analysis runs can produce repeated findings.</p>
+    <ErrorNotice error={error} />
+    {!data && !error && <p role="status">Loading contract intelligence...</p>}
+    {data && <><p className="op-admin-muted">Generated <DateValue value={data.generatedAt} />. Missing source tables are unavailable, not zero.</p>
+      <div className="op-admin-metrics">{data.metrics.map(metric => <article key={metric.key}>
+        <span>{metric.label}</span><strong className={metric.available ? undefined : "op-admin-metric-unavailable"}>{metric.available ? metric.value : "Unavailable"}</strong><small>{metric.source}</small>
+      </article>)}</div></>}
+    <p>Cross-customer peer benchmarking is unavailable until an approved disclosure policy, eligible data and audited privacy controls are in place.</p>
+  </Panel>;
+}
 function Overview({ analytics = false }) {
   const [days, setDays] = useState(30);
   const [data, setData] = useState(null);
@@ -39,6 +60,7 @@ function Overview({ analytics = false }) {
   return <>
     <div className="op-admin-actions"><label>Activity window <select value={days} onChange={e => setDays(Number(e.target.value))}>{[7, 30, 90].map(n => <option key={n} value={n}>{n} days</option>)}</select></label><button onClick={checkHealth}>Check protected API health</button>{health && <span role="status">{health.admin_system} · <DateValue value={health.timestamp} /></span>}</div>
     <ErrorNotice error={error} />
+    <ContractIntelligence />
     {!data && !error && <p role="status">Loading verified platform aggregates...</p>}
     {data && <>
       <p className="op-admin-muted">Actual database counts, generated <DateValue value={data.generatedAt} />. Window applies to sign-ins and administrative events; inventory totals are all-time.</p>

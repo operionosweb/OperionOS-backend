@@ -31,6 +31,10 @@ const fixtureApi = `
     if (path === "/api/blog/admin/profile") return {profile:{author_name:"Local Fixture Author",author_bio:"In-memory fixture",author_avatar_media:null}};
     if (path === "/api/blog/admin/media") return {media:[]};
     if (path.startsWith("/api/platform-admin/summary")) return {metrics:{users:1,contracts:0},sources:{users:"Local isolated test fixture, not production",contracts:"Local fixture"},activity:[{day:"2030-01-01",events:2}],events:[],dependencies:[],unavailable:["Revenue unavailable"],generatedAt:"2030-01-01T10:00:00Z"};
+    if (path === "/api/platform-admin/contract-intelligence") return {metrics:[
+      {key:"clauses",label:"Extracted clause records",value:0,available:true,source:"Synthetic source with repeated analyses."},
+      {key:"risks",label:"Identified risk records",value:null,available:false,source:"Synthetic missing source."}
+    ],generatedAt:"2030-01-01T10:00:00Z"};
     if (path.startsWith("/api/platform-admin/users?")) return {users:[{id:OTHER,email:"fixture@example.test",full_name:"Local Fixture User",roles:[],organizations:[],created_at:"2030-01-01",last_sign_in_at:null,email_confirmed_at:"2030-01-01"}],page:1,total:1};
     if (path === "/api/platform-admin/users/"+OTHER) return {user:{id:OTHER,email:"fixture@example.test",full_name:"Local Fixture User"},history:[]};
     if (path.startsWith("/api/platform-admin/organizations?")) return {organizations:[],page:1,total:0};
@@ -79,6 +83,12 @@ for (const width of [1440,768,390,320]) {
     await fixture("overview", width, async page => {
       await page.getByRole("heading",{name:"Super Admin Command Centre",exact:true}).waitFor();
       await page.getByText("Local isolated test fixture, not production",{exact:true}).waitFor();
+      await page.getByRole("heading",{name:"Global contract intelligence",exact:true}).waitFor();
+      const available = page.locator("article").filter({hasText:"Extracted clause records"});
+      const missing = page.locator("article").filter({hasText:"Identified risk records"});
+      assert.equal(await available.locator("strong").innerText(), "0");
+      assert.equal(await missing.locator("strong").innerText(), "Unavailable");
+      await page.getByText(/Cross-customer peer benchmarking is unavailable/).waitFor();
       assert.equal(await page.getByRole("link",{name:"Publishing Studio",exact:true}).count(),1);
       assert.equal(await page.getByRole("link",{name:"Commercial Intelligence",exact:true}).count(),1);
     });

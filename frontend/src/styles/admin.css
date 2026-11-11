@@ -8,6 +8,7 @@
 .op-admin-metrics article,.op-admin-panel { background:#fff; border:1px solid #dce5ef; border-radius:18px; padding:24px; min-width:0; margin-bottom:20px; box-shadow:0 8px 24px #0e2d4906; }
 .op-admin-metrics article { display:grid; gap:10px; margin:0; }
 .op-admin-metrics strong { font-size:34px; letter-spacing:-.05em; }
+.op-admin-metrics .op-admin-metric-unavailable { font-size:18px; letter-spacing:normal; overflow-wrap:anywhere; }
 .op-admin-metrics span { text-transform:capitalize; }
 .op-admin small,.op-admin-muted { color:#526880; font-size:12px; line-height:1.6; display:block; }
 .op-admin-columns { display:grid; grid-template-columns: minmax(0,2fr) minmax(280px,1fr); gap:20px; }

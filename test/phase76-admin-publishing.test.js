@@ -4,7 +4,9 @@ import express from "express";
 import { createServer } from "node:http";
 import { createPlatformAdminRouter } from "../routes/platformAdminRoutes.js";
 import { createPlatformAdminService, adminId } from "../services/platformAdminService.js";
+import { createProductionDiagnosticService } from "../services/productionDiagnosticService.js";
 import { createPlatformPermissionMiddleware } from "../middleware/superAdminMiddleware.js";
+import { createUserAuthMiddleware } from "../middleware/userAuthMiddleware.js";
 import { normalizeRichText, articlePlainText, readingMinutes, isPublicArticle } from "../frontend/src/lib/richText.js";
 import { renderRichTextHtml, renderBlogIndexHtml } from "../frontend/src/lib/blogRendering.js";
 import { createEditorialAnalyzer, resolveAuthor, articleRevision } from "../services/blogEditorialService.js";
@@ -14,6 +16,7 @@ import blogFeed from "../frontend/api/blog-feed.js";
 const ACTOR = "acaabfe0-83ee-4ec5-8721-c312b9317f54";
 const OTHER = "bcaabfe0-83ee-4ec5-8721-c312b9317f54";
 const ORGANIZATION = "fcaabfe0-83ee-4ec5-8721-c312b9317f54";
+const fixtureToken = aal => `Bearer fixture.${Buffer.from(JSON.stringify({ aal })).toString("base64url")}.fixture`;
 function response() {
   return {
     statusCode: 200, headers: {},
@@ -26,11 +29,12 @@ function response() {
     end() { return this; },
   };
 }
-async function serverFixture(service, roles) {
+async function serverFixture(service, roles, authenticate, diagnostics) {
   const app = express(); app.use(express.json());
   app.use("/admin", createPlatformAdminRouter({
     service,
-    authenticate(req, res, next) {
+    diagnostics,
+    authenticate: authenticate || function (req, res, next) {
       if (!req.headers.authorization) return res.status(401).json({ error: "Authentication required" });
       req.user = { id: ACTOR }; next();
     },
@@ -44,7 +48,7 @@ test("all administration reads and mutations reject ordinary users and anonymous
   const service = new Proxy({}, { get: () => () => { throw new Error("Unauthorized service invocation"); } });
   const f = await serverFixture(service, ["CUSTOMER_ADMIN"]);
   try {
-    for (const [path, method] of [["/summary", "GET"], ["/users", "POST"], [`/users/${OTHER}/platform-role`, "PUT"], [`/organizations/${ORGANIZATION}/members/${OTHER}`, "PUT"]]) {
+    for (const [path, method] of [["/summary", "GET"], ["/contract-intelligence", "GET"], ["/production-diagnostics", "GET"], ["/users", "POST"], [`/users/${OTHER}/platform-role`, "PUT"], [`/organizations/${ORGANIZATION}/members/${OTHER}`, "PUT"]]) {
       const anonymous = await fetch(f.base + path, { method });
       assert.equal(anonymous.status, 401);
       const ordinary = await fetch(f.base + path, { method, headers: { Authorization: "local-fixture" } });
@@ -77,7 +81,8 @@ function databaseFixture(run = () => ({ rows: [] })) {
     if (sql.includes("select 1 from public.platform_user_roles")) return { rows: [{ authorized: true }] };
     return run(sql, params);
   };
-  return { calls, query, connect: async () => ({ query, release() {} }) };
+  return { calls, query, connect: async () => ({ query, host: "localhost", ssl: { rejectUnauthorized: true },
+    connection: { stream: { encrypted: true, authorized: true, getPeerCertificate: () => ({ subjectaltname: "DNS:localhost" }) } }, release() {} }) };
 }
 test("self-role and self-deactivation changes fail without Auth or database writes", async () => {
   const db = databaseFixture();
@@ -145,6 +150,191 @@ test("directory SQL parameterizes search and selects no passwords or tokens", as
   assert.equal(call.params[0], "';drop table users;--");
   assert.doesNotMatch(call.sql, /encrypted_password|access_token|refresh_token|select \*/i);
   await assert.rejects(createPlatformAdminService({ database: db }).summary(999), /7, 30 or 90/);
+});
+test("contract intelligence reports available aggregate counts and marks missing sources unavailable", async () => {
+  const db = databaseFixture(sql => {
+    if (sql.includes("rolbypassrls")) return { rows: [{ full_scope: true }] };
+    if (sql.includes("to_regclass")) return { rows: [
+      { name: "analysis_runs", available: true }, { name: "clauses", available: true },
+      { name: "obligations", available: false }, { name: "deadlines", available: false },
+      { name: "risks", available: false }, { name: "ai_intelligence_usage", available: false },
+    ] };
+    return { rows: [{ processed_contracts: 2, pending_runs: 1, failed_runs: 3, clauses: 5,
+      obligations: null, upcoming_deadlines: null, risks: null, high_severity_risks: null, ai_usage_events: null }] };
+  });
+  const data = await createPlatformAdminService({ database: db, now: () => new Date("2030-01-01T00:00:00Z") }).contractIntelligence();
+  const byKey = Object.fromEntries(data.metrics.map(metric => [metric.key, metric]));
+  assert.equal(byKey.processed_contracts.value, 2);
+  assert.equal(byKey.clauses.value, 5);
+  assert.equal(byKey.obligations.value, null);
+  assert.equal(byKey.obligations.available, false);
+  assert.match(byKey.clauses.source, /repeated analyses/);
+  assert.equal(data.generatedAt, "2030-01-01T00:00:00.000Z");
+  assert.doesNotMatch(db.calls[2].sql, /from public\.(obligations|deadlines|risks|ai_intelligence_usage)/);
+});
+test("contract intelligence refuses a database role that cannot verify global RLS scope", async () => {
+  const db = databaseFixture(() => ({ rows: [{ full_scope: false }] }));
+  await assert.rejects(createPlatformAdminService({ database: db }).contractIntelligence(), /verified platform-wide database role/);
+  assert.equal(db.calls.length, 1);
+});
+test("contract intelligence refuses absent or unverified TLS before querying", async () => {
+  for (const [ssl, stream] of [
+    [{ rejectUnauthorized: true }, undefined],
+    [{ rejectUnauthorized: true }, { encrypted: false, authorized: true }],
+    [{ rejectUnauthorized: true }, { encrypted: true, authorized: false }],
+    [{ rejectUnauthorized: false }, { encrypted: true, authorized: true }],
+  ]) {
+    let released = false;
+    const db = { query: async () => { throw new Error("Query must not run"); },
+      connect: async () => ({ query: db.query, host: "localhost", ssl, connection: { stream }, release() { released = true; } }) };
+    await assert.rejects(createPlatformAdminService({ database: db }).contractIntelligence(), /verified TLS/);
+    assert.equal(released, true);
+  }
+});
+test("contract intelligence accepts verified default TLS options and independently checks the hostname", async () => {
+  const certificate = { subjectaltname: "DNS:localhost" };
+  let queries = 0;
+  const client = {
+    host: "localhost", ssl: {},
+    connection: { stream: { encrypted: true, authorized: true, getPeerCertificate: () => certificate } },
+    async query(sql) {
+      queries++;
+      if (sql.includes("rolbypassrls")) return { rows: [{ full_scope: true }] };
+      if (sql.includes("to_regclass")) return { rows: [] };
+      return { rows: [{}] };
+    },
+    release() {},
+  };
+  const db = { query: client.query, connect: async () => client };
+  await createPlatformAdminService({ database: db }).contractIntelligence();
+  assert.equal(queries, 3);
+  client.host = "wrong.example.invalid";
+  queries = 0;
+  await assert.rejects(createPlatformAdminService({ database: db }).contractIntelligence(), /verified TLS/);
+  assert.equal(queries, 0);
+});
+test("contract intelligence propagates database failures instead of inventing metrics", async () => {
+  const db = databaseFixture(() => { throw Object.assign(new Error("Database unavailable"), { code: "08006" }); });
+  await assert.rejects(createPlatformAdminService({ database: db }).contractIntelligence(), /Database unavailable/);
+});
+test("contract intelligence endpoint requires Super Admin and returns private aggregate data", async () => {
+  const f = await serverFixture({ contractIntelligence: async () => ({ metrics: [{ key: "clauses", value: 2, available: true }] }) }, ["SUPERADMIN"]);
+  try {
+    const r = await fetch(f.base + "/contract-intelligence", { headers: { Authorization: fixtureToken("aal2") } });
+    assert.equal(r.status, 200);
+    assert.equal(r.headers.get("cache-control"), "private, no-store");
+    const body = await r.json();
+    assert.deepEqual(body.metrics, [{ key: "clauses", value: 2, available: true }]);
+  } finally { await f.close(); }
+});
+test("contract intelligence rejects a Super Admin without verified MFA before accessing the service", async () => {
+  let called = false;
+  const f = await serverFixture({ contractIntelligence: async () => { called = true; return { metrics: [] }; } }, ["SUPERADMIN"]);
+  try {
+    for (const token of [fixtureToken("aal1"), "Bearer malformed"]) {
+      const r = await fetch(f.base + "/contract-intelligence", { headers: { Authorization: token } });
+      assert.equal(r.status, 403);
+      assert.match((await r.json()).error, /multi-factor/);
+    }
+    assert.equal(called, false);
+  } finally { await f.close(); }
+});
+test("contract intelligence cannot use MFA claims from a token rejected by authentication", async () => {
+  const valid = fixtureToken("aal2");
+  const authenticate = createUserAuthMiddleware(async token => {
+    if (`Bearer ${token}` !== valid) throw new Error("Invalid token");
+    return { id: ACTOR };
+  });
+  const f = await serverFixture({ contractIntelligence: async () => ({ metrics: [] }) }, ["SUPERADMIN"], authenticate);
+  try {
+    const forged = await fetch(f.base + "/contract-intelligence", { headers: { Authorization: `${valid}forged` } });
+    assert.equal(forged.status, 401);
+    const accepted = await fetch(f.base + "/contract-intelligence", { headers: { Authorization: valid } });
+    assert.equal(accepted.status, 200);
+  } finally { await f.close(); }
+});
+test("contract intelligence reports an unverified database scope without returning counts", async () => {
+  const service = createPlatformAdminService({ database: databaseFixture(() => ({ rows: [{ full_scope: false }] })) });
+  const f = await serverFixture(service, ["SUPERADMIN"]);
+  try {
+    const r = await fetch(f.base + "/contract-intelligence", { headers: { Authorization: fixtureToken("aal2") } });
+    const body = await r.json();
+    assert.equal(r.status, 503);
+    assert.match(body.error, /verified platform-wide database role/);
+    assert.equal(body.metrics, undefined);
+  } finally { await f.close(); }
+});
+test("production diagnostics require Super Admin MFA and are private", async () => {
+  let called = 0;
+  const f = await serverFixture({}, ["SUPERADMIN"], undefined, async () => { called++; return { database: { connectivity: "connected" } }; });
+  try {
+    const weak = await fetch(f.base + "/production-diagnostics", { headers: { Authorization: fixtureToken("aal1") } });
+    assert.equal(weak.status, 403);
+    assert.equal(called, 0);
+    const strong = await fetch(f.base + "/production-diagnostics", { headers: { Authorization: fixtureToken("aal2") } });
+    assert.equal(strong.status, 200);
+    assert.equal(strong.headers.get("cache-control"), "private, no-store");
+    assert.equal(called, 1);
+  } finally { await f.close(); }
+});
+test("production diagnostics cannot use an AAL2 claim from a rejected token", async () => {
+  const valid = fixtureToken("aal2");
+  const authenticate = createUserAuthMiddleware(async token => {
+    if (`Bearer ${token}` !== valid) throw new Error("Invalid token");
+    return { id: ACTOR };
+  });
+  let called = false;
+  const f = await serverFixture({}, ["SUPERADMIN"], authenticate, async () => { called = true; return {}; });
+  try {
+    const r = await fetch(f.base + "/production-diagnostics", { headers: { Authorization: `${valid}forged` } });
+    assert.equal(r.status, 401);
+    assert.equal(called, false);
+  } finally { await f.close(); }
+});
+test("production diagnostics expose only safe metadata and distinguish missing schema from verified service health", async () => {
+  const project = "abcdefghijklmnopqrst";
+  const host = `db.${project}.supabase.co`;
+  const client = {
+    host, user: "postgres", ssl: { rejectUnauthorized: true },
+    connection: { stream: { encrypted: true, authorized: true, getPeerCertificate: () => ({ subjectaltname: `DNS:${host}` }) } },
+    async query(sql, params) {
+      if (sql.includes("unnest")) return { rows: params[0].map(name => ({ name, available: name !== "blog_posts" })) };
+      if (sql.includes("to_regclass")) return { rows: [{ present: true }] };
+      return { rows: [{ version: "002" }] };
+    },
+    release() {},
+  };
+  const diagnostic = createProductionDiagnosticService({
+    database: { connect: async () => client },
+    oci: { connect: async () => { throw new Error("private connection string"); } },
+    env: { NODE_ENV: "production", RENDER_GIT_COMMIT: "abc1234", DATABASE_URL: "private connection string" },
+  });
+  const result = await diagnostic();
+  assert.equal(result.database.projectIdentifier, project);
+  assert.equal(result.database.tls, "verified");
+  assert.equal(result.schema.migrationVersion, "002");
+  assert.equal(result.blog.status, "required_tables_missing");
+  assert.equal(result.oci.status, "unavailable");
+  assert.doesNotMatch(JSON.stringify(result), /private connection string|db\.abcdefghijklmnopqrst/);
+});
+test("production diagnostics do not query an unverified database connection", async () => {
+  let queried = false;
+  const diagnostic = createProductionDiagnosticService({
+    database: { connect: async () => ({ host: "db.example.test", ssl: false, query: async () => { queried = true; }, release() {} }) },
+    oci: { connect: async () => { throw new Error("unavailable"); } }, env: {},
+  });
+  const result = await diagnostic();
+  assert.equal(result.database.tls, "unverified");
+  assert.equal(result.schema.status, "unverified");
+  assert.equal(queried, false);
+});
+test("missing Blog schema returns an explicit unavailable response without leaking database errors", async () => {
+  const controller = createBlogController({ queryFn: async () => { throw Object.assign(new Error("private relation details"), { code: "42P01" }); } });
+  const res = response();
+  await controller.listAdmin({ query: {} }, res);
+  assert.equal(res.statusCode, 503);
+  assert.equal(res.body.error, "Blog service is unavailable.");
+  assert.doesNotMatch(JSON.stringify(res.body), /private relation details/);
 });
 const document = { type: "doc", content: [{ type: "paragraph", attrs: { textAlign: "center" }, content: [{ type: "text", text: '<script>alert("fixture")</script>', marks: [{ type: "bold" }, { type: "textStyle", attrs: { color: "#123456", fontSize: "24px", fontFamily: "Georgia" } }] }] }] };
 test("structured rich text persists formatting and safely renders text, styles and semantic markup", () => {

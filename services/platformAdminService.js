@@ -1,5 +1,6 @@
 import pool from "../db.js";
 import { getSupabaseClient } from "../config/supabase.js";
+import { isVerifiedDatabaseConnection } from "../config/databaseTls.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const adminError = (status, message) => Object.assign(new Error(message), { status });
@@ -21,6 +22,36 @@ function pageOptions(input = {}) {
 const userFields = `u.id,u.email,u.created_at,u.last_sign_in_at,u.email_confirmed_at,
   coalesce(u.banned_until > now(),false) as deactivated,
   u.raw_user_meta_data->>'full_name' as full_name`;
+
+const contractMetrics = [
+  { key: "processed_contracts", label: "Contracts with a completed analysis", table: "analysis_runs",
+    expression: "count(distinct contract_id)::int from public.analysis_runs where status='completed'",
+    source: "Distinct contracts with at least one completed analysis run; a later run may have failed." },
+  { key: "pending_runs", label: "Analysis runs awaiting completion", table: "analysis_runs",
+    expression: "count(*)::int from public.analysis_runs where status in ('queued','processing','extracting','analysing','indexing')",
+    source: "Analysis runs in a queued or processing state, not distinct contracts." },
+  { key: "failed_runs", label: "Failed analysis runs", table: "analysis_runs",
+    expression: "count(*)::int from public.analysis_runs where status='failed'",
+    source: "All recorded failed analysis runs, including historical attempts." },
+  { key: "clauses", label: "Extracted clause records", table: "clauses",
+    expression: "count(*)::int from public.clauses",
+    source: "Stored clause records across analysis runs, including pending review and repeated analyses." },
+  { key: "obligations", label: "Identified obligation records", table: "obligations",
+    expression: "count(*)::int from public.obligations",
+    source: "Stored obligation records across analysis runs, including pending review and repeated analyses." },
+  { key: "upcoming_deadlines", label: "Dated deadline records in 30 days", table: "deadlines",
+    expression: "count(*)::int from public.deadlines where normalized_date>=now() and normalized_date<now()+interval '30 days' and review_status<>'rejected'",
+    source: "Non-rejected normalized dates in the next 30 days; repeated analyses may duplicate deadlines. Relative and undated deadlines are excluded." },
+  { key: "risks", label: "Identified risk records", table: "risks",
+    expression: "count(*)::int from public.risks",
+    source: "Stored risk records across analysis runs, including pending review and repeated analyses; not verified losses." },
+  { key: "high_severity_risks", label: "High or critical risk records", table: "risks",
+    expression: "count(*)::int from public.risks where severity in ('high','critical')",
+    source: "Stored high or critical severity records across analysis runs, not calibrated probabilities or financial losses." },
+  { key: "ai_usage_events", label: "AI usage records in 30 days", table: "ai_intelligence_usage",
+    expression: "count(*)::int from public.ai_intelligence_usage where created_at>=now()-interval '30 days' and created_at<=now()",
+    source: "Recorded AI usage rows created in the last 30 days; not active users, working time or billed revenue." },
+];
 
 export function createPlatformAdminService({ database = pool, authClient = getSupabaseClient, now = () => new Date() } = {}) {
   const query = database.query.bind(database);
@@ -113,6 +144,37 @@ export function createPlatformAdminService({ database = pool, authClient = getSu
         customer_opportunities: "commercial_opportunities.status = CUSTOMER; not payment verification",
       },
     };
+  }
+  async function contractIntelligence() {
+    const client = await database.connect();
+    try {
+      if (!isVerifiedDatabaseConnection(client)) {
+        throw Object.assign(adminError(503, "Global contract intelligence requires a verified TLS database connection."), { code: "GLOBAL_TLS_UNVERIFIED" });
+      }
+      const execute = client.query.bind(client);
+      const scope = await execute("select rolsuper or rolbypassrls as full_scope from pg_roles where rolname=current_user");
+      if (scope.rows[0]?.full_scope !== true) {
+        throw Object.assign(adminError(503, "Global contract intelligence requires a verified platform-wide database role."), { code: "GLOBAL_SCOPE_UNVERIFIED" });
+      }
+      const tables = [...new Set(contractMetrics.map(metric => metric.table))];
+      const catalog = await execute(
+        "select name, exists(select 1 from pg_class where oid=to_regclass('public.' || name) and relkind in ('r','p')) as available from unnest($1::text[]) as name",
+        [tables],
+      );
+      const available = new Set(catalog.rows.filter(row => row.available).map(row => row.name));
+      const fields = contractMetrics.map(metric => available.has(metric.table)
+        ? `(select ${metric.expression}) as ${metric.key}`
+        : `null::int as ${metric.key}`);
+      const result = await execute(`select ${fields.join(", ")}`);
+      return {
+        generatedAt: now().toISOString(),
+        metrics: contractMetrics.map(({ key, label, table, source }) => ({
+          key, label, source, value: result.rows[0][key], available: available.has(table),
+        })),
+      };
+    } finally {
+      client.release();
+    }
   }
   async function organizations(input) {
     const { page, offset, search } = pageOptions(input);
@@ -243,5 +305,5 @@ export function createPlatformAdminService({ database = pool, authClient = getSu
     }
     return { emailRequested: true, message: "Recovery email requested; delivery is not yet verified." };
   }
-  return { users, user, summary, organizations, organization, saveOrganization, membership, platformRole, accountStatus, provision, recovery };
+  return { users, user, summary, contractIntelligence, organizations, organization, saveOrganization, membership, platformRole, accountStatus, provision, recovery };
 }

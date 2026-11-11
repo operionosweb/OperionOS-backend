@@ -28,7 +28,7 @@ function errorResponse(res, error, operation) {
   if (error?.code === "23505") {
     return res.status(409).json({ success: false, error: "That article URL is already in use." });
   }
-  const status = Number.isInteger(error?.status) ? error.status : error instanceof TypeError || error instanceof RangeError ? 400 : error?.code === "DATABASE_NOT_CONFIGURED" ? 503 : 500;
+  const status = Number.isInteger(error?.status) ? error.status : error instanceof TypeError || error instanceof RangeError ? 400 : ["DATABASE_NOT_CONFIGURED", "42P01", "42703"].includes(error?.code) ? 503 : 500;
   if (status >= 500) console.error("blog_operation_failed", { operation, code: error?.code || "BLOG_REQUEST_FAILED" });
   return res.status(status).json({
     success: false,

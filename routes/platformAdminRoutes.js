@@ -2,8 +2,21 @@ import express from "express";
 import { authenticateUser } from "../middleware/userAuthMiddleware.js";
 import { requireSuperAdmin } from "../middleware/superAdminMiddleware.js";
 import { createPlatformAdminService } from "../services/platformAdminService.js";
+import { createProductionDiagnosticService } from "../services/productionDiagnosticService.js";
 
-export function createPlatformAdminRouter({ service = createPlatformAdminService(), authenticate = authenticateUser, authorize = requireSuperAdmin } = {}) {
+function requireMfa(req, res, next) {
+  const token = req.headers.authorization?.match(/^Bearer ([^\s]+)$/)?.[1];
+  try {
+    // The router's authentication middleware verifies this token before this check.
+    const parts = token?.split(".");
+    if (parts?.length === 3 && JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"))?.aal === "aal2") return next();
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
+  }
+  return res.status(403).json({ success: false, error: "A verified multi-factor session is required for this operation." });
+}
+
+export function createPlatformAdminRouter({ service = createPlatformAdminService(), diagnostics = createProductionDiagnosticService(), authenticate = authenticateUser, authorize = requireSuperAdmin } = {}) {
   const router = express.Router();
   router.use(authenticate, authorize, (_req, res, next) => {
     res.set("Cache-Control", "private, no-store");
@@ -26,12 +39,14 @@ export function createPlatformAdminRouter({ service = createPlatformAdminService
     catch (error) {
       const status = error.code === "23505" ? 409 : error.status || 503;
       if (status >= 500) console.error("platform_admin_failed", { code: error.code || "ADMIN_UNAVAILABLE" });
-      res.status(status).json({ success: false, error: status >= 500
+      res.status(status).json({ success: false, error: ["GLOBAL_SCOPE_UNVERIFIED", "GLOBAL_TLS_UNVERIFIED"].includes(error.code) ? error.message : status >= 500
         ? "Administration operation failed. Refresh to check current state before retrying; an external Auth change may already have completed."
         : error.code === "23505" ? "This record already exists." : error.message });
     }
   };
   router.get("/summary", handle(req => service.summary(req.query.days)));
+  router.get("/contract-intelligence", requireMfa, handle(() => service.contractIntelligence()));
+  router.get("/production-diagnostics", requireMfa, handle(() => diagnostics()));
   router.get("/users", handle(req => service.users(req.query)));
   router.get("/users/:id", handle(req => service.user(req.params.id)));
   router.post("/users", handle(req => service.provision(req.user.id, req.body)));
