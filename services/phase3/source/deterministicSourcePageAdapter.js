@@ -54,7 +54,7 @@ export function buildCanonicalPageSource({
     });
   }
 
-  const candidatePages = [...pageRows]
+  const candidatePages = (documentVersion.mime_type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ? [] : [...pageRows])
     .filter((page) => page && typeof page === "object")
     .sort((left, right) => Number(left.page_number || 1) - Number(right.page_number || 1));
   const hasTrustedPageOffsets = candidatePages.length > 0 && candidatePages.every((page, index) => {

@@ -1,10 +1,12 @@
 import supabase from "../../config/supabase.js";
+import defaultPgPool from "../../db.js";
 
 import { assertOrganizationScope, assertResourceId } from "./scope.js";
+import { beginFencedAnalysisWrite } from "./fencedAnalysisWrite.js";
 
 const PORTFOLIO_SEARCH_LIMIT = 25;
 
-export function createSearchChunkRepository(client = supabase) {
+export function createSearchChunkRepository(client = supabase, pgPool = defaultPgPool) {
   return {
     async createMany({ organizationId, chunks }) {
       assertOrganizationScope(organizationId);
@@ -41,16 +43,50 @@ export function createSearchChunkRepository(client = supabase) {
       return data || [];
     },
 
-    async replaceForRun({ organizationId, analysisRunId, chunks }) {
+    async replaceForRun({ organizationId, analysisRunId, chunks, fence }) {
       assertOrganizationScope(organizationId);
       assertResourceId(analysisRunId, "analysisRunId");
-      const removed = await client
-        .from("contract_search_chunks")
-        .delete()
-        .eq("analysis_run_id", analysisRunId)
-        .eq("organization_id", organizationId);
-      if (removed.error) throw removed.error;
-      return this.createMany({ organizationId, chunks });
+      const pgClient = await pgPool.connect();
+      try {
+        await pgClient.query("begin");
+        await beginFencedAnalysisWrite(pgClient, { organizationId, analysisRunId, fence });
+        await pgClient.query(
+          "delete from public.contract_search_chunks where organization_id = $1 and analysis_run_id = $2",
+          [organizationId, analysisRunId]
+        );
+        const persisted = [];
+        for (const chunk of chunks) {
+          assertResourceId(chunk.document_version_id, "document_version_id");
+          if (chunk.analysis_run_id !== analysisRunId || chunk.organization_id !== organizationId) {
+            throw Object.assign(new Error("Search chunk is outside the fenced analysis scope"), {
+              code: "ANALYSIS_FENCE_SCOPE_MISMATCH",
+              status: 409,
+            });
+          }
+          const result = await pgClient.query(
+            `insert into public.contract_search_chunks (
+               organization_id, contract_id, document_id, document_version_id,
+               analysis_run_id, chunk_index, text_content, char_start, char_end,
+               page_start, page_end, text_hash, index_status
+             ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+             returning id, organization_id, document_version_id, analysis_run_id,
+                       chunk_index, index_status`,
+            [
+              organizationId, chunk.contract_id, chunk.document_id, chunk.document_version_id,
+              analysisRunId, chunk.chunk_index, chunk.text_content, chunk.char_start, chunk.char_end,
+              chunk.page_start, chunk.page_end, chunk.text_hash, chunk.index_status,
+            ]
+          );
+          persisted.push(result.rows[0]);
+        }
+        await pgClient.query("commit");
+        return persisted;
+      } catch (error) {
+        try { await pgClient.query("rollback"); } catch {}
+        throw error;
+      } finally {
+        pgClient.release();
+      }
     },
 
     async search({ organizationId, analysisRunId, query, limit = 20 }) {

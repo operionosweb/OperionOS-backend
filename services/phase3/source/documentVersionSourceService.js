@@ -10,7 +10,7 @@ function sourceError(code, message, status = 400) {
 }
 
 function traceError(error) {
-  return error ? { code: error.code || null, message: String(error.message || "").slice(0, 160) } : null;
+  return error ? { code: "SOURCE_LOOKUP_FAILED" } : null;
 }
 
 function traceRow(row, fields) {
@@ -77,7 +77,7 @@ export function createDocumentVersionSourceService(client = supabase, diagnostic
       trace("document_versions.before", { documentVersionId, organizationId });
       const { data: documentVersion, error: versionError } = await client
         .from("document_versions")
-        .select("id, document_id, organization_id, version_number, extraction_status")
+        .select("id, document_id, organization_id, version_number, extraction_status, mime_type")
         .eq("id", documentVersionId)
         .eq("organization_id", organizationId)
         .maybeSingle();

@@ -7,6 +7,7 @@ import DemoFinancialImpact from "../../components/demo/DemoFinancialImpact";
 import ContractIntelligenceInvestigation from "../../components/demo/ContractIntelligenceInvestigation";
 import { trackEvent } from "../../components/analytics/Analytics";
 import { MattExperience } from "../Matt";
+import { buildAviationContractCore } from "../../../../domain/contractIntelligence/aviationContractCore.js";
 
 const sections = ["overview","clauses","obligations","deadlines","risks","evidence","financial-impact","assistant"];
 
@@ -18,6 +19,29 @@ function WorkspaceOverview({ contract }) {
     <div className="od-grid-two"><GlassCard title="Top risk areas" eyebrow="Evidence-linked"><div className="od-risk-bars">{contract.risks.map((risk,index)=><Link key={risk.id} to={`../risks`} relative="path" state={{ focusRiskId: risk.id, source: "workspace_overview" }}><span>{risk.category}</span><RiskBadge severity={risk.severity}/><i><b style={{width:`${90-index*18}%`}}/></i></Link>)}</div></GlassCard><GlassCard title="Contract identity" eyebrow="Prepared aviation context"><dl className="od-detail-list"><div><dt>Lessor</dt><dd>{contract.lessor}</dd></div><div><dt>Lessee</dt><dd>{contract.lessee}</dd></div><div><dt>Aircraft</dt><dd>{contract.aircraft ? `${contract.aircraft.registration} / ${contract.aircraft.model}` : "Association unavailable"}</dd></div><div><dt>Effective</dt><dd>{contract.effective}</dd></div><div><dt>Expiry</dt><dd>{contract.expiry}</dd></div></dl></GlassCard></div>
     <div className="od-grid-two"><GlassCard title="Recent obligations" eyebrow="Contract intelligence"><div className="od-compact-list">{contract.obligations.map(item=><Link to="../obligations" relative="path" key={item.id}><span className="od-list-icon"><ListChecks size={15}/></span><div><strong>{item.title}</strong><small>{item.actor} · {item.timing}</small></div><DemoBadge tone="neutral">{item.modality}</DemoBadge></Link>)}</div></GlassCard><GlassCard title="Deadline intelligence" eyebrow="No invented dates"><div className="od-compact-list">{contract.deadlines.map(item=><Link to="../deadlines" relative="path" key={item.id}><span className="od-list-icon"><CalendarClock size={15}/></span><div><strong>{item.title}</strong><small>{item.timing}</small></div><DemoBadge tone="neutral">{item.type}</DemoBadge></Link>)}</div></GlassCard></div>
   </>;
+}
+
+function AviationCoverage({ contract, getEvidence, openEvidence }) {
+  const sources = contract.clauses.flatMap((clause) => {
+    const evidence = getEvidence(clause.evidenceId);
+    if (!evidence?.excerpt) return [];
+    return [{
+      text: evidence.excerpt, title: clause.title, clauseId: clause.id, clauseNumber: clause.number,
+      evidenceId: evidence.id, pageNumber: evidence.page, sourceLocation: evidence.locator,
+    }];
+  });
+  const core = buildAviationContractCore(sources);
+  const identified = core.topics.filter((topic) => topic.status === "identified_for_review");
+  return <GlassCard title="Aviation review coverage" eyebrow="Deterministic synthetic example">
+    <p>These prepared excerpts demonstrate the same topic identification used by the contract workspace. A mention requires human review and does not establish an obligation, breach or legal conclusion.</p>
+    <p>Topics not identified in these excerpts are not necessarily absent from an agreement. No genuine AI request or customer contract is involved.</p>
+    {identified.length ? identified.map((topic) => <div key={topic.id}>
+      <strong>{topic.label}</strong>{" · "}Mention identified for review{" "}
+      {topic.evidence.map((item) => <button key={item.evidenceId} type="button" onClick={() => openEvidence(getEvidence(item.evidenceId))}>
+        View synthetic source{item.pageNumber ? ` · page ${item.pageNumber}` : ""}
+      </button>)}
+    </div>) : <p>No aviation topics were identified in the prepared excerpts.</p>}
+  </GlassCard>;
 }
 
 function Clauses({ contract, getEvidence, openEvidence }) {
@@ -69,7 +93,7 @@ function ContractWorkspace({ contract }) {
   const focusInvestigation=(riskId,node="risk")=>{setFocusedRiskId(riskId);setFocusedNode(node);requestAnimationFrame(()=>document.getElementById("contract-investigation")?.scrollIntoView({behavior:window.matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"}));};
   const investigateRisk=(riskId)=>{focusInvestigation(riskId);trackEvent("demo_risk_open",{contract_id:contract.id,risk_id:riskId,source:"risk_workspace"});};
   const returnToInvestigation=(node)=>{const riskId=selectedEvidence?.riskId;if(!riskId)return;setSelectedEvidence(null);focusInvestigation(riskId,node);trackEvent("demo_evidence_return",{contract_id:contract.id,risk_id:riskId,destination:node});};
-  const content = {overview:<WorkspaceOverview contract={contract}/>,clauses:<Clauses contract={contract} getEvidence={getEvidence} openEvidence={openEvidence}/>,obligations:<Obligations contract={contract} getEvidence={getEvidence} openEvidence={openEvidence}/>,deadlines:<Deadlines contract={contract} getEvidence={getEvidence} openEvidence={openEvidence}/>,risks:<Risks contract={contract} getEvidence={getEvidence} openEvidence={openEvidence} investigateRisk={investigateRisk}/>,evidence:<EvidenceExplorer contract={contract} openEvidence={openEvidence}/>,"financial-impact":<DemoFinancialImpact contract={contract} getEvidence={getEvidence} openEvidence={openEvidence}/>,assistant:<AssistantLanding contract={contract}/>}[activeSection];
+  const content = {overview:<><WorkspaceOverview contract={contract}/><AviationCoverage contract={contract} getEvidence={getEvidence} openEvidence={openEvidence}/></>,clauses:<Clauses contract={contract} getEvidence={getEvidence} openEvidence={openEvidence}/>,obligations:<Obligations contract={contract} getEvidence={getEvidence} openEvidence={openEvidence}/>,deadlines:<Deadlines contract={contract} getEvidence={getEvidence} openEvidence={openEvidence}/>,risks:<Risks contract={contract} getEvidence={getEvidence} openEvidence={openEvidence} investigateRisk={investigateRisk}/>,evidence:<EvidenceExplorer contract={contract} openEvidence={openEvidence}/>,"financial-impact":<DemoFinancialImpact contract={contract} getEvidence={getEvidence} openEvidence={openEvidence}/>,assistant:<AssistantLanding contract={contract}/>}[activeSection];
   return <>
     <PageHeader eyebrow={`Synthetic contracts / ${contract.contractId}`} title={contract.title} description={`${contract.lessor} → ${contract.lessee}`} actions={<><DemoBadge tone="success">{contract.status}</DemoBadge><button className="od-icon-button" aria-label="Favourite contract"><Star size={17}/></button><Link className="od-button od-button-primary" to={`/demo/contracts/${contract.id}/assistant`}><Bot size={16}/>Ask Matt</Link></>}><div className="od-contract-meta">{[["Lessor",contract.lessor],["Lessee",contract.lessee],["Contract ID",contract.contractId],["Effective",contract.effective],["Expiry",contract.expiry]].map(([label,value])=><span key={label}><b>{label}</b>{value}</span>)}</div></PageHeader>
     {missingEvidence && <EmptyState title="Synthetic evidence unavailable" description="No evidence for this contract matches the requested source. No other contract’s evidence is substituted."/>}

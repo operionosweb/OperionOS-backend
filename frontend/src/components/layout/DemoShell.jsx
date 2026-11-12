@@ -117,7 +117,7 @@ function DemoShellContent() {
         </div>
         {notificationsOpen && <div className="od-popover"><DemoBadge>SYNTHETIC NOTICES</DemoBadge><strong>3 illustrative intelligence notices</strong><p>Prepared lease examples only, not detected customer events: late-return risk, insurance evidence, and the maintenance-record deadline.</p></div>}
       </header>
-      <main className="od-main"><Analytics /><DemoDisclosure />{!location.pathname.startsWith("/demo/matt") && <OperionAssistant />}<Outlet /></main>
+      <main className="od-main"><Analytics />{!location.pathname.startsWith("/demo/matt") && <OperionAssistant />}<DemoDisclosure /><Outlet /></main>
       <nav className="od-bottom-nav" aria-label="Mobile demo navigation">{mainNav.slice(0,5).map(([to,label,Icon]) => <NavLink key={to} to={to} className={({isActive})=>isActive?"is-active":""}><Icon size={19}/><span>{label === "Upload Contract" ? "Upload" : label}</span></NavLink>)}</nav>
     </div>
 

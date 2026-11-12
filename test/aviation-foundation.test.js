@@ -28,7 +28,7 @@ test("production frontend never imports the synthetic aviation provider", async 
   const page = await read("frontend/src/routes/ProductionLiveTracking.jsx");
   const api = await read("frontend/src/lib/aviationApi.js");
   assert.match(page, /No synthetic positions are shown in production/);
-  assert.match(page, /Weather data temporarily unavailable/);
+  assert.match(page, /Current weather observations are unavailable/);
   assert.doesNotMatch(`${page}\n${api}`, /demo\/aviationDataProvider|SyntheticAviationProvider/);
 });
 

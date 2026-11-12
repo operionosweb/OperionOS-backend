@@ -34,7 +34,8 @@ test("upload-created analysis selection is isolated per contract and used by det
   assert.match(workspace, /setLatestExtractionStatus\(selectedVersion\?\.extraction_status \|\| null\)/);
   assert.match(workspace, /latestExtractionStatus !== "completed"/);
   assert.match(workspace, /One or more pages could not be extracted/);
-  assert.match(workspace, /analysisRun\.status !== "completed" && latestExtractionStatus === "completed"/);
+  assert.match(workspace, /analysisRun\?\.status === "queued" && latestExtractionStatus === "completed"/);
+  assert.doesNotMatch(workspace, /Retry analysis/);
   assert.match(analysis, /operion\.activeAnalysisRunId\.\$\{contractId\}/);
   assert.doesNotMatch(workspace, /getItem\("operion\.activeAnalysisRunId"\)/);
   assert.doesNotMatch(workspace, /ContractSpatialBridge/);

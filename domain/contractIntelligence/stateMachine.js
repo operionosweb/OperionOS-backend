@@ -1,6 +1,7 @@
 import { ANALYSIS_RUN_STATES } from "./enums.js";
 
 const TRANSITIONS = Object.freeze({
+  awaiting_ingestion: ["queued", "failed", "cancelled"],
   queued: ["processing", "failed", "cancelled"],
   processing: ["extracting", "failed", "cancelled"],
   extracting: ["analysing", "failed", "cancelled"],

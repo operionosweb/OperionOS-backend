@@ -16,7 +16,21 @@ const containerName = `operion-migration-rehearsal-${process.pid}-${Date.now()}`
 const databaseName = "operion_rehearsal";
 const password = crypto.randomBytes(24).toString("hex");
 
+const laterTables = [
+  "oci_user_roles", "oci_audit_events", "oci_settings", "oci_records",
+  "obligation_fulfilment_assessments", "obligation_fulfilment_assessment_evidence",
+  "recommendation_decision_history",
+  "blog_posts", "blog_slug_redirects", "blog_media", "blog_post_audit",
+  "external_market_observations",
+  "aviation_contract_outcomes", "aviation_contract_outcome_evidence",
+  "aviation_forecast_snapshots", "aviation_forecast_snapshot_evidence",
+  "contract_upload_journal", "contract_upload_events",
+  "contract_analysis_outbox",
+  "analysis_write_fences",
+];
+
 const expectedTables = [
+  ...laterTables,
   "organizations",
   "organization_memberships",
   "contracts",
@@ -71,6 +85,7 @@ const expectedTables = [
 ];
 
 const requiredTables = [
+  ...laterTables,
   "organizations",
   "organization_memberships",
   "platform_user_roles",
@@ -127,6 +142,15 @@ const absentLegacyTables = [
 ];
 
 const requiredFunctions = [
+  "reserve_contract_upload",
+  "transition_contract_upload",
+  "dispatch_contract_analysis",
+  "dispatch_pending_contract_analyses",
+  "inspect_contract_upload_recovery",
+  "assert_analysis_write_fence",
+  "begin_analysis_fenced_write",
+  "begin_analysis_fenced_write_v2",
+  "claim_analysis_execution",
   "is_organization_member",
   "prevent_contract_organization_change",
   "prevent_document_ownership_change",
@@ -155,6 +179,7 @@ const immutableResultTables = [
 ];
 
 const rlsTables = [
+  ...laterTables,
   "organizations",
   "organization_memberships",
   "contracts",
@@ -294,11 +319,11 @@ async function migrationFiles() {
   const files = (await fs.readdir(MIGRATIONS_DIR))
     .filter((file) => /^\d{3}_.+[.]sql$/.test(file))
     .sort();
-  assert.equal(files.length, 21, `Expected exactly 21 canonical migrations, found ${files.length}`);
+  assert.equal(files.length, 35, `Expected exactly 35 canonical migrations, found ${files.length}`);
   assert.deepEqual(
     files.map((file) => file.slice(0, 3)),
-    Array.from({ length: 21 }, (_, index) => String(index + 1).padStart(3, "0")),
-    "Canonical migrations are not ordered 001 through 021"
+    Array.from({ length: 35 }, (_, index) => String(index + 1).padStart(3, "0")),
+    "Canonical migrations are not ordered 001 through 035"
   );
   return files;
 }
@@ -340,7 +365,7 @@ function values(rowsToMap, key) {
   return new Set(rowsToMap.map((row) => row[key]));
 }
 
-async function verifySchema(pool) {
+export async function verifySchema(pool) {
   const publicTables = await rows(pool, `
     select table_name
     from information_schema.tables
@@ -348,7 +373,7 @@ async function verifySchema(pool) {
     order by table_name
   `);
   const tableSet = values(publicTables, "table_name");
-  assert.deepEqual([...tableSet].sort(), [...expectedTables].sort(), "Public table inventory differs from the canonical 001-021 chain");
+  assert.deepEqual([...tableSet].sort(), [...expectedTables].sort(), "Public table inventory differs from the canonical 001-035 chain");
   assert.deepEqual(requiredTables.filter((table) => !tableSet.has(table)), [], "Required tables are missing");
   assert.deepEqual(absentLegacyTables.filter((table) => tableSet.has(table)), [], "A forbidden legacy table was created");
 
@@ -615,4 +640,6 @@ async function main() {
   }
 }
 
-await main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await main();
+}

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import Resource from "@cesium/engine/Source/Core/Resource.js";
 import UrlTemplateImageryProvider from "@cesium/engine/Source/Scene/UrlTemplateImageryProvider.js";
 import WebMercatorTilingScheme from "@cesium/engine/Source/Core/WebMercatorTilingScheme.js";
 
@@ -10,7 +11,7 @@ const LAYERS = [
   ["admin", "Administrative boundaries"],
 ];
 
-export default function WeatherMapLayers({ viewer, onActivityChange }) {
+export default function WeatherMapLayers({ viewer, accessToken, organizationId, onActivityChange = () => {} }) {
   const [status, setStatus] = useState("loading");
   const [enabled, setEnabled] = useState([]);
   const [error, setError] = useState("");
@@ -39,16 +40,22 @@ export default function WeatherMapLayers({ viewer, onActivityChange }) {
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return undefined;
     const layers = active.current;
-    for (const [id, layer] of layers) {
-      if (!enabled.includes(id)) {
-        viewer.imageryLayers.remove(layer, true);
+    for (const [id, activeLayer] of layers) {
+      if (!enabled.includes(id) || activeLayer.accessToken !== accessToken || activeLayer.organizationId !== organizationId) {
+        viewer.imageryLayers.remove(activeLayer.layer, true);
         layers.delete(id);
       }
     }
     enabled.forEach((id) => {
       if (layers.has(id)) return;
       const provider = new UrlTemplateImageryProvider({
-        url: `${API_BASE}/api/weather-maps/tiles/${id}/{z}/{x}/{y}`,
+        url: new Resource({
+          url: `${API_BASE}/api/weather-maps/tiles/${id}/{z}/{x}/{y}`,
+          headers: {
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+            ...(organizationId ? { "x-org-id": organizationId } : {}),
+          },
+        }),
         tilingScheme: new WebMercatorTilingScheme(),
         minimumLevel: 1,
         maximumLevel: 6,
@@ -64,17 +71,17 @@ export default function WeatherMapLayers({ viewer, onActivityChange }) {
       });
       const layer = viewer.imageryLayers.addImageryProvider(provider);
       layer.alpha = id === "satellite-geocolor" ? 0.6 : 0.75;
-      layers.set(id, layer);
+      layers.set(id, { layer, accessToken, organizationId });
     });
     viewer.scene.requestRender();
     return undefined;
-  }, [viewer, enabled]);
+  }, [viewer, enabled, accessToken, organizationId]);
 
   useEffect(() => {
     const layers = active.current;
     return () => {
       if (viewer && !viewer.isDestroyed()) {
-        layers.forEach((layer) => viewer.imageryLayers.remove(layer, true));
+        layers.forEach(({ layer }) => viewer.imageryLayers.remove(layer, true));
       }
       layers.clear();
     };
@@ -84,10 +91,10 @@ export default function WeatherMapLayers({ viewer, onActivityChange }) {
     <summary>Xweather weather layers</summary>
     <section aria-label="Provider weather layer filters">
     <p>{status === "loading" ? "Checking server configuration..." : status === "configured"
-      ? "Server configured; subscription not verified. Enable layers individually. Tiles may count toward your subscription."
-      : "Unavailable until server credentials and a Raster Maps subscription are configured."}</p>
+      ? "Server credentials and explicit subscription approval are configured. Enable layers individually; tiles may count toward your subscription."
+      : "Unavailable until server credentials and explicit Raster Maps subscription approval are configured."}</p>
     {enabled.length > 0 && <p role="status">Provider imagery selected; illustrative scenario weather is hidden.</p>}
-    <div>{LAYERS.map(([id, label]) => <button key={id} type="button" disabled={status !== "configured" || !viewer} aria-pressed={enabled.includes(id)}
+    <div>{LAYERS.map(([id, label]) => <button key={id} type="button" disabled={status !== "configured" || !viewer || !accessToken || !organizationId} aria-pressed={enabled.includes(id)}
       onClick={() => { setError(""); setEnabled((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]); }}>{label}</button>)}</div>
     <p>Surface wind is not flight-level wind or turbulence. <a href="https://turbli.com/maps/world-wind-map/" target="_blank" rel="noopener noreferrer">Open Turbli altitude-aware wind map</a></p>
     <p>Turbli turbulence requires authorized data access. <a href="https://turbli.com/maps/interactive-turbulence-map/" target="_blank" rel="noopener noreferrer">Open Turbli turbulence map</a></p>

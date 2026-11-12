@@ -16,6 +16,7 @@ function jobRow(row) {
     id: row.id,
     organizationId: row.organization_id,
     userId: row.user_id,
+    analysisRunId: row.analysis_run_id,
     operation: row.operation_type,
     status: row.status,
     estimatedIntelligence: Number(row.estimated_intelligence || 0),
@@ -107,16 +108,14 @@ export function createPostgresIntelligenceStore(pgPool = defaultPgPool) {
     async createJob(job) {
       const result = await pgPool.query(`
         insert into ai_intelligence_jobs (
-          id, organization_id, user_id, operation_type, status,
+          id, organization_id, user_id, analysis_run_id, operation_type, status,
           estimated_intelligence, actual_intelligence, provider, model,
           request_key, technical_usage, error, created_at, completed_at
-        ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-        on conflict (organization_id, request_key)
-          where request_key is not null and status in ('pending', 'estimating', 'processing')
-          do nothing
+        ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+        on conflict do nothing
         returning *
       `, [
-        job.id, job.organizationId, job.userId, job.operation, job.status,
+        job.id, job.organizationId, job.userId, job.analysisRunId || null, job.operation, job.status,
         job.estimatedIntelligence, job.actualIntelligence, job.provider || null,
         job.model || null, job.requestKey || null, job.technicalUsage || {},
         job.error || null, job.createdAt, job.completedAt || null,
@@ -125,7 +124,6 @@ export function createPostgresIntelligenceStore(pgPool = defaultPgPool) {
       const existing = await pgPool.query(`
         select * from ai_intelligence_jobs
          where organization_id = $1 and request_key = $2
-           and status in ('pending', 'estimating', 'processing')
          order by created_at desc limit 1
       `, [job.organizationId, job.requestKey]);
       return jobRow(existing.rows[0]);
@@ -199,12 +197,12 @@ export function createPostgresIntelligenceStore(pgPool = defaultPgPool) {
     async recordUsage(usage) {
       await pgPool.query(`
         insert into ai_intelligence_usage (
-          organization_id, job_id, user_id, operation_type,
+          organization_id, job_id, user_id, analysis_run_id, operation_type,
           estimated_intelligence, actual_intelligence, provider, model,
           technical_usage, created_at
-        ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
       `, [
-        usage.organizationId, usage.jobId, usage.userId, usage.operation,
+        usage.organizationId, usage.jobId, usage.userId, usage.analysisRunId || null, usage.operation,
         usage.estimatedIntelligence, usage.actualIntelligence, usage.provider,
         usage.model, usage.technicalUsage || {}, usage.createdAt,
       ]);
@@ -214,6 +212,40 @@ export function createPostgresIntelligenceStore(pgPool = defaultPgPool) {
       const client = await pgPool.connect();
       try {
         await client.query("begin");
+        const jobResult = await client.query(
+          "select status from ai_intelligence_jobs where organization_id = $1 and id = $2 for update",
+          [job.organizationId, job.id]
+        );
+        const currentJob = jobResult.rows[0];
+        if (!currentJob) throw Object.assign(new Error("AI Intelligence Job was not found"), { code: "AI_JOB_NOT_FOUND" });
+        if (currentJob.status === "completed") {
+          const usageResult = await client.query(
+            "select id from ai_intelligence_usage where organization_id = $1 and job_id = $2",
+            [job.organizationId, job.id]
+          );
+          if (!usageResult.rows[0]) {
+            throw Object.assign(new Error("Completed AI job is missing its usage record"), { code: "AI_USAGE_RECORD_MISSING" });
+          }
+          const existingBudget = await client.query(
+            "select * from ai_intelligence_budgets where organization_id = $1",
+            [job.organizationId]
+          );
+          if (!existingBudget.rows[0]) {
+            throw Object.assign(new Error("AI Intelligence Budget is not configured"), { code: "INTELLIGENCE_BUDGET_NOT_CONFIGURED" });
+          }
+          await client.query("commit");
+          return budgetRow(existingBudget.rows[0]);
+        }
+        if (currentJob.status !== "processing") {
+          throw Object.assign(new Error("AI Intelligence Job is not processing"), { code: "AI_JOB_NOT_PROCESSING" });
+        }
+        const existingUsage = await client.query(
+          "select id from ai_intelligence_usage where organization_id = $1 and job_id = $2",
+          [job.organizationId, job.id]
+        );
+        if (existingUsage.rows[0]) {
+          throw Object.assign(new Error("AI usage was already recorded for this job"), { code: "AI_USAGE_CONFLICT" });
+        }
         const budgetResult = await client.query(`
           update ai_intelligence_budgets
              set reserved_intelligence = greatest(0, reserved_intelligence - $2),
@@ -223,20 +255,30 @@ export function createPostgresIntelligenceStore(pgPool = defaultPgPool) {
           returning *
         `, [job.organizationId, reservedAmount, job.actualIntelligence]);
         if (!budgetResult.rows[0]) throw Object.assign(new Error("AI Intelligence Budget is not configured"), { code: "INTELLIGENCE_BUDGET_NOT_CONFIGURED" });
-        await client.query(`
+        const updatedJob = await client.query(`
           update ai_intelligence_jobs
              set status = $3, actual_intelligence = $4, provider = $5, model = $6,
                  technical_usage = $7, error = $8, completed_at = $9
-           where organization_id = $1 and id = $2
+           where organization_id = $1 and id = $2 and status = 'processing'
+         returning id
         `, [job.organizationId, job.id, job.status, job.actualIntelligence, job.provider, job.model, job.technicalUsage, job.error || null, job.completedAt]);
-        await client.query(`
+        if (!updatedJob.rows[0]) {
+          throw Object.assign(new Error("AI Intelligence Job changed before usage could be committed"), { code: "AI_JOB_STATE_CONFLICT" });
+        }
+        const insertedUsage = await client.query(`
           insert into ai_intelligence_usage (
-            organization_id, job_id, user_id, operation_type,
+            organization_id, job_id, user_id, analysis_run_id, operation_type,
             estimated_intelligence, actual_intelligence, provider, model,
             technical_usage, created_at
-          ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-        `, [usage.organizationId, usage.jobId, usage.userId, usage.operation, usage.estimatedIntelligence, usage.actualIntelligence, usage.provider, usage.model, usage.technicalUsage || {}, usage.createdAt]);
-        await client.query(`
+          ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          returning id
+        `, [usage.organizationId, usage.jobId, usage.userId, usage.analysisRunId || null, usage.operation,
+          usage.estimatedIntelligence, usage.actualIntelligence, usage.provider, usage.model,
+          usage.technicalUsage || {}, usage.createdAt]);
+        if (!insertedUsage.rows[0]) {
+          throw Object.assign(new Error("AI provider usage was not recorded"), { code: "AI_USAGE_RECORD_FAILED" });
+        }
+        if (cache) await client.query(`
           insert into ai_intelligence_cache (
             organization_id, document_hash, operation_type, analysis_version,
             prompt_version, provider, model, result, intelligence_usage

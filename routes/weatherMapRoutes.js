@@ -1,4 +1,7 @@
 import express from "express";
+import { authenticateUser } from "../middleware/userAuthMiddleware.js";
+import { requireOrganizationMembership } from "../middleware/organizationMiddleware.js";
+import { requireOrganizationPermission } from "../middleware/authorizationMiddleware.js";
 
 const LAYERS = Object.freeze([
   { id: "radar", label: "Radar (regional coverage)" },
@@ -10,14 +13,21 @@ const TTL_MS = 5 * 60 * 1000;
 const MAX_TILE_BYTES = 1024 * 1024;
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
-export function createWeatherMapRouter({ env = process.env, fetchImpl = fetch, now = Date.now } = {}) {
+export function createWeatherMapRouter({
+  env = process.env,
+  fetchImpl = fetch,
+  now = Date.now,
+  authorize = [authenticateUser, requireOrganizationMembership, requireOrganizationPermission("contract:read")],
+} = {}) {
   const router = express.Router();
   const cache = new Map();
   const inFlight = new Map();
   let windowStart = now();
   let requests = 0;
+  const credentialsConfigured = () => Boolean(env.XWEATHER_CLIENT_ID && env.XWEATHER_CLIENT_SECRET);
+  const subscriptionApproved = () => env.XWEATHER_MAPS_SUBSCRIPTION_APPROVED === "1";
   const configured = () => env.XWEATHER_MAPS_ENABLED === "1"
-    && Boolean(env.XWEATHER_CLIENT_ID && env.XWEATHER_CLIENT_SECRET);
+    && credentialsConfigured() && subscriptionApproved();
 
   router.use((req, res, next) => {
     res.set("Cache-Control", "no-store");
@@ -33,11 +43,12 @@ export function createWeatherMapRouter({ env = process.env, fetchImpl = fetch, n
       minimumLevel: 1,
       attribution: "Weather imagery: Vaisala Xweather",
       turbulenceAvailable: false,
+      subscriptionApproved: subscriptionApproved(),
       subscriptionVerified: false,
     });
   });
 
-  router.get("/tiles/:layer/:z/:x/:y", async (req, res) => {
+  router.get("/tiles/:layer/:z/:x/:y", ...authorize, async (req, res) => {
     const { layer, z, x, y } = req.params;
     const validInteger = (value) => /^(0|[1-9]\d*)$/.test(value);
     if (!LAYERS.some(({ id }) => id === layer) || ![z, x, y].every(validInteger)

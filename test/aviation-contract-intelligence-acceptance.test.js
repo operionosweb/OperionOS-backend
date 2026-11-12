@@ -474,8 +474,22 @@ async function runThroughPipeline(corpusEntry, { useProductionDeadlineStage = fa
     };
 
   const pipeline = createContractIntelligencePipeline({
+    withLock: async (_keys, operation) => operation(),
     analysisRunRepository: {
       getById: async () => analysisRun,
+      claimQueued: async () => {
+        if (analysisRun.status !== "queued") return null;
+        analysisRun = { ...analysisRun, status: "processing" };
+        return {
+          run: analysisRun,
+          fenceContext: {
+            workerId: "66666666-6666-4666-8666-666666666666",
+            executionId: "77777777-7777-4777-8777-777777777777",
+            generation: "1",
+            token: "a".repeat(64),
+          },
+        };
+      },
       updateStatus: async (update) => {
         analysisRun = { ...analysisRun, status: update.status };
         return analysisRun;

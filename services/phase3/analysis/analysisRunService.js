@@ -52,7 +52,10 @@ export function createAnalysisRunService(repository = createAnalysisRunRepositor
       }
 
       assertAnalysisRunRetry(current);
-      return repository.createRetry({ run: current, organizationId });
+      throw Object.assign(new Error("The previous analysis must be reviewed before recovery"), {
+        code: "ANALYSIS_RECOVERY_REQUIRED",
+        status: 409,
+      });
     },
   };
 }

@@ -1,6 +1,7 @@
 import supabase from "../../config/supabase.js";
 import defaultPgPool from "../../db.js";
 import { assertOrganizationScope, assertResourceId } from "./scope.js";
+import { beginFencedAnalysisWrite } from "./fencedAnalysisWrite.js";
 
 function insertQuery(table, columns, row) {
   const jsonColumns = new Set(["structured_timing", "recurrence", "metadata"]);
@@ -86,7 +87,7 @@ export function createDeadlineRepository(client = supabase, pgPool = defaultPgPo
     },
 
     async persistDeadlines({ ...input }) {
-      const { organizationId, contractId, documentId, documentVersionId, analysisRunId, deadlines } = input;
+      const { organizationId, contractId, documentId, documentVersionId, analysisRunId, deadlines, fence } = input;
       assertRunScope(input);
       if (!deadlines.length) return { deadlines: [], insertedDeadlines: 0, insertedEvidenceLinks: 0 };
       const columns = [
@@ -99,6 +100,7 @@ export function createDeadlineRepository(client = supabase, pgPool = defaultPgPo
       const pgClient = await pgPool.connect();
       try {
         await pgClient.query("BEGIN");
+        await beginFencedAnalysisWrite(pgClient, { organizationId, analysisRunId, fence });
         const persisted = [];
         let insertedDeadlines = 0;
         let insertedEvidenceLinks = 0;

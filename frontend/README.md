@@ -174,23 +174,29 @@ These raster overlays are not MapsGL vector animations, flight-level wind or GTG
 turbulence; they do not reproduce Turbli's altitude/time controls.
 
 Configure `XWEATHER_CLIENT_ID` and `XWEATHER_CLIENT_SECRET` in the backend's
-deployment secret store, then set `XWEATHER_MAPS_ENABLED=1` only after verifying
-Raster Maps subscription and display rights. Rotate credentials previously shared
-in chat before production use. Never put them in `VITE_*` variables, frontend
+deployment secret store, then set `XWEATHER_MAPS_ENABLED=1` and
+`XWEATHER_MAPS_SUBSCRIPTION_APPROVED=1` only after verifying the account's Raster
+Maps subscription and display rights. The approval flag is an operator attestation;
+it does not verify provider connectivity. Rotate credentials previously shared in
+chat before any provider request. Never put them in `VITE_*` variables, frontend
 code, browser URLs or Git. `VITE_API_BASE_URL` points to the backend origin when
 it is not served behind the frontend's same-origin `/api` reverse proxy.
 
-`GET /api/weather-maps/status` reports configuration, **not** authenticated
-provider connectivity. Tiles use `/api/weather-maps/tiles/{layer}/{z}/{x}/{y}`.
+`GET /api/weather-maps/status` reports configuration and the explicit subscription
+approval flag, **not** authenticated provider connectivity. Tiles are blocked
+unless both the enable and approval flags are set; they use
+`/api/weather-maps/tiles/{layer}/{z}/{x}/{y}`.
 The server validates a fixed layer allowlist and zoom 1-6, refuses redirects,
 limits response sizes and timeouts, deduplicates requests, and caches at most
 200 tiles for five minutes. It allows at most 300 upstream requests per five
-minutes and 24 concurrent requests **per process**. This public, opt-in proxy
-needs deployment-level access controls, shared rate limits and provider spending
-alerts before scaling; process restarts and multiple instances reset/multiply
-the in-memory budget. The browser requests no provider imagery until a filter
-is selected and reports tile errors explicitly. Enabled imagery remains a snapshot
-until the layer is toggled or the page is reloaded; this is not continuous tracking.
+minutes and 24 concurrent requests **per process**. Tile requests also require a
+valid bearer session, active organization membership and `contract:read`
+permission. Because the request cap is process-local, deployment-level shared
+rate limits and provider spending alerts are still required before scaling;
+process restarts and multiple instances reset or multiply the in-memory budget.
+The browser requests no provider imagery until a filter is selected and reports
+tile errors explicitly. Enabled imagery remains a snapshot until the layer is
+toggled or the page is reloaded; this is not continuous tracking.
 
 Turbli integration still requires documented authorized access. Xweather
 credentials do not authorize a Turbli feed. Provider connectivity and subscription

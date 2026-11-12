@@ -68,6 +68,7 @@ export const RECOMMENDATION_TYPES = Object.freeze([
 ]);
 
 export const ANALYSIS_RUN_STATES = Object.freeze([
+  "awaiting_ingestion",
   "queued",
   "processing",
   "extracting",

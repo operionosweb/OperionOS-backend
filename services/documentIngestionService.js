@@ -7,10 +7,11 @@ import { recordAuditEvent } from "./foundationAuditService.js";
 import {
   buildDocumentStorageKey,
   downloadDocumentSource,
-  removeDocumentSource,
+  STORAGE_BUCKET,
   uploadDocumentSource,
 } from "./documentStorageService.js";
 import { parseDocumentStructure, persistDocumentStructure } from "./documentStructureService.js";
+import { withScopedOperationLock } from "./scopedOperationLock.js";
 import {
   createDocumentOcrProvider,
   localPdfOcrProvider,
@@ -314,7 +315,8 @@ async function parsePdf(buffer, { ocrProvider = localPdfOcrProvider } = {}) {
     const documentOcrProvider = ocrProvider
       ? createDocumentOcrProvider(ocrProvider)
       : null;
-    const parsed = await pdfParse(buffer, {
+    // The bundled PDF.js misreads pooled Node Buffers with nonzero offsets.
+    const parsed = await pdfParse(Uint8Array.from(buffer), {
       pagerender: async (pageData) => {
         const digitalText = await renderPdfPage(pageData);
         const page = await processPdfPageText({
@@ -353,13 +355,17 @@ async function parsePdf(buffer, { ocrProvider = localPdfOcrProvider } = {}) {
 }
 
 async function parseDocx(buffer) {
+  let result;
   try {
-    const result = await mammoth.extractRawText({ buffer });
-    const text = typeof result.value === "string" ? result.value : "";
-    return { pageCount: null, text, requiresOcr: false };
+    result = await mammoth.extractRawText({ buffer });
   } catch {
     throw appError("INVALID_DOCX", "The DOCX could not be parsed");
   }
+  const text = typeof result.value === "string" ? result.value : "";
+  if (!text.trim()) {
+    throw appError("SOURCE_TEXT_UNAVAILABLE", "The DOCX contains no readable text", 422);
+  }
+  return { pageCount: null, text, pages: [], requiresOcr: false, ocrSummary: null };
 }
 
 async function parseDocument(buffer, extension) {
@@ -379,7 +385,7 @@ async function findDuplicateVersion(organizationId, sha256) {
 
   const { data, error } = await supabase
     .from("document_versions")
-    .select("id, document_id, organization_id, version_number")
+    .select("id, document_id, organization_id, version_number, extraction_status, processing_status")
     .eq("organization_id", organizationId)
     .eq("sha256", sha256)
     .maybeSingle();
@@ -403,97 +409,45 @@ async function getContractRecord(contractId, organizationId) {
   return data;
 }
 
-async function createContractRecord({ organizationId, userId, title }) {
-  const { data, error } = await supabase
-    .from("contracts")
-    .insert({
-      organization_id: organizationId,
-      created_by: userId,
-      title,
-      status: "draft",
-    })
-    .select("id, organization_id")
-    .single();
-
-  if (error || !data) {
-    throw appError("STORAGE_ERROR", "Contract creation failed", 503);
+async function reserveUpload({ organizationId, userId, contractId, documentId, validated, sha256, pageCount, title }) {
+  const newDocumentId = documentId || crypto.randomUUID();
+  const versionId = crypto.randomUUID();
+  const expectedKey = buildDocumentStorageKey({
+    organizationId, documentId: newDocumentId, versionId, extension: validated.extension,
+  });
+  const { data, error } = await supabase.rpc("reserve_contract_upload", {
+    p_organization_id: organizationId, p_user_id: userId,
+    p_contract_id: contractId, p_document_id: documentId,
+    p_new_document_id: newDocumentId, p_version_id: versionId,
+    p_title: title || validated.filename, p_filename: validated.filename,
+    p_mime_type: validated.mimeType, p_file_size: validated.fileSize,
+    p_sha256: sha256, p_page_count: pageCount, p_storage_bucket: STORAGE_BUCKET,
+  });
+  if (error?.code === "23505") throw appError("INGESTION_RECOVERY_REQUIRED", "An equivalent upload already exists and requires review", 409);
+  if (error || !data || data.document_id !== newDocumentId || data.version_id !== versionId
+    || data.storage_key !== expectedKey || !data.journal_id || !data.contract_id
+    || !Number.isInteger(data.version_number) || data.version_number < 1
+    || (contractId && data.contract_id !== contractId)) {
+    throw appError("STORAGE_ERROR", "Upload reservation failed; review before retrying", 503);
   }
-
   return data;
 }
 
-async function createDocumentRecord({
-  documentId,
-  organizationId,
-  contractId,
-  userId,
-  filename,
-  mimeType,
-  fileSize,
-  storageKey,
-  sha256,
-}) {
-  const { data, error } = await supabase
-    .from("documents")
-    .insert({
-      id: documentId,
-      organization_id: organizationId,
-      contract_id: contractId,
-      created_by: userId,
-      document_type: "aviation_contract",
-      filename,
-      mime_type: mimeType,
-      file_size: fileSize,
-      storage_provider: "supabase",
-      storage_key: storageKey,
-      sha256,
-      status: "uploaded",
-    })
-    .select("id, organization_id, contract_id, status")
-    .single();
-
-  if (error || !data) {
-    throw appError("STORAGE_ERROR", "Document record creation failed", 503);
-  }
-
-  return data;
+async function transitionUpload({ organizationId, journalId, expectedState, nextState, analysisRunId = null }) {
+  const { error } = await supabase.rpc("transition_contract_upload", {
+    p_organization_id: organizationId, p_journal_id: journalId,
+    p_expected_state: expectedState, p_next_state: nextState, p_analysis_run_id: analysisRunId,
+  });
+  if (error) throw appError("STORAGE_ERROR", "Upload journal update failed; review before retrying", 503);
 }
 
-async function createVersionRecord({
-  documentId,
-  contractId,
-  organizationId,
-  userId,
-  versionNumber,
-  sha256,
-  storageKey,
-  mimeType,
-  fileSize,
-  pageCount,
-}) {
-  const { data, error } = await supabase
-    .from("document_versions")
-    .insert({
-      document_id: documentId,
-      contract_id: contractId,
-      organization_id: organizationId,
-      version_number: versionNumber,
-      sha256,
-      storage_key: storageKey,
-      mime_type: mimeType,
-      file_size: fileSize,
-      page_count: pageCount,
-      extraction_status: "queued",
-      created_by: userId,
-    })
-    .select("id, document_id, version_number, extraction_status")
-    .single();
-
-  if (error || !data) {
-    throw appError("STORAGE_ERROR", "Document version creation failed", 503);
+async function dispatchUploadAnalysis({ organizationId, journalId, analysisRunId }) {
+  const { data, error } = await supabase.rpc("dispatch_contract_analysis", {
+    p_organization_id: organizationId, p_journal_id: journalId,
+  });
+  if (error || data !== analysisRunId) {
+    throw appError("ANALYSIS_DISPATCH_PENDING", "Document is retained; analysis dispatch requires recovery", 503);
   }
-
-  return data;
 }
 
 async function createAnalysisRun({ organizationId, contractId, versionId, userId }) {
@@ -503,7 +457,7 @@ async function createAnalysisRun({ organizationId, contractId, versionId, userId
       organization_id: organizationId,
       contract_id: contractId,
       document_version_id: versionId,
-      status: "queued",
+      status: "awaiting_ingestion",
       pipeline_version: PIPELINE_VERSION,
       requested_by: userId,
     })
@@ -543,18 +497,21 @@ async function updateStatus({
     error_message: errorMessage,
   };
 
-  const updates = [
-    supabase
+  const updates = [];
+  if (documentId) {
+    updates.push(supabase
       .from("documents")
       .update(documentUpdate)
       .eq("id", documentId)
-      .eq("organization_id", organizationId),
-    supabase
+      .eq("organization_id", organizationId));
+  }
+  if (versionId) {
+    updates.push(supabase
       .from("document_versions")
       .update(versionUpdate)
       .eq("id", versionId)
-      .eq("organization_id", organizationId),
-  ];
+      .eq("organization_id", organizationId));
+  }
   if (analysisRunId && runStatus) {
     updates.push(
       supabase
@@ -564,9 +521,9 @@ async function updateStatus({
         .eq("organization_id", organizationId)
     );
   }
-  const results = await Promise.all(updates);
+  const results = await Promise.allSettled(updates);
 
-  if (results.some((result) => result.error)) {
+  if (results.some((result) => result.status === "rejected" || result.value.error)) {
     throw appError("STORAGE_ERROR", "Processing status update failed", 503);
   }
 }
@@ -602,9 +559,22 @@ export async function ingestContractUpload({
   contractId = null,
   documentId = null,
   ocrProvider = localPdfOcrProvider,
+  withLock = withScopedOperationLock,
 }) {
   const validated = validateDocumentFile(file);
   const sha256 = calculateSha256(validated.buffer);
+  requireOrganizationScope(organizationId);
+  if (documentId && !contractId) throw appError("DOCUMENT_NOT_FOUND", "Document not found", 404);
+  const keys = [`contract-upload:${organizationId}:${sha256}`];
+  if (documentId) keys.push(`document-version:${organizationId}:${documentId}`);
+  return withLock(keys, (assertLockHeld) => ingestValidatedContractUpload({
+    validated, sha256, organizationId, userId, requestId, title, contractId, documentId, ocrProvider,
+  }, assertLockHeld), { conflictCode: "INGESTION_IN_PROGRESS" });
+}
+
+async function ingestValidatedContractUpload({
+  validated, sha256, organizationId, userId, requestId, title, contractId, documentId, ocrProvider,
+}, assertLockHeld = () => {}) {
   const context = {
     organizationId,
     userId,
@@ -615,11 +585,34 @@ export async function ingestContractUpload({
   };
 
   const duplicate = await findDuplicateVersion(organizationId, sha256);
+  assertLockHeld();
   if (duplicate) {
+    if (!["completed", "requires_ocr"].includes(duplicate.extraction_status) || duplicate.processing_status !== "processed") {
+      throw appError("INGESTION_RECOVERY_REQUIRED", "An incomplete upload already exists and requires review", 409);
+    }
     const existingDocument = await getDocumentById(
       duplicate.document_id,
       organizationId
     );
+    assertLockHeld();
+    if ((contractId && existingDocument.contract_id !== contractId)
+      || (documentId && duplicate.document_id !== documentId)) {
+      throw appError("DUPLICATE_DOCUMENT", "This document belongs to another contract", 409);
+    }
+    const { data: existingJournal, error: journalError } = await supabase
+      .from("contract_upload_journal")
+      .select("state")
+      .eq("organization_id", organizationId)
+      .eq("document_version_id", duplicate.id)
+      .maybeSingle();
+    assertLockHeld();
+    if (journalError) throw appError("STORAGE_ERROR", "Upload journal lookup failed", 503);
+    if (existingJournal && !["ready", "requires_ocr"].includes(existingJournal.state)) {
+      throw appError("INGESTION_RECOVERY_REQUIRED", "An incomplete upload already exists and requires review", 409);
+    }
+    if (!["ready", "requires_ocr"].includes(existingDocument.status)) {
+      throw appError("INGESTION_RECOVERY_REQUIRED", "An incomplete upload already exists and requires review", 409);
+    }
     return {
       duplicate: true,
       contractId: existingDocument.contract_id,
@@ -629,9 +622,21 @@ export async function ingestContractUpload({
       status: "duplicate",
     };
   }
+  const { data: incompleteDocument, error: incompleteLookupError } = await supabase
+    .from("documents")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("sha256", sha256)
+    .maybeSingle();
+  assertLockHeld();
+  if (incompleteLookupError) throw appError("STORAGE_ERROR", "Duplicate document check failed", 503);
+  if (incompleteDocument) {
+    throw appError("INGESTION_RECOVERY_REQUIRED", "An incomplete upload already exists and requires review", 409);
+  }
   const parsed = validated.extension === ".docx"
     ? await parseDocument(validated.buffer, validated.extension)
     : await parsePdf(validated.buffer, { ocrProvider });
+  assertLockHeld();
   validatePersistedTextLength(parsed.text);
 
   let createdContractId = contractId;
@@ -641,93 +646,54 @@ export async function ingestContractUpload({
   let storageKey;
   let storageUploaded = false;
   let contractCreatedHere = false;
+  let documentCreatedHere = false;
+  let versionCreated = false;
+  let journalId;
+  let journalState;
+  let terminalTransitionAttempted = false;
 
   try {
-    const contract = contractId
-      ? await getContractRecord(contractId, organizationId)
-      : await createContractRecord({
-          organizationId,
-          userId,
-          title: title || validated.filename,
-        });
+    const reservation = await reserveUpload({
+      organizationId, userId, contractId, documentId, validated, sha256, pageCount: parsed.pageCount, title,
+    });
     contractCreatedHere = !contractId;
-    createdContractId = contract.id;
+    documentCreatedHere = !documentId;
+    versionCreated = true;
+    createdContractId = reservation.contract_id;
+    createdDocumentId = reservation.document_id;
+    createdVersionId = reservation.version_id;
+    storageKey = reservation.storage_key;
+    journalId = reservation.journal_id;
+    journalState = "reserved";
     context.contractId = createdContractId;
+    context.documentId = createdDocumentId;
+    context.documentVersionId = createdVersionId;
+    assertLockHeld();
 
     if (contractCreatedHere) {
       await audit("contract.created", context, { pipeline_version: PIPELINE_VERSION });
+      assertLockHeld();
     }
 
-    if (documentId) {
-      const { data, error } = await supabase
-        .from("documents")
-        .select("id, contract_id")
-        .eq("id", documentId)
-        .eq("organization_id", organizationId)
-        .maybeSingle();
-      if (error || !data || data.contract_id !== createdContractId) {
-        throw appError("DOCUMENT_NOT_FOUND", "Document not found", 404);
-      }
-    } else {
-      createdDocumentId = crypto.randomUUID();
-    }
-
-    createdVersionId = crypto.randomUUID();
-    storageKey = buildDocumentStorageKey({
-      organizationId,
-      documentId: createdDocumentId,
-      versionId: createdVersionId,
-      extension: validated.extension,
-    });
-
+    const version = { id: createdVersionId, version_number: reservation.version_number };
+    await transitionUpload({ organizationId, journalId, expectedState: journalState, nextState: "transferring" });
+    journalState = "transferring";
+    assertLockHeld();
     await uploadDocumentSource({
       storageKey,
       buffer: validated.buffer,
       mimeType: validated.mimeType,
     });
     storageUploaded = true;
-
-    if (!documentId) {
-      await createDocumentRecord({
-        documentId: createdDocumentId,
-        organizationId,
-        contractId: createdContractId,
-        userId,
-        filename: validated.filename,
-        mimeType: validated.mimeType,
-        fileSize: validated.fileSize,
-        storageKey,
-        sha256,
-      });
-      context.documentId = createdDocumentId;
+    assertLockHeld();
+    const storedSource = await downloadDocumentSource(storageKey);
+    assertLockHeld();
+    if (storedSource.length !== validated.fileSize || calculateSha256(storedSource) !== sha256) {
+      throw appError("STORAGE_ERROR", "Stored document integrity verification failed", 503);
     }
-
-    const { data: latestVersion, error: latestVersionError } = await supabase
-      .from("document_versions")
-      .select("version_number")
-      .eq("document_id", createdDocumentId)
-      .eq("organization_id", organizationId)
-      .order("version_number", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (latestVersionError) {
-      throw appError("STORAGE_ERROR", "Document version lookup failed", 503);
-    }
-
-    const version = await createVersionRecord({
-      documentId: createdDocumentId,
-      contractId: createdContractId,
-      organizationId,
-      userId,
-      versionNumber: (latestVersion?.version_number || 0) + 1,
-      sha256,
-      storageKey,
-      mimeType: validated.mimeType,
-      fileSize: validated.fileSize,
-      pageCount: parsed.pageCount,
-    });
-    context.documentVersionId = version.id;
+    await transitionUpload({ organizationId, journalId, expectedState: journalState, nextState: "stored" });
+    journalState = "stored";
+    assertLockHeld();
     const analysisRun = await createAnalysisRun({
       organizationId,
       contractId: createdContractId,
@@ -736,9 +702,12 @@ export async function ingestContractUpload({
     });
     analysisRunId = analysisRun.id;
     context.analysisRunId = analysisRunId;
+    assertLockHeld();
 
     await audit("document.uploaded", context, { sha256, file_size: validated.fileSize });
+    assertLockHeld();
     await audit("document.version.created", context, { version_number: version.version_number, sha256 });
+    assertLockHeld();
 
     const startedAt = new Date().toISOString();
     await updateStatus({
@@ -751,6 +720,7 @@ export async function ingestContractUpload({
       runStatus: null,
       startedAt,
     });
+    assertLockHeld();
 
     if (parsed.requiresOcr) {
       await storeExtraction({
@@ -760,6 +730,7 @@ export async function ingestContractUpload({
         status: "requires_ocr",
         errorCode: parsed.extractionErrorCode,
       });
+      assertLockHeld();
       await updateStatus({
         organizationId,
         documentId: createdDocumentId,
@@ -775,6 +746,7 @@ export async function ingestContractUpload({
           ? "OCR is not configured for one or more pages"
           : "OCR did not produce complete text for every required page",
       });
+      assertLockHeld();
       await audit("document.ocr_required", context, {
         page_count: parsed.pageCount,
         ocr: parsed.ocrSummary,
@@ -786,6 +758,11 @@ export async function ingestContractUpload({
           error_code: errorCode,
         })),
       });
+      assertLockHeld();
+      terminalTransitionAttempted = true;
+      await transitionUpload({ organizationId, journalId, expectedState: journalState, nextState: "requires_ocr", analysisRunId });
+      journalState = "requires_ocr";
+      assertLockHeld();
       return {
         contractId: createdContractId,
         documentId: createdDocumentId,
@@ -812,6 +789,7 @@ export async function ingestContractUpload({
       text: parsed.text,
       status: "completed",
     });
+    assertLockHeld();
     const structure = parseDocumentStructure({ text: parsed.text });
     const structureCounts = await persistDocumentStructure({
       supabase,
@@ -821,7 +799,9 @@ export async function ingestContractUpload({
       documentVersionId: version.id,
       analysisRunId,
       structure,
+      pageNumbersAvailable: validated.extension === ".pdf",
     });
+    assertLockHeld();
     await updateStatus({
       organizationId,
       documentId: createdDocumentId,
@@ -833,6 +813,13 @@ export async function ingestContractUpload({
       startedAt,
       completedAt: new Date().toISOString(),
     });
+    assertLockHeld();
+    terminalTransitionAttempted = true;
+    await transitionUpload({ organizationId, journalId, expectedState: journalState, nextState: "ready", analysisRunId });
+    journalState = "ready";
+    assertLockHeld();
+    await dispatchUploadAnalysis({ organizationId, journalId, analysisRunId });
+    assertLockHeld();
     await audit("document.ready", context, {
       status: "ready",
       page_count: parsed.pageCount,
@@ -845,6 +832,7 @@ export async function ingestContractUpload({
         confidence,
       })),
     });
+    assertLockHeld();
 
     return {
       contractId: createdContractId,
@@ -865,12 +853,25 @@ export async function ingestContractUpload({
       })),
     };
   } catch (error) {
-    if (analysisRunId) {
+    assertLockHeld();
+    if (terminalTransitionAttempted) {
+      safeLog("upload.terminal_state_uncertain", context, error);
+      throw error.code ? error : appError("STORAGE_ERROR", "Upload state requires review before retrying", 503);
+    }
+    if (journalId && ["reserved", "transferring", "stored"].includes(journalState)) {
+      try {
+        await transitionUpload({ organizationId, journalId, expectedState: journalState, nextState: "manual_review" });
+      } catch (journalError) {
+        safeLog("upload.journal_update_failed", context, journalError);
+      }
+      assertLockHeld();
+    }
+    if (analysisRunId || documentCreatedHere || versionCreated) {
       try {
         await updateStatus({
           organizationId,
-          documentId: createdDocumentId,
-          versionId: createdVersionId,
+          documentId: analysisRunId || documentCreatedHere ? createdDocumentId : null,
+          versionId: versionCreated ? createdVersionId : null,
           analysisRunId,
           documentStatus: "failed",
           extractionStatus: "failed",
@@ -879,39 +880,20 @@ export async function ingestContractUpload({
           errorCode: error.code || "INGESTION_FAILED",
           errorMessage: "Document processing failed",
         });
-        await audit("analysis.failed", context, {
-          error_code: error.code || "INGESTION_FAILED",
-        });
       } catch (statusError) {
         safeLog("analysis.failed", context, statusError);
       }
-    } else {
-      if (storageUploaded) await removeDocumentSource(storageKey);
-
-      if (createdDocumentId && !documentId) {
-        if (createdVersionId) {
-          await supabase
-            .from("document_versions")
-            .delete()
-            .eq("id", createdVersionId)
-            .eq("organization_id", organizationId);
-        }
-
-        await supabase
-          .from("documents")
-          .delete()
-          .eq("id", createdDocumentId)
-          .eq("organization_id", organizationId);
-      }
-
-      if (contractCreatedHere && createdContractId) {
-        await supabase
-          .from("contracts")
-          .delete()
-          .eq("id", createdContractId)
-          .eq("organization_id", organizationId);
-      }
     }
+    context.documentId = createdDocumentId || null;
+    context.documentVersionId = createdVersionId || null;
+    await audit("document.ingestion_failed", context, {
+      error_code: typeof error.code === "string" && /^[A-Z0-9_]{1,64}$/.test(error.code) ? error.code : "INGESTION_FAILED",
+      contract_created: contractCreatedHere,
+      document_created: documentCreatedHere,
+      version_created: versionCreated,
+      source_uploaded: storageUploaded,
+    });
+    safeLog("document.ingestion_failed", context, { code: "INGESTION_FAILED" });
 
     throw error.code ? error : appError("STORAGE_ERROR", "Document ingestion failed", 503);
   }

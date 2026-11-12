@@ -483,6 +483,28 @@ test("ATM-01 atomic success and ATM-02 rollback on persistence failure", async (
   assert.equal(failureRepository.state.obligationEvidence.length, 0);
 });
 
+test("obligation failure diagnostics exclude untrusted error messages and codes", async () => {
+  const secret = "synthetic-credential-must-not-be-logged";
+  const trace = createTraceSink();
+  const service = createDeterministicObligationService({
+    sourceService: { async load() { throw Object.assign(new Error(secret), { code: secret, status: 503 }); } },
+    repository: {},
+    trace,
+  });
+  await assert.rejects(service.runStage({
+    organizationId: IDS.organizationId,
+    contractId: IDS.contractId,
+    documentId: IDS.documentId,
+    documentVersionId: IDS.documentVersionId,
+    analysisRunId: IDS.analysisRunId,
+  }), (error) => error.message === secret);
+  assert.equal(JSON.stringify(trace.events).includes(secret), false);
+  assert.deepEqual(trace.events.find((event) => event.event === "rollback").error, {
+    code: "OBLIGATION_STAGE_FAILED",
+    status: 503,
+  });
+});
+
 test("AI-01 structured output validation and AI-02 provider failure timeout", async () => {
   const datasetA = createDataset();
   const repositoryA = createInMemoryRepository(datasetA);
@@ -540,6 +562,38 @@ test("AI-01 structured output validation and AI-02 provider failure timeout", as
   );
 
   assert.equal(repositoryB.state.obligations.length, 0);
+});
+
+test("provider normalization cannot mark its own obligation as verified or active", async () => {
+  const dataset = createDataset();
+  const repository = createInMemoryRepository(dataset);
+  const service = createDeterministicObligationService({
+    sourceService: createSourceService(dataset),
+    repository,
+    provider: {
+      async analyzeStructured() {
+        return { output: {
+          description: "The Lessee shall maintain the aircraft and perform inspections every month.",
+          obligation_type: "maintenance",
+          status: "active",
+          review_status: "verified",
+          confidence: 0.99,
+        } };
+      },
+    },
+  });
+  await service.runStage({
+    organizationId: IDS.organizationId,
+    contractId: IDS.contractId,
+    documentId: IDS.documentId,
+    documentVersionId: IDS.documentVersionId,
+    analysisRunId: IDS.analysisRunId,
+    useProviderNormalization: true,
+  });
+  assert.equal(repository.state.obligations.length, 1);
+  assert.equal(repository.state.obligations[0].status, "requires_review");
+  assert.equal(repository.state.obligations[0].review_status, "requires_review");
+  assert.equal(repository.state.obligationEvidence[0].evidence_id, IDS.evidenceId);
 });
 
 test("CLN-01 and CLN-02 cleanup assertions over generated in-memory fixtures", async () => {

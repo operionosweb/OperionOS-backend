@@ -1,6 +1,7 @@
 import supabase from "../../config/supabase.js";
 import defaultPgPool from "../../db.js";
 import { assertOrganizationScope, assertResourceId } from "./scope.js";
+import { beginFencedAnalysisWrite } from "./fencedAnalysisWrite.js";
 
 function assertRunScope({ organizationId, contractId, documentId, documentVersionId, analysisRunId }) {
   assertOrganizationScope(organizationId);
@@ -137,6 +138,11 @@ export function createRiskRepository(client = supabase, pgPool = defaultPgPool) 
       const pgClient = await pgPool.connect();
       try {
         await pgClient.query("BEGIN");
+        await beginFencedAnalysisWrite(pgClient, {
+          organizationId: scope.organizationId,
+          analysisRunId: scope.analysisRunId,
+          fence: scope.fence,
+        });
         const persisted = [];
         let insertedRisks = 0;
         let updatedRisks = 0;

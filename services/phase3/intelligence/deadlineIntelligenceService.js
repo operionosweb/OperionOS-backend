@@ -526,7 +526,7 @@ export function createDeadlineIntelligenceService({ repository = createDeadlineR
         const primaryEvidence = obligation.evidence.find((link) => link.is_primary) || obligation.evidence[0];
         if (interpretation.deadline_type === "non_computable" && useAIFallback) {
           if (!provider?.analyzeStructured) throw Object.assign(new Error("Deadline AI fallback is not configured"), { code: "PROVIDER_NOT_CONFIGURED", status: 422 });
-          interpretation = await provider.analyzeStructured({
+          const providerOutput = await provider.analyzeStructured({
             organization_id: scope.organizationId,
             user_id: userId,
             obligation_id: obligation.id,
@@ -545,7 +545,20 @@ export function createDeadlineIntelligenceService({ repository = createDeadlineR
             schema_version: SCHEMA_VERSION,
             taxonomy_version: TAXONOMY_VERSION,
           });
-          interpretation = { ...interpretation, absolute_date: null, status: interpretation.deadline_type === "ambiguous" ? "ambiguous" : "identified" };
+          const parsed = FallbackOutputSchema.safeParse(providerOutput);
+          if (!parsed.success) throw Object.assign(new Error("Deadline fallback output failed schema validation"), { code: "PROVIDER_OUTPUT_INVALID", status: 422 });
+          const output = parsed.data;
+          const sourceText = normalizeWhitespace(clause?.source_text).toLowerCase();
+          if (!sourceText || !sourceText.includes(normalizeWhitespace(output.timing_expression).toLowerCase())) {
+            throw Object.assign(new Error("Deadline timing expression is not present in the source clause"), { code: "PROVIDER_SOURCE_MISMATCH", status: 422 });
+          }
+          const supported = parseTemporalExpression(output.timing_expression);
+          if ((output.amount != null && output.amount !== supported?.amount)
+            || (output.unit != null && output.unit !== supported?.unit)
+            || (output.recurrence && output.recurrence.frequency !== supported?.recurrence?.frequency)) {
+            throw Object.assign(new Error("Deadline amount, unit or recurrence is not supported by the source expression"), { code: "PROVIDER_SOURCE_MISMATCH", status: 422 });
+          }
+          interpretation = { ...output, absolute_date: null, status: output.deadline_type === "ambiguous" ? "ambiguous" : "identified", analysis_method: "ai_fallback" };
           aiFallbackAnalyses += 1;
         }
         deadlines.push({
@@ -575,7 +588,7 @@ export function createDeadlineIntelligenceService({ repository = createDeadlineR
           ambiguity: interpretation.ambiguity || null,
           confidence: interpretation.confidence,
           status: interpretation.status,
-          review_status: "pending",
+          review_status: interpretation.analysis_method === "ai_fallback" ? "requires_review" : "pending",
           metadata: {
             parser_version: PARSER_VERSION,
             taxonomy_version: TAXONOMY_VERSION,
@@ -591,7 +604,7 @@ export function createDeadlineIntelligenceService({ repository = createDeadlineR
       return {
         status: persisted.insertedDeadlines ? "deadlines_persisted" : obligations.length ? "already_processed" : "no_obligations",
         ...persisted,
-        deterministicAnalyses: deadlines.length,
+        deterministicAnalyses: deadlines.length - aiFallbackAnalyses,
         aiFallbackAnalyses,
         aiIntelligenceConsumed: metrics.actualIntelligence || 0,
         estimatedIntelligence: metrics.estimatedIntelligence || 0,

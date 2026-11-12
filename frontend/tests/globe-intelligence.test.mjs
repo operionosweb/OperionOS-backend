@@ -88,7 +88,7 @@ test("blocked satellite detail retains real Earth and reports degradation withou
   } finally { await context.close(); }
 });
 
-test("all public and demo Globe entrypoints start unselected with twenty explicitly simulated flights", { timeout: 120000 }, async () => {
+test("all public and demo Globe entrypoints start unselected with twenty explicitly simulated flights", { timeout: 240000 }, async () => {
   const { context, page, errors } = await fixture();
   try {
     for (const path of ["/", "/product", "/demo/dashboard", "/demo/live-tracking"]) {

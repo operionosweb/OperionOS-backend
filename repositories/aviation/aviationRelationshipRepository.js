@@ -1,9 +1,10 @@
-import { query } from "../../db.js";
+import defaultPgPool, { query } from "../../db.js";
 import { assertOrganizationScope, assertResourceId } from "../phase3/scope.js";
+import { beginFencedAnalysisWrite } from "../phase3/fencedAnalysisWrite.js";
 
-export function createAviationRelationshipRepository(queryFn = query) {
+export function createAviationRelationshipRepository(queryFn = query, pgPool = defaultPgPool) {
   return {
-    async materializeContractRelationships({ organizationId, contractId, relationshipType, identifiers }) {
+    async materializeContractRelationships({ organizationId, contractId, analysisRunId, relationshipType, identifiers, fence }) {
       assertOrganizationScope(organizationId);
       assertResourceId(contractId, "contractId");
       const supported = (identifiers || []).filter((identifier) =>
@@ -12,31 +13,50 @@ export function createAviationRelationshipRepository(queryFn = query) {
         && identifier.evidence?.evidenceId
       );
       const relationships = [];
-      for (const identifier of supported) {
-        const aircraftColumn = identifier.type === "AIRCRAFT_REGISTRATION" ? "registration" : "serial_number";
-        const result = await queryFn(
-          `insert into aircraft_contract_relationships (
-             organization_id, aircraft_id, contract_id, relationship_type, active,
-             confidence, source_reference, source_identifier, source_evidence_id
-           )
-           select $1, aircraft.id, $2, $3, true, $4, $5, $6, $7
-           from aircraft
-           join aircraft_organization_relationships organization_relationship
-             on organization_relationship.aircraft_id = aircraft.id
-            and organization_relationship.organization_id = $1
-            and organization_relationship.active = true
-           where upper(aircraft.${aircraftColumn}) = upper($8)
-           on conflict (organization_id, aircraft_id, contract_id, relationship_type)
-           do update set active = true, confidence = excluded.confidence,
-             source_reference = excluded.source_reference,
-             source_identifier = excluded.source_identifier,
-             source_evidence_id = excluded.source_evidence_id
-           returning *`,
-          [organizationId, contractId, relationshipType, identifier.evidence.confidence || null,
-            identifier.evidence.sourceLocation || null, `${identifier.type}:${identifier.value}`,
-            identifier.evidence.evidenceId, identifier.value]
-        );
-        relationships.push(...result.rows);
+      const persist = async (execute) => {
+        for (const identifier of supported) {
+          const aircraftColumn = identifier.type === "AIRCRAFT_REGISTRATION" ? "registration" : "serial_number";
+          const result = await execute(
+            `insert into public.aircraft_contract_relationships (
+               organization_id, aircraft_id, contract_id, relationship_type, active,
+               confidence, source_reference, source_identifier, source_evidence_id
+             )
+             select $1, aircraft.id, $2, $3, true, $4, $5, $6, $7
+             from public.aircraft
+             join public.aircraft_organization_relationships organization_relationship
+               on organization_relationship.aircraft_id = aircraft.id
+              and organization_relationship.organization_id = $1
+              and organization_relationship.active = true
+             where upper(aircraft.${aircraftColumn}) = upper($8)
+             on conflict (organization_id, aircraft_id, contract_id, relationship_type)
+             do update set active = true, confidence = excluded.confidence,
+               source_reference = excluded.source_reference,
+               source_identifier = excluded.source_identifier,
+               source_evidence_id = excluded.source_evidence_id
+             returning *`,
+            [organizationId, contractId, relationshipType, identifier.evidence.confidence || null,
+              identifier.evidence.sourceLocation || null, `${identifier.type}:${identifier.value}`,
+              identifier.evidence.evidenceId, identifier.value]
+          );
+          relationships.push(...result.rows);
+        }
+      };
+      if (fence !== undefined) {
+        assertResourceId(analysisRunId, "analysisRunId");
+        const pgClient = await pgPool.connect();
+        try {
+          await pgClient.query("begin");
+          await beginFencedAnalysisWrite(pgClient, { organizationId, analysisRunId, fence });
+          await persist((text, values) => pgClient.query(text, values));
+          await pgClient.query("commit");
+        } catch (error) {
+          try { await pgClient.query("rollback"); } catch {}
+          throw error;
+        } finally {
+          pgClient.release();
+        }
+      } else {
+        await persist(queryFn);
       }
       return relationships;
     },

@@ -16,6 +16,12 @@ const scope = {
   documentId: "33333333-3333-4333-8333-333333333333",
   documentVersionId: "44444444-4444-4444-8444-444444444444",
   analysisRunId: "55555555-5555-4555-8555-555555555555",
+  fence: {
+    workerId: "66666666-6666-4666-8666-666666666666",
+    executionId: "77777777-7777-4777-8777-777777777777",
+    generation: "1",
+    token: "a".repeat(64),
+  },
 };
 const fuelText = `1 FUEL SURCHARGE
 Base fuel surcharge: USD 1000 per flight
@@ -242,7 +248,24 @@ test("real pipeline persists and exposes the core with injected offline stage/re
   let run = { id: scope.analysisRunId, document_version_id: scope.documentVersionId, status: "queued" };
   let saved;
   const pipeline = createContractIntelligencePipeline({
-    analysisRunRepository: { getById: async () => run, updateStatus: async ({ status }) => { run = { ...run, status }; return run; } },
+    withLock: async (_keys, operation) => operation(),
+    analysisRunRepository: {
+      getById: async () => run,
+      claimQueued: async () => {
+        if (run.status !== "queued") return null;
+        run = { ...run, status: "processing" };
+        return {
+          run,
+          fenceContext: {
+            workerId: "66666666-6666-4666-8666-666666666666",
+            executionId: "77777777-7777-4777-8777-777777777777",
+            generation: "1",
+            token: "a".repeat(64),
+          },
+        };
+      },
+      updateStatus: async ({ status }) => { run = { ...run, status }; return run; },
+    },
     profileRepository: { persist: async ({ profile }) => { saved = profile; return { id: "profile-new", metadata: profile.metadata }; } },
     searchRepository: { replaceForRun: async ({ chunks }) => chunks },
     sourceService: { load: async () => ({ contractId: scope.contractId, documentId: scope.documentId }) },

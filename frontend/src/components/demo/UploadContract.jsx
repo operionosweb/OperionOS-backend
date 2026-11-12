@@ -21,11 +21,15 @@ export default function UploadContract({ organizationId, onUploaded }) {
     if (!selected) return;
     const extension = selected.name.slice(selected.name.lastIndexOf(".")).toLowerCase();
     if (!ACCEPTED_TYPES.has(selected.type) || ![".pdf", ".docx"].includes(extension)) {
+      setFile(null);
+      setSuccessMessage("");
       setError("Unsupported file type. Please upload a PDF or DOCX document.");
       setState("error");
       return;
     }
     if (selected.size > MAX_FILE_SIZE) {
+      setFile(null);
+      setSuccessMessage("");
       setError(`This file exceeds the maximum supported size of ${MAX_FILE_SIZE_LABEL}.`);
       setState("error");
       return;
@@ -85,7 +89,7 @@ export default function UploadContract({ organizationId, onUploaded }) {
           onChange={(event) => handleFiles(event.target.files)}
         />
         <span className="op-heading-md">
-          {file ? file.name : "Drop a contract PDF, or click to select"}
+          {file ? file.name : "Drop a contract PDF or DOCX, or click to select"}
         </span>
         <span id="contract-upload-support" className="op-body">PDF or DOCX, up to {MAX_FILE_SIZE_LABEL}.</span>
         {file && <span className="op-body-sm">{(file.size / 1024 / 1024).toFixed(2)} MB selected</span>}

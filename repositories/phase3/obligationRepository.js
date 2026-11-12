@@ -1,6 +1,7 @@
 import supabase from "../../config/supabase.js";
 import defaultPgPool from "../../db.js";
 import { assertOrganizationScope, assertResourceId } from "./scope.js";
+import { beginFencedAnalysisWrite } from "./fencedAnalysisWrite.js";
 
 function buildInsertQuery(table, columns, rows) {
   const values = [];
@@ -132,6 +133,7 @@ export function createObligationRepository(client = supabase, pgPool = defaultPg
       documentId,
       documentVersionId,
       analysisRunId,
+      fence,
       obligations,
       obligationEvidenceByIdentity,
     }) {
@@ -181,6 +183,7 @@ export function createObligationRepository(client = supabase, pgPool = defaultPg
       const pgClient = await pgPool.connect();
       try {
         await pgClient.query("BEGIN");
+        await beginFencedAnalysisWrite(pgClient, { organizationId, analysisRunId, fence });
 
         const resolvedObligations = [];
         let insertedObligations = 0;

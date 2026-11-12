@@ -1,5 +1,6 @@
 import pool from "../../db.js";
 import { assertOrganizationScope, assertResourceId } from "./scope.js";
+import { beginFencedAnalysisWrite } from "./fencedAnalysisWrite.js";
 
 export function createContractProfileRepository(pgPool = pool) {
   return {
@@ -37,6 +38,11 @@ export function createContractProfileRepository(pgPool = pool) {
       const client = await pgPool.connect();
       try {
         await client.query("begin");
+        await beginFencedAnalysisWrite(client, {
+          organizationId: scope.organizationId,
+          analysisRunId: scope.analysisRunId,
+          fence: scope.fence,
+        });
         const existing = await client.query(
           "select * from contract_intelligence_profiles where organization_id = $1 and analysis_run_id = $2",
           [scope.organizationId, scope.analysisRunId]

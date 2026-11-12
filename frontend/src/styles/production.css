@@ -123,6 +123,12 @@
   min-width: 0;
 }
 
+.op-product-main > .op-consent {
+  position: static;
+  width: auto;
+  margin-bottom: 24px;
+}
+
 .op-product-topbar {
   position: sticky;
   top: 0;
@@ -1018,6 +1024,11 @@
   .op-product-account-copy,
   .op-product-account > svg { display: none; }
   .op-product-main { padding: 24px 16px 48px; }
+  .op-product-main > .matt-floating.matt-floating {
+    position: static;
+    width: fit-content;
+    margin-bottom: 16px;
+  }
   .op-workspace-page .op-flow-shell { grid-template-columns: minmax(0, 1fr); }
   .op-workspace-tabs { top: 72px; margin-inline: -6px; }
   .op-page-heading { align-items: flex-start; flex-direction: column; }

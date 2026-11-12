@@ -9,6 +9,12 @@ const SCOPE = Object.freeze({
   documentId: "33333333-3333-4333-8333-333333333333",
   documentVersionId: "44444444-4444-4444-8444-444444444444",
   analysisRunId: "55555555-5555-4555-8555-555555555555",
+  fence: {
+    workerId: "99999999-9999-4999-8999-999999999999",
+    executionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    generation: "1",
+    token: "a".repeat(64),
+  },
 });
 
 function fakePool({ existingRisk = null, supersededRows = [] } = {}) {
@@ -18,6 +24,9 @@ function fakePool({ existingRisk = null, supersededRows = [] } = {}) {
       calls.push({ sql, values });
       if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
         return { rows: [], rowCount: 0 };
+      }
+      if (sql.startsWith("select public.begin_analysis_fenced_write_v2")) {
+        return { rows: [], rowCount: 1 };
       }
       if (sql.includes("set status = 'superseded'")) {
         return { rows: supersededRows, rowCount: supersededRows.length };

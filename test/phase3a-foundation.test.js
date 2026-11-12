@@ -53,6 +53,7 @@ test("Phase 3A taxonomies expose the bounded aviation-first values", () => {
   assert.ok(DEADLINE_TYPES.includes("redelivery_date"));
   assert.ok(RECOMMENDATION_TYPES.includes("monitor_deadline"));
   assert.deepEqual(ANALYSIS_RUN_STATES, [
+    "awaiting_ingestion",
     "queued",
     "processing",
     "extracting",
@@ -67,6 +68,8 @@ test("Phase 3A taxonomies expose the bounded aviation-first values", () => {
 
 test("AnalysisRun state machine accepts every valid transition", () => {
   const validTransitions = [
+    ["awaiting_ingestion", "queued"],
+    ["awaiting_ingestion", "failed"],
     ["queued", "processing"],
     ["processing", "extracting"],
     ["extracting", "analysing"],
@@ -115,7 +118,7 @@ test("AnalysisRun state machine rejects invalid and terminal transitions", () =>
   );
 });
 
-test("AnalysisRun service scopes access and creates retries as new runs", async () => {
+test("AnalysisRun service scopes access and blocks unsafe retry creation", async () => {
   const calls = [];
   let run = {
     id: runId,
@@ -138,10 +141,7 @@ test("AnalysisRun service scopes access and creates retries as new runs", async 
       run = { ...run, status: input.status };
       return run;
     },
-    async createRetry(input) {
-      calls.push(["retry", input.organizationId]);
-      return { ...run, id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", status: "processing" };
-    },
+    async createRetry() { assert.fail("an unreviewed retry must not be created"); },
   };
   const service = createAnalysisRunService(repository);
 
@@ -155,8 +155,11 @@ test("AnalysisRun service scopes access and creates retries as new runs", async 
     null
   );
 
-  await service.retry({ analysisRunId: runId, organizationId: organizationA });
-  assert.deepEqual(calls.at(-1), ["retry", organizationA]);
+  await assert.rejects(service.retry({ analysisRunId: runId, organizationId: organizationA }), {
+    code: "ANALYSIS_RECOVERY_REQUIRED",
+    status: 409,
+  });
+  assert.deepEqual(calls.at(-1), ["get", runId, organizationA]);
 });
 
 test("schemas accept valid findings and reject invalid confidence/enums", () => {

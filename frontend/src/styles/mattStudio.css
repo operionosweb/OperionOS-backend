@@ -78,6 +78,13 @@
 @media (max-width: 600px) {
   .od-shell .matt-studio { width: 100%; max-width: none; padding: 0; margin-inline: 0; }
   .matt-studio .matt-environment { height: 220px; }
+  .matt-studio:not(.matt-compact) .matt-environment:has(video) { height: 170px; }
+  .matt-studio:not(.matt-compact) .matt-video-column { display: contents; }
+  .matt-studio:not(.matt-compact) .matt-media-unit { order: 0; }
+  .matt-studio:not(.matt-compact) .matt-composer { order: 1; }
+  .matt-studio:not(.matt-compact) .matt-live-controls { order: 2; }
+  .matt-studio:not(.matt-compact) .matt-workspace { order: 3; }
+  .matt-studio:not(.matt-compact) .matt-voice-settings { order: 4; }
   .matt-studio .matt-controls button { flex-basis: 72px; padding: 8px 5px; font-size: 12px; }
   .matt-studio .matt-controls svg { display: none; }
   .matt-studio .matt-composer { padding: 8px; }

@@ -131,11 +131,12 @@ export function buildAnalysisPageRows({ organizationId, contractId, documentId, 
   }));
 }
 
-export async function persistDocumentStructure({ supabase, organizationId, contractId, documentId, documentVersionId, analysisRunId, structure }) {
+export async function persistDocumentStructure({ supabase, organizationId, contractId, documentId, documentVersionId, analysisRunId, structure, pageNumbersAvailable = true }) {
   if (!supabase || !organizationId || !contractId || !documentId || !documentVersionId || !analysisRunId || !structure) throw new TypeError("Structure persistence context is incomplete");
   const sectionIds = [];
-  if (structure.pages.length) {
-    const documentPageRows = structure.pages.map((page) => ({
+  const pages = pageNumbersAvailable ? structure.pages : [];
+  if (pages.length) {
+    const documentPageRows = pages.map((page) => ({
       organization_id: organizationId,
       contract_id: contractId,
       document_id: documentId,
@@ -147,7 +148,7 @@ export async function persistDocumentStructure({ supabase, organizationId, contr
       char_end: page.charEnd,
       text_hash: crypto.createHash("sha256").update(page.text).digest("hex"),
     }));
-    const analysisPageRows = buildAnalysisPageRows({ organizationId, contractId, documentId, documentVersionId, analysisRunId, pages: structure.pages });
+    const analysisPageRows = buildAnalysisPageRows({ organizationId, contractId, documentId, documentVersionId, analysisRunId, pages });
     const [documentPagesResult, analysisPagesResult] = await Promise.all([
       supabase.from("contract_document_pages").insert(documentPageRows),
       supabase.from("document_version_pages").insert(analysisPageRows),
@@ -164,8 +165,8 @@ export async function persistDocumentStructure({ supabase, organizationId, contr
       parent_section_id: parentSectionId,
       heading: section.heading,
       section_order: sectionIndex,
-      page_start: structure.pages.find((page) => section.charStart >= page.charStart && section.charStart <= page.charEnd)?.pageNumber || null,
-      page_end: structure.pages.find((page) => section.charEnd <= page.charEnd)?.pageNumber || null,
+      page_start: pages.find((page) => section.charStart >= page.charStart && section.charStart <= page.charEnd)?.pageNumber || null,
+      page_end: pages.find((page) => section.charEnd <= page.charEnd)?.pageNumber || null,
       source_text: section.text,
       metadata: { clause_number: section.clauseNumber, structure: section.structure, char_start: section.charStart, char_end: section.charEnd },
     }).select("id").single();
@@ -180,7 +181,7 @@ export async function persistDocumentStructure({ supabase, organizationId, contr
       document_id: documentId,
       document_version_id: documentVersionId,
       section_id: sectionIds[chunk.sectionIndex] || null,
-      page_number: structure.pages.find((page) => chunk.charStart >= page.charStart && chunk.charStart <= page.charEnd)?.pageNumber || null,
+      page_number: pages.find((page) => chunk.charStart >= page.charStart && chunk.charStart <= page.charEnd)?.pageNumber || null,
       chunk_order: chunk.chunkIndex,
       source_text: chunk.text,
       content_hash: chunk.contentHash,
@@ -188,7 +189,7 @@ export async function persistDocumentStructure({ supabase, organizationId, contr
     })));
     if (error) throw Object.assign(new Error("Document chunk persistence failed"), { code: "STORAGE_ERROR" });
   }
-  return { pages: structure.pages.length, sections: structure.sections.length, chunks: structure.chunks.length };
+  return { pages: pages.length, sections: structure.sections.length, chunks: structure.chunks.length };
 }
 
 export const documentStructureConstants = Object.freeze({ defaultChunkSize: DEFAULT_CHUNK_SIZE });

@@ -274,7 +274,27 @@ function migrationReadiness(sentinels, applyMigrations) {
   return { state: "contiguous_suffix_ready", missing, applyEnabled: true };
 }
 
-async function verifySchema(pool) {
+export function assertContractStoragePolicies(storagePolicies) {
+  if (!storagePolicies.some((policy) => policy.cmd === "SELECT" && `${policy.qual || ""} ${policy.with_check || ""}`.includes("is_organization_member"))) {
+    fail("STORAGE_POLICY_MISSING", "Organization-scoped storage SELECT policy is missing");
+  }
+  const directStorageInsertPolicies = storagePolicies.filter((policy) => (
+    ["INSERT", "ALL"].includes(policy.cmd)
+    && (policy.roles || []).some((role) => ["authenticated", "public"].includes(role))
+  ));
+  if (directStorageInsertPolicies.length) {
+    fail("STORAGE_CLIENT_INSERT_POLICY", `Direct authenticated storage INSERT policies are not allowed: ${directStorageInsertPolicies.map((policy) => policy.policyname).join(", ")}`);
+  }
+  const directStorageDeletePolicies = storagePolicies.filter((policy) => (
+    ["DELETE", "ALL"].includes(policy.cmd)
+    && (policy.roles || []).some((role) => ["authenticated", "public"].includes(role))
+  ));
+  if (directStorageDeletePolicies.length) {
+    fail("STORAGE_CLIENT_DELETE_POLICY", `Direct authenticated storage DELETE policies are not allowed: ${directStorageDeletePolicies.map((policy) => policy.policyname).join(", ")}`);
+  }
+}
+
+export async function verifySchema(pool) {
   const sentinels = await readSentinels(pool);
   const missing = Object.entries(sentinels).filter(([, present]) => !present).map(([migration]) => migration);
   if (missing.length) fail("SCHEMA_INCOMPLETE", `Migration sentinels missing after application: ${missing.join(", ")}`);
@@ -320,18 +340,7 @@ async function verifySchema(pool) {
     fail("SERVER_OWNED_WRITE_POLICY", `Authenticated write policies exist for server-owned tables: ${[...new Set(broadServerOwnedPolicies.map((policy) => policy.tablename))].join(", ")}`);
   }
   const storagePolicies = policies.rows.filter((row) => row.schemaname === "storage" && row.tablename === "objects");
-  for (const operation of ["SELECT", "INSERT"]) {
-    if (!storagePolicies.some((policy) => policy.cmd === operation && `${policy.qual || ""} ${policy.with_check || ""}`.includes("is_organization_member"))) {
-      fail("STORAGE_POLICY_MISSING", `Organization-scoped storage ${operation} policy is missing`);
-    }
-  }
-  const directStorageDeletePolicies = storagePolicies.filter((policy) => (
-    ["DELETE", "ALL"].includes(policy.cmd)
-    && (policy.roles || []).some((role) => ["authenticated", "public"].includes(role))
-  ));
-  if (directStorageDeletePolicies.length) {
-    fail("STORAGE_CLIENT_DELETE_POLICY", `Direct authenticated storage DELETE policies are not allowed: ${directStorageDeletePolicies.map((policy) => policy.policyname).join(", ")}`);
-  }
+  assertContractStoragePolicies(storagePolicies);
 
   const constraints = await pool.query(
     "select conname, contype, conrelid::regclass::text as table_name, pg_get_constraintdef(pg_constraint.oid) as definition from pg_constraint join pg_namespace on pg_namespace.oid = pg_constraint.connamespace where nspname = 'public'"

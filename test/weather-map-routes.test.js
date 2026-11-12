@@ -5,11 +5,17 @@ import express from "express";
 import { createWeatherMapRouter } from "../routes/weatherMapRoutes.js";
 
 const image = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==", "base64");
-const credentials = { XWEATHER_MAPS_ENABLED: "1", XWEATHER_CLIENT_ID: "offline-client", XWEATHER_CLIENT_SECRET: "offline-secret" };
+const credentials = {
+  XWEATHER_MAPS_ENABLED: "1",
+  XWEATHER_MAPS_SUBSCRIPTION_APPROVED: "1",
+  XWEATHER_CLIENT_ID: "offline-client",
+  XWEATHER_CLIENT_SECRET: "offline-secret",
+};
 
 async function withRouter(options, run) {
   const app = express();
-  app.use("/api/weather-maps", createWeatherMapRouter(options));
+  const authorize = options.authorize || ((_req, _res, next) => next());
+  app.use("/api/weather-maps", createWeatherMapRouter({ ...options, authorize: [authorize] }));
   const server = app.listen(0, "127.0.0.1");
   await once(server, "listening");
   try { await run(`http://127.0.0.1:${server.address().port}/api/weather-maps`); }
@@ -26,9 +32,37 @@ test("weather maps default to disabled and never expose credentials in status", 
   await withRouter({ env: credentials }, async (url) => {
     const status = await (await fetch(`${url}/status`)).json();
     assert.equal(status.configured, true);
+    assert.equal(status.subscriptionApproved, true);
     assert.equal(status.subscriptionVerified, false);
     assert.equal(status.layers.length, 4);
     assert.doesNotMatch(JSON.stringify(status), /offline-client|offline-secret/);
+  });
+});
+
+test("weather tiles remain disabled until subscription approval is explicit", async () => {
+  let calls = 0;
+  const env = { ...credentials, XWEATHER_MAPS_SUBSCRIPTION_APPROVED: "0" };
+  await withRouter({ env, fetchImpl: async () => { calls++; throw new Error("Must not contact provider"); } }, async (url) => {
+    const status = await (await fetch(`${url}/status`)).json();
+    assert.equal(status.configured, false);
+    assert.equal(status.subscriptionApproved, false);
+    assert.equal(status.subscriptionVerified, false);
+    assert.deepEqual(status.layers, []);
+    assert.equal((await fetch(`${url}/tiles/radar/1/0/0`)).status, 503);
+    assert.equal(calls, 0);
+  });
+});
+
+test("weather tiles require organization authorization before any provider request", async () => {
+  let calls = 0;
+  await withRouter({
+    env: credentials,
+    authorize: (_req, res) => res.status(401).json({ error: "Authentication required" }),
+    fetchImpl: async () => { calls++; throw new Error("Must not contact provider"); },
+  }, async (url) => {
+    const response = await fetch(`${url}/tiles/radar/1/0/0`);
+    assert.equal(response.status, 401);
+    assert.equal(calls, 0);
   });
 });
 

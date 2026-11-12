@@ -35,7 +35,7 @@ export function Confidence({ value }) {
 }
 
 export function DemoDisclosure() {
-  return <details className="od-honesty-note" aria-label="Synthetic Demo limitations"><summary>Synthetic demo · illustrative data · View limitations</summary><p>All prepared analyses, amounts, risk/confidence labels, budgets, notifications and telemetry are synthetic or illustrative, not measured customer data. Demo does not display outcome history, immutable snapshots, verified backtests, or calibrated Bayesian/Monte Carlo forecasts. Actual probabilistic forecasts remain unavailable and unvalidated: justified model inputs and verified history are missing.</p></details>;
+  return <details className="od-honesty-note" aria-label="Synthetic Demo limitations"><summary>Synthetic demo · illustrative data · View limitations</summary><p>All prepared analyses, amounts, risk/confidence labels, budgets, notifications and telemetry are synthetic or illustrative, not measured customer data. This is not production Phase 54–62 output. Demo does not display outcome history, immutable snapshots, verified backtests, or calibrated Bayesian/Monte Carlo forecasts. Actual probabilistic forecasts remain unavailable and unvalidated: justified model inputs and verified history are missing.</p></details>;
 }
 
 export function EvidenceCard({ evidence, onOpen }) {

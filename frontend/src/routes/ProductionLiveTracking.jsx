@@ -1,6 +1,7 @@
 import React, { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { CloudRain, Filter, LocateFixed, Plane, Radio, Route, Search, ShieldAlert, Sparkles, X } from "lucide-react";
 import { useOrganization } from "../context/OrganizationContext";
+import { useAuth } from "../context/AuthContext";
 import useAviationTracking from "../hooks/useAviationTracking";
 import { getAircraftIntelligence, getAviationWeather } from "../lib/aviationApi";
 import { ErrorState, LoadingState } from "../components/ui/States";
@@ -18,6 +19,7 @@ const stateCopy = {
 
 export default function ProductionLiveTracking() {
   const { organizationId } = useOrganization();
+  const { session } = useAuth();
   const [companyOnly, setCompanyOnly] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
   const [query, setQuery] = useState("");
@@ -68,8 +70,8 @@ export default function ProductionLiveTracking() {
 
     <div className={`op-aviation-stage${selected ? " has-selection" : ""}`}>
       <section className="op-globe-stage">
-        {visible.length ? <Suspense fallback={<LoadingState label="Loading 3D globe…"/>}><ProductionFlightGlobe aircraft={visible} selectedId={selectedId} onSelect={setSelectedId}/></Suspense> : <div className="op-aviation-unavailable"><Plane size={32}/><span className="op-badge">{provenance[0]}</span><h2>No aviation positions available</h2><p>{tracking.state === "UNAVAILABLE" ? "Configure a server-side aviation provider to display aircraft. No synthetic positions are shown in production." : "No aircraft match the current organization scope and filters."}</p></div>}
-        <div className="op-layer-control"><strong>Layers</strong><label><input type="checkbox" checked={visible.length > 0} readOnly/>Aircraft</label><label><input type="checkbox" checked={false} disabled/>Routes</label><label><input type="checkbox" checked={weatherEnabled} disabled={weather.state === "UNAVAILABLE"} onChange={(event) => setWeatherEnabled(event.target.checked)}/>Weather</label><input aria-label="Weather opacity" type="range" min="0" max="100" defaultValue="60" disabled={!weatherEnabled}/><small>{weather.state === "UNAVAILABLE" ? "Weather data temporarily unavailable" : `Updated ${weather.updatedAt ? new Date(weather.updatedAt).toLocaleTimeString() : "time unavailable"}`}</small></div>
+        {visible.length ? <Suspense fallback={<LoadingState label="Loading 3D globe…"/>}><ProductionFlightGlobe aircraft={visible} selectedId={selectedId} onSelect={setSelectedId} accessToken={session?.access_token} organizationId={organizationId}/></Suspense> : <div className="op-aviation-unavailable"><Plane size={32}/><span className="op-badge">{provenance[0]}</span><h2>No aviation positions available</h2><p>{tracking.state === "UNAVAILABLE" ? "Configure a server-side aviation provider to display aircraft. No synthetic positions are shown in production." : "No aircraft match the current organization scope and filters."}</p></div>}
+        <div className="op-layer-control"><strong>Layers</strong><label><input type="checkbox" checked={visible.length > 0} readOnly/>Aircraft</label><label><input type="checkbox" checked={false} disabled/>Routes</label><small>Use the approval-gated Xweather controls below the globe to add provider imagery.</small></div>
       </section>
       {selected && <aside className="op-flight-sheet">
         <button className="op-sheet-close" onClick={() => setSelectedId(null)} aria-label="Close aircraft details"><X size={18}/></button>
@@ -101,7 +103,7 @@ export default function ProductionLiveTracking() {
     </div>
 
     {filtersOpen && <div className="op-filter-backdrop" onClick={() => setFiltersOpen(false)}><aside className="op-filter-drawer" role="dialog" aria-modal="true" aria-label="Aviation filters" onClick={(event) => event.stopPropagation()}><button className="op-sheet-close" onClick={() => setFiltersOpen(false)} aria-label="Close filters"><X size={18}/></button><Filter size={22}/><h2>Aircraft filters</h2><p>Status, altitude, speed, airline, region, and aircraft-type filtering become available when the configured provider supplies those fields.</p><button className="op-button-primary" onClick={() => setFiltersOpen(false)}>Done</button></aside></div>}
-    <div className="op-aviation-boundary"><CloudRain size={18}/><p><strong>Weather provider unavailable.</strong> No live or synthetic weather is displayed in production.</p></div>
+    <div className="op-aviation-boundary"><CloudRain size={18}/><p><strong>{weather.state === "UNAVAILABLE" ? "Current weather observations are unavailable." : "Current weather observations are connected."}</strong> {weather.state === "UNAVAILABLE" ? "Raster imagery is a separate, approval-gated Xweather layer." : `Updated ${weather.updatedAt ? new Date(weather.updatedAt).toLocaleTimeString() : "at an unknown time"}.`}</p></div>
     {dependenciesOpen && selected && intelligence?.contracts?.length > 0 && <Suspense fallback={<LoadingState label="Loading dependency tree…"/>}><ProductionDependencyGraph aircraft={selected} intelligence={intelligence} onClose={() => setDependenciesOpen(false)}/></Suspense>}
   </div>;
 }

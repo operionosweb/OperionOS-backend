@@ -15,23 +15,40 @@ import { MATT_DEMO_ORGANIZATION_ID, readMattDemoContext } from "../../services/m
 import { createMattLiveRouter } from "../../routes/mattLiveRoutes.js";
 import { createUserAuthMiddleware } from "../../middleware/userAuthMiddleware.js";
 import { createOrganizationMiddleware } from "../../middleware/organizationMiddleware.js";
-import { mkdir } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const authOrigin = "http://127.0.0.1:59998";
 process.env.VITE_SUPABASE_URL = authOrigin;
 process.env.VITE_SUPABASE_ANON_KEY = "offline-matt-test";
 process.env.VITE_API_BASE_URL = "";
-let browser, server, origin;
+let browser, server, origin, outDir;
+function failureDiagnostics(responses, logs, errors) {
+  return {
+    responseCount: responses.length,
+    failedResponseCount: responses.filter((response) => response.status >= 400).length,
+    logCount: logs.length,
+    pageErrorCount: errors.length,
+  };
+}
 before(async () => {
-  await build({ root, mode: "matt-offline", resolve: { alias: { "@daily-co/daily-js": path.join(root, "tests", "fixtures", "daily-synthetic.js") } }, logLevel: "error" });
-  server = await preview({ root, preview: { host: "127.0.0.1", port: 0 }, logLevel: "error" });
+  outDir = await mkdtemp(path.join(os.tmpdir(), "operion-matt-browser-"));
+  await build({ root, mode: "matt-offline", resolve: { alias: { "@daily-co/daily-js": path.join(root, "tests", "fixtures", "daily-synthetic.js") } }, logLevel: "error", build: { outDir, emptyOutDir: true } });
+  server = await preview({ root, build: { outDir }, preview: { host: "127.0.0.1", port: 0 }, logLevel: "error" });
   origin = `http://127.0.0.1:${server.httpServer.address().port}`;
   browser = await chromium.launch({ channel: process.env.MATT_TEST_BROWSER || undefined, args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] });
 });
 after(async () => {
-  await browser?.close();
-  if (server) { server.httpServer.closeAllConnections(); await new Promise((resolve) => server.httpServer.close(resolve)); }
+  try {
+    await browser?.close();
+  } finally {
+    try {
+      if (server) { server.httpServer.closeAllConnections(); await new Promise((resolve) => server.httpServer.close(resolve)); }
+    } finally {
+      if (outDir) await rm(outDir, { recursive: true, force: true });
+    }
+  }
 });
 
 async function fixture({ demo = false, flightId = null, configured = true, requiresConfirmation = false, width = 1440, deviceScaleFactor = 1, connect = true, captureFailure = null, blockAudio = false, manualTranscript = false, delayCapture = false, realtime = false, speechApproved = true, idleTimeoutMs, organizationId = "org-one", secondOrganizationId, analysisRunId = "run-one" } = {}) {
@@ -71,7 +88,7 @@ async function fixture({ demo = false, flightId = null, configured = true, requi
     Object.defineProperty(window, "speechSynthesis", { configurable: true, value: { getVoices: () => [], addEventListener() {}, removeEventListener() {}, cancel() {}, speak() { window.__speechOutputs++; } } });
   }, { stored: { access_token: token, refresh_token: "offline-refresh", token_type: "bearer", expires_at: now + 3600, expires_in: 3600, user }, captureFailure, blockAudio, manualTranscript, delayCapture, organizationId, secondOrganizationId });
   const page = await context.newPage(), requests = [], errors = [];
-  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("pageerror", () => errors.push("Page error"));
   await context.route("**/*", async (route) => {
     const url = new URL(route.request().url()), request = route.request();
     const json = (body, status = 200) => route.fulfill({ json: body, status });
@@ -262,7 +279,7 @@ for (const boundary of ["membership", "permission"]) {
       assert.ok(logs.every((entry) => Object.values(canaries).every((marker) => !JSON.stringify(entry).includes(marker))));
       assert.deepEqual(f.errors, []);
     } catch (error) {
-      console.error("Synthetic UI integration diagnostics", JSON.stringify({ responses, logs, body: await f.page.locator("body").innerText() }));
+      console.error("Synthetic UI integration diagnostics", JSON.stringify(failureDiagnostics(responses, logs, f.errors)));
       throw error;
     } finally {
       revoked = false;
@@ -273,6 +290,12 @@ for (const boundary of ["membership", "permission"]) {
     }
   });
 }
+test("failure diagnostics omit response paths and logged content", () => {
+  const marker = "synthetic-sensitive-value";
+  const result = failureDiagnostics([{ path: marker, status: 503 }], [[marker]], [marker]);
+  assert.deepEqual(result, { responseCount: 1, failedResponseCount: 1, logCount: 1, pageErrorCount: 1 });
+  assert.doesNotMatch(JSON.stringify(result), /synthetic-sensitive-value/);
+});
 test("native browser HTTP enforces tenant, token, provider-session and Demo boundaries, including pending-turn revocation", async () => {
   const f = await fixture({ demo: true, connect: false });
   const tenants = [
@@ -446,10 +469,9 @@ for (const demo of [false, true]) {
         assert.equal(request.hasAuth, !demo);
         const disconnect = f.page.getByRole("button", { name: "Disconnect live Matt", exact: true });
         assert.equal(await disconnect.count(), 1, JSON.stringify({
-          contextMode, errors: await f.page.locator(".matt-error").allTextContents(),
-          environment: await f.page.locator(".matt-environment").innerText(),
+          contextMode, errorCount: await f.page.locator(".matt-error").count(),
           state: await f.page.locator(".matt-page").getAttribute("data-state"),
-          requests: f.requests.filter((item) => item.path.includes("/matt/")),
+          requestCount: f.requests.filter((item) => item.path.includes("/matt/")).length,
         }));
         await disconnect.click();
       }
@@ -621,7 +643,7 @@ for (const width of [390, 1440]) {
       await f.page.getByRole("button", { name: "Mute Matt audio", exact: true }).waitFor();
       await f.page.evaluate(() => window.scrollTo(0, 0));
       const question = await f.page.locator(".matt-question-panel button").first().boundingBox();
-      assert.ok(question.y + question.height <= (width < 600 ? 844 : 900), "Authenticated ready-state suggestions do not require scrolling");
+      assert.ok(question.y + question.height <= (width < 600 ? 844 : 900), `Authenticated ready-state suggestions do not require scrolling (bottom ${question.y + question.height})`);
       assert.match(await f.page.locator(".matt-page").evaluate((node) => getComputedStyle(node).fontFamily), /sans-serif/);
       await f.page.getByRole("button", { name: "Type a question", exact: true }).click();
       await f.page.getByRole("textbox", { name: "Ask Matt", exact: true }).fill("Which return condition applies?");
@@ -682,16 +704,23 @@ test("the actual Demo UI crosses the actual local HTTP capability/router/context
     await f.page.getByRole("button", { name: "Mute Matt audio", exact: true }).waitFor();
     await allowBrowserSpeech(f.page);
     await f.page.getByRole("button", { name: "Microphone", exact: true }).click();
-    await f.page.waitForFunction(() => window.__daily.sent.some((item) => item.event_type === "conversation.echo"));
+    await f.page.waitForFunction(() => window.__daily.sent.some((item) => item.event_type === "conversation.echo") || document.querySelector(".matt-error")?.textContent || [...document.querySelectorAll("button")].some((button) => button.textContent.includes("Approve estimated generation")));
+    const approval = f.page.getByRole("button", { name: "Approve estimated generation", exact: true });
+    if (await approval.isVisible()) await approval.click();
+    await f.page.waitForFunction(() => window.__daily.sent.some((item) => item.event_type === "conversation.echo") || (document.querySelector(".matt-error")?.textContent && ![...document.querySelectorAll("button")].some((button) => button.textContent.includes("Approve estimated generation"))));
+    assert.equal(await f.page.evaluate(() => window.__daily.sent.filter((item) => item.event_type === "conversation.echo").length), 1,
+      JSON.stringify({ responseStatuses: http.map(({ status }) => status), errorCount: await f.page.locator(".matt-error").count() }));
     assert.equal(inputs.length, 1);
     assert.equal(inputs[0].context.contract.id, "demo-aircraft-lease");
     assert.equal(inputs[0].context.evidence[0].id, "ev-return");
     await f.page.getByRole("button", { name: "Type a question", exact: true }).click();
     await f.page.getByRole("textbox", { name: "Ask Matt", exact: true }).fill("What evidence supports that?");
     await f.page.getByRole("button", { name: "Send", exact: true }).click();
-    await f.page.waitForFunction(() => window.__daily.sent.filter((item) => item.event_type === "conversation.echo").length === 2 || document.querySelector(".matt-error")?.textContent);
+    await f.page.waitForFunction(() => window.__daily.sent.filter((item) => item.event_type === "conversation.echo").length === 2 || document.querySelector(".matt-error")?.textContent || [...document.querySelectorAll("button")].some((button) => button.textContent.includes("Approve estimated generation")));
+    if (await approval.isVisible()) await approval.click();
+    await f.page.waitForFunction(() => window.__daily.sent.filter((item) => item.event_type === "conversation.echo").length === 2 || (document.querySelector(".matt-error")?.textContent && ![...document.querySelectorAll("button")].some((button) => button.textContent.includes("Approve estimated generation"))));
     assert.equal(await f.page.evaluate(() => window.__daily.sent.filter((item) => item.event_type === "conversation.echo").length), 2,
-      JSON.stringify({ requests: http.map(({ path, method, status }) => ({ path, method, status })), error: await f.page.locator(".matt-error").allTextContents() }));
+      JSON.stringify({ responseStatuses: http.map(({ status }) => status), errorCount: await f.page.locator(".matt-error").count() }));
     assert.equal(inputs[1].history.length, 2);
     assert.equal(http.filter((item) => item.path.endsWith("/access")).length, 1);
     assert.ok(http.filter((item) => item.path.includes("/sessions")).every((item) => item.headers["x-matt-demo-token"] && !item.headers.authorization && !item.headers["x-org-id"]));

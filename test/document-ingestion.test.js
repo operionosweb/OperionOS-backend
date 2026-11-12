@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import PDFDocument from "pdfkit";
+import mammoth from "mammoth";
 import { createCanvas } from "@napi-rs/canvas";
 import { after, mock, test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -24,6 +25,7 @@ import {
 import { buildDocumentStorageKey } from "../services/documentStorageService.js";
 import { terminateLocalPdfOcrWorker } from "../services/localPdfOcrService.js";
 import { segmentDeterministicClauses } from "../services/phase3/intelligence/deterministicClauseService.js";
+import { buildCanonicalPageSource } from "../services/phase3/source/deterministicSourcePageAdapter.js";
 import { buildDeterministicObligationCandidates } from "../services/phase3/intelligence/deterministicObligationService.js";
 import { toSafeHttpError } from "../utils/safeHttpError.js";
 
@@ -56,6 +58,36 @@ async function createSyntheticPdf(buildDocument) {
   document.end();
   await completed;
   return Buffer.concat(chunks);
+}
+
+function mockUploadJournal(t, supabase, { actions = [], onReserve, reserveError = null, dispatchError = null, terminalError = null } = {}) {
+  let runId;
+  t.mock.method(supabase, "rpc", async (name, args) => {
+    actions.push(`rpc:${name}${args.p_next_state ? `:${args.p_next_state}` : ""}`);
+    if (name === "dispatch_contract_analysis") return { data: dispatchError ? null : runId, error: dispatchError };
+    if (args.p_next_state === "ready") runId = args.p_analysis_run_id;
+    if (name === "transition_contract_upload") return { data: null, error: args.p_next_state === "ready" ? terminalError : null };
+    assert.equal(name, "reserve_contract_upload");
+    if (reserveError) return { data: null, error: reserveError };
+    onReserve?.(args);
+    const documentId = args.p_document_id || args.p_new_document_id;
+    return {
+      data: {
+        journal_id: crypto.randomUUID(),
+        contract_id: args.p_contract_id || crypto.randomUUID(),
+        document_id: documentId,
+        version_id: args.p_version_id,
+        version_number: 1,
+        storage_key: buildDocumentStorageKey({
+          organizationId: args.p_organization_id,
+          documentId,
+          versionId: args.p_version_id,
+          extension: args.p_mime_type === "application/pdf" ? ".pdf" : ".docx",
+        }),
+      },
+      error: null,
+    };
+  });
 }
 
 test("PDF signature and metadata validation are server-controlled", () => {
@@ -127,6 +159,112 @@ test("DOCX extension, MIME, ZIP signature, and storage key are server-controlled
       (error) => error.code === "INVALID_DOCX" && error.status === 400
     );
   });
+
+test("empty DOCX extraction is rejected before upload", async (t) => {
+  t.mock.method(mammoth, "extractRawText", async () => ({ value: " \n " }));
+  await assert.rejects(
+    () => extractDocumentMetadata(Buffer.from("synthetic"), ".docx"),
+    (error) => error.code === "SOURCE_TEXT_UNAVAILABLE" && error.status === 422
+  );
+});
+
+test("synthetic PDF and DOCX uploads persist source and retain honest page evidence", async (t) => {
+  const originalUrl = process.env.SUPABASE_URL;
+  const originalKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = "http://127.0.0.1:54321";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "synthetic-ingestion-key";
+  const supabase = getSupabaseClient();
+  t.after(() => {
+    if (originalUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = originalUrl;
+    if (originalKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = originalKey;
+  });
+
+  const organizationId = "11111111-1111-4111-8111-111111111111";
+  const userId = "22222222-2222-4222-8222-222222222222";
+  const contractId = "33333333-3333-4333-8333-333333333333";
+  const versionId = "44444444-4444-4444-8444-444444444444";
+  const runId = "55555555-5555-4555-8555-555555555555";
+  const pdf = await createSyntheticPdf((document) => {
+    document.text("1. MAINTENANCE\nThe Lessee shall maintain the Aircraft in an airworthy condition.");
+  });
+  const docx = await fs.readFile(path.join(repositoryRoot, "test", "fixtures", "step9-aircraft-lease.docx"));
+
+  for (const [filename, mimetype, buffer, expectedPage] of [
+    ["synthetic.pdf", "application/pdf", pdf, 1],
+    ["synthetic.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", docx, null],
+  ]) {
+    await t.test(filename, async (subtest) => {
+      const inserts = [];
+      const uploads = [];
+      mockUploadJournal(subtest, supabase);
+      subtest.mock.method(supabase.storage, "from", () => ({
+        async upload(key, bytes, options) {
+          uploads.push({ key, bytes, options });
+          return { error: null };
+        },
+        async download() { return { data: new Blob([buffer]), error: null }; },
+      }));
+      subtest.mock.method(supabase, "from", (table) => {
+        let payload;
+        const query = {
+          insert(value) { payload = value; inserts.push({ table, value }); return this; },
+          update() { return this; },
+          select() { return this; },
+          eq() { return this; },
+          order() { return this; },
+          limit() { return this; },
+          async maybeSingle() { return { data: null, error: null }; },
+          async single() {
+            const data = table === "contracts" ? { id: contractId, organization_id: organizationId }
+              : table === "document_versions" ? { id: payload.id, document_id: payload.document_id, version_number: 1 }
+                : table === "analysis_runs" ? { id: runId, status: "queued" }
+                  : { id: payload?.id || crypto.randomUUID(), ...payload };
+            return { data, error: null };
+          },
+          then(resolve, reject) { return Promise.resolve({ data: null, error: null }).then(resolve, reject); },
+        };
+        return query;
+      });
+
+      const result = await ingestContractUpload({
+        file: { originalname: filename, mimetype, buffer },
+        organizationId,
+        userId,
+        requestId: "synthetic-upload",
+        ocrProvider: null,
+        withLock: async (_keys, operation) => operation(),
+      });
+
+      assert.equal(result.status, "ready");
+      assert.equal(result.analysisRunId, runId);
+      assert.equal(result.pageCount, expectedPage);
+      assert.equal(uploads.length, 1);
+      assert.match(uploads[0].key, new RegExp(`^organizations/${organizationId}/documents/${result.documentId}/versions/${result.documentVersionId}/source\\.(pdf|docx)$`));
+      assert.deepEqual(uploads[0].bytes, buffer);
+      assert.equal(uploads[0].options.upsert, false);
+      const extraction = inserts.find((entry) => entry.table === "document_version_extractions").value;
+      const pageRows = inserts.find((entry) => entry.table === "document_version_pages")?.value || [];
+      assert.equal(pageRows.length, expectedPage || 0);
+      const sections = inserts.filter((entry) => entry.table === "contract_sections").map((entry) => entry.value);
+      if (!expectedPage) assert.ok(sections.every((section) => section.page_start === null && section.page_end === null));
+      const source = buildCanonicalPageSource({
+        documentVersion: { id: result.documentVersionId, organization_id: organizationId, mime_type: mimetype },
+        document: { id: result.documentId, contract_id: contractId },
+        analysisRun: { id: runId },
+        extraction,
+        pageRows,
+      });
+      const clause = segmentDeterministicClauses(source).find((item) => /maintain/i.test(item.source_text));
+      assert.ok(clause);
+      assert.equal(clause.evidence.page_number, expectedPage);
+      assert.ok(source.text.includes(clause.evidence.excerpt));
+      const obligations = buildDeterministicObligationCandidates(clause);
+      assert.ok(obligations.some((obligation) => /maintain/i.test(obligation.description)));
+    });
+  }
+});
 
 test("parseable image-like PDF is marked as requiring OCR", async () => {
   const buffer = await fs.readFile(path.join(repositoryRoot, "test.pdf"));
@@ -557,6 +695,267 @@ test("server hash is calculated from bytes and storage keys are server-shaped", 
   );
 });
 
+test("failed ingestion retains owned records and blocks a repeated incomplete upload", async (t) => {
+  const supabase = getSupabaseClient();
+  const organizationId = "11111111-1111-4111-8111-111111111111";
+  const userId = "22222222-2222-4222-8222-222222222222";
+  let document = null;
+  const actions = [];
+  mockUploadJournal(t, supabase, { actions, onReserve: (args) => { document = { id: args.p_new_document_id }; } });
+  t.mock.method(supabase.storage, "from", () => ({
+    async upload() { actions.push("upload"); return { error: null }; },
+    async download() {
+      return { data: new Blob([await fs.readFile(path.join(repositoryRoot, "test", "fixtures", "step9-aircraft-lease.docx"))]), error: null };
+    },
+    async remove() { actions.push("remove"); return { error: null }; },
+  }));
+  t.mock.method(supabase, "from", (table) => {
+    let payload;
+    const query = {
+      insert(value) { payload = value; actions.push(`insert:${table}`); return this; },
+      update(value) { actions.push(`update:${table}:${value.status || value.extraction_status}`); return this; },
+      delete() { actions.push(`delete:${table}`); return this; },
+      select() { return this; },
+      eq() { return this; },
+      order() { return this; },
+      limit() { return this; },
+      async maybeSingle() { return { data: table === "documents" ? document : null, error: null }; },
+      async single() {
+        if (table === "analysis_runs") return { data: null, error: { code: "synthetic" } };
+        if (table === "documents") document = { id: payload.id };
+        return { data: { id: payload?.id || crypto.randomUUID(), ...payload }, error: null };
+      },
+      then(resolve, reject) { return Promise.resolve({ data: null, error: null }).then(resolve, reject); },
+    };
+    return query;
+  });
+  const buffer = await fs.readFile(path.join(repositoryRoot, "test", "fixtures", "step9-aircraft-lease.docx"));
+  const args = {
+    file: { originalname: "synthetic.docx", mimetype: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer },
+    organizationId, userId, requestId: "retained-failure-test",
+    withLock: async (_keys, operation) => operation(),
+  };
+  await assert.rejects(ingestContractUpload(args), { code: "STORAGE_ERROR" });
+  assert.ok(actions.includes("upload"));
+  assert.ok(actions.includes("update:documents:failed"));
+  assert.ok(actions.includes("update:document_versions:failed"));
+  assert.ok(actions.indexOf("rpc:reserve_contract_upload") < actions.indexOf("upload"));
+  assert.ok(actions.includes("rpc:transition_contract_upload:manual_review"));
+  assert.equal(actions.some((action) => action === "remove" || action.startsWith("delete:")), false);
+  const count = actions.length;
+  await assert.rejects(ingestContractUpload(args), { code: "INGESTION_RECOVERY_REQUIRED" });
+  assert.equal(actions.length, count);
+});
+
+test("observed lock loss during upload stops subsequent writes and leaves reserved records untouched", async (t) => {
+  const supabase = getSupabaseClient();
+  const actions = [];
+  let lockLost = false;
+  mockUploadJournal(t, supabase, { actions });
+  t.mock.method(supabase.storage, "from", () => ({
+    async upload() { actions.push("upload"); lockLost = true; return { error: null }; },
+    async remove() { actions.push("remove"); return { error: null }; },
+  }));
+  t.mock.method(supabase, "from", (table) => {
+    let payload;
+    return {
+      insert(value) { payload = value; actions.push(`insert:${table}`); return this; },
+      update() { actions.push(`update:${table}`); return this; },
+      delete() { actions.push(`delete:${table}`); return this; },
+      select() { return this; },
+      eq() { return this; },
+      order() { return this; },
+      limit() { return this; },
+      async maybeSingle() { return { data: null, error: null }; },
+      async single() { return { data: { id: payload?.id || crypto.randomUUID(), ...payload }, error: null }; },
+      then(resolve, reject) { return Promise.resolve({ data: null, error: null }).then(resolve, reject); },
+    };
+  });
+  const buffer = await fs.readFile(path.join(repositoryRoot, "test", "fixtures", "step9-aircraft-lease.docx"));
+  await assert.rejects(ingestContractUpload({
+    file: { originalname: "synthetic.docx", mimetype: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer },
+    organizationId: "11111111-1111-4111-8111-111111111111",
+    userId: "22222222-2222-4222-8222-222222222222",
+    withLock: async (_keys, operation) => operation(() => {
+      if (lockLost) throw Object.assign(new Error("synthetic disconnect"), { code: "OPERATION_LOCK_LOST" });
+    }),
+  }), { code: "OPERATION_LOCK_LOST" });
+  assert.ok(actions.includes("rpc:reserve_contract_upload"));
+  assert.ok(actions.includes("upload"));
+  assert.equal(actions.includes("insert:analysis_runs"), false);
+  assert.equal(actions.some((action) => action.startsWith("update:") || action.startsWith("delete:") || action === "remove"), false);
+});
+
+test("a failed version reservation does not create an untracked storage object", async (t) => {
+  const supabase = getSupabaseClient();
+  const actions = [];
+  mockUploadJournal(t, supabase, { actions, reserveError: { code: "synthetic" } });
+  t.mock.method(supabase.storage, "from", () => ({
+    async upload() { actions.push("upload"); return { error: null }; },
+  }));
+  t.mock.method(supabase, "from", (table) => {
+    let payload;
+    return {
+      insert(value) { payload = value; actions.push(`insert:${table}`); return this; },
+      update(value) { actions.push(`update:${table}:${value.status}`); return this; },
+      select() { return this; },
+      eq() { return this; },
+      order() { return this; },
+      limit() { return this; },
+      async maybeSingle() { return { data: null, error: null }; },
+      async single() {
+        if (table === "document_versions") return { data: null, error: { code: "synthetic" } };
+        return { data: { id: payload?.id || crypto.randomUUID(), ...payload }, error: null };
+      },
+      then(resolve, reject) { return Promise.resolve({ data: null, error: null }).then(resolve, reject); },
+    };
+  });
+  const buffer = await fs.readFile(path.join(repositoryRoot, "test", "fixtures", "step9-aircraft-lease.docx"));
+  await assert.rejects(ingestContractUpload({
+    file: { originalname: "synthetic.docx", mimetype: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer },
+    organizationId: "11111111-1111-4111-8111-111111111111",
+    userId: "22222222-2222-4222-8222-222222222222",
+    withLock: async (_keys, operation) => operation(),
+  }), { code: "STORAGE_ERROR" });
+  assert.equal(actions.includes("upload"), false);
+  assert.equal(actions.some((action) => action.startsWith("update:")), false);
+});
+
+test("a partially failed processing-status write attempts to mark both owned records failed", async (t) => {
+  const supabase = getSupabaseClient();
+  const updates = [];
+  const events = [];
+  mockUploadJournal(t, supabase);
+  t.mock.method(supabase.storage, "from", () => ({
+    async upload() { return { error: null }; },
+    async download() {
+      return { data: new Blob([await fs.readFile(path.join(repositoryRoot, "test", "fixtures", "step9-aircraft-lease.docx"))]), error: null };
+    },
+  }));
+  t.mock.method(supabase, "from", (table) => {
+    let payload;
+    let update;
+    return {
+      insert(value) { payload = value; return this; },
+      update(value) { update = value; updates.push({ table, value }); events.push(`${table}:${value.status || value.extraction_status}`); return this; },
+      select() { return this; },
+      eq() { return this; },
+      order() { return this; },
+      limit() { return this; },
+      async maybeSingle() { return { data: null, error: null }; },
+      async single() { return { data: { id: payload?.id || crypto.randomUUID(), ...payload }, error: null }; },
+      then(resolve, reject) {
+        if (table === "document_versions" && update?.extraction_status === "processing") {
+          return Promise.reject(new Error("synthetic transport failure")).then(resolve, reject);
+        }
+        if (table === "documents" && update?.status === "processing") {
+          return new Promise((done) => setTimeout(() => {
+            events.push("documents:processing-settled");
+            done({ data: null, error: null });
+          }, 20)).then(resolve, reject);
+        }
+        return Promise.resolve({ data: null, error: null }).then(resolve, reject);
+      },
+    };
+  });
+  const buffer = await fs.readFile(path.join(repositoryRoot, "test", "fixtures", "step9-aircraft-lease.docx"));
+  await assert.rejects(ingestContractUpload({
+    file: { originalname: "synthetic.docx", mimetype: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer },
+    organizationId: "11111111-1111-4111-8111-111111111111",
+    userId: "22222222-2222-4222-8222-222222222222",
+    withLock: async (_keys, operation) => operation(),
+  }), { code: "STORAGE_ERROR" });
+  assert.ok(updates.some(({ table, value }) => table === "documents" && value.status === "failed"));
+  assert.ok(updates.some(({ table, value }) => table === "document_versions" && value.extraction_status === "failed"));
+  assert.ok(updates.some(({ table, value }) => table === "analysis_runs" && value.status === "failed"));
+  assert.ok(events.indexOf("documents:processing-settled") < events.indexOf("documents:failed"));
+});
+
+test("storage, integrity and structure failures never mark the journal ready", async (t) => {
+  const supabase = getSupabaseClient();
+  const buffer = await fs.readFile(path.join(repositoryRoot, "test", "fixtures", "step9-aircraft-lease.docx"));
+  for (const failure of ["upload", "checksum", "structure"]) {
+    await t.test(failure, async (subtest) => {
+      const actions = [];
+      mockUploadJournal(subtest, supabase, { actions });
+      subtest.mock.method(supabase.storage, "from", () => ({
+        async upload() { return { error: failure === "upload" ? { code: "synthetic" } : null }; },
+        async download() { return { data: new Blob([failure === "checksum" ? Buffer.from("incorrect") : buffer]), error: null }; },
+      }));
+      subtest.mock.method(supabase, "from", (table) => {
+        let payload;
+        return {
+          insert(value) { payload = value; return this; },
+          update() { return this; },
+          select() { return this; },
+          eq() { return this; },
+          order() { return this; },
+          limit() { return this; },
+          async maybeSingle() { return { data: null, error: null }; },
+          async single() {
+            return table === "contract_sections" && failure === "structure"
+              ? { data: null, error: { code: "synthetic" } }
+              : { data: { id: payload?.id || crypto.randomUUID(), ...payload }, error: null };
+          },
+          then(resolve, reject) { return Promise.resolve({ data: null, error: null }).then(resolve, reject); },
+        };
+      });
+      await assert.rejects(ingestContractUpload({
+        file: { originalname: "synthetic.docx", mimetype: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer },
+        organizationId: "11111111-1111-4111-8111-111111111111",
+        userId: "22222222-2222-4222-8222-222222222222",
+        withLock: async (_keys, operation) => operation(),
+      }), { code: "STORAGE_ERROR" });
+      assert.ok(actions.includes("rpc:transition_contract_upload:manual_review"));
+      assert.equal(actions.includes("rpc:transition_contract_upload:ready"), false);
+      if (failure !== "structure") assert.equal(actions.includes("rpc:transition_contract_upload:stored"), false);
+    });
+  }
+});
+
+test("uncertain terminal acknowledgements preserve ingestion without marking records failed", async (t) => {
+  const supabase = getSupabaseClient();
+  const buffer = await fs.readFile(path.join(repositoryRoot, "test", "fixtures", "step9-aircraft-lease.docx"));
+  for (const boundary of ["terminal", "dispatch"]) {
+    await t.test(boundary, async (subtest) => {
+      const actions = [];
+      mockUploadJournal(subtest, supabase, {
+        actions,
+        terminalError: boundary === "terminal" ? { code: "synthetic" } : null,
+        dispatchError: boundary === "dispatch" ? { code: "synthetic" } : null,
+      });
+      subtest.mock.method(supabase.storage, "from", () => ({
+        async upload() { return { error: null }; },
+        async download() { return { data: new Blob([buffer]), error: null }; },
+      }));
+      subtest.mock.method(supabase, "from", (table) => {
+        let payload;
+        return {
+          insert(value) { payload = value; return this; },
+          update(value) { actions.push(`update:${table}:${value.status || value.extraction_status}`); return this; },
+          select() { return this; },
+          eq() { return this; },
+          order() { return this; },
+          limit() { return this; },
+          async maybeSingle() { return { data: null, error: null }; },
+          async single() { return { data: { id: payload?.id || crypto.randomUUID(), ...payload }, error: null }; },
+          then(resolve, reject) { return Promise.resolve({ data: null, error: null }).then(resolve, reject); },
+        };
+      });
+      await assert.rejects(ingestContractUpload({
+        file: { originalname: "synthetic.docx", mimetype: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer },
+        organizationId: "11111111-1111-4111-8111-111111111111",
+        userId: "22222222-2222-4222-8222-222222222222",
+        withLock: async (_keys, operation) => operation(),
+      }), { code: boundary === "terminal" ? "STORAGE_ERROR" : "ANALYSIS_DISPATCH_PENDING" });
+      assert.ok(actions.includes("rpc:transition_contract_upload:ready"));
+      assert.equal(actions.includes("rpc:dispatch_contract_analysis"), boundary === "dispatch");
+      assert.equal(actions.some((action) => action.endsWith(":failed")), false);
+      assert.equal(actions.includes("rpc:transition_contract_upload:manual_review"), false);
+    });
+  }
+});
+
 test("duplicate upload returns the organization-scoped existing version before reparsing", async (t) => {
   const organizationId = "11111111-1111-4111-8111-111111111111";
   const calls = [];
@@ -566,9 +965,9 @@ test("duplicate upload returns the organization-scoped existing version before r
   process.env.SUPABASE_SERVICE_ROLE_KEY = "phase13-test-key";
   const supabase = getSupabaseClient();
   mock.method(supabase, "from", (table) => {
-    const data = table === "document_versions"
-      ? { id: "44444444-4444-4444-8444-444444444444", document_id: "33333333-3333-4333-8333-333333333333" }
-      : { id: "33333333-3333-4333-8333-333333333333", organization_id: organizationId, contract_id: "22222222-2222-4222-8222-222222222222" };
+    const data = table === "contract_upload_journal" ? null : table === "document_versions"
+      ? { id: "44444444-4444-4444-8444-444444444444", document_id: "33333333-3333-4333-8333-333333333333", extraction_status: "completed", processing_status: "processed" }
+      : { id: "33333333-3333-4333-8333-333333333333", organization_id: organizationId, contract_id: "22222222-2222-4222-8222-222222222222", status: "ready" };
     const query = {
       select() {
         return this;
@@ -600,6 +999,7 @@ test("duplicate upload returns the organization-scoped existing version before r
     organizationId,
     userId: "55555555-5555-4555-8555-555555555555",
     requestId: "phase13-duplicate-test",
+    withLock: async (_keys, operation) => operation(),
   });
 
   assert.equal(result.duplicate, true);
@@ -607,8 +1007,28 @@ test("duplicate upload returns the organization-scoped existing version before r
   assert.equal(result.documentId, "33333333-3333-4333-8333-333333333333");
   assert.equal(result.documentVersionId, "44444444-4444-4444-8444-444444444444");
   assert.equal(result.contractId, "22222222-2222-4222-8222-222222222222");
-  assert.equal(calls.filter((call) => call.column === "organization_id").length, 2);
+  assert.equal(calls.filter((call) => call.column === "organization_id").length, 3);
   assert.ok(calls.every((call) => call.column !== "sha256" || /^[0-9a-f]{64}$/.test(call.value)));
+});
+
+test("a partially persisted duplicate is not reported as a successful upload", async (t) => {
+  const supabase = getSupabaseClient();
+  t.mock.method(supabase, "from", (table) => {
+    assert.equal(table, "document_versions");
+    return {
+      select() { return this; },
+      eq() { return this; },
+      async maybeSingle() {
+        return { data: { extraction_status: "completed", processing_status: "failed" }, error: null };
+      },
+    };
+  });
+  await assert.rejects(ingestContractUpload({
+    file: { originalname: "contract.pdf", mimetype: "application/pdf", buffer: Buffer.from("%PDF-synthetic") },
+    organizationId: "11111111-1111-4111-8111-111111111111",
+    userId: "22222222-2222-4222-8222-222222222222",
+    withLock: async (_keys, operation) => operation(),
+  }), { code: "INGESTION_RECOVERY_REQUIRED" });
 });
 
 test("document versions return the latest organization-scoped analysis run for workspace recovery", async (t) => {

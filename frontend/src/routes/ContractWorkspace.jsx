@@ -77,13 +77,14 @@ const WORKSPACE_SECTIONS = Object.freeze({
 });
 
 const PROCESSING_STAGES = {
+  awaiting_ingestion: ["Document verification pending", "Analysis will be queued after the document is verified. If this persists, the upload requires review."],
   queued: ["Document received", "Ready to build Contract Intelligence."],
   processing: ["Validating document", "Confirming the secure document source and analysis scope."],
   extracting: ["Identifying clauses", "Reading contract structure and preserving source evidence."],
   analysing: ["Extracting contract intelligence", "Building obligations, deadlines, risks and the contract summary."],
   indexing: ["Building searchable intelligence", "Preparing evidence-backed search across the contract."],
   completed: ["Contract Intelligence ready", "Review the summary, risks, obligations, deadlines and source evidence below."],
-  failed: ["Analysis needs attention", "The previous processing attempt did not complete. You can retry safely."],
+  failed: ["Analysis needs attention", "The previous processing attempt did not complete. Review its status and any AI usage before recovery."],
 };
 
 function formatDeadlineTiming(deadline) {
@@ -255,6 +256,7 @@ function ContractWorkspace({ contractId, organizationId, requestedAnalysisRunId,
   const [financialImpactState, setFinancialImpactState] = useState("loading");
   const [aviationLeaseAssessment, setAviationLeaseAssessment] = useState(null);
   const [processingState, setProcessingState] = useState("idle");
+  const [requestAIReview, setRequestAIReview] = useState(false);
   const [processingStatusError, setProcessingStatusError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -274,6 +276,10 @@ function ContractWorkspace({ contractId, organizationId, requestedAnalysisRunId,
       return "";
     }
   });
+
+  useEffect(() => {
+    setRequestAIReview(false);
+  }, [contractId, organizationId, activeAnalysisRunId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -526,7 +532,11 @@ function ContractWorkspace({ contractId, organizationId, requestedAnalysisRunId,
     setProcessingStatusError("");
     setErrorMessage("");
     try {
-      await processContractIntelligence(analysisRun.id, organizationId);
+      if (requestAIReview) {
+        await processContractIntelligence(analysisRun.id, organizationId, { useAI: true, confirmAIBudget: true });
+      } else {
+        await processContractIntelligence(analysisRun.id, organizationId);
+      }
       const financialImpactLoad = getAnalysisRunFinancialImpact(analysisRun.id, organizationId)
         .then((result) => ({ result, error: null }))
         .catch((error) => ({ result: null, error }));
@@ -702,6 +712,13 @@ function ContractWorkspace({ contractId, organizationId, requestedAnalysisRunId,
     && (!profileRunId || profileRunId === activeAnalysisRunId)
     ? evidenceBackedRecommendations(profile?.recommendations || [], clauses)
     : [];
+  const aiAnalysis = profile?.metadata?.aiAnalysis;
+  const aiFindings = analysisRun?.id === activeAnalysisRunId && (!profileRunId || profileRunId === activeAnalysisRunId)
+    && aiAnalysis?.method === "ai"
+    ? evidenceBackedRecommendations((Array.isArray(aiAnalysis.findings) ? aiAnalysis.findings : []).map((finding) => ({
+      ...finding, evidence: [finding.evidence],
+    })), clauses)
+    : [];
   const leaseIntelligence = profile?.metadata?.leaseIntelligence || profile?.metadata?.lease_intelligence || {};
   const leaseLifecycleRelationships = leaseIntelligence.lifecycleRelationships || [];
   const keyCommercialTerms = profile?.key_commercial_terms || [];
@@ -824,9 +841,15 @@ function ContractWorkspace({ contractId, organizationId, requestedAnalysisRunId,
             {processingStatusError && processingState === "processing" && <p className="op-body-sm" role="status" style={{ marginTop: "var(--op-space-3)" }}>
               {processingStatusError} Contract Intelligence processing continues; this status will retry automatically.
             </p>}
-            {canAnalyze && analysisRun && analysisRun.status !== "completed" && latestExtractionStatus === "completed" && <Button type="button" variant="primary" onClick={handleFullProcessing} disabled={processingState === "processing"}>
-              {processingState === "processing" ? processingStage[0] : analysisRun.status === "failed" ? "Retry analysis" : "Analyse contract"}
-            </Button>}
+            {canAnalyze && analysisRun?.status === "queued" && latestExtractionStatus === "completed" && <>
+              <label className="op-body-sm" style={{ display: "block", marginBottom: "var(--op-space-3)" }}>
+                <input type="checkbox" checked={requestAIReview} onChange={(event) => setRequestAIReview(event.target.checked)} disabled={processingState === "processing"} />
+                {" "}Request AI review. I confirm authority to send this document to the approved provider and accept variable intelligence-budget usage. AI requires owner-approved provider and isolation settings.
+              </label>
+              <Button type="button" variant="primary" onClick={handleFullProcessing} disabled={processingState === "processing"}>
+                {processingState === "processing" ? processingStage[0] : "Analyse contract"}
+              </Button>
+            </>}
             {processingState === "error" && <p className="op-body-sm" style={{ color: "var(--op-signal-risk)", marginTop: "var(--op-space-3)" }}>{errorMessage}</p>}
             {analysisRun?.status === "completed" && <Button to="#intelligence-summary" variant="secondary">Review intelligence</Button>}
           </div>
@@ -861,7 +884,26 @@ function ContractWorkspace({ contractId, organizationId, requestedAnalysisRunId,
         <Reveal style={{ marginBottom: "var(--op-space-6)" }}>
           <h2 className="op-heading-md" style={{ marginBottom: "var(--op-space-3)" }}>Contract profile</h2>
           <div className="op-surface-plane-primary" style={{ padding: "var(--op-space-5)" }}>
+            <p className="op-kicker">Deterministic summary</p>
             <p className="op-body" style={{ marginBottom: "var(--op-space-4)" }}>{profile.executive_summary}</p>
+            {aiAnalysis?.method === "ai" && (
+              <section aria-label="AI contract review" style={{ marginBottom: "var(--op-space-4)" }}>
+                <p className="op-kicker">AI contract review · human verification required</p>
+                <p className="op-body-sm">Interpretations may be incomplete or incorrect. Confidence is the model's uncalibrated assessment, not a probability.</p>
+                {!aiFindings.length && <p className="op-body-sm">No source-verifiable AI findings are available.</p>}
+                {aiFindings.map((finding, index) => (
+                  <article className="op-relationship-item" key={`${finding.category}-${index}`}>
+                    <div>
+                      <strong className="op-body">{formatIntelligenceLabel(finding.category)}</strong>
+                      <p className="op-body-sm">{finding.interpretation}</p>
+                      {finding.recommendedAction && <p className="op-body-sm">Suggested review: {finding.recommendedAction}</p>}
+                      <p className="op-body-sm">Model confidence: {finding.confidence} · Human review required</p>
+                    </div>
+                    <EvidencePanel findingLabel={formatIntelligenceLabel(finding.category)} evidence={normalizeProfileEvidence(finding.evidence)} />
+                  </article>
+                ))}
+              </section>
+            )}
             <div className="op-contract-profile-grid">
               <div><span className="op-kicker">Detected type</span><p className="op-body-sm">{contractClassification.type}</p>{contractClassification.reviewLabel && <p className="op-body-sm">{contractClassification.reviewLabel}</p>}</div>
               <div><span className="op-kicker">Contract number</span><p className="op-body-sm">{profile.metadata?.contractNumber || NOT_ESTABLISHED}</p></div>

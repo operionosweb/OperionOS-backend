@@ -53,6 +53,35 @@ function normalizeAnalysisRunError(error) {
   }).body;
 }
 
+export async function assertAnalysisIngestionReady({ run, organizationId, client = supabase }) {
+  if (run.status === "awaiting_ingestion") {
+    throw Object.assign(new Error("Document ingestion must finish before analysis"), {
+      code: "INGESTION_NOT_READY", status: 409,
+    });
+  }
+  const { data: journal, error } = await client.from("contract_upload_journal")
+      .select("state")
+      .eq("organization_id", organizationId)
+      .eq("document_version_id", run.document_version_id)
+      .maybeSingle();
+  if (error) throw Object.assign(new Error("Upload journal lookup failed"), { code: "STORAGE_ERROR", status: 503 });
+  if (journal && journal.state !== "ready") {
+    throw Object.assign(new Error("Document ingestion must finish before analysis"), {
+      code: "INGESTION_NOT_READY", status: 409,
+    });
+  }
+}
+
+async function requireIngestionReady(req, res, next) {
+  try {
+    const run = await getAnalysisRunById(req.params.id, req.organization.id);
+    await assertAnalysisIngestionReady({ run, organizationId: req.organization.id });
+    return next();
+  } catch (error) {
+    return res.status(error.status || 503).json(normalizeAnalysisRunError(error));
+  }
+}
+
 function sanitizeClause(row) {
   if (!row) return null;
   const {
@@ -383,9 +412,11 @@ export async function processAnalysisRun({
   organizationId,
   analysisRunId,
   userId = null,
+  useAI = false,
+  confirmAIBudget = false,
   pipeline = createContractIntelligencePipeline(),
 }) {
-  return pipeline.run({ organizationId, analysisRunId, userId });
+  return pipeline.run({ organizationId, analysisRunId, userId, useAI, confirmAIBudget });
 }
 
 export async function readAnalysisRunProfile({
@@ -674,10 +705,16 @@ router.get("/:id", async (req, res) => {
 
 async function runContractIntelligence(req, res) {
   try {
+    if ((req.body?.useAI !== undefined && typeof req.body.useAI !== "boolean")
+      || (req.body?.confirmAIBudget !== undefined && typeof req.body.confirmAIBudget !== "boolean")) {
+      return res.status(400).json({ success: false, code: "INVALID_AI_REQUEST", error: "AI request options must be boolean" });
+    }
     const result = await processAnalysisRun({
       organizationId: req.organization.id,
       analysisRunId: req.params.id,
       userId: req.user.id,
+      useAI: req.body?.useAI === true,
+      confirmAIBudget: req.body?.confirmAIBudget === true,
     });
     return res.status(result.status === "already_processed" ? 200 : 201).json({ success: true, ...result });
   } catch (error) {
@@ -792,7 +829,7 @@ router.get("/:sourceAId/compare/:sourceBId", async (req, res) => {
   }
 });
 
-router.post("/:id/clauses/analyze", requireOrganizationPermission("contract:analyze"), async (req, res) => {
+router.post("/:id/clauses/analyze", requireOrganizationPermission("contract:analyze"), requireIngestionReady, async (req, res) => {
   const analysisRunRepository = createAnalysisRunRepository();
   try {
     const analysisRun = await analysisRunRepository.getById(req.params.id, req.organization.id);
@@ -851,7 +888,7 @@ router.get("/:id/obligations/estimate", requireOrganizationPermission("contract:
   }
 });
 
-router.post("/:id/obligations/analyze", requireOrganizationPermission("contract:analyze"), async (req, res) => {
+router.post("/:id/obligations/analyze", requireOrganizationPermission("contract:analyze"), requireIngestionReady, async (req, res) => {
   const metrics = {};
   try {
     const analysisRun = await getAnalysisRunById(req.params.id, req.organization.id);
@@ -941,7 +978,7 @@ router.post(
   }
 );
 
-router.post("/:id/deadlines/analyze", requireOrganizationPermission("contract:analyze"), async (req, res) => {
+router.post("/:id/deadlines/analyze", requireOrganizationPermission("contract:analyze"), requireIngestionReady, async (req, res) => {
   const metrics = {};
   try {
     const analysisRunRepository = createAnalysisRunRepository();
@@ -1031,7 +1068,7 @@ router.get("/:id/risks/estimate", async (req, res) => {
   }
 });
 
-router.post("/:id/risks/analyze", requireOrganizationPermission("contract:analyze"), async (req, res) => {
+router.post("/:id/risks/analyze", requireOrganizationPermission("contract:analyze"), requireIngestionReady, async (req, res) => {
   const metrics = {};
   try {
     const analysisRunRepository = createAnalysisRunRepository();

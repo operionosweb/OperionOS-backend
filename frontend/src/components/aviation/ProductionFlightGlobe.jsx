@@ -8,6 +8,7 @@ import ScreenSpaceEventType from "@cesium/engine/Source/Core/ScreenSpaceEventTyp
 import VerticalOrigin from "@cesium/engine/Source/Scene/VerticalOrigin.js";
 import Viewer from "@cesium/widgets/Source/Viewer/Viewer.js";
 import { attachGlobeImagery } from "./globeImagery";
+import WeatherMapLayers from "./WeatherMapLayers";
 import { LocateFixed } from "lucide-react";
 import { attachGlobeTouchControls } from "./globeTouchControls";
 import { pickGlobeAircraft } from "./pickGlobeAircraft";
@@ -18,10 +19,12 @@ function validPosition(position) {
   return Number.isFinite(position?.longitude) && Number.isFinite(position?.latitude);
 }
 
-export default function ProductionFlightGlobe({ aircraft, selectedId, onSelect }) {
+export default function ProductionFlightGlobe({ aircraft, selectedId, onSelect, accessToken, organizationId }) {
   const hostRef = useRef(null);
   const viewerRef = useRef(null);
+  const aircraftEntitiesRef = useRef(new Map());
   const selectRef = useRef(onSelect);
+  const [viewerInstance, setViewerInstance] = useState(null);
   const [imageryError, setImageryError] = useState("");
   selectRef.current = onSelect;
 
@@ -35,17 +38,10 @@ export default function ProductionFlightGlobe({ aircraft, selectedId, onSelect }
       contextOptions: { webgl: { preserveDrawingBuffer: true } },
     });
     viewerRef.current = viewer;
+    setViewerInstance(viewer);
     viewer.scene.globe.enableLighting = true;
     setImageryError("");
     const removeImagery = attachGlobeImagery(viewer, { onError: setImageryError });
-    aircraft.filter((item) => validPosition(item.position)).forEach((item) => {
-      viewer.entities.add({
-        id: `aircraft-${item.id}`,
-        position: Cartesian3.fromDegrees(item.position.longitude, item.position.latitude, item.position.altitudeMeters || 0),
-        point: { pixelSize: 11, color: Color.fromCssColorString("#6848dc"), outlineColor: Color.WHITE, outlineWidth: 2 },
-        label: { text: item.callsign || item.registration || "Aircraft", font: "600 13px sans-serif", fillColor: Color.WHITE, showBackground: true, backgroundColor: Color.fromCssColorString("#11182c"), backgroundPadding: new Cartesian2(7, 4), pixelOffset: new Cartesian2(0, -22), style: LabelStyle.FILL, horizontalOrigin: HorizontalOrigin.CENTER, verticalOrigin: VerticalOrigin.BOTTOM },
-      });
-    });
     viewer.camera.setView({ destination: Cartesian3.fromDegrees(10, 35, 14_000_000), orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 } });
     const selectAtPosition = (position) => {
       const aircraftId = pickGlobeAircraft(viewer, position);
@@ -58,8 +54,31 @@ export default function ProductionFlightGlobe({ aircraft, selectedId, onSelect }
     };
     viewer.screenSpaceEventHandler.setInputAction(({ position }) => selectAtPosition(position), ScreenSpaceEventType.LEFT_CLICK);
     const removeTouchControls = attachGlobeTouchControls(viewer, selectAtPosition);
-    return () => { removeTouchControls(); removeImagery(); viewer.destroy(); viewerRef.current = null; };
-  }, [aircraft]);
+    return () => {
+      aircraftEntitiesRef.current.clear();
+      removeTouchControls();
+      removeImagery();
+      viewer.destroy();
+      viewerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || viewer.isDestroyed()) return;
+    for (const entity of aircraftEntitiesRef.current.values()) viewer.entities.remove(entity);
+    aircraftEntitiesRef.current.clear();
+    aircraft.filter((item) => validPosition(item.position)).forEach((item) => {
+      const entity = viewer.entities.add({
+        id: `aircraft-${item.id}`,
+        position: Cartesian3.fromDegrees(item.position.longitude, item.position.latitude, item.position.altitudeMeters || 0),
+        point: { pixelSize: 11, color: Color.fromCssColorString("#6848dc"), outlineColor: Color.WHITE, outlineWidth: 2 },
+        label: { text: item.callsign || item.registration || "Aircraft", font: "600 13px sans-serif", fillColor: Color.WHITE, showBackground: true, backgroundColor: Color.fromCssColorString("#11182c"), backgroundPadding: new Cartesian2(7, 4), pixelOffset: new Cartesian2(0, -22), style: LabelStyle.FILL, horizontalOrigin: HorizontalOrigin.CENTER, verticalOrigin: VerticalOrigin.BOTTOM },
+      });
+      aircraftEntitiesRef.current.set(item.id, entity);
+    });
+    viewer.scene.requestRender();
+  }, [aircraft, viewerInstance]);
 
   useEffect(() => {
     const selected = aircraft.find((item) => item.id === selectedId);
@@ -79,5 +98,5 @@ export default function ProductionFlightGlobe({ aircraft, selectedId, onSelect }
     });
   }
 
-  return <><div className="op-aviation-globe" ref={hostRef} aria-label="Interactive production aviation globe" />{imageryError && <p className="od-globe-imagery-status" role="status">{imageryError}</p>}<button type="button" className="op-globe-reset" onClick={resetView} aria-label="Reset view" title="Reset view"><LocateFixed size={18}/></button></>;
+  return <><div className="op-aviation-globe" ref={hostRef} aria-label="Interactive production aviation globe" />{imageryError && <p className="od-globe-imagery-status" role="status">{imageryError}</p>}<button type="button" className="op-globe-reset" onClick={resetView} aria-label="Reset view" title="Reset view"><LocateFixed size={18}/></button><WeatherMapLayers viewer={viewerInstance} accessToken={accessToken} organizationId={organizationId}/></>;
 }

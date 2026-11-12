@@ -2,9 +2,17 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import test from "node:test";
 
-import { assertNonemptyMigrationPlan, hasDocxMigrationSemantics } from "./supabase-validation.js";
+import { assertContractStoragePolicies, assertNonemptyMigrationPlan, hasDocxMigrationSemantics } from "./supabase-validation.js";
 
 const read = (file) => fs.readFile(file, "utf8");
+
+test("storage checks allow server-owned uploads and reject client writes", () => {
+  const readPolicy = { cmd: "SELECT", roles: ["authenticated"], qual: "is_organization_member" };
+  assert.doesNotThrow(() => assertContractStoragePolicies([readPolicy]));
+  assert.throws(() => assertContractStoragePolicies([readPolicy, { cmd: "INSERT", roles: ["authenticated"] }]), { code: "STORAGE_CLIENT_INSERT_POLICY" });
+  assert.throws(() => assertContractStoragePolicies([readPolicy, { cmd: "DELETE", roles: ["public"] }]), { code: "STORAGE_CLIENT_DELETE_POLICY" });
+  assert.throws(() => assertContractStoragePolicies([]), { code: "STORAGE_POLICY_MISSING" });
+});
 
 test("Supabase validation is isolated from the unit test command", async () => {
   const packageJson = JSON.parse(await read("package.json"));

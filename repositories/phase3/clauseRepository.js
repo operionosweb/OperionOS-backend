@@ -1,6 +1,7 @@
 import supabase from "../../config/supabase.js";
 import defaultPgPool from "../../db.js";
 import { assertOrganizationScope, assertResourceId } from "./scope.js";
+import { beginFencedAnalysisWrite } from "./fencedAnalysisWrite.js";
 
 // Builds a single parameterized multi-row INSERT so all rows land in one round trip
 // inside the caller's transaction.
@@ -95,6 +96,7 @@ export function createClauseRepository(client = supabase, pgPool = defaultPgPool
       analysisRunId,
       clauses,
       evidenceRows,
+      fence,
     }) {
       assertOrganizationScope(organizationId);
       assertResourceId(contractId, "contractId");
@@ -164,6 +166,7 @@ export function createClauseRepository(client = supabase, pgPool = defaultPgPool
       const pgClient = await pgPool.connect();
       try {
         await pgClient.query("BEGIN");
+        await beginFencedAnalysisWrite(pgClient, { organizationId, analysisRunId, fence });
 
         const clauseRows = clauses.map((clause) => ({ ...clause, organization_id: organizationId }));
         const insertedClauseRows = await insertRowsInTransaction(pgClient, "clauses", clauseColumns, clauseRows);

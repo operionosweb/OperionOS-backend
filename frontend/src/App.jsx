@@ -67,7 +67,7 @@ function ScrollToTop() {
 
 function NonDemoAnalytics() {
   const { pathname } = useLocation();
-  return /^\/demo(?:\/|$)/i.test(pathname) ? null : <Analytics />;
+  return /^\/(?:demo|app)(?:\/|$)/i.test(pathname) ? null : <Analytics />;
 }
 
 export default function App() {

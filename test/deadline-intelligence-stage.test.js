@@ -433,13 +433,35 @@ test("complex timing uses the controlled fallback with bounded context and no fa
   const result = await createDeadlineIntelligenceService({ repository, provider }).runStage({ ...SCOPE, useAIFallback: true });
 
   assert.equal(result.aiFallbackAnalyses, 1);
+  assert.equal(result.deterministicAnalyses, 0);
   assert.equal(result.deadlines[0].absolute_date, null);
+  assert.equal(result.deadlines[0].review_status, "requires_review");
+  assert.equal(result.deadlines[0].structured_timing.analysis_method, "ai_fallback");
   assert.deepEqual(Object.keys(payloads[0]).sort(), [
     "evidence_ids", "obligation", "obligation_id", "obligation_identity", "organization_id",
     "parser_version", "prompt_version", "relevant_clause", "schema_version", "taxonomy_version", "user_id",
   ]);
   assert.equal(payloads[0].relevant_clause.text, source.description);
   assert.equal("full_contract" in payloads[0], false);
+});
+
+test("deadline fallback rejects invented source text and unsupported timing amounts", async () => {
+  const source = obligation("The Lessee shall respond in the operational window customarily applicable to the relevant maintenance condition.");
+  for (const output of [
+    { timing_expression: "within 30 days", amount: 30, unit: "days" },
+    { timing_expression: "operational window customarily applicable", amount: 30, unit: "days" },
+    { timing_expression: "operational window customarily applicable", recurrence: { frequency: "monthly" } },
+  ]) {
+    const repository = inMemoryRepository({ obligations: [source], clauses: [{ id: source.clause_id, source_text: source.description }] });
+    const provider = { async analyzeStructured() {
+      return { deadline_type: "event_based", computability: "relative_event", confidence: 0.7, ...output };
+    } };
+    await assert.rejects(
+      () => createDeadlineIntelligenceService({ repository, provider }).runStage({ ...SCOPE, useAIFallback: true }),
+      { code: "PROVIDER_SOURCE_MISMATCH" },
+    );
+    assert.equal(repository.rows.length, 0);
+  }
 });
 
 test("Gateway fallback records estimate, actual usage, provider miss and cache hit", async () => {

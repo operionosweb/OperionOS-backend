@@ -1,8 +1,10 @@
 import supabase from "../../config/supabase.js";
+import defaultPgPool from "../../db.js";
 
 import { assertOrganizationScope, assertResourceId } from "./scope.js";
+import { beginFencedAnalysisWrite, assertFenceContext } from "./fencedAnalysisWrite.js";
 
-export function createAnalysisRunRepository(client = supabase) {
+export function createAnalysisRunRepository(client = supabase, pgPool = defaultPgPool) {
   return {
     async getById(analysisRunId, organizationId) {
       assertResourceId(analysisRunId, "analysisRunId");
@@ -19,10 +21,38 @@ export function createAnalysisRunRepository(client = supabase) {
       return data;
     },
 
+    async claimQueued({ analysisRunId, organizationId, startedAt }) {
+      assertResourceId(analysisRunId, "analysisRunId");
+      assertOrganizationScope(organizationId);
+      const { data, error } = await client.rpc("claim_analysis_execution", {
+        p_organization_id: organizationId,
+        p_analysis_run_id: analysisRunId,
+      });
+      if (error) throw error;
+      const execution = Array.isArray(data) ? data[0] : data;
+      if (!execution) return null;
+      const fenceContext = {
+        workerId: execution.worker_id,
+        executionId: execution.execution_id,
+        generation: execution.generation,
+        token: execution.token,
+      };
+      assertFenceContext(fenceContext);
+      const run = await this.getById(analysisRunId, organizationId);
+      if (!run || run.status !== "processing") {
+        throw Object.assign(new Error("The claimed analysis run could not be reloaded"), {
+          code: "ANALYSIS_CLAIM_RELOAD_FAILED",
+          status: 503,
+        });
+      }
+      return { run, fenceContext };
+    },
+
     async updateStatus({
       analysisRunId,
       organizationId,
       status,
+      fence,
       startedAt = null,
       completedAt = null,
       errorCode = null,
@@ -30,53 +60,34 @@ export function createAnalysisRunRepository(client = supabase) {
     }) {
       assertResourceId(analysisRunId, "analysisRunId");
       assertOrganizationScope(organizationId);
-
-      const { data, error } = await client
-        .from("analysis_runs")
-        .update({
-          status,
-          started_at: startedAt,
-          completed_at: completedAt,
-          error_code: errorCode,
-          error_message: errorMessage,
-        })
-        .eq("id", analysisRunId)
-        .eq("organization_id", organizationId)
-        .select("*")
-        .single();
-
-      if (error) throw error;
-      return data;
+      assertFenceContext(fence);
+      const pgClient = await pgPool.connect();
+      try {
+        await pgClient.query("begin");
+        await beginFencedAnalysisWrite(pgClient, { organizationId, analysisRunId, fence });
+        const result = await pgClient.query(
+          `update public.analysis_runs
+              set status = $3, started_at = $4, completed_at = $5,
+                  error_code = $6, error_message = $7
+            where id = $1 and organization_id = $2
+            returning *`,
+          [analysisRunId, organizationId, status, startedAt, completedAt, errorCode, errorMessage]
+        );
+        if (!result.rows[0]) {
+          throw Object.assign(new Error("Analysis run not found"), {
+            code: "ANALYSIS_RUN_NOT_FOUND",
+            status: 404,
+          });
+        }
+        await pgClient.query("commit");
+        return result.rows[0];
+      } catch (error) {
+        try { await pgClient.query("rollback"); } catch {}
+        throw error;
+      } finally {
+        pgClient.release();
+      }
     },
 
-    async createRetry({ run, organizationId }) {
-      assertOrganizationScope(organizationId);
-      assertResourceId(run.contract_id, "contract_id");
-      assertResourceId(run.document_version_id, "document_version_id");
-      assertResourceId(run.requested_by, "requested_by");
-
-      const { data, error } = await client
-        .from("analysis_runs")
-        .insert({
-          organization_id: organizationId,
-          contract_id: run.contract_id,
-          document_version_id: run.document_version_id,
-          status: "processing",
-          pipeline_version: run.pipeline_version,
-          intelligence_schema_version: run.intelligence_schema_version || "phase3a-v1",
-          extraction_version: run.extraction_version || null,
-          prompt_version: run.prompt_version || null,
-          provider: run.provider || null,
-          model: run.model || null,
-          retry_count: Number(run.retry_count || 0) + 1,
-          requested_by: run.requested_by,
-          started_at: new Date().toISOString(),
-        })
-        .select("*")
-        .single();
-
-      if (error) throw error;
-      return data;
-    },
   };
 }

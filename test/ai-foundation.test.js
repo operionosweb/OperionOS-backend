@@ -30,6 +30,18 @@ test("provider failure is surfaced and the job is marked failed", async () => {
   assert.equal([...ai.store.jobs.values()][0].status, "failed");
 });
 
+test("provider failures do not persist provider error text or unsafe error codes", async () => {
+  const ai = gateway({ generate: async () => {
+    throw Object.assign(new Error("synthetic private contract content"), { code: "synthetic private detail" });
+  } });
+  ai.setBudget(orgA, { allocated: 100 });
+  await assert.rejects(() => ai.request({ organizationId: orgA, operation: "classification", input: "synthetic" }));
+  const job = [...ai.store.jobs.values()][0];
+  assert.deepEqual(job.error, { code: "PROVIDER_FAILED", message: "AI request failed" });
+  assert.equal(JSON.stringify(job).includes("synthetic private"), false);
+  assert.equal(ai.getBudget(orgA).reserved, 0);
+});
+
 test("deterministic and existing intelligence paths consume zero and skip the provider", async () => {
   let calls = 0;
   const ai = gateway({ generate: async () => { calls += 1; return { output: {} }; } });

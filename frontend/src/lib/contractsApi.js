@@ -94,8 +94,8 @@ export function getAnalysisRun(analysisRunId, organizationId) {
   return apiRequest(`/api/analysis-runs/${analysisRunId}`, { organizationId });
 }
 
-export function processContractIntelligence(analysisRunId, organizationId) {
-  return apiRequest(`/api/analysis-runs/${analysisRunId}/process`, { method: "POST", organizationId });
+export function processContractIntelligence(analysisRunId, organizationId, options) {
+  return apiRequest(`/api/analysis-runs/${analysisRunId}/process`, { method: "POST", organizationId, body: options });
 }
 
 export function getAnalysisRunProfile(analysisRunId, organizationId) {

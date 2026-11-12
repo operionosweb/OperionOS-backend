@@ -26,6 +26,16 @@ const post = {
     { type: "link", text: "Explore the product", href: "https://operionos.com/product" },
   ],
 };
+const relatedPost = {
+  title: "MRO agreement renewal controls",
+  slug: "mro-agreement-renewal-controls",
+  status: "published",
+  category: "MRO and Maintenance Contracts",
+  excerpt: "Review renewal triggers and notice evidence.",
+  author_name: "Synthetic Editorial",
+  published_at: "2026-11-08T12:00:00.000Z",
+  content: [{ type: "paragraph", text: "Review the executed MRO agreement." }],
+};
 
 async function fixture(width, javaScriptEnabled = true) {
   const browser = await chromium.launch();
@@ -40,7 +50,7 @@ async function fixture(width, javaScriptEnabled = true) {
       body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64"),
     });
     if (url.pathname === "/blog") return route.fulfill({ contentType: "text/html", body: renderBlogIndexHtml([post], origin) });
-    if (url.pathname === `/blog/${post.slug}`) return route.fulfill({ contentType: "text/html", body: renderBlogArticleHtml(post, origin) });
+    if (url.pathname === `/blog/${post.slug}`) return route.fulfill({ contentType: "text/html", body: renderBlogArticleHtml(post, origin, [relatedPost]) });
     return route.fulfill({ status: 404, body: "Article not found." });
   });
   const page = await context.newPage();
@@ -59,6 +69,9 @@ for (const width of [1440, 768, 390, 320]) {
       await page.getByRole("heading", { name: post.title }).getByRole("link").click();
       await page.getByRole("heading", { name: post.title, level: 1 }).waitFor();
       await page.getByRole("heading", { name: "Evidence to review", level: 2 }).waitFor();
+      await page.getByRole("heading", { name: "Related aviation insights" }).waitFor();
+      await page.getByRole("region", { name: "Related aviation insights" })
+        .getByRole("article").filter({ hasText: relatedPost.title }).waitFor();
       assert.equal(await page.title(), post.seo_title);
       assert.equal(await page.locator('link[rel="canonical"]').getAttribute("href"), `https://operionos.com/blog/${post.slug}`);
       assert.equal(await page.locator('meta[name="description"]').getAttribute("content"), post.seo_description);

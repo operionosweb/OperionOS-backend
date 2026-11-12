@@ -77,6 +77,11 @@ const JOB_STATUSES = new Set([
   "completed", "failed", "cancelled", "budget_blocked",
 ]);
 
+const SAFE_PROVIDER_ERROR_CODES = new Set([
+  "PROVIDER_UNAVAILABLE", "PROVIDER_TIMEOUT", "INVALID_STRUCTURED_OUTPUT",
+  "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "ERR_BAD_RESPONSE",
+]);
+
 export function hashContent(content = "") {
   return crypto.createHash("sha256").update(String(content), "utf8").digest("hex");
 }
@@ -109,11 +114,11 @@ function budgetSnapshot(budget) {
 
 function parseStructuredOutput(output) {
   if (output && typeof output === "object") return output;
-  if (typeof output !== "string") throw Object.assign(new Error("Provider returned no structured output"), { code: "INVALID_STRUCTURED_OUTPUT" });
+  if (typeof output !== "string") throw Object.assign(new Error("Provider returned no structured output"), { code: "INVALID_STRUCTURED_OUTPUT", status: 502 });
   try {
     return JSON.parse(output.replace(/^```json\s*/i, "").replace(/\s*```$/, "").trim());
   } catch {
-    throw Object.assign(new Error("Provider returned invalid structured output"), { code: "INVALID_STRUCTURED_OUTPUT" });
+    throw Object.assign(new Error("Provider returned invalid structured output"), { code: "INVALID_STRUCTURED_OUTPUT", status: 502 });
   }
 }
 
@@ -147,12 +152,48 @@ function createOpenRouterProvider({ apiKey = process.env.OPENROUTER_API_KEY, mod
   };
 }
 
+function createAzureOpenAIProvider({ endpoint = process.env.AZURE_OPENAI_ENDPOINT, apiKey = process.env.AZURE_OPENAI_API_KEY, model = process.env.AZURE_OPENAI_DEPLOYMENT, http = axios } = {}) {
+  return {
+    name: "azure_openai", model,
+    async generate(request) {
+      let url;
+      try { url = new URL(endpoint); } catch { throw Object.assign(new Error("Azure OpenAI endpoint is invalid"), { code: "INVALID_PROVIDER_CONFIGURATION" }); }
+      if (url.protocol !== "https:" || !/^[a-z0-9-]+\.openai\.azure\.com$/i.test(url.hostname)
+        || url.username || url.password || url.port || url.search || url.hash || !["", "/"].includes(url.pathname)
+        || !apiKey?.trim() || !/^[a-zA-Z0-9._-]{1,128}$/.test(model || "")) {
+        throw Object.assign(new Error("Azure OpenAI configuration is incomplete or invalid"), { code: "INVALID_PROVIDER_CONFIGURATION" });
+      }
+      if (!request.responseFormat) throw Object.assign(new Error("Azure structured output schema is required"), { code: "INVALID_AI_REQUEST" });
+      let response;
+      try {
+        response = await http.post(`${url.origin}/openai/v1/chat/completions`, {
+          model, messages: [{ role: "system", content: request.system }, { role: "user", content: request.input }],
+          response_format: request.responseFormat, max_completion_tokens: 4096, n: 1,
+        }, { headers: { "api-key": apiKey, "Content-Type": "application/json" }, timeout: 60000, maxRedirects: 0, maxContentLength: 2 * 1024 * 1024, maxBodyLength: 1024 * 1024, proxy: false, signal: request.signal });
+      } catch {
+        throw Object.assign(new Error("Azure OpenAI request failed"), { code: "PROVIDER_UNAVAILABLE", status: 502 });
+      }
+      const choice = response?.data?.choices?.[0];
+      if (choice?.finish_reason !== "stop" || choice.message?.refusal || typeof choice.message?.content !== "string") {
+        throw Object.assign(new Error("Azure OpenAI did not return a complete analysis"), { code: "INVALID_STRUCTURED_OUTPUT", status: 502 });
+      }
+      const usage = {};
+      for (const key of ["prompt_tokens", "completion_tokens", "total_tokens"]) {
+        const value = response.data.usage?.[key];
+        if (Number.isSafeInteger(value) && value >= 0) usage[key] = value;
+      }
+      return { output: choice.message.content, usage };
+    },
+  };
+}
+
 export function createAIGateway({
   providers = {}, store = createInMemoryIntelligenceStore(), costs = DEFAULT_COSTS,
   now = () => new Date().toISOString(), analysisVersion = "ai-foundation-v1",
 } = {}) {
   const configuredProviders = Object.keys(providers).length ? providers : {
     mistral: createMistralProvider(),
+    azure_openai: createAzureOpenAIProvider(),
     ...(process.env.OPENROUTER_API_KEY ? { openrouter: createOpenRouterProvider() } : {}),
   };
 
@@ -197,7 +238,7 @@ export function createAIGateway({
     return Math.max(0, Math.ceil(base * Math.max(1, String(input).length / 12000)));
   }
 
-  async function request({ organizationId, userId = null, operation, input = "", deterministicResult, existingIntelligence, documentHash = hashContent(input), provider = process.env.AI_PROVIDER || "mistral", model, promptVersion = null, confirmation = false, structured = true, system, signal }) {
+  async function request({ organizationId, userId = null, analysisRunId = null, operation, input = "", deterministicResult, existingIntelligence, documentHash = hashContent(input), provider = process.env.AI_PROVIDER || "mistral", model, promptVersion = null, confirmation = false, structured = true, system, signal, responseFormat, cache = true }) {
     signal?.throwIfAborted();
     if (!operation) throw Object.assign(new Error("An operation type is required"), { code: "INVALID_AI_REQUEST" });
     scopedKey(organizationId, "request");
@@ -208,17 +249,22 @@ export function createAIGateway({
     const resolvedModel = model || selected.model || null;
     const cacheKey = scopedKey(organizationId, `${documentHash}:${operation}:${analysisVersion}:${promptVersion || "default"}:${provider}:${resolvedModel || "default"}`);
     const cacheIdentity = { organizationId, documentHash, operation, analysisVersion, promptVersion, provider, model: resolvedModel };
-    const cached = await findCached(cacheIdentity, cacheKey);
+    const cached = cache ? await findCached(cacheIdentity, cacheKey) : null;
     if (cached) return { success: true, source: "cache", intelligenceConsumption: 0, result: cached.result, job: cached.job };
 
     const estimated = estimate(operation, input);
     let budget = store.kind === "postgres" ? await store.getBudget(organizationId) : getMemoryBudget(organizationId);
     const snapshot = budgetSnapshot(budget);
-    const requestKey = hashContent(JSON.stringify(cacheIdentity));
-    const job = { id: crypto.randomUUID(), organizationId, userId, operation, status: "estimating", estimatedIntelligence: estimated, actualIntelligence: 0, requestKey, createdAt: now() };
+    const requestKey = hashContent(JSON.stringify(analysisRunId ? { ...cacheIdentity, analysisRunId } : cacheIdentity));
+    const job = { id: crypto.randomUUID(), organizationId, userId, analysisRunId, operation, status: "estimating", estimatedIntelligence: estimated, actualIntelligence: 0, requestKey, createdAt: now() };
     const persistedJob = await createJob(job);
     if (persistedJob?.id !== job.id) {
-      return { success: false, code: "REQUEST_IN_PROGRESS", job: persistedJob, estimatedIntelligence: persistedJob?.estimatedIntelligence ?? estimated };
+      return {
+        success: false,
+        code: persistedJob?.status === "completed" ? "AI_REQUEST_ALREADY_COMPLETED" : "REQUEST_IN_PROGRESS",
+        job: persistedJob,
+        estimatedIntelligence: persistedJob?.estimatedIntelligence ?? estimated,
+      };
     }
     if (estimated > snapshot.remaining && budget.hardLimit) {
       job.status = "budget_blocked";
@@ -244,7 +290,7 @@ export function createAIGateway({
     await updateJob(job);
     try {
       signal?.throwIfAborted();
-      const response = await selected.generate({ input, system, structured, signal });
+      const response = await selected.generate({ input, system, structured, signal, responseFormat });
       const actual = estimated;
       const result = structured ? parseStructuredOutput(response?.output) : response?.output;
       if (store.kind !== "postgres") {
@@ -252,22 +298,23 @@ export function createAIGateway({
         budget.consumed = Number(budget.consumed || 0) + actual;
       }
       job.status = "completed"; job.actualIntelligence = actual; job.completedAt = now(); job.technicalUsage = response?.usage || {};
-      const usage = { organizationId, userId, jobId: job.id, operation, estimatedIntelligence: estimated, actualIntelligence: actual, provider: job.provider, model: job.model, technicalUsage: job.technicalUsage, createdAt: now() };
+      const usage = { organizationId, userId, analysisRunId, jobId: job.id, operation, estimatedIntelligence: estimated, actualIntelligence: actual, provider: job.provider, model: job.model, technicalUsage: job.technicalUsage, createdAt: now() };
       if (store.kind === "postgres" && typeof store.completeRequest === "function") {
-        budget = await store.completeRequest({ job, reservedAmount: estimated, usage, cache: { ...cacheIdentity, result } });
+        budget = await store.completeRequest({ job, reservedAmount: estimated, usage, cache: cache ? { ...cacheIdentity, result } : null });
       } else if (store.kind === "postgres") {
         budget = await store.consumeBudget(organizationId, estimated, actual);
         await updateJob(job);
         await store.recordUsage(usage);
-        await store.putCache({ ...cacheIdentity, result, job: { ...job } });
+        if (cache) await store.putCache({ ...cacheIdentity, result, job: { ...job } });
       } else {
         await updateJob(job);
         store.usage.push(usage);
-        store.cache.set(cacheKey, { result, job: { ...job }, createdAt: now(), documentHash, analysisVersion });
+        if (cache) store.cache.set(cacheKey, { result, job: { ...job }, createdAt: now(), documentHash, analysisVersion });
       }
       return { success: true, source: "provider", result, job, budget: budgetSnapshot(budget) };
     } catch (error) {
-      job.status = "failed"; job.error = { code: error.code || "PROVIDER_FAILED", message: error.message }; job.completedAt = now();
+      const code = SAFE_PROVIDER_ERROR_CODES.has(error.code) ? error.code : "PROVIDER_FAILED";
+      job.status = "failed"; job.error = { code, message: "AI request failed" }; job.completedAt = now();
       if (store.kind === "postgres" && typeof store.failRequest === "function") await store.failRequest(job, estimated);
       else {
         if (store.kind === "postgres") await store.releaseBudget(organizationId, estimated);
@@ -298,4 +345,4 @@ export function createAIGateway({
 
 export const aiGateway = createAIGateway({ store: createPostgresIntelligenceStore() });
 
-export { DEFAULT_COSTS, JOB_STATUSES, createMistralProvider, createOpenRouterProvider };
+export { DEFAULT_COSTS, JOB_STATUSES, createMistralProvider, createOpenRouterProvider, createAzureOpenAIProvider };

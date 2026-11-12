@@ -23,6 +23,7 @@ import { useAuth } from "../../context/AuthContext";
 import { useOrganization } from "../../context/OrganizationContext";
 import { ORGANIZATION_PERMISSIONS, PLATFORM_PERMISSIONS } from "../../lib/permissions";
 import { MattFloating } from "../demo/OperionAssistant";
+import Analytics from "../analytics/Analytics";
 
 const PRIMARY_NAV = [
   { to: "/app/dashboard", label: "Dashboard", icon: Gauge, end: true },
@@ -162,12 +163,13 @@ export default function ProductionLayout() {
           </div>
         )}
         <main className="op-product-main">
+          <Analytics />
+          {(organization.hasOrganizationPermission(ORGANIZATION_PERMISSIONS.CONTRACT_READ) || auth.hasPlatformPermission(PLATFORM_PERMISSIONS.PLATFORM_ADMIN)) && (
+            <MattFloating presenceOnly={!organization.hasOrganizationPermission(ORGANIZATION_PERMISSIONS.CONTRACT_READ)} />
+          )}
           <Outlet />
         </main>
       </div>
-      {(organization.hasOrganizationPermission(ORGANIZATION_PERMISSIONS.CONTRACT_READ) || auth.hasPlatformPermission(PLATFORM_PERMISSIONS.PLATFORM_ADMIN)) && (
-        <MattFloating presenceOnly={!organization.hasOrganizationPermission(ORGANIZATION_PERMISSIONS.CONTRACT_READ)} />
-      )}
     </div>
   );
 }

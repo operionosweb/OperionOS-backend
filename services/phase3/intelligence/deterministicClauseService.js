@@ -348,7 +348,7 @@ function buildSegment({ source, start, end, heading, parentClauseNumber = null, 
       confidence,
       review_status: reviewStatus,
       ambiguity_reason: source.pageBoundaries === "derived_unavailable"
-        ? "Original PDF page boundaries were not persisted by Phase 2; the clause evidence uses canonical derived source provenance"
+        ? "Original page boundaries are unavailable; the clause evidence uses canonical derived source provenance"
         : null,
       evidence_hash: crypto.createHash("sha256").update(sourceText).digest("hex"),
     },
@@ -424,6 +424,7 @@ export async function runDeterministicClauseStage({
   documentVersionId,
   analysisRunId,
   organizationId,
+  fence,
   sourceService = createDocumentVersionSourceService(),
   clauseRepository = createClauseRepository(),
   evidenceRepository = createEvidenceRepository(),
@@ -479,6 +480,7 @@ export async function runDeterministicClauseStage({
     analysisRunId,
     clauses: insertRows,
     evidenceRows: segmentPlan.map((segment) => segment.evidence),
+    ...(fence === undefined ? {} : { fence }),
   });
 
   if (!result?.clauses || result.clauses.length !== segmentPlan.length) {

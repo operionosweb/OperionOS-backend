@@ -1,32 +1,41 @@
 import assert from "node:assert/strict";
 import test, { before, after } from "node:test";
 import path from "node:path";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { build, preview } from "vite";
 import { chromium } from "@playwright/test";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 process.env.VITE_SUPABASE_URL = "http://127.0.0.1:59998";
 process.env.VITE_SUPABASE_ANON_KEY = "offline-matt-test";
 process.env.VITE_API_BASE_URL = "";
-let browser, server, origin;
+let browser, server, origin, outDir;
 before(async () => {
-  await build({ root, mode: "matt-offline", logLevel: "error" });
-  server = await preview({ root, preview: { host: "127.0.0.1", port: 0 }, logLevel: "error" });
+  outDir = await mkdtemp(path.join(os.tmpdir(), "operion-matt-unified-"));
+  await build({ root, mode: "matt-offline", logLevel: "error", build: { outDir, emptyOutDir: true } });
+  server = await preview({ root, build: { outDir }, preview: { host: "127.0.0.1", port: 0 }, logLevel: "error" });
   origin = `http://127.0.0.1:${server.httpServer.address().port}`;
   browser = await chromium.launch();
 });
 after(async () => {
-  await browser?.close();
-  if (server) { server.httpServer.closeAllConnections(); await new Promise((resolve) => server.httpServer.close(resolve)); }
+  try {
+    await browser?.close();
+  } finally {
+    try {
+      if (server) { server.httpServer.closeAllConnections(); await new Promise((resolve) => server.httpServer.close(resolve)); }
+    } finally {
+      if (outDir) await rm(outDir, { recursive: true, force: true });
+    }
+  }
 });
 
 async function fixture(width = 1440) {
   const context = await browser.newContext({ viewport: { width, height: 1000 }, reducedMotion: "reduce" });
   await context.addInitScript(() => localStorage.setItem("operion.consent", "declined"));
   const page = await context.newPage(), errors = [], requests = [];
-  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("pageerror", () => errors.push("Page error"));
   await context.route("**/*", (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/api/weather-maps/status") return route.fulfill({ json: { configured: false } });
@@ -45,7 +54,12 @@ async function prepare(page) {
 async function ask(page, question) {
   await page.getByRole("textbox", { name: "Ask Matt", exact: true }).fill(question);
   await page.getByRole("button", { name: "Send", exact: true }).click();
-  await page.locator(".matt-page[data-state='PRESENTING']").waitFor();
+  await page.waitForFunction((submitted) => {
+    const messages = [...document.querySelectorAll(".matt-history p")];
+    return document.querySelector(".matt-page")?.dataset.state === "PRESENTING"
+      && messages.at(-2)?.textContent === `You ${submitted}`
+      && messages.at(-1)?.querySelector("strong")?.textContent === "Matt";
+  }, question);
 }
 
 test("Globe selection, switching, closing, floating and expanded Matt keep only the current prepared aircraft", async () => {
@@ -61,14 +75,14 @@ test("Globe selection, switching, closing, floating and expanded Matt keep only 
       await f.page.mouse.move(1439, 0);
       await f.page.waitForFunction(() => !document.querySelector(".od-sidebar")?.classList.contains("is-expanded"));
       await shell.waitFor({ timeout: 10000 }).catch(async (error) => {
-        throw new Error(JSON.stringify({ url: f.page.url(), errors: f.errors, body: (await f.page.locator("body").innerText()).slice(0, 1500) }), { cause: error });
+        throw new Error(`Globe shell did not appear; page errors: ${f.errors.length}`, { cause: error });
       });
       await shell.getByRole("button", { name: /^Explore the fleet/ }).click();
       await shell.locator(".od-dashboard-aircraft-list button").nth(index).click();
     };
     await choose(0);
     assert.equal(await f.page.locator(".od-globe-spatial-infocard").evaluate((node) => getComputedStyle(node).borderRadius), "14px", "Aircraft infocard consumes the shared corporate card radius");
-    await f.page.getByRole("main").getByRole("button", { name: "Ask Matt", exact: true }).click();
+    await f.page.locator(".od-globe-spatial-infocard").getByRole("button", { name: "Ask Matt about this flight", exact: true }).click();
     await f.page.locator('.matt-floating-panel .matt-page[data-context="ac-demo-001"]').waitFor();
     await prepare(f.page);
     await ask(f.page, "What is the potential financial exposure?");
@@ -241,7 +255,7 @@ for (const [width, height] of [[320, 780], [390, 844], [768, 1024], [1024, 768],
       });
       const firstEntry = await measure();
       const firstQuestion = await f.page.locator(".matt-question-panel button").first().boundingBox();
-      assert.ok(firstQuestion.y + firstQuestion.height <= firstEntry.usableBottom, "The first suggested question is wholly above fixed navigation on first entry");
+      assert.ok(firstQuestion.y + firstQuestion.height <= firstEntry.usableBottom, `The first suggested question is wholly above fixed navigation on first entry (bottom ${firstQuestion.y + firstQuestion.height}, limit ${firstEntry.usableBottom})`);
       assert.equal(await f.page.locator(".matt-question-panel button").first().evaluate((button) => {
         const b = button.getBoundingClientRect();
         return document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)?.closest("button") === button;
@@ -421,6 +435,9 @@ test("Matt retains the original workspace's supported intelligence categories wi
       assert.ok(await f.page.locator(".matt-findings li").count() > 0, question);
     }
     await ask(f.page, "What is our fuel price exposure?");
+    assert.match(await f.page.locator(".matt-report").innerText(), /fuel/i);
+    assert.ok(await f.page.locator(".matt-findings li").count() > 0, "The synthetic fuel clause is represented");
+    await ask(f.page, "What is the spacecraft docking allowance?");
     assert.equal(await f.page.locator(".matt-findings li").count(), 0, "No unrelated financial answer substituted");
     assert.match(await f.page.locator(".matt-report").innerText(), /Not established/);
     assert.deepEqual(f.errors, []);

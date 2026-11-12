@@ -7,6 +7,8 @@
     "start": "node index.js",
     "test": "node --test test/*.test.js",
     "test:supabase": "node test/supabase-validation.js",
+    "validate:contract-ai:preflight": "node test/phase84-contract-validation.js",
+    "validate:contract-ai:live": "node test/phase85-contract-live.js",
     "test:migrations:clean-room": "node test/clean-room-migration-rehearsal.js",
     "test:supabase:local": "node test/local-supabase-rehearsal.js",
     "recovery:audit": "node scripts/offline-recovery-audit.js",

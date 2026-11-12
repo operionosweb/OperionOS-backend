@@ -101,7 +101,14 @@ test("published article rendering is semantic, escaped, canonical, and includes 
       { type: "paragraph", text: "Check payment evidence and contract terms. <img src=x onerror=alert(1)>" },
       { type: "link", href: "javascript:alert(2)", text: "unsafe" },
     ],
-  });
+  }, "", [{
+    title: "MRO agreement renewal controls",
+    slug: "mro-agreement-renewal-controls",
+    category: "MRO and Maintenance Contracts",
+    excerpt: "Review renewal triggers and notice evidence.",
+    author_name: "Operion Editorial",
+    content: [{ type: "paragraph", text: "Review the executed MRO agreement." }],
+  }]);
 
   assert.match(html, /<h1>&lt;script&gt;alert\(1\)&lt;\/script&gt; Lease obligations<\/h1>/);
   assert.match(html, /<h2>What should a reviewer verify\?<\/h2>/);
@@ -117,6 +124,8 @@ test("published article rendering is semantic, escaped, canonical, and includes 
   assert.match(html, /<meta property="og:type" content="article">/);
   assert.match(html, /"BlogPosting"/);
   assert.match(html, /"BreadcrumbList"/);
+  assert.match(html, /<section aria-label="Related aviation insights">[\s\S]*<div class="op-blog-grid">[\s\S]*class="op-blog-card"/);
+  assert.match(html, /href="\/blog\/mro-agreement-renewal-controls"/);
   const jsonLdMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
   assert.ok(jsonLdMatch);
   const jsonLd = JSON.parse(jsonLdMatch[1]);

@@ -321,9 +321,8 @@ function mapEvidenceForObligation(clauseEvidenceLinks, evidenceById) {
 
 function safeError(error) {
   return {
-    code: error?.code || "UNCLASSIFIED",
-    status: error?.status || null,
-    message: String(error?.message || "error").slice(0, 160),
+    code: "OBLIGATION_STAGE_FAILED",
+    status: Number.isInteger(error?.status) && error.status >= 400 && error.status <= 599 ? error.status : null,
   };
 }
 
@@ -347,6 +346,7 @@ export function createDeterministicObligationService({
       documentId,
       documentVersionId,
       analysisRunId,
+      fence,
       userId = null,
       useProviderNormalization = false,
       providerTimeoutMs = DEFAULT_PROVIDER_TIMEOUT_MS,
@@ -585,9 +585,9 @@ export function createDeterministicObligationService({
               consequence: output.consequence || deterministicCandidate.consequence || null,
               modality: output.modality || deterministicCandidate.modality || "mandatory",
               priority: output.priority || "medium",
-              status: output.status || "identified",
+              status: useProviderNormalization ? "requires_review" : output.status || "identified",
               confidence: output.confidence ?? 0.5,
-              review_status: output.review_status || "pending",
+              review_status: useProviderNormalization ? "requires_review" : output.review_status || "pending",
               obligation_identity: obligationIdentity,
             });
 
@@ -633,6 +633,7 @@ export function createDeterministicObligationService({
           documentId,
           documentVersionId,
           analysisRunId,
+          fence,
           obligations,
           obligationEvidenceByIdentity,
         });

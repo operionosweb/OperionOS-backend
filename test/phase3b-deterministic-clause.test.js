@@ -12,12 +12,47 @@ import {
 import { parseDocumentStructure } from "../services/documentStructureService.js";
 import { buildCanonicalPageSource } from "../services/phase3/source/deterministicSourcePageAdapter.js";
 import { createDocumentVersionSourceService } from "../services/phase3/source/documentVersionSourceService.js";
-import { createClauseRepository } from "../repositories/phase3/clauseRepository.js";
+import { createClauseRepository as createProductionClauseRepository } from "../repositories/phase3/clauseRepository.js";
 
 const UUID_PLACEHOLDER = "11111111-1111-4111-8111-111111111111";
+const TEST_FENCE = {
+  workerId: UUID_PLACEHOLDER,
+  executionId: "22222222-2222-4222-8222-222222222222",
+  generation: "1",
+  token: "a".repeat(64),
+};
+
+function createClauseRepository(client, pgPool) {
+  const repository = createProductionClauseRepository(client, pgPool);
+  return {
+    ...repository,
+    persistDeterministicClauseStage: (input) => repository.persistDeterministicClauseStage({
+      ...input,
+      fence: input.fence || TEST_FENCE,
+    }),
+  };
+}
 
 test("document source service accepts the default null diagnostic", () => {
   assert.doesNotThrow(() => createDocumentVersionSourceService());
+});
+
+test("source lookup diagnostics never include arbitrary provider error text or codes", async () => {
+  const events = [];
+  const secret = "synthetic-credential-must-not-be-logged";
+  const query = {
+    select() { return this; },
+    eq() { return this; },
+    async maybeSingle() { return { data: null, error: { code: secret, message: secret } }; },
+  };
+  const service = createDocumentVersionSourceService({ from: () => query }, (event) => events.push(event));
+  await assert.rejects(service.load({
+    documentVersionId: UUID_PLACEHOLDER,
+    analysisRunId: UUID_PLACEHOLDER,
+    organizationId: UUID_PLACEHOLDER,
+  }), { code: "SOURCE_LOOKUP_FAILED" });
+  assert.equal(JSON.stringify(events).includes(secret), false);
+  assert.deepEqual(events.find((event) => event.event === "document_versions.after").error, { code: "SOURCE_LOOKUP_FAILED" });
 });
 
 function buildTestSource(text) {
@@ -38,8 +73,8 @@ function buildTestSource(text) {
 // ROLLBACK isolation and a unique constraint on (document_version_id,
 // analysis_run_id, clause_identity)) so the repository's real transaction code path
 // can be exercised without a live database. This is CODE-VERIFIED behavior only;
-// it does not prove anything about actual PostgreSQL locking/MVCC semantics, which
-// remain DATABASE REQUIRED — NOT EXECUTED.
+// it does not prove actual PostgreSQL locking/MVCC semantics. The disposable
+// PostgreSQL rehearsal tests the real concurrent clause-identity constraint.
 function createFakeTransactionalPgPool() {
   const committed = { clauses: [], intelligence_evidence: [], clause_evidence: [] };
   const log = [];
@@ -82,6 +117,10 @@ function createFakeTransactionalPgPool() {
 
         if (normalized === "rollback") {
           pending = null;
+          return { rows: [] };
+        }
+
+        if (normalized.startsWith("select public.begin_analysis_fenced_write_v2")) {
           return { rows: [] };
         }
 
@@ -464,14 +503,9 @@ test("clauseRepository.persistDeterministicClauseStage real transaction boundary
     assert.equal(pgPool.committed.clauses.length, 1, "only the first batch may persist");
   });
 
-  await suite.test("DATABASE REQUIRED — NOT EXECUTED: real Postgres unique_violation (23505) enforcement under true concurrency", () => {
-    // The fake pool above proves the application code correctly issues BEGIN,
-    // detects a duplicate, and issues ROLLBACK. It cannot prove that PostgreSQL's
-    // actual MVCC/locking behavior serializes two truly concurrent transactions
-    // the same way. That requires a live database and is intentionally not
-    // simulated here.
-    assert.ok(true);
-  });
+  await suite.test("real Postgres unique_violation (23505) enforcement under true concurrency", {
+    skip: "Executed separately by the disposable PostgreSQL rehearsal",
+  }, () => {});
 });
 
 test("canonical source page adapter and atomic persistence boundaries", async (suite) => {
@@ -526,6 +560,22 @@ test("canonical source page adapter and atomic persistence boundaries", async (s
     assert.equal(source.pageBoundaries, "explicit");
     assert.equal(source.sourceStatus, "extracted");
     assert.match(source.sourceLocator(10, text.length), /page:2:char:10-18$/);
+  });
+
+  await suite.test("legacy DOCX derived pages are never treated as original page numbers", () => {
+    const text = "1. Maintenance\nThe Lessee shall maintain the aircraft.";
+    const source = buildCanonicalPageSource({
+      documentVersion: { id: UUID_PLACEHOLDER, organization_id: UUID_PLACEHOLDER, mime_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+      document: { id: UUID_PLACEHOLDER, contract_id: UUID_PLACEHOLDER },
+      analysisRun: { id: UUID_PLACEHOLDER },
+      extraction: { text_content: text, extraction_status: "completed" },
+      pageRows: [{ page_number: 1, char_start: 0, char_end: text.length, text_content: text }],
+    });
+    const clause = segmentDeterministicClauses(source)[0];
+    assert.equal(source.pageBoundaries, "derived_unavailable");
+    assert.equal(clause.evidence.page_number, null);
+    assert.doesNotMatch(clause.evidence.source_locator, /:page:/);
+    assert.equal(clause.evidence.excerpt, text);
   });
 
   await suite.test("blank PDF pages preserve later clause extraction and exact page evidence", () => {
@@ -868,7 +918,7 @@ Content of second clause.`;
     const clauses = segmentDeterministicClauses(source);
     assert.equal(clauses[0].evidence.page_id, null);
     assert.equal(clauses[0].evidence.page_number, null);
-    assert.ok(clauses[0].evidence.ambiguity_reason.includes("PDF page boundaries"));
+    assert.ok(clauses[0].evidence.ambiguity_reason.includes("page boundaries are unavailable"));
   });
 
   await suite.test("taxonomy categories match Phase 3A enums", () => {
