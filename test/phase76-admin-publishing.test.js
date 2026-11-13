@@ -9,7 +9,7 @@ import { createPlatformPermissionMiddleware } from "../middleware/superAdminMidd
 import { createUserAuthMiddleware } from "../middleware/userAuthMiddleware.js";
 import { normalizeRichText, articlePlainText, readingMinutes, isPublicArticle } from "../frontend/src/lib/richText.js";
 import { renderRichTextHtml, renderBlogIndexHtml } from "../frontend/src/lib/blogRendering.js";
-import { createEditorialAnalyzer, resolveAuthor, articleRevision } from "../services/blogEditorialService.js";
+import { createEditorialAnalyzer, resolveAuthor, articleRevision, SEO_SCORE_CATEGORIES } from "../services/blogEditorialService.js";
 import { createBlogController } from "../controllers/blogController.js";
 import blogFeed from "../frontend/api/blog-feed.js";
 
@@ -417,16 +417,35 @@ test("publication requires explicit review before any database operation", async
 });
 test("AI analyzes complete saved rich content with consent, validates suggestions and cannot change author/status", async () => {
   let invocation;
+  const scores = Object.fromEntries(SEO_SCORE_CATEGORIES.map(({ id }) => [id, {
+    score: 50,
+    explanation: "Fixture rationale based on the saved article.",
+  }]));
   const analyze = createEditorialAnalyzer({ generate: async (...args) => {
     invocation = args;
-    return { provider: "local-mock-not-real-AI", analysis: { seo_title: "Aviation evidence", seo_description: "Reviewing documented aviation clause evidence.", category: "Aircraft Leasing", tags: ["Evidence"], author_name: "Impersonator", status: "published", quality_notes: ["Verify source clauses."] } };
+    return {
+      provider: "local-mock-not-real-AI",
+      analysis: {
+        scores,
+        recommendations: [],
+        suggestions: {
+          metadata: { seo_title: "Aviation evidence", seo_description: "Reviewing documented aviation clause evidence." },
+          primary_keyword: "aviation contract evidence",
+          secondary_keywords: [],
+          headings: [],
+          internal_link_topics: [],
+          article_structure: [],
+          paragraph_improvements: [],
+        },
+      },
+    };
   } });
   const post = { title: "Aircraft lease evidence", excerpt: "Evidence guidance.", updated_at: "2030-01-01", content: [{ type: "rich_text", document: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Review actual saved clause evidence. ".repeat(5) }] }] } }] };
   await assert.rejects(analyze(post, { consent: false }), /Confirm/);
   const result = await analyze(post, { consent: true, organizationId: ORGANIZATION });
   assert.match(invocation[0], /actual saved clause evidence/);
   assert.equal(invocation[2].organizationId, ORGANIZATION);
-  assert.ok(!("author_name" in result.metadata)); assert.ok(!("status" in result.metadata));
+  assert.ok(!("author_name" in result.suggestions.metadata)); assert.ok(!("status" in result.suggestions.metadata));
   assert.equal(result.approved, false); assert.equal(result.revision.length, 64);
   assert.match(articlePlainText(post), /actual saved/);
 });
@@ -509,7 +528,7 @@ test("profile photo ownership is enforced before the Auth profile can be changed
 });
 test("AI incomplete output fails explicitly and never fabricates a generated SEO result", async () => {
   const analyze = createEditorialAnalyzer({ generate: async () => ({ provider: "local-fixture", analysis: {} }) });
-  await assert.rejects(analyze({ ...editorialPost, content: [{ type: "paragraph", text: "Saved article evidence. ".repeat(10) }] }, { consent: true, organizationId: ORGANIZATION }), /incomplete SEO suggestions/);
+  await assert.rejects(analyze({ ...editorialPost, content: [{ type: "paragraph", text: "Saved article evidence. ".repeat(10) }] }, { consent: true, organizationId: ORGANIZATION }), /no SEO category scores/);
 });
 test("AI results cannot be attached after a concurrent publication", async () => {
   let reads = 0; const statements = [];

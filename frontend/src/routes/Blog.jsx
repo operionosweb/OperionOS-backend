@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowRight, BookOpen, CalendarDays, ChevronRight } from "lucide-react";
 import { apiRequest } from "../lib/apiClient";
 import { useAuth } from "../context/AuthContext";
 import { blogMediaUrl, renderRichTextHtml } from "../lib/blogRendering";
 import { readingMinutes } from "../lib/richText";
+import { BLOG_CATEGORIES } from "../lib/blogContent";
 import { applyRouteMetadata } from "../components/seo/RouteMetadata";
 
 const SITE_URL = "https://operionos.com";
@@ -145,19 +146,69 @@ function ArticleCard({ post }) {
   );
 }
 
+function ArticleSharing({ post }) {
+  const canonical = post.canonical_url || `${SITE_URL}/blog/${encodeURIComponent(post.slug)}`;
+  const encodedUrl = encodeURIComponent(canonical);
+  return <nav className="op-blog-share" aria-label="Share this article">
+    <strong>Share this article</strong>
+    <a href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`} target="_blank" rel="noopener noreferrer">LinkedIn</a>
+    <a href={`https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodeURIComponent(post.title)}`} target="_blank" rel="noopener noreferrer">X</a>
+    <a href={`mailto:?subject=${encodeURIComponent(post.title)}&body=${encodedUrl}`}>Email</a>
+  </nav>;
+}
+
 export function BlogIndex() {
-  const [params] = useSearchParams();
+  const [params, setSearchParams] = useSearchParams();
+  const [requestedPage, setRequestedPage] = useState(() => {
+    const page = Number(params.get("page"));
+    return Number.isSafeInteger(page) && page > 0 ? page : 1;
+  });
   const [posts, setPosts] = useState([]);
   const [category, setCategory] = useState(() => params.get("category") || "All topics");
   const [error, setError] = useState("");
   const [search, setSearch] = useState(() => params.get("search") || "");
   const [tag, setTag] = useState(() => params.get("tag") || "");
+  const [publishedCategories, setPublishedCategories] = useState(BLOG_CATEGORIES);
+  const [pagination, setPagination] = useState({ page: 1, page_size: 12, total: 0, has_more: false });
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadMoreRequestRef = useRef(0);
+  const listingKey = JSON.stringify([category, search.trim(), tag]);
+  const listingKeyRef = useRef(listingKey);
+  listingKeyRef.current = listingKey;
 
   useEffect(() => {
     let active = true;
-    apiRequest("/api/blog")
-      .then((result) => active && setPosts(Array.isArray(result.posts) ? result.posts : []))
-      .catch(() => active && setError("Insights are temporarily unavailable. Please try again later."));
+    const controller = new AbortController();
+    loadMoreRequestRef.current += 1;
+    const query = new URLSearchParams({ page: String(requestedPage), limit: "12" });
+    if (category !== "All topics") query.set("category", category);
+    if (search.trim()) query.set("search", search.trim());
+    if (tag) query.set("tag", tag);
+    const urlQuery = new URLSearchParams();
+    if (category !== "All topics") urlQuery.set("category", category);
+    if (search.trim()) urlQuery.set("search", search.trim());
+    if (tag) urlQuery.set("tag", tag);
+    if (requestedPage > 1) urlQuery.set("page", String(requestedPage));
+    setSearchParams(urlQuery, { replace: true });
+    setPosts([]);
+    setPagination({ page: 1, page_size: 12, total: 0, has_more: false });
+    setError("");
+    setLoading(true);
+    setLoadingMore(false);
+    const timeout = window.setTimeout(() => {
+      apiRequest(`/api/blog?${query}`, { signal: controller.signal })
+        .then((result) => {
+          if (!active) return;
+          setPosts(Array.isArray(result.posts) ? result.posts : []);
+          setPublishedCategories([...new Set([...BLOG_CATEGORIES, ...(result.categories || [])])]);
+          setPagination(result.pagination || { page: 1, page_size: 12, total: result.posts?.length || 0, has_more: false });
+        })
+        .catch((failure) => {
+          if (active && failure.name !== "AbortError") setError("Insights are temporarily unavailable. Please try again later.");
+        })
+        .finally(() => active && setLoading(false));
+    }, search.trim() ? 250 : 0);
     applyRouteMetadata({
       title: "Operion Insights | Aviation Contract Intelligence",
       description: BLOG_DESCRIPTION,
@@ -174,14 +225,46 @@ export function BlogIndex() {
         ],
       },
     });
-    return () => { active = false; };
-  }, []);
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+      controller.abort();
+      loadMoreRequestRef.current += 1;
+    };
+  }, [category, search, tag, requestedPage, setSearchParams]);
 
-  const categories = useMemo(() => ["All topics", ...new Set(posts.map((post) => post.category).filter(Boolean))], [posts]);
-  const tags = [...new Set(posts.flatMap(p => p.tags || []))];
-  const visiblePosts = posts.filter(post => (category === "All topics" || post.category === category)
-    && (!tag || post.tags?.includes(tag))
-    && `${post.title} ${post.excerpt || ""}`.toLowerCase().includes(search.toLowerCase()));
+  const categories = useMemo(() => ["All topics", ...new Set([
+    ...publishedCategories,
+    ...posts.map((post) => post.category).filter(Boolean),
+    ...(category !== "All topics" ? [category] : []),
+  ])], [publishedCategories, posts, category]);
+  const visiblePosts = posts;
+
+  async function loadMore() {
+    if (loadingMore || !pagination.has_more) return;
+    const requestId = ++loadMoreRequestRef.current;
+    const requestKey = listingKeyRef.current;
+    const nextPage = pagination.page + 1;
+    const query = new URLSearchParams({ page: String(nextPage), limit: String(pagination.page_size || 12) });
+    if (category !== "All topics") query.set("category", category);
+    if (search.trim()) query.set("search", search.trim());
+    if (tag) query.set("tag", tag);
+    setLoadingMore(true);
+    setError("");
+    try {
+      const result = await apiRequest(`/api/blog?${query}`);
+      if (requestId !== loadMoreRequestRef.current || requestKey !== listingKeyRef.current) return;
+      const nextPosts = Array.isArray(result.posts) ? result.posts : [];
+      setPosts(current => [...current, ...nextPosts.filter(post => !current.some(existing => existing.id === post.id))]);
+      setPagination(result.pagination || { ...pagination, page: nextPage, has_more: false });
+    } catch {
+      if (requestId === loadMoreRequestRef.current && requestKey === listingKeyRef.current) {
+        setError("More insights could not be loaded. Please try again.");
+      }
+    } finally {
+      if (requestId === loadMoreRequestRef.current) setLoadingMore(false);
+    }
+  }
 
   return (
     <div className="op-blog-page">
@@ -201,13 +284,14 @@ export function BlogIndex() {
           <p>Clear analysis for the people responsible for aviation contracts, assets and operations.</p>
         </div>
         <div className="op-blog-category-list" aria-label="Filter articles by topic">
-          {categories.map((item) => <button type="button" className={category === item ? "is-active" : ""} key={item} onClick={() => setCategory(item)} aria-pressed={category === item}>{item}</button>)}
+          {categories.map((item) => <button type="button" className={category === item ? "is-active" : ""} key={item} onClick={() => { setRequestedPage(1); setCategory(item); }} aria-pressed={category === item}>{item}</button>)}
         </div>
-        <div className="op-blog-search"><label>Search insights<input value={search} onChange={e => setSearch(e.target.value)} maxLength={160} /></label><label>Tag<select value={tag} onChange={e => setTag(e.target.value)}><option value="">All tags</option>{tags.map(t => <option key={t}>{t}</option>)}</select></label></div>
-        {error ? <div className="op-blog-state" role="alert">{error}</div>
-          : posts.length === 0 ? <LoadingNotice label="New aviation insights are in editorial development. Please check back soon." />
-            : visiblePosts.length ? <div className="op-blog-grid">{visiblePosts.map((post) => <ArticleCard key={post.id} post={post} />)}</div>
-              : <div className="op-blog-state" role="status">No published articles in this topic yet.</div>}
+        <div className="op-blog-search"><label>Search insights<input value={search} onChange={e => { setRequestedPage(1); setSearch(e.target.value); }} maxLength={160} /></label><label>Tag<input value={tag} onChange={e => { setRequestedPage(1); setTag(e.target.value); }} maxLength={60} /></label></div>
+        {error && <div className="op-blog-state" role="alert">{error}</div>}
+        {loading && posts.length === 0 ? <LoadingNotice label="Loading published aviation insights…" />
+          : visiblePosts.length ? <div className="op-blog-grid">{visiblePosts.map((post) => <ArticleCard key={post.id} post={post} />)}</div>
+            : <div className="op-blog-state" role="status">No published articles match these filters yet.</div>}
+        {pagination.has_more && <div className="op-blog-load-more"><button type="button" onClick={loadMore} disabled={loadingMore}>{loadingMore ? "Loading more insights…" : "Load more insights"}</button></div>}
       </section>
 
       <section className="op-blog-conversion"><div><p className="op-blog-eyebrow">OPERION / CONTRACT INTELLIGENCE</p><h2>Find the obligations, evidence and exposure that matter.</h2><p>Explore how Operion connects aviation contract terms to clear, evidence-grounded decisions.</p></div><Link to="/request-demo">Talk to Operion <ChevronRight size={18} aria-hidden="true" /></Link></section>
@@ -295,6 +379,7 @@ export function BlogArticle() {
       </header>
       {post.cover_image && <figure className="op-blog-cover"><img src={blogMediaUrl(post.cover_image, API_BASE_URL)} alt={post.cover_image_alt || ""} fetchPriority="high" /></figure>}
       <BlogArticleBody post={post} />
+      <ArticleSharing post={post} />
       {related.length > 0 && <section><h2>Related aviation insights</h2><p>Selected by shared editorial category, not engagement ranking.</p><div className="op-blog-grid">{related.map(p => <ArticleCard key={p.id} post={p} />)}</div></section>}
       <aside className="op-blog-editorial-note">Operion articles share industry information and product perspectives; they are not legal advice. Verify contractual interpretation with qualified advisers.</aside>
       <section className="op-blog-article-cta"><p className="op-blog-eyebrow">OPERION / AVIATION CONTRACT INTELLIGENCE</p><h2>Connect contract terms to decisions.</h2><Link to="/request-demo">Explore Operion <ArrowRight size={17} aria-hidden="true" /></Link></section>

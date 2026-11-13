@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Archive, ArrowLeft, Eye, FilePlus2, History, ImagePlus, Save, Send, Undo2 } from "lucide-react";
+import { Archive, ArrowLeft, Eye, FilePlus2, History, ImagePlus, Plus, Save, Send, Sparkles, Undo2 } from "lucide-react";
 import { apiRequest, apiUpload } from "../lib/apiClient";
 import { BLOG_CATEGORIES, slugFromTitle } from "../lib/blogContent";
+import { applyParagraphSuggestion } from "../lib/blogEditorSuggestions";
 import { blogMediaUrl } from "../lib/blogRendering";
 import { BlogArticleBody } from "./Blog";
 import { PrivateMediaImage } from "./Blog";
@@ -48,7 +49,65 @@ function Field({ label, hint, children }) {
   return <label className="op-blog-field"><span>{label}</span>{children}{hint && <small>{hint}</small>}</label>;
 }
 
-function BlockEditor({ block, index, onChange, onRemove, onMove, last, uploadImage }) {
+const SEO_SCORE_LABELS = {
+  seo_title_length: "SEO title and length",
+  meta_description_length: "Meta description and length",
+  primary_keyword: "Primary keyword",
+  keyword_placement: "Keyword placement and natural use",
+  heading_structure: "Heading structure and hierarchy",
+  content_quality: "Content quality and depth",
+  search_intent_alignment: "Search intent alignment",
+  readability: "Readability and paragraph structure",
+  internal_linking: "Internal linking opportunities",
+  image_alt_text: "Image alt text",
+  url_slug: "URL slug",
+  duplicate_content: "Originality and repetition",
+  aviation_relevance: "Aviation terminology and relevance",
+};
+
+function SeoAnalysisResults({ analysis, post, saving, canReanalyse, onReanalyse, onApplyMetadata, onApplyTag, onAddHeading, onApplyParagraph }) {
+  const hasScore = Number.isInteger(analysis?.overall_score) && analysis?.scores && typeof analysis.scores === "object";
+  if (!hasScore) return <div className="op-ai-review" role="status"><p>This saved analysis uses an older format and has no verified score. Reanalyse to request a current provider response.</p><button type="button" onClick={onReanalyse} disabled={saving || !canReanalyse}>Reanalyse</button></div>;
+  const metadata = analysis.suggestions?.metadata || {};
+  const recommendations = Array.isArray(analysis.recommendations) ? analysis.recommendations : [];
+  const suggestions = analysis.suggestions || {};
+  return <section className="op-ai-results" aria-labelledby="op-ai-results-heading" aria-live="polite">
+    <header className="op-ai-results-header">
+      <div><p className="op-blog-eyebrow">AI / EDITORIAL REVIEW</p><h3 id="op-ai-results-heading">SEO score · {analysis.overall_score}/100</h3><p>{analysis.scoring_explanation}</p></div>
+      <progress aria-label={`Overall SEO score ${analysis.overall_score} out of 100`} max="100" value={analysis.overall_score}>{analysis.overall_score}</progress>
+    </header>
+    <p className="op-ai-disclaimer">{analysis.disclaimer} Provider: {analysis.provider}. Suggestions are not approved or published.</p>
+    <details open><summary>Category scores</summary><div className="op-ai-score-grid">
+      {Object.entries(SEO_SCORE_LABELS).map(([id, label]) => {
+        const score = analysis.scores[id];
+        if (!score || !Number.isInteger(score.score)) return null;
+        return <article key={id}><div><strong>{label}</strong><span>{score.score}/100</span></div><progress aria-label={`${label} score`} max="100" value={score.score}>{score.score}</progress><p>{score.explanation}</p></article>;
+      })}
+    </div></details>
+    <section><h4>Recommendations</h4>{recommendations.length ? <ul className="op-ai-recommendations">
+      {recommendations.map((item, index) => <li key={`${item.category}-${index}`}><span className={`op-ai-priority is-${String(item.priority).toLowerCase()}`}>{item.priority}</span><strong>{SEO_SCORE_LABELS[item.category] || item.category}</strong><p><b>What:</b> {item.problem}</p><p><b>Why:</b> {item.why_it_matters}</p><p><b>Improve:</b> {item.improvement}</p></li>)}
+    </ul> : <p>No material weaknesses were identified in this provider response.</p>}</section>
+    {Object.keys(metadata).length > 0 && <section><h4>Before / suggested metadata</h4><div className="op-ai-suggestions">
+      {Object.entries(metadata).map(([field, value]) => <article key={field}><strong>{field.replaceAll("_", " ")}</strong><p><b>Before:</b> {analysis.baseline?.[field] || "Not set"}</p><p><b>Suggested:</b> {value}</p><button type="button" disabled={saving || value === post[field]} onClick={() => onApplyMetadata(field, value)}>Apply {field.replaceAll("_", " ")}</button></article>)}
+    </div></section>}
+    {(suggestions.primary_keyword || suggestions.secondary_keywords?.length > 0) && <section><h4>Keyword suggestions</h4>
+      {suggestions.primary_keyword && <p><strong>Primary:</strong> {suggestions.primary_keyword} <button type="button" disabled={saving} onClick={() => onApplyTag(suggestions.primary_keyword)}>Add primary keyword as tag</button></p>}
+      {suggestions.secondary_keywords?.map(keyword => <p key={keyword}><strong>Secondary:</strong> {keyword} <button type="button" disabled={saving} onClick={() => onApplyTag(keyword)}>Add tag</button></p>)}
+    </section>}
+    {suggestions.headings?.length > 0 && <section><h4>Suggested headings</h4><ul>{suggestions.headings.map((heading, index) => <li key={`${heading}-${index}`}>{heading} <button type="button" disabled={saving} onClick={() => onAddHeading(heading)}>Add as article heading</button></li>)}</ul></section>}
+    {suggestions.article_structure?.length > 0 && <section><h4>Recommended article structure</h4><ol>{suggestions.article_structure.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ol></section>}
+    {suggestions.internal_link_topics?.length > 0 && <section><h4>Internal-link opportunities</h4><ul>{suggestions.internal_link_topics.map((item, index) => <li key={`${item}-${index}`}>{item} <small>Use only when a relevant published Operion resource exists; no URL was invented.</small></li>)}</ul></section>}
+    {suggestions.paragraph_improvements?.length > 0 && <section><h4>Specific paragraph improvements</h4><div className="op-ai-suggestions">
+      {suggestions.paragraph_improvements.map((item, index) => {
+        const applicable = applyParagraphSuggestion(post.content, item.original_text, item.suggested_text).applied;
+        return <article key={`${item.original_text}-${index}`}><p><b>Before:</b> {item.original_text}</p><p><b>Suggested:</b> {item.suggested_text}</p><p>{item.reason}</p><button type="button" disabled={saving || !applicable} onClick={() => onApplyParagraph(item)}>{applicable ? "Apply paragraph suggestion" : "Apply manually — no unique plain paragraph match"}</button></article>;
+      })}
+    </div></section>}
+    <button type="button" className="op-blog-button op-blog-button-secondary" disabled={saving || !canReanalyse} onClick={onReanalyse}>Reanalyse saved article</button>
+  </section>;
+}
+
+function BlockEditor({ block, index, onChange, onRemove, onMove, last, uploadImage, onInsertImage }) {
   const set = (values) => onChange(index, { ...block, ...values });
   const handleImage = (event) => {
     const file = event.target.files?.[0];
@@ -59,7 +118,7 @@ function BlockEditor({ block, index, onChange, onRemove, onMove, last, uploadIma
   return (
     <section className="op-blog-block-editor">
       <header><strong>{block.type.replaceAll("_", " ")}</strong><div><button type="button" disabled={index === 0} onClick={() => onMove(index, -1)} aria-label={`Move block ${index + 1} up`}>Move up</button><button type="button" disabled={last} onClick={() => onMove(index, 1)} aria-label={`Move block ${index + 1} down`}>Move down</button><button type="button" className="op-blog-text-button" onClick={() => onRemove(index)}>Remove block</button></div></header>
-      {block.type === "rich_text" && <RichTextEditor document={block.document} onChange={(document) => set({ document })} />}
+      {block.type === "rich_text" && <RichTextEditor document={block.document} onChange={(document) => set({ document })} onInsertImage={onInsertImage} />}
       {block.type === "heading" && <>
         <select aria-label="Heading level" value={block.level} onChange={(event) => set({ level: Number(event.target.value) })}><option value="2">Heading 2</option><option value="3">Heading 3</option></select>
         <input aria-label="Heading text" value={block.text} onChange={(event) => set({ text: event.target.value })} maxLength="240" />
@@ -88,6 +147,10 @@ function BlockEditor({ block, index, onChange, onRemove, onMove, last, uploadIma
 
 export default function BlogCMS() {
   const [posts, setPosts] = useState([]);
+  const [categories, setCategories] = useState(BLOG_CATEGORIES.map(name => ({ name, slug: slugFromTitle(name), description: "" })));
+  const [categoryFormOpen, setCategoryFormOpen] = useState(false);
+  const [categoryDraft, setCategoryDraft] = useState({ name: "", slug: "", description: "", slugEdited: false });
+  const [editingCategoryId, setEditingCategoryId] = useState("");
   const [post, setPost] = useState(blankArticle());
   const [selectedId, setSelectedId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -111,6 +174,7 @@ export default function BlogCMS() {
   const [aiOrganization, setAiOrganization] = useState("");
   const [aiConsent, setAiConsent] = useState(false);
   const [analysis, setAnalysis] = useState(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
   const [previewWidth, setPreviewWidth] = useState("desktop");
   const savingRef = useRef(false);
   const postsRequest = useRef(0);
@@ -134,8 +198,19 @@ export default function BlogCMS() {
     }
   }
 
+  async function loadCategories() {
+    try {
+      const result = await apiRequest("/api/blog/admin/categories");
+      if (!Array.isArray(result?.categories)) throw new Error("Category list response is invalid.");
+      setCategories(result.categories);
+    } catch (failure) {
+      setError(failure.message || "Unable to load categories.");
+    }
+  }
+
   useEffect(() => {
     loadPosts();
+    loadCategories();
     apiRequest("/api/blog/admin/profile").then(result => setProfile(result.profile)).catch(failure => setError(failure.message));
     apiRequest("/api/blog/admin/media").then(result => setMedia(result.media)).catch(failure => setError(failure.message));
   }, []);
@@ -161,6 +236,9 @@ export default function BlogCMS() {
     setError("");
     setMessage("");
     setSaved(""); setReviewed(false); setAnalysis(null);
+    setCategoryFormOpen(false);
+    setCategoryDraft({ name: "", slug: "", description: "", slugEdited: false });
+    setEditingCategoryId("");
   }
 
   async function selectPost(id) {
@@ -182,10 +260,12 @@ export default function BlogCMS() {
 
   function change(field, value) {
     setReviewed(false);
+    setAnalysis(null);
     setPost((current) => ({ ...current, [field]: value }));
   }
 
   function changeTitle(value) {
+    setAnalysis(null);
     setPost((current) => ({
       ...current,
       title: value,
@@ -196,6 +276,7 @@ export default function BlogCMS() {
   }
 
   function changeField(field, value) {
+    setAnalysis(null);
     setPost((current) => ({
       ...current,
       [field]: value,
@@ -203,6 +284,95 @@ export default function BlogCMS() {
       ...(field === "seo_title" ? { seoTitleEdited: true } : {}),
       ...(field === "social_title" ? { socialTitleEdited: true } : {}),
     }));
+  }
+
+  async function saveCategory(event) {
+    event.preventDefault();
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setError("");
+    try {
+      const previousCategory = categories.find(item => item.id === editingCategoryId);
+      const result = await apiRequest(
+        editingCategoryId ? `/api/blog/admin/categories/${encodeURIComponent(editingCategoryId)}` : "/api/blog/admin/categories",
+        { method: editingCategoryId ? "PUT" : "POST", body: categoryDraft }
+      );
+      if (!result?.category?.name) throw new Error("Category save response is invalid.");
+      setCategories(current => [...current.filter(item => item.id !== result.category.id), result.category].sort((a, b) => a.name.localeCompare(b.name)));
+      if (!editingCategoryId || post.category === previousCategory?.name) change("category", result.category.name);
+      setCategoryDraft({ name: "", slug: "", description: "", slugEdited: false });
+      setEditingCategoryId("");
+      setCategoryFormOpen(false);
+      setMessage(editingCategoryId
+        ? `Category “${result.category.name}” updated. Existing article assignments were preserved.`
+        : `Category “${result.category.name}” created and selected. Save the draft to persist this article assignment.`);
+    } catch (failure) {
+      setError(failure.message || "Unable to create category.");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }
+
+  function editCategory(category) {
+    if (!category?.id || savingRef.current) return;
+    setEditingCategoryId(category.id);
+    setCategoryDraft({ name: category.name, slug: category.slug, description: category.description || "", slugEdited: true });
+    setCategoryFormOpen(true);
+  }
+
+  async function deleteCategory(category) {
+    if (!category?.id || savingRef.current || !window.confirm(`Delete category “${category.name}”? Categories assigned to articles cannot be deleted.`)) return;
+    savingRef.current = true;
+    setSaving(true);
+    setError("");
+    try {
+      await apiRequest(`/api/blog/admin/categories/${encodeURIComponent(category.id)}`, { method: "DELETE" });
+      setCategories(current => current.filter(item => item.id !== category.id));
+      if (editingCategoryId === category.id) {
+        setEditingCategoryId("");
+        setCategoryDraft({ name: "", slug: "", description: "", slugEdited: false });
+        setCategoryFormOpen(false);
+      }
+      setMessage(`Category “${category.name}” deleted.`);
+    } catch (failure) {
+      setError(failure.message || "Unable to delete category.");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }
+
+  function applyMetadataSuggestion(field, value) {
+    setReviewed(false);
+    setPost(current => ({ ...current, [field]: value, ...(field === "slug" ? { canonical_url: "" } : {}) }));
+    setMessage(`Applied ${field.replaceAll("_", " ")} suggestion as an unsaved draft change.`);
+  }
+
+  function applyKeywordSuggestion(value) {
+    const keyword = value.trim();
+    if (!keyword) return;
+    setReviewed(false);
+    setPost(current => ({ ...current, tags: [...new Set([...(current.tags || []), keyword])].slice(0, 12) }));
+    setMessage("Keyword added as an unsaved article tag.");
+  }
+
+  function addSuggestedHeading(value) {
+    setReviewed(false);
+    setPost(current => ({ ...current, content: [...current.content, { type: "heading", level: 2, text: value }] }));
+    setMessage("Heading appended to the article as an unsaved change.");
+  }
+
+  function applyParagraphImprovement(item) {
+    const result = applyParagraphSuggestion(post.content, item.original_text, item.suggested_text);
+    if (!result.applied) {
+      setError("The original paragraph is no longer a unique, unformatted match. Nothing was changed.");
+      return;
+    }
+    setReviewed(false);
+    setPost(current => ({ ...current, content: result.content }));
+    setMessage("Selected paragraph improvement applied as an unsaved change.");
   }
 
   async function saveArticle() {
@@ -306,6 +476,13 @@ export default function BlogCMS() {
     change("content", [...post.content, defaults[blockType]]);
   }
 
+  function insertImageAfter(index) {
+    const content = [...post.content];
+    content.splice(index + 1, 0, { type: "image", mediaId: "", alt: "", caption: "", size: "full", alignment: "center" });
+    change("content", content);
+    setMessage("Image block added. Add descriptive alt text before uploading the image.");
+  }
+
   function changeBlock(index, nextBlock) {
     change("content", post.content.map((block, blockIndex) => blockIndex === index ? nextBlock : block));
   }
@@ -357,11 +534,12 @@ export default function BlogCMS() {
       if (savingRef.current) return;
       if (!selectedId || dirty) { setError("Save the complete article before AI analysis."); return; }
       savingRef.current = true;
+      setAnalysisLoading(true);
       setSaving(true); setError("");
       try {
         const result = await apiRequest(`/api/blog/admin/posts/${selectedId}/analyze`, { method: "POST", body: { organization_id: aiOrganization, public_editorial_consent: aiConsent } });
         setAnalysis(result.analysis); setMessage("AI suggestions are unapproved. Review and apply only the fields you accept.");
-      } catch (failure) { setError(failure.message); } finally { savingRef.current = false; setSaving(false); }
+      } catch (failure) { setError(failure.message); } finally { savingRef.current = false; setSaving(false); setAnalysisLoading(false); }
     }
     async function scheduleArticle() {
       if (savingRef.current) return;
@@ -421,7 +599,7 @@ export default function BlogCMS() {
             <div className="op-blog-editor-toolbar">
               <span>{selectedId ? `Editing · ${post.status}` : "New draft"} · {dirty ? "Unsaved changes" : "Saved"} · {readingMinutes(post)} min read</span>
               <div>
-                {selectedId && <button type="button" className="op-blog-button op-blog-button-secondary" onClick={() => setPreview(true)}><Eye size={16} />Preview</button>}
+                {post.status === "draft" && <button type="button" className="op-blog-button op-blog-button-secondary" onClick={() => setPreview(true)}><Eye size={16} />Preview</button>}
                 <button type="button" className="op-blog-button op-blog-button-secondary" onClick={saveArticle} disabled={saving || post.status !== "draft"}><Save size={16} />{saving ? "Saving…" : "Save draft"}</button>
                 {post.status === "draft" && <button type="button" className="op-blog-button op-blog-button-primary" onClick={publishArticle} disabled={saving || !selectedId || dirty || !reviewed}><Send size={16} />Publish</button>}
                 {selectedId && <button type="button" className="op-blog-button" onClick={duplicateArticle} disabled={saving}>Duplicate draft</button>}
@@ -436,7 +614,19 @@ export default function BlogCMS() {
               <Field label="Subtitle"><input value={post.subtitle} onChange={(event) => change("subtitle", event.target.value)} maxLength="240" /></Field>
               <Field label="URL slug" hint="Changing a published slug creates a permanent redirect."><input value={post.slug} onChange={(event) => changeField("slug", slugFromTitle(event.target.value))} maxLength="120" /></Field>
               <Field label="Summary"><textarea rows="3" value={post.excerpt} onChange={(event) => change("excerpt", event.target.value)} maxLength="500" placeholder="A concise, factual description of the article" /></Field>
-              <Field label="Aviation category"><select value={post.category} onChange={(event) => change("category", event.target.value)}>{BLOG_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select></Field>
+              <Field label="Aviation category"><select value={post.category} onChange={(event) => change("category", event.target.value)}>{categories.map((category) => <option key={category.id || category.slug} value={category.name}>{category.name}</option>)}</select></Field>
+              <button type="button" className="op-blog-button op-blog-button-secondary" aria-expanded={categoryFormOpen} onClick={() => setCategoryFormOpen(open => !open)}><Plus size={16} />{categoryFormOpen ? "Close category form" : "Add Category"}</button>
+              <details className="op-blog-category-list"><summary>Existing categories · {categories.length}</summary><ul>{categories.map(category => <li key={category.id || category.slug}><div><strong>{category.name}</strong><small>/{category.slug}</small></div>{category.description && <span>{category.description}</span>}{category.id && <div className="op-blog-category-actions"><button type="button" disabled={saving} onClick={() => editCategory(category)}>Edit</button><button type="button" disabled={saving} onClick={() => deleteCategory(category)}>Delete</button></div>}</li>)}</ul></details>
+              {categoryFormOpen && <form className="op-blog-category-form" onSubmit={saveCategory}>
+                <h3>{editingCategoryId ? "Edit editorial category" : "Create an editorial category"}</h3>
+                <Field label="Category name"><input required maxLength="80" value={categoryDraft.name} onChange={event => {
+                  const name = event.target.value;
+                  setCategoryDraft(current => ({ ...current, name, slug: current.slugEdited ? current.slug : slugFromTitle(name).slice(0, 80).replace(/-+$/g, "") }));
+                }} /></Field>
+                <Field label="Category description (optional)"><textarea rows="2" maxLength="500" value={categoryDraft.description} onChange={event => setCategoryDraft(current => ({ ...current, description: event.target.value }))} /></Field>
+                <Field label="Category URL slug"><input required maxLength="80" pattern="[a-z0-9]+(-[a-z0-9]+)*" title="Use lowercase letters, numbers, and single hyphens." value={categoryDraft.slug} onChange={event => setCategoryDraft(current => ({ ...current, slug: event.target.value, slugEdited: true }))} /></Field>
+                <div className="op-blog-category-actions"><button type="submit" className="op-blog-button op-blog-button-primary" disabled={saving || !categoryDraft.name.trim() || !categoryDraft.slug}>{saving ? "Saving category…" : editingCategoryId ? "Save category changes" : "Save category and select"}</button>{editingCategoryId && <button type="button" disabled={saving} onClick={() => { setEditingCategoryId(""); setCategoryDraft({ name: "", slug: "", description: "", slugEdited: false }); }}>Cancel edit</button>}</div>
+              </form>}
               <Field label="Tags (comma separated; applied when leaving this field)"><input key={(post.tags || []).join(",")} defaultValue={(post.tags || []).join(", ")} onBlur={e => change("tags", e.target.value.split(",").map(s => s.trim()).filter(Boolean))} /></Field>
               <label className="op-blog-checkbox"><input type="checkbox" checked={post.is_featured} onChange={e => change("is_featured", e.target.checked)} />Featured editorial article</label>
             </div>
@@ -448,10 +638,22 @@ export default function BlogCMS() {
                 </select><button type="button" className="op-blog-button op-blog-button-secondary" onClick={addBlock}>Add block</button></div>
               </div>
               <div className="op-blog-block-list">
-                {post.content.map((block, index) => <BlockEditor key={`${index}-${block.type}`} block={block} index={index} last={index === post.content.length - 1} onMove={moveBlock} onChange={changeBlock} onRemove={removeBlock} uploadImage={uploadImage} />)}
+                {post.content.map((block, index) => <BlockEditor key={`${index}-${block.type}`} block={block} index={index} last={index === post.content.length - 1} onMove={moveBlock} onChange={changeBlock} onRemove={removeBlock} uploadImage={uploadImage} onInsertImage={() => insertImageAfter(index)} />)}
                 {post.content.length === 0 && <p className="op-blog-muted">Add headings and paragraphs to build a readable, structured article.</p>}
               </div>
             </div>
+
+            <section className="op-blog-editor-section op-blog-ai-section" aria-labelledby="op-blog-ai-heading">
+              <p className="op-blog-eyebrow">AI / SEARCH DISCOVERABILITY</p><h2 id="op-blog-ai-heading">AI Analyse & SEO Score</h2>
+              <p>Request a scored review of the saved draft through the existing Mistral gateway, organization budget and audit path. Analysis is manual, requires explicit consent, and never guarantees search rankings.</p>
+              <Field label="Authorized publishing-budget organization UUID"><input value={aiOrganization} onChange={event => setAiOrganization(event.target.value)} /></Field>
+              <label className="op-blog-checkbox"><input type="checkbox" checked={aiConsent} onChange={event => setAiConsent(event.target.checked)} />This is public-intended editorial content, with no confidential or personal customer information, and I authorize the existing provider analysis.</label>
+              <button type="button" className="op-blog-button op-blog-button-primary op-blog-ai-trigger" disabled={!selectedId || dirty || saving || !aiConsent || !aiOrganization.trim() || post.status !== "draft"} onClick={runAnalysis}>
+                <Sparkles size={17} aria-hidden="true" />{analysisLoading ? "Analysing saved article…" : analysis ? "Reanalyse article" : "AI ANALYSE ARTICLE"}
+              </button>
+              {!selectedId || dirty ? <p className="op-blog-muted">Save the draft before requesting analysis. Suggestions are based on the saved revision.</p> : null}
+              {analysis && <SeoAnalysisResults analysis={analysis} post={post} saving={saving} canReanalyse={!!selectedId && !dirty && post.status === "draft"} onReanalyse={runAnalysis} onApplyMetadata={applyMetadataSuggestion} onApplyTag={applyKeywordSuggestion} onAddHeading={addSuggestedHeading} onApplyParagraph={applyParagraphImprovement} />}
+            </section>
 
             <div className="op-blog-editor-section op-blog-seo-grid">
               <div><p className="op-blog-eyebrow">EDITORIAL / AUTHOR</p><h2>Attribution</h2>
@@ -470,15 +672,13 @@ export default function BlogCMS() {
 
             <div className="op-blog-editor-section">
               <p className="op-blog-eyebrow">MEDIA / SOCIAL SHARING</p><h2>Cover image</h2>
+              <p>The cover image is also used for Open Graph and Twitter/X sharing. Social titles and descriptions are set in Search metadata above.</p>
               <Field label="Descriptive image alt text"><input value={post.cover_image_alt} onChange={(event) => change("cover_image_alt", event.target.value)} maxLength="300" /></Field>
               {post.cover_image && <div className="op-blog-cover-preview"><PrivateMediaImage mediaId={post.cover_image} alt={post.cover_image_alt} /><button type="button" className="op-blog-text-button" onClick={() => change("cover_image", "")}>Remove image</button></div>}
               <label className="op-blog-upload-button"><ImagePlus size={16} aria-hidden="true" />Upload PNG, JPEG or WebP (max 3 MB)<input type="file" accept="image/png,image/jpeg,image/webp" disabled={!post.cover_image_alt.trim()} onChange={uploadCover} /></label>
               <h3>Private media library</h3><div className="op-media-library">{media.map(m => <article key={m.id}><PrivateMediaImage mediaId={m.id} alt={m.alt_text} /><p>{m.alt_text}</p><button type="button" onClick={() => setPost(current => ({ ...current, cover_image: m.id, cover_image_alt: m.alt_text }))}>Use as featured image</button><button type="button" onClick={() => change("content", [...post.content, { type: "image", mediaId: m.id, alt: m.alt_text, caption: m.caption || "" }])}>Insert inline block</button></article>)}</div>
             </div>
             </fieldset>
-            <section className="op-blog-editor-section"><h2>AI content analysis · review only</h2><p>Analyzes the actual saved article through the existing Mistral gateway, organization budget and audit path. No new provider. No automatic publication. A legitimate publishing-budget organization and active administrator membership are required.</p><Field label="Authorized publishing-budget organization UUID"><input value={aiOrganization} onChange={e => setAiOrganization(e.target.value)} /></Field><label className="op-blog-checkbox"><input type="checkbox" checked={aiConsent} onChange={e => setAiConsent(e.target.checked)} />This is public-intended editorial content, with no confidential or personal customer information, and I authorize the existing provider analysis.</label><button type="button" className="op-blog-button" disabled={!selectedId || dirty || saving || !aiConsent || post.status !== "draft"} onClick={runAnalysis}>Analyze saved article</button>
-              {analysis && <div className="op-ai-review"><p>Unapproved AI suggestions · {analysis.provider}</p>{Object.entries(analysis.metadata).map(([field, value]) => <div key={field}><strong>{field.replaceAll("_", " ")}</strong><p>{Array.isArray(value) ? value.join(", ") : value}</p><button type="button" onClick={() => { change(field, value); if (field === "slug") change("canonical_url", ""); }}>Apply this suggestion</button></div>)}<h3>Writing and evidence review</h3>{Object.entries(analysis.notes).map(([key, value]) => <p key={key}><strong>{key.replaceAll("_", " ")}:</strong> {Array.isArray(value) ? value.join("; ") : value}</p>)}</div>}
-            </section>
             <section className="op-blog-editor-section"><h2>Editorial approval & scheduling</h2><label className="op-blog-checkbox"><input type="checkbox" checked={reviewed} disabled={dirty || !selectedId} onChange={e => setReviewed(e.target.checked)} />I reviewed the saved preview, attribution, evidence and metadata and approve publication.</label><Field label="Publication time (your device timezone; transmitted as UTC)"><input type="datetime-local" value={scheduleAt} onChange={e => setScheduleAt(e.target.value)} /></Field><button className="op-blog-button" type="button" disabled={!reviewed || dirty || post.status !== "draft"} onClick={scheduleArticle}>Approve & schedule</button></section>
 
             <div className="op-blog-editor-section op-blog-editor-footer">

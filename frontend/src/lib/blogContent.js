@@ -23,6 +23,20 @@ export function slugFromTitle(value = "") {
     .replace(/-+$/g, "");
 }
 
+export function normalizeBlogCategory(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new TypeError("Category data must be an object");
+  const name = boundedText(payload.name, 80, "Category name", { required: true }).replace(/\s+/g, " ");
+  if (/[\u0000-\u001f\u007f]/.test(name)) throw new TypeError("Category name contains unsupported characters");
+  const requestedSlug = boundedText(payload.slug, 80, "Category slug");
+  const slug = requestedSlug || slugFromTitle(name).slice(0, 80).replace(/-+$/g, "");
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new TypeError("Category slug must use lowercase letters, numbers, and single hyphens");
+  return {
+    name,
+    slug,
+    description: boundedText(payload.description, 500, "Category description"),
+  };
+}
+
 function boundedText(value, maxLength, field, { required = false } = {}) {
   if (typeof value !== "string") {
     if (required) throw new TypeError(`${field} is required`);
@@ -108,7 +122,7 @@ export function normalizeBlogBlocks(value) {
   });
 }
 
-export function normalizeBlogPostInput(payload, { partial = false } = {}) {
+export function normalizeBlogPostInput(payload, { partial = false, allowedCategories = BLOG_CATEGORIES } = {}) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new TypeError("Article data must be an object");
   const title = boundedText(payload.title, 200, "Title", { required: !partial });
   const slugInput = boundedText(payload.slug, 120, "Slug") || (title ? slugFromTitle(title) : "");
@@ -116,7 +130,7 @@ export function normalizeBlogPostInput(payload, { partial = false } = {}) {
   if (!partial && !slug) throw new TypeError("A valid URL slug is required");
 
   const category = boundedText(payload.category, 80, "Category");
-  if (category && !BLOG_CATEGORIES.includes(category)) throw new TypeError("Choose a supported aviation category");
+  if (category && !allowedCategories.includes(category)) throw new TypeError("Choose a supported aviation category");
   const content = payload.content === undefined && partial ? undefined : normalizeBlogBlocks(payload.content || []);
   const excerpt = boundedText(payload.excerpt, 500, "Excerpt");
   const firstParagraph = content?.find((block) => block.type === "paragraph")?.text || "";

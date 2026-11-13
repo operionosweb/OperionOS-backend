@@ -8,11 +8,18 @@ import { chromium } from "@playwright/test";
 const resolveDir = fileURLToPath(new URL("..", import.meta.url));
 const ACTOR = "acaabfe0-83ee-4ec5-8721-c312b9317f54";
 const OTHER = "bcaabfe0-83ee-4ec5-8721-c312b9317f54";
+const SEO_SCORE_IDS = [
+  "seo_title_length", "meta_description_length", "primary_keyword", "keyword_placement",
+  "heading_structure", "content_quality", "search_intent_alignment", "readability",
+  "internal_linking", "image_alt_text", "url_slug", "duplicate_content", "aviation_relevance",
+];
 const fixtureApi = `
   const ACTOR=${JSON.stringify(ACTOR)}, OTHER=${JSON.stringify(OTHER)};
   const clone = value => JSON.parse(JSON.stringify(value));
-  let post = { id: OTHER, title: "Local aviation fixture", slug: "local-aviation-fixture", status: "draft", category: "Aircraft Leasing", content: [], tags: [], updated_at: "2030-01-01T10:00:00Z", created_by: ACTOR, author_name: "Local Fixture Author", author_id: ACTOR, author_avatar_media: null, seo_title: null, seo_description: null, social_title:null, social_description:null };
+  let post = { id: OTHER, title: "Local aviation fixture", slug: "local-aviation-fixture", status: "draft", category: "Aircraft Leasing", content: clone(window.fixtureContent || []), tags: [], updated_at: "2030-01-01T10:00:00Z", created_by: ACTOR, author_name: "Local Fixture Author", author_id: ACTOR, author_avatar_media: null, seo_title: null, seo_description: null, social_title:null, social_description:null };
+  let categories = [{id:"fixture-aircraft-leasing",name:"Aircraft Leasing",slug:"aircraft-leasing",description:""}];
   window.fixtureCalls = [];
+  window.fixtureUploads = [];
   export async function apiRequest(path, options = {}) {
     window.fixtureCalls.push({path, ...options});
     const body = options.body;
@@ -31,6 +38,15 @@ const fixtureApi = `
       if (!body.confirm_review || body.expected_updated_at !== post.updated_at) throw new Error("Missing editorial revision approval");
       post = {...post,status:"published",published_at:new Date().toISOString()}; return {post:clone(post)};
     }
+    if (path === "/api/blog/admin/categories" && !options.method) return {categories:clone(categories)};
+    if (path === "/api/blog/admin/categories" && options.method === "POST") {
+      if (categories.some(category => category.name.toLowerCase()===body.name.toLowerCase() || category.slug===body.slug)) throw new Error("A category with this name or slug already exists.");
+      const category={...body,id:"fixture-new-category"}; categories.push(category); return {category:clone(category)};
+    }
+    if (path === "/api/blog/admin/posts/"+OTHER+"/analyze") {
+      if (window.fixtureAnalysisFailure) throw new Error("AI analysis is unavailable. No score was generated or saved; retry after the provider is available.");
+      return {analysis:clone(window.fixtureAnalysis)};
+    }
     if (path === "/api/blog/admin/profile") return {profile:{author_name:"Local Fixture Author",author_bio:"In-memory fixture",author_avatar_media:null}};
     if (path === "/api/blog/admin/media") return {media:[]};
     if (path.startsWith("/api/platform-admin/summary")) return {metrics:{users:1,contracts:0},sources:{users:"Local isolated test fixture, not production",contracts:"Local fixture"},activity:[{day:"2030-01-01",events:2}],events:[],dependencies:[{name:"fixture_missing_table",available:false}],unavailable:["Revenue unavailable"],generatedAt:"2030-01-01T10:00:00Z"};
@@ -46,7 +62,10 @@ const fixtureApi = `
     if (path === "/api/platform-admin/organizations" && options.method === "POST") return {organization:{id:OTHER,name:body.name}};
     throw new Error("Unexpected isolated API: "+path);
   }
-  export async function apiUpload() { throw new Error("Upload not included in this browser fixture; backend image tests cover validation"); }
+  export async function apiUpload(path, options = {}) {
+    window.fixtureUploads.push({path,fields:options.fields});
+    return {media:{id:"dcaabfe0-83ee-4ec5-8721-c312b9317f54",alt_text:options.fields.alt_text,caption:options.fields.caption||"",mime_type:"image/webp"}};
+  }
 `;
 async function bundle(section) {
   const result = await build({
@@ -179,7 +198,7 @@ test("publishing studio rich formatting survives save/reopen and reviewed revisi
     await page.getByRole("button",{name:"Add block",exact:true}).click();
     const editor = page.getByRole("textbox",{name:"Rich article content"});
     await editor.waitFor();
-    await page.getByRole("button",{name:"bold",exact:true}).click();
+    await page.getByRole("button",{name:"Bold",exact:true}).click();
     await editor.pressSequentially("Saved aviation evidence formatting.");
     await page.getByRole("button",{name:"Save draft",exact:true}).click();
     await page.getByText("Draft saved.",{exact:true}).waitFor();
@@ -202,6 +221,151 @@ test("publishing studio loads the real editor layout on mobile without runtime e
     await page.locator(".op-blog-cms-list-item").filter({hasText:"Local aviation fixture"}).click();
     await page.getByRole("button",{name:"Add block",exact:true}).click();
     await page.getByRole("textbox",{name:"Rich article content"}).waitFor();
+  });
+});
+test("rich-text toolbar formats content and inserts accessible structured image blocks", async () => {
+  await fixture("studio",1440,async page => {
+    await page.locator(".op-blog-cms-list-item").filter({hasText:"Local aviation fixture"}).click();
+    await page.getByRole("button",{name:"Add block",exact:true}).click();
+    const editor = page.getByRole("textbox",{name:"Rich article content"});
+    await editor.fill("Aviation formatting sample");
+    await editor.press("Control+A");
+    for (const mark of ["Bold","Italic","Underline"]) await page.getByRole("button",{name:mark,exact:true}).click();
+    const structure = page.getByLabel("Text structure");
+    for (const [level, tag] of [["1","h1"],["2","h2"],["3","h3"]]) {
+      await structure.selectOption(level);
+      assert.ok(await editor.locator(tag).count()>=1,`${tag} formatting is applied`);
+    }
+    await structure.selectOption("paragraph");
+    await page.getByLabel("Font family").selectOption("Georgia");
+    await page.getByLabel("Font size").selectOption("20px");
+    await page.getByLabel("Text colour").evaluate(element => { element.value="#183a57"; element.dispatchEvent(new Event("input",{bubbles:true})); element.dispatchEvent(new Event("change",{bubbles:true})); });
+    await page.getByLabel("Highlight colour").evaluate(element => { element.value="#fff2b0"; element.dispatchEvent(new Event("input",{bubbles:true})); element.dispatchEvent(new Event("change",{bubbles:true})); });
+    await page.getByRole("button",{name:"Align center"}).click();
+    assert.match(await editor.locator("p").filter({hasText:"Aviation formatting sample"}).getAttribute("style"),/text-align:\s*center/);
+    await page.getByRole("button",{name:"Bulleted list"}).click();
+    assert.equal(await editor.locator("ul").count(),1);
+    await page.getByRole("button",{name:"Numbered list"}).click();
+    assert.equal(await editor.locator("ol").count(),1);
+    page.once("dialog",dialog => dialog.accept("https://operionos.com/blog"));
+    await page.getByRole("button",{name:"Link",exact:true}).click();
+    assert.equal(await editor.locator("a").getAttribute("href"),"https://operionos.com/blog");
+    await page.getByRole("button",{name:"Undo",exact:true}).click();
+    await page.getByRole("button",{name:"Redo",exact:true}).click();
+    await page.getByRole("button",{name:"Remove formatting"}).click();
+    await page.getByRole("button",{name:"Insert image"}).click();
+    const imageBlock = page.locator(".op-blog-block-editor").last();
+    await page.getByLabel("Image alt text",{exact:true}).fill("Synthetic aircraft maintenance image");
+    await imageBlock.locator('input[type="file"]').setInputFiles({name:"fixture.png",mimeType:"image/png",buffer:Buffer.from("synthetic image fixture")});
+    await page.getByText("Image uploaded. It remains private until used in a published article.",{exact:true}).waitFor();
+    await page.getByRole("button",{name:"Save draft",exact:true}).click();
+    await page.getByText("Draft saved.",{exact:true}).waitFor();
+    const saved = await page.evaluate(() => window.fixtureCalls.filter(call=>call.method==="PUT").at(-1).body);
+    assert.equal(saved.content[0].type,"rich_text");
+    assert.equal(saved.content[1].type,"image");
+    assert.equal(saved.content[1].alt,"Synthetic aircraft maintenance image");
+    assert.equal(saved.content[1].mediaId,"dcaabfe0-83ee-4ec5-8721-c312b9317f54");
+    assert.equal(await page.evaluate(() => window.fixtureUploads.length),1);
+  });
+});
+for (const width of [1440,390]) {
+  test(`body editor toolbar sticks only inside its scroll boundary at ${width}px`, async () => {
+    await fixture("studio",width,async page => {
+      await page.locator(".op-blog-cms-list-item").filter({hasText:"Local aviation fixture"}).click();
+      const wrapper = page.locator(".op-rich-editor");
+      await wrapper.waitFor();
+      const insideScroll = await wrapper.evaluate(element => {
+        element.scrollTop = Math.min(500, element.scrollHeight);
+        const toolbar = element.querySelector(".op-rich-toolbar");
+        const parent = element.getBoundingClientRect();
+        const bar = toolbar.getBoundingClientRect();
+        return {position:getComputedStyle(toolbar).position,overflow:getComputedStyle(toolbar).overflowX,maxScroll:element.scrollHeight-element.clientHeight,offset:bar.top-parent.top,barHeight:bar.height,buttonHeight:toolbar.querySelector("button").getBoundingClientRect().height};
+      });
+      assert.equal(insideScroll.position,"sticky");
+      assert.ok(insideScroll.maxScroll>0,"long article body has an internal scroll range");
+      assert.ok(Math.abs(insideScroll.offset)<=2,"toolbar remains pinned to the body editor boundary");
+      if (width<600) {
+        assert.equal(insideScroll.overflow,"auto");
+        assert.ok(insideScroll.buttonHeight>=44,"mobile toolbar controls remain touch friendly");
+        assert.ok(await wrapper.locator(".op-rich-toolbar").evaluate(element=>element.scrollWidth>element.clientWidth),"mobile controls can scroll horizontally");
+      }
+      const outsideScroll = await page.evaluate(() => {
+        window.scrollTo(0,document.documentElement.scrollHeight);
+        const editor=document.querySelector(".op-rich-editor"),toolbar=editor.querySelector(".op-rich-toolbar");
+        return {position:getComputedStyle(toolbar).position,offset:toolbar.getBoundingClientRect().top-editor.getBoundingClientRect().top};
+      });
+      assert.equal(outsideScroll.position,"sticky");
+      assert.ok(Math.abs(outsideScroll.offset)<=2,"toolbar follows its editor instead of the browser viewport");
+    },async page => {
+      await page.evaluate(() => {
+        window.fixtureContent=[{type:"rich_text",document:{type:"doc",content:Array.from({length:32},(_,index)=>({type:"paragraph",content:[{type:"text",text:`Synthetic aviation paragraph ${index+1} provides enough editorial text to verify the contained formatting toolbar while reviewing a long article.`}]}))}}];
+      });
+    });
+  });
+}
+test("Super Admin can add a category in the article editor and immediately select it", async () => {
+  await fixture("studio",1440,async page => {
+    await page.locator(".op-blog-cms-list-item").filter({hasText:"Local aviation fixture"}).click();
+    await page.getByRole("button",{name:"Add Category"}).click();
+    await page.getByLabel("Category name").fill("Engine Maintenance");
+    await page.getByLabel("Category description (optional)").fill("Maintenance and reserve evidence.");
+    await page.getByLabel("Category URL slug").fill("engine-maintenance");
+    await page.getByRole("button",{name:"Save category and select"}).click();
+    await page.getByText("Category “Engine Maintenance” created and selected.",{exact:false}).waitFor();
+    assert.equal(await page.getByLabel("Aviation category").inputValue(),"Engine Maintenance");
+    const request = await page.evaluate(() => window.fixtureCalls.find(call=>call.path==="/api/blog/admin/categories" && call.method==="POST"));
+    assert.equal(request.body.slug,"engine-maintenance");
+    assert.equal(request.body.description,"Maintenance and reserve evidence.");
+    await page.getByRole("button",{name:"Save draft",exact:true}).click();
+    await page.getByText("Draft saved.",{exact:true}).waitFor();
+    const saved = await page.evaluate(() => window.fixtureCalls.filter(call=>call.method==="PUT").at(-1).body);
+    assert.equal(saved.category,"Engine Maintenance");
+  });
+});
+test("AI SEO analysis renders provider results, applies only selected suggestions, and supports retry", async () => {
+  await fixture("studio",1440,async page => {
+    await page.locator(".op-blog-cms-list-item").filter({hasText:"Local aviation fixture"}).click();
+    await page.evaluate(ids => {
+      window.fixtureAnalysis={
+        overall_score:72,
+        scores:Object.fromEntries(ids.map(id=>[id,{score:72,explanation:`Evidence for ${id}.`} ])),
+        recommendations:[{category:"heading_structure",problem:"Headings are sparse.",why_it_matters:"Readers need topic boundaries.",improvement:"Add descriptive subheadings.",priority:"High"}],
+        suggestions:{metadata:{seo_title:"Improved aviation article title"},primary_keyword:"aviation contract review",secondary_keywords:["maintenance reserves"],headings:["Evidence review"],internal_link_topics:["aircraft leasing"],article_structure:["Terms","Evidence","Review"],paragraph_improvements:[]},
+        baseline:{seo_title:"",seo_description:""},
+        provider:"mistral",
+        disclaimer:"Editorial guidance only.",
+        scoring_explanation:"Rounded mean of equally weighted categories.",
+      };
+      window.fixtureAnalysisFailure=true;
+    },SEO_SCORE_IDS);
+    await page.getByLabel("Authorized publishing-budget organization UUID").fill(OTHER);
+    await page.getByLabel(/public-intended editorial content/).check();
+    await page.getByRole("button",{name:"AI ANALYSE ARTICLE",exact:true}).click();
+    await page.getByRole("alert").filter({hasText:"No score was generated"}).waitFor();
+    assert.equal(await page.getByRole("heading",{name:/SEO score/}).count(),0);
+    await page.evaluate(() => {window.fixtureAnalysisFailure=false;});
+    await page.getByRole("button",{name:"AI ANALYSE ARTICLE",exact:true}).click();
+    await page.getByRole("heading",{name:"SEO score · 72/100"}).waitFor();
+    await page.getByText("Heading structure and hierarchy",{exact:true}).first().waitFor();
+    await page.getByText("Headings are sparse.",{exact:false}).waitFor();
+    await page.getByRole("button",{name:"Apply seo title"}).click();
+    assert.equal(await page.locator(".op-blog-seo-grid").getByLabel("SEO title").inputValue(),"Improved aviation article title");
+    assert.equal(await page.getByRole("heading",{name:"SEO score · 72/100"}).count(),1);
+    assert.equal(await page.getByRole("button",{name:"Reanalyse saved article"}).isDisabled(),true);
+    assert.equal(await page.evaluate(() => window.fixtureCalls.filter(call=>call.method==="PUT").length),0,"Applying a suggestion does not silently persist article content");
+  });
+});
+test("a new unsaved draft can be privately previewed without persistence", async () => {
+  await fixture("studio",1440,async page => {
+    await page.getByRole("heading",{name:"Insights CMS"}).waitFor();
+    await page.getByLabel("Article title",{exact:true}).fill("Unsaved aviation editorial preview");
+    await page.getByRole("button",{name:"Preview",exact:true}).click();
+    await page.getByRole("heading",{name:"Unsaved aviation editorial preview",exact:true}).waitFor();
+    await page.getByText("Private preview — not publicly published.",{exact:true}).waitFor();
+    const writes = await page.evaluate(() => window.fixtureCalls.filter(call => ["POST","PUT"].includes(call.method)));
+    assert.deepEqual(writes,[]);
+    await page.getByRole("button",{name:"Back to editor"}).click();
+    assert.equal(await page.getByLabel("Article title",{exact:true}).inputValue(),"Unsaved aviation editorial preview");
   });
 });
 test("Demo header uses compact expandable disclosure without hiding synthetic-data limitations", async () => {

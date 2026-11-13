@@ -35,6 +35,10 @@ export function createBlogRouter({
 
   admin.use(authenticate, authorize);
   admin.use((_req, res, next) => { res.set("Cache-Control", "private, no-store"); next(); });
+  admin.get("/categories", controller.listCategories);
+  admin.post("/categories", controller.createCategory);
+  admin.put("/categories/:id", controller.updateCategory);
+  admin.delete("/categories/:id", controller.deleteCategory);
   admin.get("/posts", controller.listAdmin);
   admin.get("/profile", controller.profile);
   admin.put("/profile", controller.updateProfile);

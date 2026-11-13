@@ -9,6 +9,7 @@ import { requireSuperAdmin, createPlatformPermissionMiddleware, PLATFORM_PERMISS
 import { authenticateUser } from "../middleware/userAuthMiddleware.js";
 import { createBlogRouter } from "../routes/blogRoutes.js";
 import { BLOG_CATEGORIES, normalizeBlogBlocks, normalizeBlogPostInput, slugFromTitle, validateForPublication } from "../frontend/src/lib/blogContent.js";
+import { articlePlainText } from "../frontend/src/lib/richText.js";
 import { renderBlogArticleHtml, renderBlogBlocksHtml, renderBlogIndexHtml } from "../frontend/src/lib/blogRendering.js";
 import { createCanvas } from "@napi-rs/canvas";
 import blogIndex from "../frontend/api/blog/index.js";
@@ -80,6 +81,24 @@ test("blog slugs, block schemas, and publication validation are deterministic an
   assert.throws(() => normalizeBlogPostInput({ title: "Test", is_indexable: "false", content: [] }), /true or false/);
 });
 
+test("Phase 98 aviation article pack contains three substantial CMS-ready drafts", async () => {
+  const pack = JSON.parse(await read("content/blog-drafts-phase98.json"));
+  assert.equal(pack.format_version, 1);
+  assert.equal(pack.publication_state, "draft");
+  assert.equal(pack.articles.length, 3);
+  assert.equal(new Set(pack.articles.map(article => article.slug)).size, 3);
+  assert.equal(new Set(pack.articles.map(article => article.seo_title)).size, 3);
+
+  for (const article of pack.articles) {
+    assert.equal(article.status, "draft");
+    const normalized = normalizeBlogPostInput(article);
+    const wordCount = articlePlainText(normalized).trim().split(/\s+/).filter(Boolean).length;
+    assert.ok(wordCount >= 350, `${article.slug} should be substantial (found ${wordCount} words)`);
+    assert.deepEqual(validateForPublication({ ...normalized, author_name: "Verified Editorial Author" }), []);
+    assert.equal(normalized.canonical_url, "");
+  }
+});
+
 test("published article rendering is semantic, escaped, canonical, and includes BlogPosting metadata", () => {
   const html = renderBlogArticleHtml({
     title: "<script>alert(1)</script> Lease obligations",
@@ -90,6 +109,8 @@ test("published article rendering is semantic, escaped, canonical, and includes 
     social_title: "Lease obligations explained",
     social_description: "A grounded aviation guide.",
     canonical_url: "https://operionos.com/blog/lease-obligations",
+    cover_image: MEDIA_ID,
+    cover_image_alt: "Synthetic aircraft technical records",
     author_name: "Operion Editorial",
     author_role: "Aviation Contract Intelligence",
     author_url: "https://operionos.com/about",
@@ -117,6 +138,10 @@ test("published article rendering is semantic, escaped, canonical, and includes 
   assert.doesNotMatch(html, /href="javascript:/);
   assert.match(html, /<link rel="canonical" href="https:\/\/operionos\.com\/blog\/lease-obligations">/);
   assert.match(html, /<meta property="og:title" content="Lease obligations explained">/);
+  assert.match(html, /<meta property="og:description" content="A grounded aviation guide\.">/);
+  assert.match(html, /<meta property="og:image" content="\/api\/blog\/media\/bcaabfe0-83ee-4ec5-8721-c312b9317f54">/);
+  assert.match(html, /<meta name="twitter:card" content="summary_large_image">/);
+  assert.match(html, /<meta name="twitter:description" content="A grounded aviation guide\.">/);
   assert.match(html, /<meta property="article:published_time" content="2026-11-09T08:00:00\.000Z">/);
   assert.match(html, /<meta property="article:modified_time" content="2026-11-09T08:30:00\.000Z">/);
   assert.match(html, /<meta property="article:author" content="https:\/\/operionos\.com\/about">/);
@@ -124,6 +149,10 @@ test("published article rendering is semantic, escaped, canonical, and includes 
   assert.match(html, /<meta property="og:type" content="article">/);
   assert.match(html, /"BlogPosting"/);
   assert.match(html, /"BreadcrumbList"/);
+  assert.match(html, /<nav class="op-blog-share" aria-label="Share this article">/);
+  assert.match(html, /linkedin\.com\/sharing\/share-offsite\/\?url=https%3A%2F%2Foperionos\.com%2Fblog%2Flease-obligations/);
+  assert.match(html, /twitter\.com\/intent\/tweet\?url=https%3A%2F%2Foperionos\.com%2Fblog%2Flease-obligations/);
+  assert.match(html, /mailto:\?subject=%3Cscript%3Ealert\(1\)%3C%2Fscript%3E/);
   assert.match(html, /<section aria-label="Related aviation insights">[\s\S]*<div class="op-blog-grid">[\s\S]*class="op-blog-card"/);
   assert.match(html, /href="\/blog\/mro-agreement-renewal-controls"/);
   const jsonLdMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
@@ -167,6 +196,20 @@ test("blog index SSR exposes article text without JavaScript and media tables ar
   assert.match(html, /alt="Aircraft maintenance hangar"/);
   assert.match(html, /class="op-blog-card has-cover"/);
   assert.match(html, /"Blog"/);
+  assert.match(renderBlogIndexHtml([{
+    title: "Later maintenance article",
+    slug: "later-maintenance-article",
+  }], "", {}, { page: 1, page_size: 12, total: 14, has_more: true }), /class="op-blog-pagination"/);
+  assert.match(renderBlogIndexHtml([{
+    title: "Later maintenance article",
+    slug: "later-maintenance-article",
+  }], "", {}, { page: 2, page_size: 12, total: 14, has_more: false }), /href="\/blog" rel="prev"/);
+  assert.match(renderBlogIndexHtml([{
+    title: "Engine maintenance review",
+    slug: "engine-maintenance-review",
+    category: "Engine Maintenance",
+    content: [],
+  }]), /<option value="Engine Maintenance">Engine Maintenance<\/option>/);
   assert.match(html, /href="\/blog\.css"/);
   assert.doesNotMatch(html, /<script type="module"/);
   assert.match(renderBlogBlocksHtml([{ type: "table", rows: [["A", "B"], ["C", "D"]] }]), /op-blog-table-wrap/);
@@ -182,6 +225,8 @@ test("public blog reads filter to published articles and redirects remain local"
     database: {},
     queryFn: async (sql, params) => {
       calls.push({ sql, params });
+      if (sql.includes("COUNT(*)")) return { rows: [{ total: 25 }] };
+      if (sql.includes("SELECT DISTINCT category")) return { rows: [{ category: "Aircraft Leasing" }] };
       if (sql.includes("FROM blog_posts") && sql.includes("category = $1")) return { rows: [{ id: ID, status: "published", slug: "lease-guide" }] };
       if (sql.includes("FROM blog_posts") && sql.includes("WHERE slug")) return { rows: [] };
       if (sql.includes("blog_slug_redirects")) return { rows: [{ new_slug: "lease-guide" }] };
@@ -190,11 +235,21 @@ test("public blog reads filter to published articles and redirects remain local"
   });
 
   const listingResponse = responseRecorder();
-  await controller.listPublished({ query: { category: "Aircraft Leasing" } }, listingResponse);
+  await controller.listPublished({ query: { category: "Aircraft Leasing", page: "2", limit: "10" } }, listingResponse);
   assert.deepEqual(listingResponse.body.posts.map((post) => post.status), ["published"]);
   assert.match(calls[0].sql, /status IN \('published','scheduled'\) AND published_at<=NOW\(\) AND archived_at IS NULL/);
   assert.match(calls[0].sql.split("FROM blog_posts")[0], /\bstatus\b/);
-  assert.deepEqual(calls[0].params, ["Aircraft Leasing", "", null]);
+  assert.match(calls[0].sql, /LIMIT \$4 OFFSET \$5/);
+  assert.deepEqual(calls[0].params, ["Aircraft Leasing", "", null, 10, 10]);
+  assert.deepEqual(listingResponse.body.categories, ["Aircraft Leasing"]);
+  assert.deepEqual(listingResponse.body.pagination, { page: 2, page_size: 10, total: 25, has_more: true });
+
+  const invalidPageResponse = responseRecorder();
+  await controller.listPublished({ query: { page: "0" } }, invalidPageResponse);
+  assert.equal(invalidPageResponse.statusCode, 400);
+  const invalidLimitResponse = responseRecorder();
+  await controller.listPublished({ query: { limit: "51" } }, invalidLimitResponse);
+  assert.equal(invalidLimitResponse.statusCode, 400);
 
   const articleResponse = responseRecorder();
   await controller.getPublished({ params: { slug: "old-lease-guide" } }, articleResponse);
@@ -215,6 +270,71 @@ test("public SQL projection preserves published status required by SSR privacy g
   await controller.getPublished({ params: { slug: "published-lease-guide" } }, response);
   assert.match(statements[0].split("FROM blog_posts")[0], /\bstatus\b/);
   assert.equal(response.body.post.status, "published");
+});
+
+test("public article recommendations prefer category, fill across categories, and exclude ineligible rows", async () => {
+  const article = {
+    id: ID,
+    slug: "current-lease-guide",
+    category: "Aircraft Leasing",
+    status: "published",
+    published_at: "2026-11-09T08:00:00.000Z",
+  };
+  const published = (id, slug, category, publishedAt = "2026-11-09T08:00:00.000Z") => ({
+    id,
+    slug,
+    category,
+    status: "published",
+    published_at: publishedAt,
+    cover_image: `${id.slice(0, 8)}-83ee-4ec5-8721-c312b9317f54`,
+  });
+  const candidates = [
+    published(ID, article.slug, article.category),
+    published("1caabfe0-83ee-4ec5-8721-c312b9317f51", "same-category-one", article.category),
+    published("2caabfe0-83ee-4ec5-8721-c312b9317f52", "same-category-two", article.category),
+    published("3caabfe0-83ee-4ec5-8721-c312b9317f53", "other-category-one", "Maintenance"),
+    { ...published("4caabfe0-83ee-4ec5-8721-c312b9317f54", "draft", "Maintenance"), status: "draft" },
+    published("5caabfe0-83ee-4ec5-8721-c312b9317f55", "scheduled-later", "Maintenance", "2999-01-01T00:00:00.000Z"),
+    { ...published("6caabfe0-83ee-4ec5-8721-c312b9317f56", "archived", "Maintenance"), archived_at: "2026-11-09T09:00:00.000Z" },
+    { ...published("7caabfe0-83ee-4ec5-8721-c312b9317f57", "without-cover", "Maintenance"), cover_image: null },
+    published("3caabfe0-83ee-4ec5-8721-c312b9317f53", "other-category-one-duplicate", "Maintenance"),
+  ];
+  let recommendationSql = "";
+  const controller = createBlogController({
+    database: {},
+    queryFn: async (sql) => {
+      if (sql.includes("WHERE slug = $1")) return { rows: [article] };
+      recommendationSql = sql;
+      return { rows: candidates };
+    },
+  });
+
+  const response = responseRecorder();
+  await controller.getPublished({ params: { slug: article.slug } }, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.body.related.map((post) => post.slug), [
+    "same-category-one",
+    "same-category-two",
+    "other-category-one",
+  ]);
+  assert.match(recommendationSql, /p\.status IN \('published','scheduled'\) AND p\.published_at<=NOW\(\) AND p\.archived_at IS NULL/);
+  assert.match(recommendationSql, /p\.cover_image IS NOT NULL AND EXISTS \(SELECT 1 FROM blog_media/);
+  assert.match(recommendationSql, /ORDER BY CASE WHEN p\.category IS NOT DISTINCT FROM \$1 THEN 0 ELSE 1 END/);
+  assert.match(recommendationSql, /LIMIT 3/);
+});
+
+test("public media remains unavailable until referenced by a current published article", async () => {
+  let statement = "";
+  const controller = createBlogController({
+    database: {},
+    queryFn: async (sql) => { statement = sql; return { rows: [] }; },
+  });
+  const response = responseRecorder();
+  await controller.publicMedia({ params: { id: MEDIA_ID } }, response);
+  assert.equal(response.statusCode, 404);
+  assert.match(statement, /status IN \('published','scheduled'\) AND p\.published_at<=NOW\(\) AND p\.archived_at IS NULL/);
+  assert.match(statement, /p\.cover_image=m\.id::text OR p\.author_avatar_media=m\.id OR p\.content @>/);
 });
 
 test("CMS draft, edit, publish, unpublish, archive, and restore lifecycle keeps drafts private", async () => {
@@ -356,6 +476,17 @@ test("CMS draft, edit, publish, unpublish, archive, and restore lifecycle keeps 
   await controller.getPublished({ params: { slug: post.slug } }, hiddenAfterUnpublish);
   assert.equal(hiddenAfterUnpublish.statusCode, 404);
 
+  const editedAfterUnpublish = responseRecorder();
+  await controller.update(request({
+    ...articleInput,
+    title: "Reviewed aircraft lease obligations",
+    excerpt: "Reviewed: a practical guide to aviation lease terms.",
+    content: [{ type: "paragraph", text: "Recheck the reviewed terms against the executed clause and evidence." }],
+  }), editedAfterUnpublish);
+  assert.equal(editedAfterUnpublish.statusCode, 200);
+  assert.equal(editedAfterUnpublish.body.post.status, "draft");
+  assert.match(editedAfterUnpublish.body.post.title, /^Reviewed/);
+
   const republished = responseRecorder();
   await controller.publish(request({ confirm_review: true }), republished);
   assert.equal(republished.body.post.status, "published");
@@ -377,6 +508,7 @@ test("CMS draft, edit, publish, unpublish, archive, and restore lifecycle keeps 
     "updated",
     "published",
     "unpublished",
+    "updated",
     "published",
     "archived",
     "restored_to_draft",
@@ -449,13 +581,24 @@ test("CMS image uploads reject invalid images and store resized WebP with alt te
   assert.equal(statements[0].params[1], "image/webp");
   assert.equal(statements[0].params[2].toString("ascii", 8, 12), "WEBP");
   assert.ok(statements[0].params[2].length < source.length);
+
+  const oversized = Buffer.alloc(3 * 1024 * 1024 + 1);
+  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(oversized);
+  const oversizedResponse = responseRecorder();
+  await controller.uploadMedia({
+    file: { buffer: oversized },
+    body: { alt_text: "Oversized synthetic image" },
+    user: { id: ID },
+  }, oversizedResponse);
+  assert.equal(oversizedResponse.statusCode, 413);
 });
 
 test("Super Admin authentication and permission middleware wrap every CMS operation", async () => {
   const authenticate = (_req, _res, next) => next();
   const authorize = (_req, _res, next) => next();
   const controller = Object.fromEntries([
-    "listPublished", "getPublished", "sitemap", "publicMedia", "listAdmin", "getAdmin",
+    "listPublished", "getPublished", "sitemap", "publicMedia", "listAdmin", "listCategories", "createCategory", "getAdmin",
+    "updateCategory", "deleteCategory",
     "create", "update", "publish", "unpublish", "archive", "restore", "history",
     "uploadMedia", "adminMedia", "authorPage", "profile", "updateProfile", "mediaLibrary", "schedule", "analyze", "deleteArchived",
   ].map((key) => [key, () => {}]));
@@ -469,9 +612,19 @@ test("Super Admin authentication and permission middleware wrap every CMS operat
   const productionAdminLayer = productionRouter.stack.find((layer) => layer.name === "router");
   assert.equal(productionAdminLayer.handle.stack[0].handle, authenticateUser);
   assert.equal(productionAdminLayer.handle.stack[1].handle, requireSuperAdmin);
+  assert.ok(adminLayer.handle.stack.some(layer => layer.route?.path === "/categories" && layer.route.methods.get));
+  assert.ok(adminLayer.handle.stack.some(layer => layer.route?.path === "/categories" && layer.route.methods.post));
+  assert.ok(adminLayer.handle.stack.some(layer => layer.route?.path === "/categories/:id" && layer.route.methods.put));
+  assert.ok(adminLayer.handle.stack.some(layer => layer.route?.path === "/categories/:id" && layer.route.methods.delete));
   assert.ok(router.stack.some((layer) => layer.route?.path === "/"));
   assert.ok(router.stack.some((layer) => layer.route?.path === "/:slug"));
   assert.equal(router.stack.find((layer) => layer.route?.path === "/:slug").route.methods.get, true);
+
+  let anonymousNext = false;
+  const anonymousResponse = responseRecorder();
+  await authenticateUser({ headers: {} }, anonymousResponse, () => { anonymousNext = true; });
+  assert.equal(anonymousNext, false);
+  assert.equal(anonymousResponse.statusCode, 401);
 
   const access = createPlatformPermissionMiddleware(
     PLATFORM_PERMISSIONS.PLATFORM_ADMIN,
@@ -520,6 +673,7 @@ test("Vercel SSR handlers render public articles and sitemap from the published 
   const previousFetch = globalThis.fetch;
   process.env.OPERION_BACKEND_URL = "https://api.operionos.com/";
   const article = {
+    id: ID,
     title: "Aircraft lease payment obligations",
     slug: "aircraft-lease-payment-obligations",
     category: "Aircraft Leasing",
@@ -530,10 +684,31 @@ test("Vercel SSR handlers render public articles and sitemap from the published 
     status: "published",
     content: [{ type: "paragraph", text: "Verify the amount, currency, due date, and triggering clause." }],
   };
+  const recommendations = [1, 2, 3].map((number) => ({
+    id: `${number}caabfe0-83ee-4ec5-8721-c312b9317f5${number}`,
+    title: `Recommended aviation article ${number}`,
+    slug: `recommended-aviation-article-${number}`,
+    category: number === 1 ? article.category : "Maintenance",
+    excerpt: `Evidence-led recommendation ${number}.`,
+    author_name: "Operion Editorial",
+    status: "published",
+    published_at: "2026-11-08T08:00:00.000Z",
+    cover_image: `${number}baabfe0-83ee-4ec5-8721-c312b9317f5${number}`,
+    cover_image_alt: `Synthetic aviation image ${number}`,
+    content: [{ type: "paragraph", text: `Review the evidence for recommendation ${number}.` }],
+  }));
+  const relatedWithIneligible = [
+    ...recommendations,
+    article,
+    { ...recommendations[0], slug: "private-recommendation", status: "draft" },
+    { ...recommendations[1], slug: "future-recommendation", published_at: "2999-01-01T00:00:00.000Z" },
+    { ...recommendations[2], slug: "recommendation-without-image", cover_image: null },
+    recommendations[0],
+  ];
   const requests = [];
   globalThis.fetch = async (url) => {
     requests.push(String(url));
-    if (String(url).endsWith("/api/blog")) {
+    if (new URL(String(url)).pathname === "/api/blog") {
       return { ok: true, json: async () => ({ posts: [
         article,
         { ...article, slug: "unpublished-draft", status: "draft", title: "Private draft must not appear" },
@@ -541,7 +716,10 @@ test("Vercel SSR handlers render public articles and sitemap from the published 
       ] }) };
     }
     if (String(url).endsWith(`/api/blog/${article.slug}`)) {
-      return { ok: true, json: async () => ({ post: article }) };
+      return { ok: true, json: async () => ({ post: article, related: relatedWithIneligible }) };
+    }
+    if (String(url).endsWith("/api/blog/fewer-eligible-articles")) {
+      return { ok: true, json: async () => ({ post: { ...article, slug: "fewer-eligible-articles" }, related: recommendations.slice(0, 2) }) };
     }
     if (String(url).endsWith("/api/blog/private-draft")) {
       return { ok: true, json: async () => ({ post: { ...article, status: "draft" } }) };
@@ -564,10 +742,28 @@ test("Vercel SSR handlers render public articles and sitemap from the published 
   assert.doesNotMatch(listing.body, /Private draft must not appear|archived-article/);
   assert.equal(listing.headers["content-type"], "text/html; charset=utf-8");
 
+  const filteredListing = responseRecorder();
+  await blogIndex({ method: "GET", query: { search: "lease terms", category: "Aircraft Leasing", tag: "renewal", page: "2", limit: "10" } }, filteredListing);
+  assert.equal(filteredListing.statusCode, 200);
+  assert.ok(requests.some(url => url.includes("/api/blog?search=lease+terms&category=Aircraft+Leasing&tag=renewal&page=2&limit=10")));
+  assert.match(filteredListing.body, /name="search" value="lease terms"/);
+  assert.match(filteredListing.body, /<option value="Aircraft Leasing" selected>/);
+
   const detail = responseRecorder();
   await blogArticle({ method: "GET", query: { slug: article.slug } }, detail);
   assert.equal(detail.statusCode, 200);
   assert.match(detail.body, /Verify the amount, currency, due date/);
+  assert.equal((detail.body.match(/class="op-blog-card(?:\s|")/g) || []).length, 3);
+  for (const recommendation of recommendations) {
+    assert.match(detail.body, new RegExp(`href="/blog/${recommendation.slug}"`));
+    assert.match(detail.body, new RegExp(`/api/blog/media/${recommendation.cover_image}`));
+  }
+  assert.doesNotMatch(detail.body, /private-recommendation|future-recommendation|recommendation-without-image/);
+
+  const fewerRecommendations = responseRecorder();
+  await blogArticle({ method: "GET", query: { slug: "fewer-eligible-articles" } }, fewerRecommendations);
+  assert.equal(fewerRecommendations.statusCode, 200);
+  assert.equal((fewerRecommendations.body.match(/class="op-blog-card(?:\s|")/g) || []).length, 2);
 
   const draftDetail = responseRecorder();
   await blogArticle({ method: "GET", query: { slug: "private-draft" } }, draftDetail);
@@ -578,7 +774,7 @@ test("Vercel SSR handlers render public articles and sitemap from the published 
   await blogSitemap({ method: "GET" }, sitemap);
   assert.equal(sitemap.statusCode, 200);
   assert.match(sitemap.body, /<urlset/);
-  assert.equal(requests.length, 4);
+  assert.equal(requests.length, 6);
 
   const unsupportedMethod = responseRecorder();
   await blogSitemap({ method: "POST" }, unsupportedMethod);

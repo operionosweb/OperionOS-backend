@@ -5,7 +5,7 @@ export default async function blogFeed(req, res) {
   if (req.method !== "GET") { res.setHeader("Allow", "GET"); return res.status(405).send("Method not allowed"); }
   try {
     const base = new URL(process.env.OPERION_BACKEND_URL || process.env.VITE_API_BASE_URL).origin;
-    const response = await fetch(`${base}/api/blog`, { signal: AbortSignal.timeout(8000) });
+    const response = await fetch(`${base}/api/blog?limit=50`, { signal: AbortSignal.timeout(8000) });
     if (!response.ok) throw new Error("Feed source unavailable");
     const result = await response.json();
     if (!Array.isArray(result.posts)) throw new Error("Invalid feed source");

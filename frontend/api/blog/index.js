@@ -21,7 +21,7 @@ export default async function blogIndex(req, res) {
   const base = backendUrl();
   if (!base) return res.status(503).send("Operion Insights is temporarily unavailable.");
   try {
-    const query = new URLSearchParams(Object.fromEntries(["search", "category", "tag"].filter(k => typeof req.query?.[k] === "string").map(k => [k, req.query[k].slice(0, 160)])));
+    const query = new URLSearchParams(Object.fromEntries(["search", "category", "tag", "page", "limit"].filter(k => typeof req.query?.[k] === "string").map(k => [k, req.query[k].slice(0, 160)])));
     const response = await fetch(`${base}/api/blog${query.size ? `?${query}` : ""}`, {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(8000),
@@ -33,7 +33,7 @@ export default async function blogIndex(req, res) {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Cache-Control", "public, max-age=0, s-maxage=0, must-revalidate");
-    return res.status(200).send(renderBlogIndexHtml(posts, base, req.query || {}));
+    return res.status(200).send(renderBlogIndexHtml(posts, base, req.query || {}, result.pagination || {}, result.categories || []));
   } catch {
     console.error("blog_ssr_index_failed");
     return res.status(503).send("Operion Insights is temporarily unavailable.");

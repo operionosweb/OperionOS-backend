@@ -3,9 +3,12 @@ import { getSupabaseClient } from "../config/supabase.js";
 import { resolveAuthor, createEditorialAnalyzer, articleRevision } from "../services/blogEditorialService.js";
 import { query, default as pool } from "../db.js";
 import {
+  BLOG_CATEGORIES,
+  normalizeBlogCategory,
   normalizeBlogPostInput,
   validateForPublication,
 } from "../frontend/src/lib/blogContent.js";
+import { isPublicArticle } from "../frontend/src/lib/richText.js";
 
 const SITE_URL = "https://operionos.com";
 const PUBLIC_POST_FIELDS = `
@@ -26,13 +29,19 @@ function httpError(status, message) {
 
 function errorResponse(res, error, operation) {
   if (error?.code === "23505") {
+    if (["create_category", "update_category"].includes(operation)) return res.status(409).json({ success: false, error: "A category with this name or slug already exists." });
     return res.status(409).json({ success: false, error: "That article URL is already in use." });
+  }
+  if (error?.code === "23503" && operation === "delete_category") {
+    return res.status(409).json({ success: false, error: "This category is assigned to an article and cannot be deleted." });
   }
   const status = Number.isInteger(error?.status) ? error.status : error instanceof TypeError || error instanceof RangeError ? 400 : ["DATABASE_NOT_CONFIGURED", "42P01", "42703"].includes(error?.code) ? 503 : 500;
   if (status >= 500) console.error("blog_operation_failed", { operation, code: error?.code || "BLOG_REQUEST_FAILED" });
   return res.status(status).json({
     success: false,
-    error: status >= 500 ? "Blog service is unavailable." : error.message,
+    error: operation === "ai_analyze" && status >= 500
+      ? "AI analysis is unavailable. No score was generated or saved; retry after the provider or database is available."
+      : status >= 500 ? "Blog service is unavailable." : error.message,
   });
 }
 
@@ -124,9 +133,19 @@ function auditSnapshot(row, actorId, action) {
 
 export function createBlogController({ queryFn = query, database = pool, authorResolver = resolveAuthor, analyzer = createEditorialAnalyzer(), authClient = getSupabaseClient } = {}) {
   const runTransaction = (callback) => transaction(database, queryFn, callback);
+  const normalizeArticle = async (value) => {
+    const result = await queryFn("SELECT name FROM blog_categories ORDER BY name");
+    const allowedCategories = [...new Set([...BLOG_CATEGORIES, ...result.rows.map((row) => row.name)])];
+    return normalizeBlogPostInput(value, { allowedCategories });
+  };
 
   const listPublished = withRequest("list_published", async (req, res) => {
     const values = [req.query.category || null, String(req.query.search || "").slice(0, 160), req.query.tag || null];
+    const pageValue = req.query.page === undefined ? 1 : Number(req.query.page);
+    const pageSizeValue = req.query.limit === undefined ? 12 : Number(req.query.limit);
+    if (!Number.isSafeInteger(pageValue) || pageValue < 1 || pageValue > 100000) throw httpError(400, "Page must be a positive integer.");
+    if (!Number.isSafeInteger(pageSizeValue) || pageSizeValue < 1 || pageSizeValue > 50) throw httpError(400, "Page size must be between 1 and 50.");
+    const offset = (pageValue - 1) * pageSizeValue;
     const result = await queryFn(
       `SELECT ${PUBLIC_POST_FIELDS}
        FROM blog_posts
@@ -134,10 +153,36 @@ export function createBlogController({ queryFn = query, database = pool, authorR
          AND ($1::text IS NULL OR category = $1)
          AND ($2='' OR position(lower($2) in lower(title||' '||coalesce(excerpt,'')))>0)
          AND ($3::text IS NULL OR $3=ANY(tags))
-       ORDER BY is_featured DESC,published_at DESC, id DESC LIMIT 200`,
-      values
+       ORDER BY is_featured DESC,published_at DESC, id DESC LIMIT $4 OFFSET $5`,
+      [...values, pageSizeValue, offset]
     );
-    return res.json({ success: true, posts: result.rows });
+    const [count, categoryResult] = await Promise.all([
+      queryFn(
+        `SELECT COUNT(*)::int AS total FROM blog_posts
+         WHERE status IN ('published','scheduled') AND published_at<=NOW() AND archived_at IS NULL
+           AND ($1::text IS NULL OR category = $1)
+           AND ($2='' OR position(lower($2) in lower(title||' '||coalesce(excerpt,'')))>0)
+           AND ($3::text IS NULL OR $3=ANY(tags))`,
+        values
+      ),
+      queryFn(
+        `SELECT DISTINCT category FROM blog_posts
+         WHERE status IN ('published','scheduled') AND published_at<=NOW() AND archived_at IS NULL
+           AND category IS NOT NULL ORDER BY category`
+      ),
+    ]);
+    const total = Number(count.rows[0]?.total || 0);
+    return res.json({
+      success: true,
+      posts: result.rows,
+      categories: categoryResult.rows.map(({ category }) => category),
+      pagination: {
+        page: pageValue,
+        page_size: pageSizeValue,
+        total,
+        has_more: offset + result.rows.length < total,
+      },
+    });
   });
 
   const getPublished = withRequest("get_published", async (req, res) => {
@@ -148,9 +193,22 @@ export function createBlogController({ queryFn = query, database = pool, authorR
     );
     if (result.rows[0]) {
       const post = result.rows[0];
-      const related = await queryFn(`select ${PUBLIC_POST_FIELDS} from blog_posts where category=$1 and id<>$2
-        and status in ('published','scheduled') and published_at<=now() and archived_at is null order by published_at desc limit 3`, [post.category, post.id]);
-      return res.json({ success: true, post, related: related.rows.filter(p => p.id !== post.id) });
+      const related = await queryFn(
+        `SELECT ${PUBLIC_POST_FIELDS} FROM blog_posts p
+         WHERE p.id<>$2 AND p.status IN ('published','scheduled') AND p.published_at<=NOW() AND p.archived_at IS NULL
+           AND p.cover_image IS NOT NULL AND EXISTS (SELECT 1 FROM blog_media m WHERE m.id::text=p.cover_image)
+         ORDER BY CASE WHEN p.category IS NOT DISTINCT FROM $1 THEN 0 ELSE 1 END,
+           p.published_at DESC, p.id DESC
+         LIMIT 3`,
+        [post.category, post.id]
+      );
+      const seen = new Set([post.id]);
+      const recommendations = related.rows.filter((article) => {
+        if (!article || seen.has(article.id) || !article.cover_image || !isPublicArticle(article)) return false;
+        seen.add(article.id);
+        return true;
+      }).slice(0, 3);
+      return res.json({ success: true, post, related: recommendations });
     }
 
     const redirect = await queryFn(
@@ -190,6 +248,82 @@ export function createBlogController({ queryFn = query, database = pool, authorR
     return res.json({ success: true, posts: result.rows });
   });
 
+  const listCategories = withRequest("list_categories", async (_req, res) => {
+    const result = await queryFn(
+      "SELECT id,name,slug,description,created_at FROM blog_categories ORDER BY lower(name),name"
+    );
+    return res.json({ success: true, categories: result.rows });
+  });
+
+  const createCategory = withRequest("create_category", async (req, res) => {
+    const category = normalizeBlogCategory(req.body);
+    const duplicate = await queryFn(
+      "SELECT id FROM blog_categories WHERE lower(name)=lower($1) OR slug=$2 LIMIT 1",
+      [category.name, category.slug]
+    );
+    if (duplicate.rows.length) throw httpError(409, "A category with this name or slug already exists.");
+    const result = await runTransaction(async (execute) => {
+      const inserted = await execute(
+        `INSERT INTO blog_categories (name,slug,description,created_by)
+         VALUES ($1,$2,$3,$4)
+         RETURNING id,name,slug,description,created_at`,
+        [category.name, category.slug, category.description, req.user.id]
+      );
+      return inserted.rows[0];
+    });
+    return res.status(201).json({ success: true, category: result });
+  });
+
+  const updateCategory = withRequest("update_category", async (req, res) => {
+    const id = requiredId(req.params.id, "Category ID");
+    const category = normalizeBlogCategory(req.body);
+    const updated = await runTransaction(async (execute) => {
+      const currentResult = await execute(
+        "SELECT id,name FROM blog_categories WHERE id=$1 FOR UPDATE",
+        [id]
+      );
+      const current = currentResult.rows[0];
+      if (!current) throw httpError(404, "Category not found.");
+      const duplicate = await execute(
+        `SELECT id FROM blog_categories
+         WHERE id<>$3 AND (lower(name)=lower($1) OR slug=$2) LIMIT 1`,
+        [category.name, category.slug, id]
+      );
+      if (duplicate.rows.length) throw httpError(409, "A category with this name or slug already exists.");
+      const result = await execute(
+        `UPDATE blog_categories SET name=$1,slug=$2,description=$3
+         WHERE id=$4 RETURNING id,name,slug,description,created_at`,
+        [category.name, category.slug, category.description, id]
+      );
+      return { previousName: current.name, category: result.rows[0] };
+    });
+    return res.json({ success: true, category: updated.category, previous_name: updated.previousName });
+  });
+
+  const deleteCategory = withRequest("delete_category", async (req, res) => {
+    const id = requiredId(req.params.id, "Category ID");
+    const deleted = await runTransaction(async (execute) => {
+      const currentResult = await execute(
+        "SELECT id,name FROM blog_categories WHERE id=$1 FOR UPDATE",
+        [id]
+      );
+      const current = currentResult.rows[0];
+      if (!current) throw httpError(404, "Category not found.");
+      const usage = await execute(
+        "SELECT 1 FROM blog_posts WHERE category=$1 LIMIT 1",
+        [current.name]
+      );
+      if (usage.rows.length) throw httpError(409, "This category is assigned to an article and cannot be deleted.");
+      const result = await execute(
+        "DELETE FROM blog_categories WHERE id=$1 RETURNING id,name",
+        [id]
+      );
+      if (!result.rows[0]) throw httpError(404, "Category not found.");
+      return result.rows[0];
+    });
+    return res.json({ success: true, category: deleted });
+  });
+
   const getAdmin = withRequest("get_admin", async (req, res) => {
     const id = requiredId(req.params.id, "Article ID");
     const result = await queryFn(
@@ -201,7 +335,7 @@ export function createBlogController({ queryFn = query, database = pool, authorR
   });
 
   const create = withRequest("create", async (req, res) => {
-    const article = normalizeBlogPostInput(req.body);
+    const article = await normalizeArticle(req.body);
     const actorId = req.user.id;
     await assertMediaExists(queryFn, mediaIdsFor(article));
     const result = await runTransaction(async (execute) => {
@@ -236,7 +370,7 @@ export function createBlogController({ queryFn = query, database = pool, authorR
 
   const update = withRequest("update", async (req, res) => {
     const id = requiredId(req.params.id, "Article ID");
-    const article = normalizeBlogPostInput(req.body);
+    const article = await normalizeArticle(req.body);
     const actorId = req.user.id;
     await assertMediaExists(queryFn, mediaIdsFor(article));
     const post = await runTransaction(async (execute) => {
@@ -499,7 +633,7 @@ export function createBlogController({ queryFn = query, database = pool, authorR
     const result = await queryFn(`select ${ADMIN_POST_FIELDS} from blog_posts where id=$1`, [id]);
     const current = result.rows[0];
     if (!current || current.status !== "draft") throw httpError(409, "Save a draft before AI analysis.");
-    const analysis = await analyzer(current, { organizationId, consent: req.body.public_editorial_consent });
+    const analysis = await analyzer(current, { organizationId, consent: req.body.public_editorial_consent, userId: req.user.id });
     const updated = await runTransaction(async execute => {
       const locked = await execute(`select ${ADMIN_POST_FIELDS} from blog_posts where id=$1 for update`, [id]);
       if (!locked.rows[0] || locked.rows[0].status !== "draft" || articleRevision(locked.rows[0]) !== analysis.revision) throw httpError(409, "Article changed during AI analysis; regenerate against the saved revision.");
@@ -533,7 +667,7 @@ export function createBlogController({ queryFn = query, database = pool, authorR
   });
 
   return {
-    listPublished, getPublished, sitemap, listAdmin, getAdmin, create, update,
+    listPublished, getPublished, sitemap, listAdmin, listCategories, createCategory, updateCategory, deleteCategory, getAdmin, create, update,
     publish, unpublish, archive, restore, history, uploadMedia, adminMedia, publicMedia,
     mediaLibrary, profile, updateProfile, schedule, analyze, authorPage, deleteArchived,
   };

@@ -1177,3 +1177,11 @@
 .op-blog-tags a { background:#e9f2f9; color:#174260; border-radius:20px; padding:6px 12px; font-size:12px; }
 .op-blog-image.compact { max-width:480px; }.op-blog-image.wide { max-width:800px; }
 .op-blog-image.align-left { margin-left:0; margin-right:auto; }.op-blog-image.align-right { margin-left:auto; margin-right:0; }.op-blog-image.align-center { margin-left:auto; margin-right:auto; }
+.op-blog-share { display:flex; flex-wrap:wrap; align-items:center; gap:10px; max-width:740px; margin:26px auto; padding:16px; border:1px solid var(--blog-line); border-radius:8px; background:#f8fbfe; color:#405b78; font-size:13px; }
+.op-blog-share a { padding:7px 10px; border:1px solid #cbd9e8; border-radius:6px; background:#fff; color:#174260; font-weight:650; text-decoration:none; }
+.op-blog-share a:hover { border-color:#8bb4ea; background:#eaf3ff; }
+.op-blog-pagination { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:18px; margin-top:28px; color:#536982; font-size:13px; }
+.op-blog-pagination a,.op-blog-load-more button { min-height:42px; padding:10px 16px; border:1px solid #b8cbe0; border-radius:7px; background:#fff; color:#174260; font-weight:650; text-decoration:none; cursor:pointer; }
+.op-blog-pagination a:hover,.op-blog-load-more button:hover { background:#eaf3ff; }
+.op-blog-load-more { display:flex; justify-content:center; margin-top:28px; }
+.op-blog-load-more button:disabled { opacity:.6; cursor:wait; }
